@@ -1,0 +1,15 @@
+import { QuickStockInForm } from "@/features/inventory/components/quick-stock-in-form";
+import { getInventorySnapshot } from "@/features/inventory/inventory-service";
+import { getSuppliers } from "@/features/suppliers/supplier-service";
+
+export default async function QuickStockInPage() {
+  const [snapshot, suppliers] = await Promise.all([getInventorySnapshot(), getSuppliers()]);
+
+  return (
+    <QuickStockInForm
+      items={snapshot.items}
+      suppliers={suppliers}
+      warehouses={snapshot.warehouses}
+    />
+  );
+}

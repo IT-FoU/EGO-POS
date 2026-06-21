@@ -1,0 +1,204 @@
+{
+  "artifacts": {
+    "customerPhone": "0208364851",
+    "ownerSaleNo": "A15742ZZZZZZZ0003",
+    "productSku": "A2F-1782058333862",
+    "saleNos": [
+      "A15742ZZZZZZZ0003",
+      "A15742ZZZZZZZZ0001",
+      "A15742ZZZZZZZZ0002"
+    ],
+    "stockProductId": "prd-pepsi-can"
+  },
+  "generatedAt": "2026-06-21T16:14:00.473Z",
+  "passed": 31,
+  "results": [
+    {
+      "detail": "igo-admin",
+      "name": "Owner login",
+      "pass": true,
+      "section": "Auth"
+    },
+    {
+      "detail": "A2F-1782058333862",
+      "name": "Create",
+      "pass": true,
+      "section": "Products"
+    },
+    {
+      "detail": "A2F-1782058333862",
+      "name": "Search",
+      "pass": true,
+      "section": "Products"
+    },
+    {
+      "detail": "A2 Final Product 1782058333862 Updated",
+      "name": "Edit",
+      "pass": true,
+      "section": "Products"
+    },
+    {
+      "detail": "A2 Final Product 1782058333862 Updated",
+      "name": "Refresh after edit",
+      "pass": true,
+      "section": "Products"
+    },
+    {
+      "detail": "deleted from edit page",
+      "name": "Delete",
+      "pass": true,
+      "section": "Products"
+    },
+    {
+      "detail": "A2 Final Customer 1782058364851",
+      "name": "Create",
+      "pass": true,
+      "section": "Customers"
+    },
+    {
+      "detail": "0208364851",
+      "name": "Search and refresh",
+      "pass": true,
+      "section": "Customers"
+    },
+    {
+      "detail": "http://127.0.0.1:3001/customers/cmqnzjg9n00791cbhu8sogb6n",
+      "name": "Open details",
+      "pass": true,
+      "section": "Customers"
+    },
+    {
+      "detail": "Somchai Vongsavanh",
+      "name": "Owner attach member",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "A15742ZZZZZZZ0003",
+      "name": "Owner complete payment",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "receipt modal",
+      "name": "Owner receipt",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "saved A15742ZZZZZZZZ",
+      "name": "Owner settings save",
+      "pass": true,
+      "section": "Permissions"
+    },
+    {
+      "detail": "manager",
+      "name": "Manager login",
+      "pass": true,
+      "section": "Auth"
+    },
+    {
+      "detail": "A15742ZZZZZZZZ0001",
+      "name": "Manager complete payment",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "receipt modal",
+      "name": "Manager receipt",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "blocked (A15742ZZZZZZZZ)",
+      "name": "Manager settings save",
+      "pass": true,
+      "section": "Permissions"
+    },
+    {
+      "detail": "cashier",
+      "name": "Cashier login",
+      "pass": true,
+      "section": "Auth"
+    },
+    {
+      "detail": "checkout ok",
+      "name": "Cashier complete payment",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "receipt modal",
+      "name": "Cashier receipt",
+      "pass": true,
+      "section": "POS"
+    },
+    {
+      "detail": "blocked (A15742ZZZZZZZZ)",
+      "name": "Cashier settings save",
+      "pass": true,
+      "section": "Permissions"
+    },
+    {
+      "detail": "A2F-1782058333862",
+      "name": "Product removed after delete",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "0208364851",
+      "name": "Customer in PostgreSQL",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "qty=-1",
+      "name": "Stock deduction",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "items=1 payments=1",
+      "name": "Sale A15742ZZZZZZZ0003 exists",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "items=1 payments=1",
+      "name": "Sale A15742ZZZZZZZZ0001 exists",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "items=1 payments=1",
+      "name": "Sale A15742ZZZZZZZZ0002 exists",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "[]",
+      "name": "No duplicate sale_no",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "A15742ZZZZZZZ0003, A15742ZZZZZZZZ0001, A15742ZZZZZZZZ0002",
+      "name": "Consecutive unique bill numbers",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "A15742ZZZZZZZ0003",
+      "name": "Sale has customer",
+      "pass": true,
+      "section": "Database"
+    },
+    {
+      "detail": "balance=1416 earned=1",
+      "name": "Loyalty points ledger",
+      "pass": true,
+      "section": "Database"
+    }
+  ],
+  "total": 31
+}

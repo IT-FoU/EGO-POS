@@ -1,0 +1,26 @@
+import { getPrismaSettings } from "@/features/settings/prisma-repository";
+import { SettingsForm } from "@/features/settings/components/settings-form";
+import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
+import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
+import { requireSession } from "@/lib/auth/session";
+import { tenantFromSession } from "@/lib/db/write-context";
+
+export default async function SettingsPage() {
+  const session = await requireSession();
+  const tenant = tenantFromSession(session);
+  const [settings, qrSnapshot, staffSnapshot] = await Promise.all([
+    getPrismaSettings(tenant),
+    getQrPaymentSettingsSnapshot(tenant),
+    getStaffAccessSnapshot(tenant),
+  ]);
+
+  return (
+    <SettingsForm
+      initialQrAccounts={qrSnapshot.accounts}
+      initialQrBanks={qrSnapshot.banks}
+      initialSettings={settings}
+      initialStaffSnapshot={staffSnapshot}
+      qrBranches={qrSnapshot.branches}
+    />
+  );
+}

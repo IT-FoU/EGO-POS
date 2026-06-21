@@ -1,0 +1,320 @@
+{
+  "generatedAt": "2026-06-21T13:49:24.766Z",
+  "results": [
+    {
+      "detail": "igo-admin",
+      "module": "Login",
+      "name": "Login",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/dashboard status=200",
+      "module": "Dashboard",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/products status=200",
+      "module": "Products",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/customers status=200",
+      "module": "Customers",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/membership-levels status=200",
+      "module": "Membership",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/promotions status=200",
+      "module": "Promotions",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/inventory status=200",
+      "module": "Inventory",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/purchasing status=200",
+      "module": "Purchasing",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/reports status=200",
+      "module": "Reports",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/settings status=200",
+      "module": "Settings",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "/pos status=200",
+      "module": "POS Checkout",
+      "name": "Page load",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "A2-1782049664447",
+      "module": "Products",
+      "name": "Create",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "A2 Product 1782049664447",
+      "module": "Products",
+      "name": "Search after create",
+      "pass": false,
+      "role": "Owner"
+    },
+    {
+      "detail": "A2 Customer 1782049664447",
+      "module": "Customers",
+      "name": "Create",
+      "pass": true,
+      "role": "Owner"
+    },
+    {
+      "detail": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator('input[placeholder*=\"phone\"], input[placeholder*=\"Phone\"], input.h-11').first() to be visible\n",
+      "module": "Login",
+      "name": "Flow error",
+      "pass": false,
+      "role": "Owner"
+    },
+    {
+      "detail": "manager",
+      "module": "Login",
+      "name": "Login",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/dashboard status=200",
+      "module": "Dashboard",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/products status=200",
+      "module": "Products",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/customers status=200",
+      "module": "Customers",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/membership-levels status=200",
+      "module": "Membership",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/promotions status=200",
+      "module": "Promotions",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/inventory status=200",
+      "module": "Inventory",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/purchasing status=200",
+      "module": "Purchasing",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/reports status=200",
+      "module": "Reports",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/settings status=200",
+      "module": "Settings",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "/pos status=200",
+      "module": "POS Checkout",
+      "name": "Page load",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "[ Logo ]\nUpload Company Logo\nEGO POS\nງ່າຍ. ສະຫຼາດ. ໄວ. ສຳລັບທຸກທຸລະກິດ.\nໜ້າຫຼັກ\nPOS\nສິນຄ້າ\nສາງສິນຄ້າ\nຈັດຊື້\nລູກຄ້າ\nສະມາຊິກ\nຜູ້ສະໜອງ\nໂປຣໂມຊັນ\nລາຍງານ\nຕັ້ງຄ່າ\nGo B",
+      "module": "POS Checkout",
+      "name": "Complete sale",
+      "pass": false,
+      "role": "Manager"
+    },
+    {
+      "detail": "A15742",
+      "module": "Settings",
+      "name": "Save blocked",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "cleared",
+      "module": "Login",
+      "name": "Logout",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "manager",
+      "module": "Login",
+      "name": "Re-login",
+      "pass": true,
+      "role": "Manager"
+    },
+    {
+      "detail": "cashier",
+      "module": "Login",
+      "name": "Login",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/dashboard status=200",
+      "module": "Dashboard",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/products status=200",
+      "module": "Products",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/customers status=200",
+      "module": "Customers",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/membership-levels status=200",
+      "module": "Membership",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/promotions status=200",
+      "module": "Promotions",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/inventory status=200",
+      "module": "Inventory",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/purchasing status=200",
+      "module": "Purchasing",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/reports status=200",
+      "module": "Reports",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/settings status=200",
+      "module": "Settings",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "/pos status=200",
+      "module": "POS Checkout",
+      "name": "Page load",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "[ Logo ]\nUpload Company Logo\nEGO POS\nງ່າຍ. ສະຫຼາດ. ໄວ. ສຳລັບທຸກທຸລະກິດ.\nໜ້າຫຼັກ\nPOS\nສິນຄ້າ\nສາງສິນຄ້າ\nຈັດຊື້\nລູກຄ້າ\nສະມາຊິກ\nຜູ້ສະໜອງ\nໂປຣໂມຊັນ\nລາຍງານ\nຕັ້ງຄ່າ\nGo B",
+      "module": "POS Checkout",
+      "name": "Complete sale",
+      "pass": false,
+      "role": "Cashier"
+    },
+    {
+      "detail": "A15742",
+      "module": "Settings",
+      "name": "Save blocked",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "cleared",
+      "module": "Login",
+      "name": "Logout",
+      "pass": true,
+      "role": "Cashier"
+    },
+    {
+      "detail": "cashier",
+      "module": "Login",
+      "name": "Re-login",
+      "pass": true,
+      "role": "Cashier"
+    }
+  ]
+}

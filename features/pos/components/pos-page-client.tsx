@@ -1,0 +1,1711 @@
+"use client";
+
+import { t } from "@/lib/i18n/ui";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosReceiptSettings, QrBank, } from "@/features/pos/types";
+import { PosProductImage } from "@/features/pos/components/pos-product-image";
+import { formatLak } from "@/features/pos/format";
+import { cn } from "@/lib/utils";
+import { completeSaleAction } from "@/features/pos/actions";
+import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
+import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
+import {
+    demoAuditLogRepository,
+    demoPendingApprovalRepository,
+} from "@/lib/demo/repositories";
+import { DemoStorageKeys } from "@/lib/demo/storage-keys";
+import { writeJsonToStorage } from "@/lib/demo/storage";
+import {
+    evaluatePosPermission,
+    formatPosPermissionAction,
+    POS_PERMISSION_DENIED_MESSAGE,
+    type PosAuditEntry,
+    type PosPendingApprovalRequest,
+    type PosPermissionAction,
+    type PosPermissionPolicy,
+} from "@/features/pos/permissions";
+const OPENING_CASH_DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500] as const;
+const HYDRATION_SAFE_TIME = "--:--";
+const HYDRATION_SAFE_BUSINESS_DATE = "--";
+const HYDRATION_SAFE_REFERENCE_DATE = new Date("2026-06-20T00:00:00");
+type ReceiptSnapshot = {
+    branchName: string;
+    cashierName: string;
+    cartItems: PosCartItem[];
+    changeAmount: number;
+    discountTotal: number;
+    paidAmount: number;
+    paymentMode: PaymentMode;
+    subtotal: number;
+    taxAmount: number;
+    totalAmount: number;
+};
+type ResolvedPayment = {
+    cardAmount: number;
+    cashAmount: number;
+    changeAmount: number;
+    paidAmount: number;
+    qrAmount: number;
+    transferAmount: number;
+};
+export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+    branchId: string;
+    branchName: string;
+    cashierName: string;
+    cashSession: PosCashSessionContext;
+    customers: PosCustomer[];
+    demoMode: boolean;
+    devDebug: boolean;
+    loyaltySettings: PosLoyaltySettings;
+    nextSaleNo: string;
+    posPermissionPolicy: PosPermissionPolicy;
+    products: PosProduct[];
+    promotionBanners: string[];
+    qrBanks: QrBank[];
+    receiptSettings: PosReceiptSettings;
+    taxInclusive: boolean;
+    taxRatePercent: number;
+    warehouseId: string;
+}) {
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
+    const [barcodeQuery, setBarcodeQuery] = useState("");
+    const [productQuery, setProductQuery] = useState("");
+    const [membershipQuery, setMembershipQuery] = useState("");
+    const [selectedCategory, setSelectedCategory] = useState("All");
+    const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
+    const [unitSelectionProduct, setUnitSelectionProduct] = useState<PosProduct | null>(null);
+    const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(null);
+    const [discountAmount, setDiscountAmount] = useState(0);
+    const [discountPercent, setDiscountPercent] = useState(0);
+    const [taxEnabled, setTaxEnabled] = useState(true);
+    const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
+    const [cashAmount, setCashAmount] = useState(0);
+    const [qrAmount, setQrAmount] = useState(0);
+    const [transferAmount, setTransferAmount] = useState(0);
+    const [cardAmount, setCardAmount] = useState(0);
+    const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
+    const [selectedHeldSaleId, setSelectedHeldSaleId] = useState("");
+    const [selectedStaffName, setSelectedStaffName] = useState(cashierName || "Current User");
+    const [staffStatus, setStaffStatus] = useState("Not Started");
+    const [staffControlExpanded, setStaffControlExpanded] = useState(true);
+    const [workStartedAt, setWorkStartedAt] = useState<Date | null>(null);
+    const [workEndedAt, setWorkEndedAt] = useState<Date | null>(null);
+    const [otStartedAt, setOtStartedAt] = useState<Date | null>(null);
+    const [otEndedAt, setOtEndedAt] = useState<Date | null>(null);
+    const [actualClosingCash, setActualClosingCash] = useState(0);
+    const [closingSummaryVisible, setClosingSummaryVisible] = useState(false);
+    const [openingCashCounts, setOpeningCashCounts] = useState<Record<number, number>>(() => Object.fromEntries(OPENING_CASH_DENOMINATIONS.map((denomination) => [denomination, 0])));
+    const [receiptOpen, setReceiptOpen] = useState(false);
+    const [lastReceipt, setLastReceipt] = useState<ReceiptSnapshot | null>(null);
+    const [mixedPaymentOpen, setMixedPaymentOpen] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
+    const [pendingApprovals, setPendingApprovals] = useState<PosPendingApprovalRequest[]>([]);
+    const [auditEntries, setAuditEntries] = useState<PosAuditEntry[]>([]);
+    const [customerDisplayMode, setCustomerDisplayMode] = useState<PosDisplayState["displayMode"]>("advertising");
+    const [availableQrBanks, setAvailableQrBanks] = useState(qrBanks);
+    const [selectedQrBankId, setSelectedQrBankId] = useState(qrBanks[0]?.id ?? "");
+    const [visibleProducts, setVisibleProducts] = useState<PosProduct[]>(products);
+    const [currentTime, setCurrentTime] = useState(HYDRATION_SAFE_TIME);
+    const [businessDate, setBusinessDate] = useState(HYDRATION_SAFE_BUSINESS_DATE);
+    const [stockReferenceDate, setStockReferenceDate] = useState(HYDRATION_SAFE_REFERENCE_DATE);
+    const [billNo, setBillNo] = useState(nextSaleNo);
+    useEffect(() => {
+        setBillNo(nextSaleNo);
+    }, [nextSaleNo]);
+    useEffect(() => {
+        setVisibleProducts(products);
+    }, [products]);
+    useEffect(() => {
+        setAvailableQrBanks(qrBanks);
+        setSelectedQrBankId((current) => current || qrBanks[0]?.id || "");
+    }, [qrBanks]);
+    useEffect(() => {
+        setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
+        setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
+    }, []);
+    useEffect(() => {
+        const updateClock = () => {
+            const now = new Date();
+            setCurrentTime(formatPosTime(now));
+            setBusinessDate(formatBusinessDate(now));
+            setStockReferenceDate(now);
+        };
+        updateClock();
+        const interval = window.setInterval(updateClock, 30000);
+        return () => window.clearInterval(interval);
+    }, []);
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const staffControlView = searchParams.get("staffControl");
+        if (staffControlView === "collapsed") {
+            setStaffControlExpanded(false);
+        }
+        if (searchParams.get("focus") === "staff") {
+            window.setTimeout(() => {
+                document.getElementById("staff-control")?.scrollIntoView({ block: "center" });
+            }, 250);
+        }
+    }, []);
+    const categories = useMemo(() => ["All", ...Array.from(new Set(visibleProducts.map((product) => product.categoryName)))], [visibleProducts]);
+    const favoriteProducts = useMemo(() => {
+        const favorites = visibleProducts.filter((product) => product.isFavorite).slice(0, 16);
+        return favorites.length >= 12 ? favorites : visibleProducts.slice(0, 16);
+    }, [visibleProducts]);
+    const filteredProducts = useMemo(() => {
+        const normalized = productQuery.trim().toLowerCase();
+        return visibleProducts.filter((product) => {
+            const categoryMatch = selectedCategory === "All" || product.categoryName === selectedCategory;
+            const queryMatch = !normalized ||
+                product.nameEn.toLowerCase().includes(normalized) ||
+                product.nameLo.toLowerCase().includes(normalized) ||
+                product.sku.toLowerCase().includes(normalized) ||
+                product.productCode?.toLowerCase().includes(normalized) ||
+                product.barcode.includes(productQuery.trim());
+            return categoryMatch && queryMatch;
+        });
+    }, [productQuery, visibleProducts, selectedCategory]);
+    const selectedQrBank = availableQrBanks.find((bank) => bank.id === selectedQrBankId) ?? null;
+    const staffOptions = useMemo(() => Array.from(new Set([cashierName || "Cashier 1", "Manager", "Cashier 1", "Cashier 2", "Owner"])), [cashierName]);
+    const activeCustomer = isMembershipActive(selectedCustomer) ? selectedCustomer : null;
+    const openingCashTotal = OPENING_CASH_DENOMINATIONS.reduce((total, denomination) => total + denomination * (openingCashCounts[denomination] ?? 0), 0);
+    const workHours = calculateHours(workStartedAt, workEndedAt);
+    const otHours = calculateHours(otStartedAt, otEndedAt);
+    const subtotal = cartItems.reduce((total, item) => total + item.priceLak * item.quantity, 0);
+    const membershipSavings = cartItems.reduce((total, item) => total + Math.max(item.retailPriceLak - item.priceLak, 0) * item.quantity, 0);
+    const percentDiscountValue = Math.round(subtotal * (discountPercent / 100));
+    const discountTotal = Math.min(subtotal, discountAmount + percentDiscountValue);
+    const taxableAmount = Math.max(subtotal - discountTotal, 0);
+    const taxAmount = taxEnabled
+        ? Math.round(taxInclusive ? taxableAmount * (taxRatePercent / (100 + taxRatePercent)) : taxableAmount * (taxRatePercent / 100))
+        : 0;
+    const totalAmount = taxInclusive ? taxableAmount : taxableAmount + taxAmount;
+    const pointsEarned = loyaltySettings.loyaltyEnabled
+        ? Math.floor(totalAmount / Math.max(loyaltySettings.loyaltySpendPerPointLak, 1))
+        : 0;
+    const paidAmount = paymentMode === "cash"
+        ? cashAmount
+        : paymentMode === "qr"
+            ? qrAmount
+            : paymentMode === "transfer"
+                ? transferAmount
+                : paymentMode === "card"
+                    ? cardAmount
+                    : cashAmount + qrAmount + transferAmount + cardAmount;
+    const changeAmount = Math.max(paidAmount - totalAmount, 0);
+    const dueAmount = Math.max(totalAmount - paidAmount, 0);
+    const cashSales = cashAmount;
+    const qrTransferSales = qrAmount + transferAmount;
+    const expectedCash = openingCashTotal + cashSales;
+    const cashDifference = actualClosingCash - expectedCash;
+    const appliedPromotions = useMemo(() => {
+        const labels = cartItems
+            .map((item) => item.pricingNote)
+            .filter((label): label is string => Boolean(label));
+        if (discountTotal > 0)
+            labels.push("Manual discount applied");
+        if (promotionBanners.length > 0)
+            labels.push(promotionBanners[0]);
+        return Array.from(new Set(labels)).slice(0, 4);
+    }, [cartItems, discountTotal, promotionBanners]);
+    function recordPosAudit(action: PosPermissionAction, result: PosAuditEntry["result"], approvalStatus: PosAuditEntry["approvalStatus"], details: string) {
+        const entry: PosAuditEntry = {
+            action,
+            approvalStatus,
+            createdAt: new Date().toISOString(),
+            details,
+            id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            result,
+            role: posPermissionPolicy.role,
+            user: posPermissionPolicy.displayName,
+        };
+        setAuditEntries((current) => {
+            const next = [entry, ...current].slice(0, 100);
+            demoAuditLogRepository.addAuditEntry(entry, 100);
+            return next;
+        });
+    }
+    function createPendingApproval(action: PosPermissionAction, reason: string, oldValue?: string, newValue?: string) {
+        const request: PosPendingApprovalRequest = {
+            action,
+            createdAt: new Date().toISOString(),
+            id: `approval-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            newValue,
+            oldValue,
+            reason,
+            requestedBy: posPermissionPolicy.displayName,
+            requestedByRole: posPermissionPolicy.role,
+            status: "pending",
+        };
+        setPendingApprovals((current) => {
+            const next = [request, ...current];
+            demoPendingApprovalRepository.savePendingApprovals(next);
+            return next;
+        });
+        recordPosAudit(action, "approval_requested", "pending", reason);
+        setMessage(`Pending approval created: ${formatPosPermissionAction(action)}.`);
+    }
+    function enforcePosAction(action: PosPermissionAction, context: { amountLak?: number; discountPercent?: number; oldValue?: string; newValue?: string } = {}) {
+        const decision = evaluatePosPermission(posPermissionPolicy, action, context);
+        if (decision.allowed) {
+            recordPosAudit(action, "allowed", "not_required", `${formatPosPermissionAction(action)} allowed.`);
+            return true;
+        }
+        if (decision.approvalRequired) {
+            createPendingApproval(action, decision.reason ?? `${formatPosPermissionAction(action)} requires approval.`, context.oldValue, context.newValue);
+            return false;
+        }
+        recordPosAudit(action, "blocked", "rejected", decision.reason ?? POS_PERMISSION_DENIED_MESSAGE);
+        setMessage(POS_PERMISSION_DENIED_MESSAGE);
+        return false;
+    }
+    function resolvePendingApproval(requestId: string, status: "approved" | "rejected") {
+        if (posPermissionPolicy.role !== "Owner") {
+            setMessage(POS_PERMISSION_DENIED_MESSAGE);
+            recordPosAudit("manual_price_override", "blocked", "rejected", "Only Owner can approve or reject POS approval requests.");
+            return;
+        }
+        const request = pendingApprovals.find((item) => item.id === requestId);
+        setPendingApprovals((current) => {
+            const next = current.map((request) => request.id === requestId ? { ...request, status } : request);
+            demoPendingApprovalRepository.savePendingApprovals(next);
+            return next;
+        });
+        if (request) {
+            recordPosAudit(request.action, status, status, `${formatPosPermissionAction(request.action)} ${status}.`);
+            if (status === "approved") {
+                applyPosAction(request.action, "approved");
+            }
+        }
+        setMessage(`Approval request ${status}.`);
+    }
+    useEffect(() => {
+        const state: PosDisplayState = {
+            appliedPromotions,
+            customer: selectedCustomer,
+            displayMode: cartItems.length > 0 ? customerDisplayMode : "advertising",
+            items: cartItems,
+            membershipDiscountLak: membershipSavings,
+            membershipPoints: selectedCustomer?.pointsBalance ?? 0,
+            membershipStatus: selectedCustomer
+                ? `${selectedCustomer.membershipType} ${isMembershipActive(selectedCustomer) ? "Active" : "Expired"}`
+                : "Guest",
+            pointsEarned,
+            promotionDiscountLak: discountTotal,
+            selectedQrBank,
+            storeLogoUrl: "",
+            subtotalLak: subtotal,
+            totalLak: totalAmount,
+        };
+        writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
+    }, [appliedPromotions, cartItems, customerDisplayMode, discountTotal, membershipSavings, pointsEarned, selectedCustomer, selectedQrBank, subtotal, totalAmount]);
+    function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
+        const saleUnit = selectedUnit ?? getSaleUnits(product)[0];
+        const unitProduct = saleUnit ? productWithSelectedUnit(product, saleUnit) : product;
+        const pricedProduct = applyCustomerPricing(unitProduct, activeCustomer);
+        const stockWarning = getStockWarning(unitProduct, stockReferenceDate);
+        setCartItems((current) => {
+            const existing = current.find((item) => item.id === product.id && item.unitId === pricedProduct.unitId);
+            if (existing) {
+                return current.map((item) => item.id === product.id && item.unitId === pricedProduct.unitId
+                    ? { ...item, quantity: Math.min(item.quantity + 1, Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1)))) }
+                    : item);
+            }
+            return [...current, {
+                    ...pricedProduct,
+                    cartLineId: `${product.id}:${pricedProduct.unitId ?? "default"}`,
+                    id: product.id,
+                    quantity: 1,
+                    stockWarning,
+                }];
+        });
+        setCustomerDisplayMode("checkout");
+        setUnitSelectionProduct(null);
+        setMessage(stockWarning ? `${stockWarning.label}: ${product.nameEn}` : `${product.nameEn} ${saleUnit?.unitName ?? ""} added to cart.`);
+    }
+    function selectProductForSale(product: PosProduct, matchedUnit?: PosProductUnit) {
+        const saleUnits = getSaleUnits(product);
+        if (saleUnits.length <= 1) {
+            addToCart(product, matchedUnit ?? saleUnits[0]);
+            return;
+        }
+        setUnitSelectionProduct(matchedUnit ? productWithSortedMatchedUnit(product, matchedUnit) : product);
+    }
+    function scanBarcode() {
+        const normalized = barcodeQuery.trim();
+        if (!normalized) {
+            setMessage(t("ui.scan.or.enter.barcode.sku.or.internal.code.f"));
+            return;
+        }
+        const product = visibleProducts.find((item) => item.barcode === normalized ||
+            item.units?.some((unit) => unit.barcode === normalized) ||
+            item.sku.toLowerCase() === normalized.toLowerCase() ||
+            item.productCode?.toLowerCase() === normalized.toLowerCase());
+        if (!product) {
+            setMessage(t("ui.no.product.found.for.barcode.sku.or.internal"));
+            return;
+        }
+        const matchedUnit = product.units?.find((unit) => unit.barcode === normalized);
+        selectProductForSale(product, matchedUnit);
+        setBarcodeQuery("");
+    }
+    function searchMembership() {
+        const query = membershipQuery.trim().toLowerCase();
+        const customer = customers.find((item) => item.phone.includes(query) ||
+            item.name.toLowerCase().includes(query) ||
+            item.membershipNumber.toLowerCase().includes(query));
+        if (!customer) {
+            setSelectedCustomer(null);
+            setMessage(t("ui.no.customer.or.membership.found"));
+            return;
+        }
+        setSelectedCustomer(customer);
+        setMessage(isMembershipActive(customer)
+            ? `${customer.name} membership active.`
+            : `${customer.name} membership expired. Retail pricing applies.`);
+    }
+    function updateQuantity(productId: string, quantity: number, unitId?: string) {
+        setCartItems((current) => current
+            .map((item) => item.id === productId && item.unitId === unitId
+            ? { ...item, quantity: Math.max(1, Math.min(quantity, Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1))))) }
+            : item)
+            .filter((item) => item.quantity > 0));
+    }
+    function removeItem(productId: string, unitId?: string) {
+        if (!enforcePosAction("delete_item_from_bill")) {
+            return;
+        }
+        setCartItems((current) => current.filter((item) => !(item.id === productId && item.unitId === unitId)));
+    }
+    function holdSale() {
+        if (!enforcePosAction("hold_bill")) {
+            return;
+        }
+        if (cartItems.length === 0) {
+            setMessage(t("ui.cart.is.empty.add.items.before.holding.a.bil"));
+            return;
+        }
+        const heldSale: HeldSale = {
+            id: `hold-${Date.now()}`,
+            saleNo: nextHoldName(heldSales.length),
+            createdAt: new Date().toLocaleString("en-GB"),
+            itemCount: cartItems.reduce((total, item) => total + item.quantity, 0),
+            totalLak: totalAmount,
+            items: cartItems,
+        };
+        setHeldSales((current) => [heldSale, ...current]);
+        clearSale();
+        setMessage(`Bill ${heldSale.saleNo} held.`);
+    }
+    function resumeSale() {
+        if (!enforcePosAction("resume_bill")) {
+            return;
+        }
+        const heldSale = heldSales.find((sale) => sale.id === selectedHeldSaleId);
+        if (!heldSale) {
+            setMessage(t("ui.select.a.held.bill.to.resume"));
+            return;
+        }
+        setCartItems(heldSale.items);
+        setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
+        setSelectedHeldSaleId("");
+        setMessage(`Bill ${heldSale.saleNo} resumed.`);
+    }
+    function deleteHeldSale() {
+        if (!enforcePosAction("void_bill")) {
+            return;
+        }
+        if (!selectedHeldSaleId) {
+            setMessage(t("ui.select.a.held.bill.to.delete"));
+            return;
+        }
+        const sale = heldSales.find((item) => item.id === selectedHeldSaleId);
+        setHeldSales((current) => current.filter((item) => item.id !== selectedHeldSaleId));
+        setSelectedHeldSaleId("");
+        setMessage(`Bill ${sale?.saleNo ?? ""} deleted.`);
+    }
+    function resolvePaymentForCompletion(): ResolvedPayment | null {
+        if (!paymentMode) {
+            return null;
+        }
+        const payment: ResolvedPayment = {
+            cardAmount,
+            cashAmount,
+            changeAmount,
+            paidAmount,
+            qrAmount,
+            transferAmount,
+        };
+        if (paymentMode !== "mixed" && payment.paidAmount <= 0 && totalAmount > 0) {
+            payment.cashAmount = paymentMode === "cash" ? totalAmount : 0;
+            payment.qrAmount = paymentMode === "qr" ? totalAmount : 0;
+            payment.transferAmount = paymentMode === "transfer" ? totalAmount : 0;
+            payment.cardAmount = paymentMode === "card" ? totalAmount : 0;
+            payment.paidAmount = totalAmount;
+            payment.changeAmount = 0;
+        }
+        if (payment.paidAmount < totalAmount) {
+            return null;
+        }
+        payment.changeAmount = Math.max(payment.paidAmount - totalAmount, 0);
+        return payment;
+    }
+    function applyResolvedPayment(payment: ResolvedPayment) {
+        setCashAmount(payment.cashAmount);
+        setQrAmount(payment.qrAmount);
+        setTransferAmount(payment.transferAmount);
+        setCardAmount(payment.cardAmount);
+    }
+    function getStockValidationError() {
+        const soldByProduct = cartItems.reduce<Record<string, number>>((totals, item) => {
+            totals[item.id] = (totals[item.id] ?? 0) + item.quantity * (item.conversionQty ?? 1);
+            return totals;
+        }, {});
+        const productsToCheck = visibleProducts;
+        for (const [productId, soldQty] of Object.entries(soldByProduct)) {
+            const product = productsToCheck.find((item) => item.id === productId);
+            if (!product) {
+                return "Product was not found. Sale was not completed.";
+            }
+            if (soldQty > product.stockQty) {
+                return `Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested ${soldQty}.`;
+            }
+        }
+        return null;
+    }
+    function buildReceiptSnapshot(payment: ResolvedPayment): ReceiptSnapshot {
+        return {
+            branchName,
+            cashierName,
+            cartItems,
+            changeAmount: payment.changeAmount,
+            discountTotal,
+            paidAmount: payment.paidAmount,
+            paymentMode,
+            subtotal,
+            taxAmount,
+            totalAmount,
+        };
+    }
+    function completeSale() {
+        if (cartItems.length === 0) {
+            setMessage(t("ui.cart.is.empty"));
+            return;
+        }
+        const stockError = getStockValidationError();
+        if (stockError) {
+            setMessage(stockError);
+            return;
+        }
+        const payment = resolvePaymentForCompletion();
+        if (!payment) {
+            setMessage(t("ui.payment.is.not.complete.yet"));
+            return;
+        }
+        if (!enforcePosAction("create_sale", { amountLak: totalAmount, discountPercent })) {
+            return;
+        }
+        if (discountTotal > 0 && !enforcePosAction("apply_discount", {
+            amountLak: discountTotal,
+            discountPercent,
+            newValue: `${formatLak(discountTotal)} LAK / ${discountPercent}%`,
+            oldValue: "0 LAK / 0%",
+        })) {
+            return;
+        }
+        applyResolvedPayment(payment);
+        const saleNo = billNo;
+        startTransition(async () => {
+            const result = await completeSaleAction({
+                branchId,
+                cardAmount: payment.cardAmount,
+                cashAmount: payment.cashAmount,
+                changeAmount: payment.changeAmount,
+                customerId: selectedCustomer?.id,
+                discountAmount,
+                discountPercent,
+                items: cartItems.map((item) => ({
+                    costPrice: item.costPriceLak,
+                    conversionQty: item.conversionQty ?? 1,
+                    productId: item.id,
+                    quantity: item.quantity,
+                    sellingPrice: item.priceLak,
+                    unitId: item.unitId,
+                })),
+                paymentMode,
+                qrAmount: payment.qrAmount,
+                saleNo,
+                taxAmount,
+                taxRate: taxEnabled ? taxRatePercent : 0,
+                totalAmount,
+                transferAmount: payment.transferAmount,
+                warehouseId,
+            });
+            if (!result.ok) {
+                setMessage(result.error ?? t("ui.sale.completion.failed"));
+                return;
+            }
+            const assignedSaleNo = result.data?.saleNo ?? saleNo;
+            setLastReceipt(buildReceiptSnapshot(payment));
+            setReceiptOpen(true);
+            setMessage(`${assignedSaleNo} completed and saved.`);
+            setCustomerDisplayMode("thank_you");
+            clearSale();
+            setBillNo(getFollowingPosSaleNo(assignedSaleNo, receiptSettings.receiptPrefix));
+            router.refresh();
+            const displaySettings = readCustomerDisplaySettingsFromStorage();
+            window.setTimeout(() => {
+                setCustomerDisplayMode("advertising");
+            }, displaySettings.autoReturnSeconds * 1000);
+        });
+    }
+    function clearSale() {
+        setCartItems([]);
+        setDiscountAmount(0);
+        setDiscountPercent(0);
+        setCashAmount(0);
+        setQrAmount(0);
+        setTransferAmount(0);
+        setCardAmount(0);
+        setPaymentMode("cash");
+        setCustomerDisplayMode("advertising");
+    }
+    function updateOpeningCashCount(denomination: number, quantity: number) {
+        setOpeningCashCounts((current) => ({ ...current, [denomination]: Math.max(0, Math.floor(quantity)) }));
+    }
+    function recordStartWork() {
+        if (!enforcePosAction("cash_in", { amountLak: openingCashTotal, newValue: `${formatLak(openingCashTotal)} LAK` })) {
+            return;
+        }
+        setWorkStartedAt(new Date());
+        setWorkEndedAt(null);
+        setStaffStatus("Working");
+        setClosingSummaryVisible(false);
+    }
+    function recordEndWork() {
+        if (!enforcePosAction("cash_out", { amountLak: actualClosingCash, newValue: `${formatLak(actualClosingCash)} LAK` })) {
+            return;
+        }
+        setWorkEndedAt(new Date());
+        setStaffStatus("Closed");
+        setClosingSummaryVisible(true);
+    }
+    function recordStartOt() {
+        setOtStartedAt(new Date());
+        setOtEndedAt(null);
+        setStaffStatus("OT");
+    }
+    function recordEndOt() {
+        setOtEndedAt(new Date());
+        setStaffStatus(workEndedAt ? "Closed" : "Working");
+    }
+    function selectPaymentMode(nextMode: PaymentMode) {
+        if (nextMode === "mixed" && !enforcePosAction("split_payment")) {
+            return;
+        }
+        if ((nextMode === "qr" || nextMode === "transfer" || nextMode === "card" || nextMode === "mixed") && !enforcePosAction("multi_currency_payment")) {
+            return;
+        }
+        setPaymentMode(nextMode);
+        if (nextMode === "mixed") {
+            setMixedPaymentOpen(true);
+        }
+    }
+    function openMixedPayment() {
+        if (!enforcePosAction("split_payment")) {
+            return;
+        }
+        setMixedPaymentOpen(true);
+    }
+    function runControlledPosAction(action: PosPermissionAction) {
+        const context = buildPosActionContext(action);
+        if (enforcePosAction(action, context)) {
+            applyPosAction(action, "allowed");
+        }
+    }
+    function buildPosActionContext(action: PosPermissionAction) {
+        if (action === "refund_bill") {
+            return { amountLak: totalAmount || 150000, oldValue: "Completed sale", newValue: "Refund request" };
+        }
+        if (action === "manual_price_override") {
+            return {
+                amountLak: totalAmount,
+                oldValue: cartItems[0] ? `${formatLak(cartItems[0].priceLak)} LAK` : "No item",
+                newValue: cartItems[0] ? `${formatLak(Math.max(cartItems[0].priceLak - 1000, 0))} LAK` : "Manual price override",
+            };
+        }
+        if (action === "apply_discount") {
+            const testDiscountPercent = posPermissionPolicy.role === "Owner" ? 5 : posPermissionPolicy.maxDiscountPercent + 5;
+            return {
+                amountLak: Math.round(subtotal * (testDiscountPercent / 100)) || 5000,
+                discountPercent: testDiscountPercent,
+                oldValue: `${discountPercent}%`,
+                newValue: `${testDiscountPercent}%`,
+            };
+        }
+        return { amountLak: totalAmount };
+    }
+    function applyPosAction(action: PosPermissionAction, source: "allowed" | "approved") {
+        const suffix = source === "approved" ? " after Owner approval" : "";
+        if (action === "refund_bill") {
+            setMessage(`Refund bill processed${suffix}.`);
+            return;
+        }
+        if (action === "void_bill") {
+            clearSale();
+            setMessage(`Bill voided${suffix}.`);
+            return;
+        }
+        if (action === "manual_price_override") {
+            if (cartItems.length === 0) {
+                setMessage("Add an item before manual price override.");
+                return;
+            }
+            setCartItems((current) => current.map((item, index) => index === 0 ? { ...item, priceLak: Math.max(item.priceLak - 1000, 0), pricingNote: "Manual price override" } : item));
+            setMessage(`Manual price override applied${suffix}.`);
+            return;
+        }
+        if (action === "delete_item_from_bill") {
+            if (cartItems.length === 0) {
+                setMessage("Cart is empty.");
+                return;
+            }
+            const [firstItem] = cartItems;
+            setCartItems((current) => current.slice(1));
+            setMessage(`${firstItem.nameEn} deleted from bill${suffix}.`);
+            return;
+        }
+        if (action === "apply_discount") {
+            const nextDiscount = posPermissionPolicy.role === "Owner" ? 5 : Math.min(posPermissionPolicy.maxDiscountPercent, 5);
+            setDiscountPercent(nextDiscount);
+            setMessage(`${nextDiscount}% discount applied${suffix}.`);
+            return;
+        }
+        if (action === "cash_in") {
+            setWorkStartedAt(new Date());
+            setWorkEndedAt(null);
+            setStaffStatus("Working");
+            setClosingSummaryVisible(false);
+            setMessage(`Cash in recorded${suffix}.`);
+            return;
+        }
+        if (action === "cash_out") {
+            setWorkEndedAt(new Date());
+            setStaffStatus("Closed");
+            setClosingSummaryVisible(true);
+            setMessage(`Cash out recorded${suffix}.`);
+            return;
+        }
+        if (action === "reprint_receipt") {
+            setReceiptOpen(true);
+            setMessage(`Receipt reprint opened${suffix}.`);
+            return;
+        }
+        if (action === "split_payment") {
+            setPaymentMode("mixed");
+            setMixedPaymentOpen(true);
+            setMessage(`Split payment opened${suffix}.`);
+            return;
+        }
+        if (action === "multi_currency_payment") {
+            setPaymentMode("transfer");
+            setMessage(`Multi-currency payment mode selected${suffix}.`);
+            return;
+        }
+        setMessage(`${formatPosPermissionAction(action)} completed${suffix}.`);
+    }
+    return (<div className="flex min-w-0 flex-col gap-3">
+      {message ? (<div className="rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary">
+          {message}
+        </div>) : null}
+
+      <section className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_390px] 2xl:grid-cols-[minmax(0,1fr)_430px]">
+        <main className="flex min-w-0 flex-col gap-3">
+          <Panel className="p-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto]">
+              <label className="relative">
+                <Barcode className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-primary" aria-hidden="true"/>
+                <input autoFocus className="h-14 w-full rounded-md border border-primary/40 bg-background pl-12 pr-4 text-lg font-semibold outline-none transition focus:border-primary" placeholder="Scan barcode / SKU / code" value={barcodeQuery} onChange={(event) => setBarcodeQuery(event.target.value)} onKeyDown={(event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                scanBarcode();
+            }
+        }}/>
+              </label>
+              <label className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
+                <input className="field-input h-14 pl-10" placeholder={t("ui.search.product.sku.code")} value={productQuery} onChange={(event) => setProductQuery(event.target.value)}/>
+              </label>
+              <button className="h-14 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground" type="button" onClick={scanBarcode}>
+                Scan Barcode
+              </button>
+            </div>
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {categories.map((category) => (<button className={cn("h-10 shrink-0 rounded-md border px-4 text-sm font-semibold transition", selectedCategory === category
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:border-primary hover:text-foreground")} key={category} type="button" onClick={() => setSelectedCategory(category)}>
+                  {category}
+                </button>))}
+            </div>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {favoriteProducts.slice(0, 16).map((product, index) => {
+            const warning = getStockWarning(product, stockReferenceDate);
+            return (<button className="grid h-16 w-36 shrink-0 rounded-md border border-border bg-background p-2 text-left text-xs font-semibold transition hover:border-primary" key={productKey(product, index)} type="button" onClick={() => addToCart(product)}>
+                    <span className="line-clamp-1">{product.nameEn}</span>
+                    <span className="flex items-center justify-between gap-1 self-end">
+                      <span className="text-primary">{formatLak(product.priceLak)}</span>
+                      <span className={cn("rounded px-1 py-0.5 text-[10px]", warning ? warningBadgeClass(warning.tone) : "bg-primary/10 text-primary")}>
+                        {warning?.label ?? product.stockQty}
+                      </span>
+                    </span>
+                  </button>);
+        })}
+            </div>
+            <div className="mt-2 flex gap-2 overflow-x-auto">
+              {promotionBanners.map((banner) => (<div className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary" key={banner}>
+                  <BadgePercent className="size-4" aria-hidden="true"/>
+                  {banner}
+                </div>))}
+            </div>
+          </Panel>
+
+          <section className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
+            {filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)}/>))}
+          </section>
+        </main>
+
+        <aside className="flex min-w-0 flex-col gap-3">
+          <Panel>
+            <div className="flex items-center justify-between gap-3 border-b border-border p-3">
+              <div className="min-w-0">
+                <h2 className="font-semibold">Shopping Cart</h2>
+                <p className="text-xs text-muted-foreground">{cartItems.length} lines</p>
+              </div>
+              <ShoppingCart className="text-primary" aria-hidden="true"/>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-b border-border bg-background/50 px-3 py-2 text-xs">
+              <CartMeta label={t("ui.bill.no")} value={billNo}/>
+              <CartMeta label="Customer" value={selectedCustomer?.name ?? "Guest"}/>
+              <CartMeta label="Cashier" value={cashierName || "Current User"}/>
+              <CartMeta label="Time" value={currentTime}/>
+            </div>
+            <div className="max-h-[350px] overflow-y-auto p-3">
+              {cartItems.length === 0 ? (<div className="grid min-h-36 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{t("ui.scan.barcode.or.tap.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-2">
+                  {cartItems.map((item, index) => (<div className="rounded-md border border-border bg-background p-2" key={cartLineKey(item, index)}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="line-clamp-1 text-sm font-semibold">{item.nameEn}</div>
+                          <div className="font-mono text-[11px] text-muted-foreground">{item.sku} / {item.unitName}</div>
+                          {item.stockWarning ? (<div className={cn("mt-1 text-xs font-semibold", warningTextClass(item.stockWarning.tone))}>
+                              {item.stockWarning.label}
+                            </div>) : null}
+                          {item.pricingNote ? (<div className="mt-1 text-xs font-semibold text-primary">{item.pricingNote}</div>) : null}
+                        </div>
+                        <button className="grid size-8 shrink-0 place-items-center rounded-md border border-border text-danger" type="button" onClick={() => removeItem(item.id, item.unitId)} aria-label="Remove item">
+                          <Trash2 aria-hidden="true"/>
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <QuantityStepper item={item} onChange={updateQuantity}/>
+                        <div className="text-right">
+                          <div className="font-semibold">{formatLak(item.priceLak * item.quantity)} LAK</div>
+                          <div className="text-xs text-muted-foreground">{formatLak(item.priceLak)} / {item.unitName}</div>
+                        </div>
+                      </div>
+                    </div>))}
+                </div>)}
+            </div>
+          </Panel>
+
+          <Panel className="p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <UserRoundSearch className="text-primary" aria-hidden="true"/>
+              <h2 className="text-sm font-semibold">Membership Search</h2>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <input className="field-input h-10 text-sm" placeholder={t("ui.phone.name.or.member.no")} value={membershipQuery} onChange={(event) => setMembershipQuery(event.target.value)} onKeyDown={(event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                searchMembership();
+            }
+        }}/>
+              <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={searchMembership}>
+                Find Member
+              </button>
+            </div>
+            <CustomerCard customer={selectedCustomer}/>
+          </Panel>
+
+          <Panel className="p-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold">Payment</h2>
+              <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
+                Mixed popup
+              </button>
+            </div>
+            <dl className="mt-3">
+              <div className="flex items-center justify-between rounded-md border border-primary/25 bg-primary/10 px-3 py-3 text-xl font-semibold">
+                <dt>Total</dt>
+                <dd>{formatLak(totalAmount)} LAK</dd>
+              </div>
+            </dl>
+            <div className="mt-3 grid grid-cols-5 gap-1">
+              <PaymentButton active={paymentMode === "cash"} icon={Banknote} label="Cash" onClick={() => selectPaymentMode("cash")}/>
+              <PaymentButton active={paymentMode === "qr"} icon={QrCode} label="QR" onClick={() => selectPaymentMode("qr")}/>
+              <PaymentButton active={paymentMode === "transfer"} icon={WalletCards} label="Bank" onClick={() => selectPaymentMode("transfer")}/>
+              <PaymentButton active={paymentMode === "card"} icon={CreditCard} label="Card" onClick={() => selectPaymentMode("card")}/>
+              <PaymentButton active={paymentMode === "mixed"} icon={ReceiptText} label="Mixed" onClick={() => selectPaymentMode("mixed")}/>
+            </div>
+
+            <PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} mode={paymentMode} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>
+
+            <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
+              <Metric label="Paid" value={`${formatLak(paidAmount)} LAK`}/>
+              <Metric label="Due" value={`${formatLak(dueAmount)} LAK`}/>
+              <Metric label="Change" value={`${formatLak(changeAmount)} LAK`}/>
+            </dl>
+            <button className="mt-3 h-12 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending}>
+              {isPending ? t("ui.completing") : "Pay"}
+            </button>
+
+            <div className="mt-3 grid gap-3">
+              <div className="rounded-md border border-border bg-background p-2">
+                <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
+                  <ActionButton icon={RotateCcw} label="Resume Bill" onClick={resumeSale}/>
+                  <ActionButton icon={ReceiptText} label="Hold Bill" onClick={holdSale}/>
+                </div>
+                <div className="mt-2 grid gap-2">
+                  <select className="field-input h-10 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
+                    <option value="">Held bills</option>
+                    {heldSales.map((sale) => (<option key={sale.id} value={sale.id}>
+                        {sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items
+                      </option>))}
+                  </select>
+                  <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={deleteHeldSale}>
+                    Delete Held Bill
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          {demoMode && devDebug ? (<PosPermissionPanel auditEntries={auditEntries} pendingApprovals={pendingApprovals} policy={posPermissionPolicy} onApprove={(requestId) => resolvePendingApproval(requestId, "approved")} onReject={(requestId) => resolvePendingApproval(requestId, "rejected")} onTestAction={runControlledPosAction}/>) : null}
+
+          <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={openingCashTotal} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
+        </aside>
+      </section>
+
+      {mixedPaymentOpen ? (<MixedPaymentModal cardAmount={cardAmount} cashAmount={cashAmount} onClose={() => setMixedPaymentOpen(false)} qrAmount={qrAmount} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setPaymentMode={setPaymentMode} setQrAmount={setQrAmount} setTransferAmount={setTransferAmount} totalAmount={totalAmount} transferAmount={transferAmount}/>) : null}
+
+      {unitSelectionProduct ? (<UnitSelectorModal product={unitSelectionProduct} onClose={() => setUnitSelectionProduct(null)} onSelect={(unit) => addToCart(unitSelectionProduct, unit)}/>) : null}
+
+      {receiptOpen && lastReceipt ? (<ReceiptPreview branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} discountTotal={lastReceipt.discountTotal} onClose={() => setReceiptOpen(false)} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptSettings={receiptSettings} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
+    </div>);
+}
+function Panel({ children, className }: {
+    children: React.ReactNode;
+    className?: string;
+}) {
+    return <section className={cn("min-w-0 rounded-lg border border-border bg-card", className)}>{children}</section>;
+}
+function CustomerCard({ customer }: {
+    customer: PosCustomer | null;
+}) {
+    if (!customer) {
+        return (<div className="mt-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground">{t("ui.guest.sale.search.for.member.pricing")}</div>);
+    }
+    const active = isMembershipActive(customer);
+    return (<div className="mt-2 rounded-md border border-border bg-background p-2 text-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold">{customer.name}</div>
+          <div className="text-[11px] text-muted-foreground">{customer.phone}</div>
+        </div>
+        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", active ? "bg-success/10 text-success" : "bg-danger/10 text-danger")}>
+          {customer.membershipStatus}
+        </span>
+      </div>
+      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+        <InfoLine label="Type" value={customer.membershipType}/>
+        <InfoLine label={t("ui.member.no")} value={customer.membershipNumber}/>
+        <InfoLine label="Expiry" value={customer.membershipExpiry}/>
+        <InfoLine label="Points" value={String(customer.pointsBalance)}/>
+      </div>
+      {customer.membershipType === "Student" ? (<div className="mt-1.5 rounded-md bg-primary/10 p-1.5 text-[11px] text-primary">
+          <div className="flex items-center gap-1 font-semibold"><GraduationCap className="size-4" aria-hidden="true"/> Student verified</div>
+          <div className="line-clamp-1">{customer.schoolName} - {customer.studentIdNumber}</div>
+          <div>Card upload: {customer.studentCardUrl ? "Stored" : "Missing"}</div>
+        </div>) : null}
+    </div>);
+}
+function InfoLine({ label, value }: {
+    label: string;
+    value: string;
+}) {
+    return (<div>
+      <div className="text-muted-foreground">{label}</div>
+      <div className="font-semibold">{value}</div>
+    </div>);
+}
+function ProductGridItem({ onClick, product, stockReferenceDate, }: {
+    onClick: () => void;
+    product: PosProduct;
+    stockReferenceDate: Date;
+}) {
+    return (<>
+      <button className="min-h-[176px] rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary hover:shadow-sm" type="button" onClick={onClick}>
+        <PosProductImage imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={product.nameEn}/>
+        <div className="mt-3 min-h-12">
+          <div className="line-clamp-1 text-sm font-semibold">{product.nameEn}</div>
+          <div className="line-clamp-1 text-xs text-muted-foreground">{product.sku}</div>
+        </div>
+        <div className="mt-3 flex items-end justify-between gap-2">
+          <div>
+            <div className="text-base font-semibold">{formatLak(product.priceLak)}</div>
+            <div className="text-xs text-muted-foreground">LAK / {product.unitName}</div>
+          </div>
+          <StockBadge product={product} stockReferenceDate={stockReferenceDate}/>
+        </div>
+      </button>
+    </>);
+}
+function CartMeta({ label, value }: {
+    label: string;
+    value: string;
+}) {
+    return (<div className="min-w-0">
+      <span className="text-muted-foreground">{label}: </span>
+      <span className="truncate font-semibold">{value}</span>
+    </div>);
+}
+function StockBadge({ product, stockReferenceDate }: {
+    product: PosProduct;
+    stockReferenceDate: Date;
+}) {
+    const warning = getStockWarning(product, stockReferenceDate);
+    return (<span className={cn("rounded-md px-2 py-1 text-xs font-semibold", warning ? warningBadgeClass(warning.tone) : "bg-primary/10 text-primary")}>
+      {warning ? warning.label : `${product.stockQty} left`}
+    </span>);
+}
+function QuantityStepper({ item, onChange }: {
+    item: PosCartItem;
+    onChange: (productId: string, quantity: number, unitId?: string) => void;
+}) {
+    const maxSaleQty = Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1)));
+    return (<div className="inline-flex h-10 items-center rounded-md border border-border">
+      <button className="grid size-10 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity - 1, item.unitId)} aria-label="Decrease quantity">
+        <Minus aria-hidden="true"/>
+      </button>
+      <PosNumberInput className="h-10 w-14 border-x border-border bg-transparent text-center text-sm font-semibold outline-none" max={maxSaleQty} min={1} value={item.quantity} onValueChange={(value) => onChange(item.id, value, item.unitId)}/>
+      <button className="grid size-10 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity + 1, item.unitId)} aria-label="Increase quantity">
+        <Plus aria-hidden="true"/>
+      </button>
+    </div>);
+}
+function Field({ children, label }: {
+    children: React.ReactNode;
+    label: string;
+}) {
+    return (<label className="flex flex-col gap-1 text-xs font-semibold">
+      {label}
+      {children}
+    </label>);
+}
+function PaymentFields({ availableQrBanks, cardAmount, cashAmount, mode, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
+    availableQrBanks: QrBank[];
+    cardAmount: number;
+    cashAmount: number;
+    mode: PaymentMode;
+    qrAmount: number;
+    selectedQrBankId: string;
+    setCardAmount: (value: number) => void;
+    setCashAmount: (value: number) => void;
+    setQrAmount: (value: number) => void;
+    setSelectedQrBankId: (value: string) => void;
+    setTransferAmount: (value: number) => void;
+    transferAmount: number;
+}) {
+    return (<div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {(mode === "cash" || mode === "mixed") ? (<Field label="Cash Amount">
+          <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
+        </Field>) : null}
+      {(mode === "qr" || mode === "mixed") ? (<>
+          <Field label="QR Bank">
+            <select className="field-input" value={selectedQrBankId} onChange={(event) => setSelectedQrBankId(event.target.value)}>
+              {availableQrBanks.map((bank) => (<option key={bank.id} value={bank.id}>{bank.bankName}</option>))}
+            </select>
+          </Field>
+          <Field label="QR Amount">
+            <PosNumberInput className="field-input" value={qrAmount} onValueChange={setQrAmount}/>
+          </Field>
+        </>) : null}
+      {(mode === "transfer" || mode === "mixed") ? (<Field label="Bank Transfer">
+          <PosNumberInput className="field-input" value={transferAmount} onValueChange={setTransferAmount}/>
+        </Field>) : null}
+      {(mode === "card" || mode === "mixed") ? (<Field label="Card Amount">
+          <PosNumberInput className="field-input" value={cardAmount} onValueChange={setCardAmount}/>
+        </Field>) : null}
+    </div>);
+}
+function Metric({ label, value }: {
+    label: string;
+    value: string;
+}) {
+    return (<div className="rounded-md border border-border bg-background p-2">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-sm font-semibold">{value}</dd>
+    </div>);
+}
+function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSales, closingSummaryVisible, expanded, expectedCash, openingCashCounts, openingCashTotal, onEndOt, onEndWork, onSetActualClosingCash, onSelectStaff, onStartOt, onStartWork, onToggleExpanded, onUpdateOpeningCashCount, otEndedAt, otHours, otStartedAt, selectedStaffName, staffOptions, staffStatus, workEndedAt, workHours, workStartedAt, qrTransferSales, }: {
+    actualClosingCash: number;
+    businessDate: string;
+    cashDifference: number;
+    cashSales: number;
+    closingSummaryVisible: boolean;
+    expanded: boolean;
+    expectedCash: number;
+    openingCashCounts: Record<number, number>;
+    openingCashTotal: number;
+    otEndedAt: Date | null;
+    otHours: number;
+    otStartedAt: Date | null;
+    selectedStaffName: string;
+    staffOptions: string[];
+    staffStatus: string;
+    workEndedAt: Date | null;
+    workHours: number;
+    workStartedAt: Date | null;
+    onEndOt: () => void;
+    onEndWork: () => void;
+    onSetActualClosingCash: (value: number) => void;
+    onSelectStaff: (staffName: string) => void;
+    onStartOt: () => void;
+    onStartWork: () => void;
+    onToggleExpanded: () => void;
+    onUpdateOpeningCashCount: (denomination: number, quantity: number) => void;
+    qrTransferSales: number;
+}) {
+    const CollapseIcon = expanded ? ChevronUp : ChevronDown;
+    const isWorking = staffStatus === "Working";
+    const isOt = staffStatus === "OT";
+    return (<section className="min-w-0 scroll-mt-24 rounded-lg border border-border bg-card p-3" id="staff-control">
+      <button className="flex w-full items-center justify-between gap-3 text-left" type="button" onClick={onToggleExpanded} aria-expanded={expanded}>
+        <div className="flex min-w-0 items-center gap-2">
+          <CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true"/>
+          <div className="min-w-0 text-xs">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <h3 className="text-sm font-semibold">Staff Control</h3>
+              <span className="text-muted-foreground">|</span>
+              <span className="text-muted-foreground">{businessDate}</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", staffStatusClassName(staffStatus))}>{staffStatus}</span>
+            </div>
+            <div className="mt-1 text-[11px] font-semibold text-muted-foreground">
+              Work {workHours.toFixed(2)}h | OT {otHours.toFixed(2)}h
+            </div>
+          </div>
+        </div>
+        <CollapseIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
+      </button>
+
+      {!expanded ? null : (<>
+          <div className="mt-3 rounded-md border border-[#FFD700]/35 bg-[#FFD700]/10 p-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#FFD700]">Opening Cash Total</div>
+            <div className="mt-1 text-2xl font-black leading-none text-[#FFD700]">{formatLak(openingCashTotal)} LAK</div>
+          </div>
+
+          <label className="mt-3 grid gap-1 text-xs font-semibold">
+            Staff
+            <select className="field-input h-9 text-xs" value={selectedStaffName} onChange={(event) => onSelectStaff(event.target.value)}>
+              {staffOptions.map((staffName) => (<option key={staffName} value={staffName}>
+                  {staffName}
+                </option>))}
+            </select>
+          </label>
+
+          <div className="mt-2 grid grid-cols-2 gap-1">
+            <StaffButton active={isWorking} tone="success" label="Start Work" onClick={onStartWork}/>
+            <StaffButton label="End Work" onClick={onEndWork}/>
+            <StaffButton active={isOt} tone="warning" label="Start OT" onClick={onStartOt}/>
+            <StaffButton label="End OT" onClick={onEndOt}/>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-2 text-[11px]">
+            <StaffTime label="Start Work" value={formatStaffTime(workStartedAt)}/>
+            <StaffTime label="End Work" value={formatStaffTime(workEndedAt)}/>
+            <StaffTime label="Start OT" value={formatStaffTime(otStartedAt)}/>
+            <StaffTime label="End OT" value={formatStaffTime(otEndedAt)}/>
+            <StaffTime label="Work Hours" value={workHours.toFixed(2)} strong/>
+            <StaffTime label="OT Hours" value={otHours.toFixed(2)} strong/>
+          </div>
+
+          <div className="mt-2 rounded-md border border-border bg-background p-2">
+            <div className="mb-2 text-xs font-semibold">
+              <span>Opening Cash Count</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              {OPENING_CASH_DENOMINATIONS.map((denomination) => (<label className="grid grid-cols-[58px_minmax(0,1fr)] items-center gap-2 text-[11px]" key={denomination}>
+                  <span className="font-semibold">{formatLak(denomination)}</span>
+                  <PosNumberInput className="h-8 min-w-0 rounded-md border border-border bg-card px-1 text-center text-[11px] font-semibold outline-none transition focus:border-primary" min={0} value={openingCashCounts[denomination] ?? 0} onValueChange={(value) => onUpdateOpeningCashCount(denomination, value)}/>
+                </label>))}
+            </div>
+          </div>
+
+          <div className="mt-2 rounded-md border border-border bg-background p-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold">Closing Summary</div>
+              {closingSummaryVisible ? (<span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">Confirm required</span>) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <SettlementValue label="Cash Sales" value={`${formatLak(cashSales)} LAK`}/>
+              <SettlementValue label="QR / Transfer" value={`${formatLak(qrTransferSales)} LAK`}/>
+              <SettlementValue label="Expected Cash" value={`${formatLak(expectedCash)} LAK`} strong/>
+              <label className="grid gap-1">
+                <span className="text-muted-foreground">Actual Cash</span>
+                <PosNumberInput className="h-9 rounded-md border border-border bg-card px-2 text-xs font-semibold outline-none transition focus:border-primary" value={actualClosingCash} onValueChange={onSetActualClosingCash}/>
+              </label>
+            </div>
+            <div className={cn("mt-2 rounded-md border px-2 py-2 text-xs font-semibold", cashDifference === 0
+                ? "border-success/30 bg-success/10 text-success"
+                : "border-danger/40 bg-danger/10 text-danger")}>
+              Cash Difference: {formatLak(cashDifference)} LAK
+            </div>
+            {closingSummaryVisible ? (<button className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground" type="button">
+                Confirm Closing Summary
+              </button>) : null}
+          </div>
+        </>)}
+    </section>);
+}
+function StaffTime({ label, strong = false, value }: {
+    label: string;
+    strong?: boolean;
+    value: string;
+}) {
+    return (<div>
+      <div className="text-muted-foreground">{label}</div>
+      <div className={cn("font-semibold", strong && "text-primary")}>{value}</div>
+    </div>);
+}
+function StaffButton({ active = false, label, onClick, tone = "neutral" }: {
+    active?: boolean;
+    label: string;
+    onClick: () => void;
+    tone?: "neutral" | "success" | "warning";
+}) {
+    return (<button className={cn("h-8 rounded-md border px-2 text-[11px] font-semibold transition hover:border-primary", active && tone === "success"
+            ? "border-success bg-success text-white shadow-sm"
+            : active && tone === "warning"
+                ? "border-warning bg-warning text-black shadow-sm"
+                : "border-border bg-card")} type="button" onClick={onClick}>
+      {label}
+    </button>);
+}
+function SettlementValue({ label, strong = false, value }: {
+    label: string;
+    strong?: boolean;
+    value: string;
+}) {
+    return (<div>
+      <div className="text-muted-foreground">{label}</div>
+      <div className={cn("font-semibold", strong && t("ui.text.ffd700"))}>{value}</div>
+    </div>);
+}
+function staffStatusClassName(status: string) {
+    if (status === "Working")
+        return "bg-success/15 text-success";
+    if (status === "OT")
+        return "bg-warning/15 text-warning";
+    if (status === "Closed")
+        return "bg-danger/15 text-danger";
+    return "bg-muted text-muted-foreground";
+}
+function PosNumberInput({ className, max, min = 0, onValueChange, value, }: {
+    className?: string;
+    max?: number;
+    min?: number;
+    value: number;
+    onValueChange: (value: number) => void;
+}) {
+    const [draft, setDraft] = useState(String(value));
+    useEffect(() => {
+        setDraft(String(value));
+    }, [value]);
+    function normalize(rawValue: string) {
+        const digits = rawValue.replace(/[^\d]/g, "");
+        if (!digits)
+            return "";
+        return digits.replace(/^0+(?=\d)/, "");
+    }
+    function commit(rawValue: string) {
+        const normalized = normalize(rawValue);
+        const numericValue = normalized ? Number(normalized) : 0;
+        const clampedValue = Math.min(Math.max(numericValue, min), max ?? Number.MAX_SAFE_INTEGER);
+        onValueChange(clampedValue);
+        setDraft(String(clampedValue));
+    }
+    return (<input className={className} inputMode="numeric" type="text" value={draft} onBlur={() => commit(draft)} onChange={(event) => {
+            const normalized = normalize(event.target.value);
+            setDraft(normalized);
+            onValueChange(normalized ? Number(normalized) : 0);
+        }} onFocus={() => {
+            if (value === 0)
+                setDraft("");
+        }}/>);
+}
+function PaymentButton({ active, icon: Icon, label, onClick }: {
+    active: boolean;
+    icon: typeof Banknote;
+    label: string;
+    onClick: () => void;
+}) {
+    const isMixed = label === "Mixed";
+    return (<button className={cn("flex min-h-12 flex-col items-center justify-center gap-1 rounded-md border px-1 text-[11px] font-semibold transition", active
+            ? isMixed
+                ? "border-success bg-success text-white shadow-sm"
+                : "border-primary bg-primary text-primary-foreground"
+            : isMixed
+                ? "border-success/50 bg-success/10 text-success hover:bg-success hover:text-white"
+                : "border-border text-muted-foreground hover:border-primary hover:text-foreground")} type="button" onClick={onClick}>
+      <Icon className="size-4" aria-hidden="true"/>
+      {label}
+    </button>);
+}
+function PosPermissionPanel({ auditEntries, onApprove, onReject, onTestAction, pendingApprovals, policy, }: {
+    auditEntries: PosAuditEntry[];
+    onApprove: (requestId: string) => void;
+    onReject: (requestId: string) => void;
+    onTestAction: (action: PosPermissionAction) => void;
+    pendingApprovals: PosPendingApprovalRequest[];
+    policy: PosPermissionPolicy;
+}) {
+    const controlledActions: PosPermissionAction[] = [
+        "refund_bill",
+        "void_bill",
+        "manual_price_override",
+        "delete_item_from_bill",
+        "apply_discount",
+        "cash_in",
+        "cash_out",
+        "reprint_receipt",
+        "split_payment",
+        "multi_currency_payment",
+    ];
+    const pending = pendingApprovals.filter((request) => request.status === "pending");
+    const allowedActions = Object.entries(policy.permissions)
+        .filter(([, allowed]) => allowed)
+        .map(([action]) => action as PosPermissionAction);
+    const blockedActions = Object.entries(policy.permissions)
+        .filter(([, allowed]) => !allowed)
+        .map(([action]) => action as PosPermissionAction);
+    const approvalActions = Object.keys(policy.approvalRules) as PosPermissionAction[];
+    return (<Panel className="p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Demo Permission Debug Panel</h2>
+          <p className="mt-1 text-xs text-muted-foreground">POS permission reality verification support</p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">{pending.length} pending</span>
+      </div>
+      <div className="mt-3 grid gap-2 rounded-md border border-border bg-background p-2 text-[11px]">
+        <DebugLine label="Current user" value={`${policy.displayName} (${policy.username})`}/>
+        <DebugLine label="Role" value={policy.role}/>
+        <DebugLine label="Branch" value={policy.branchName}/>
+        <DebugLine label="Terminal" value={policy.assignedTerminal}/>
+        <DebugLine label="Discount limit" value={`${policy.maxDiscountPercent}%`}/>
+      </div>
+      <div className="mt-3 grid gap-2 text-[11px]">
+        <ActionSummary title="Allowed POS actions" actions={allowedActions}/>
+        <ActionSummary title="Blocked POS actions" actions={blockedActions}/>
+        <ActionSummary title="Approval-required actions" actions={approvalActions}/>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-1">
+        {controlledActions.map((action) => (<button className="min-h-8 rounded-md border border-border bg-background px-2 py-1 text-[10px] font-semibold transition hover:border-primary" key={action} type="button" onClick={() => onTestAction(action)}>
+            {formatPosPermissionAction(action)}
+          </button>))}
+      </div>
+      <div className="mt-3 rounded-md border border-border bg-background p-2">
+        <div className="text-xs font-semibold">Pending Approval Center</div>
+        {pending.length === 0 ? (<p className="mt-2 text-xs text-muted-foreground">No pending POS approvals.</p>) : (<div className="mt-2 grid gap-2">
+            {pending.slice(0, 3).map((request) => (<div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-xs" key={request.id}>
+                <div className="font-semibold">{formatPosPermissionAction(request.action)}</div>
+                <div className="mt-1 text-muted-foreground">{request.reason}</div>
+                <div className="mt-2 flex gap-2">
+                  {policy.role === "Owner" ? (<>
+                    <button className="h-8 rounded-md bg-success px-3 text-[11px] font-semibold text-white" type="button" onClick={() => onApprove(request.id)}>Approve</button>
+                    <button className="h-8 rounded-md border border-danger/40 px-3 text-[11px] font-semibold text-danger" type="button" onClick={() => onReject(request.id)}>Reject</button>
+                  </>) : (<span className="text-[11px] font-semibold text-warning">Owner approval required</span>)}
+                </div>
+              </div>))}
+          </div>)}
+      </div>
+      <div className="mt-3 rounded-md border border-border bg-background p-2">
+        <div className="text-xs font-semibold">Audit Log</div>
+        {auditEntries.length === 0 ? (<p className="mt-2 text-xs text-muted-foreground">No POS audit entries yet.</p>) : (<div className="mt-2 grid gap-1">
+            {auditEntries.slice(0, 4).map((entry) => (<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-[11px]" key={entry.id}>
+                <span className="truncate">{formatPosPermissionAction(entry.action)} - {entry.result}</span>
+                <span className="font-semibold text-primary">{entry.approvalStatus}</span>
+              </div>))}
+          </div>)}
+      </div>
+    </Panel>);
+}
+function DebugLine({ label, value }: {
+    label: string;
+    value: string;
+}) {
+    return (<div className="flex min-w-0 justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="truncate font-semibold">{value}</span>
+    </div>);
+}
+function ActionSummary({ actions, title }: {
+    actions: PosPermissionAction[];
+    title: string;
+}) {
+    return (<div className="rounded-md border border-border bg-background p-2">
+      <div className="font-semibold">{title}</div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {actions.length === 0 ? (<span className="text-muted-foreground">None</span>) : actions.map((action) => (<span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground" key={action}>{formatPosPermissionAction(action)}</span>))}
+      </div>
+    </div>);
+}
+function UnitSelectorModal({ onClose, onSelect, product, }: {
+    onClose: () => void;
+    onSelect: (unit: PosProductUnit) => void;
+    product: PosProduct;
+}) {
+    const units = getSaleUnits(product);
+    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+      <section className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Select sale unit</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{product.nameEn || product.nameLo}</p>
+          </div>
+          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close unit selector">
+            <X className="size-4" aria-hidden="true"/>
+          </button>
+        </div>
+        <div className="mt-5 grid gap-2">
+          {units.map((unit) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left transition hover:border-primary" key={unit.id} type="button" onClick={() => onSelect(unit)}>
+              <span>
+                <span className="block font-semibold">{unit.unitName}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {unit.conversionQty} base units {unit.barcode ? `| ${unit.barcode}` : t("ui.manual.select")}
+                </span>
+              </span>
+              <span className="text-right font-semibold text-primary">{formatLak(unit.sellingPriceLak)} LAK</span>
+            </button>))}
+        </div>
+      </section>
+    </div>);
+}
+function ActionButton({ icon: Icon, label, onClick }: {
+    icon: LucideIcon;
+    label: string;
+    onClick: () => void;
+}) {
+    return (<button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClick}>
+      <Icon className="size-4" aria-hidden="true"/>
+      {label}
+    </button>);
+}
+function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardAmount, setCashAmount, setPaymentMode, setQrAmount, setTransferAmount, totalAmount, transferAmount, }: {
+    cardAmount: number;
+    cashAmount: number;
+    onClose: () => void;
+    qrAmount: number;
+    setCardAmount: (value: number) => void;
+    setCashAmount: (value: number) => void;
+    setPaymentMode: (mode: PaymentMode) => void;
+    setQrAmount: (value: number) => void;
+    setTransferAmount: (value: number) => void;
+    totalAmount: number;
+    transferAmount: number;
+}) {
+    const paid = cashAmount + qrAmount + cardAmount + transferAmount;
+    const valid = paid >= totalAmount;
+    return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Mixed Payment</h2>
+          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close mixed payment">
+            <X aria-hidden="true"/>
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Field label="Cash Amount">
+            <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
+          </Field>
+          <Field label="QR Amount">
+            <PosNumberInput className="field-input" value={qrAmount} onValueChange={setQrAmount}/>
+          </Field>
+          <Field label="Card Amount">
+            <PosNumberInput className="field-input" value={cardAmount} onValueChange={setCardAmount}/>
+          </Field>
+          <Field label="Transfer Amount">
+            <PosNumberInput className="field-input" value={transferAmount} onValueChange={setTransferAmount}/>
+          </Field>
+        </div>
+        <div className={cn("mt-4 rounded-md border p-3 text-sm font-semibold", valid ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning")}>
+          Paid {formatLak(paid)} LAK / Total {formatLak(totalAmount)} LAK
+        </div>
+        <button className="mt-4 h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
+          Apply Mixed Payment
+        </button>
+      </div>
+    </div>);
+}
+function ReceiptPreview({ branchName, cashierName, cartItems, changeAmount, discountTotal, onClose, onReprint, paidAmount, paymentMode, receiptSettings, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+    branchName: string;
+    cashierName: string;
+    cartItems: PosCartItem[];
+    changeAmount: number;
+    discountTotal: number;
+    onClose: () => void;
+    onReprint: () => boolean;
+    paidAmount: number;
+    paymentMode: PaymentMode;
+    receiptSettings: PosReceiptSettings;
+    showTaxOnReceipt: boolean;
+    subtotal: number;
+    taxAmount: number;
+    totalAmount: number;
+}) {
+    const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
+    const receiptFooter = receiptSettings.receiptFooter || "Thank you";
+    return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
+        <div className="flex items-center justify-between gap-3 print:hidden">
+          <h2 className="text-lg font-semibold">Receipt preview</h2>
+          <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
+        </div>
+        <div className="mt-4 rounded-md border border-border bg-background p-5 font-mono text-sm">
+          <div className="text-center">
+            <div className="text-lg font-bold">{receiptTitle}</div>
+            <div>{branchName}</div>
+            <div>{t("ui.cashier")}{cashierName}</div>
+            <div>{new Date().toLocaleString("en-GB")}</div>
+          </div>
+          <div className="my-4 border-t border-dashed border-border"/>
+          <div className="flex flex-col gap-3">
+            {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">No receipt items.</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
+                <div className="flex justify-between gap-3">
+                  <span>{item.nameEn}</span>
+                  <span>{formatLak(item.priceLak * item.quantity)}</span>
+                </div>
+                <div className="text-muted-foreground">{item.quantity} x {formatLak(item.priceLak)} LAK</div>
+              </div>))}
+          </div>
+          <div className="my-4 border-t border-dashed border-border"/>
+          <ReceiptRow label="Subtotal" value={subtotal}/>
+          <ReceiptRow label="Discount" value={-discountTotal}/>
+          {showTaxOnReceipt ? <ReceiptRow label="Tax" value={taxAmount}/> : null}
+          <ReceiptRow label="Total" value={totalAmount} strong/>
+          <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>
+          <ReceiptRow label="Change" value={changeAmount}/>
+          <div className="my-4 border-t border-dashed border-border"/>
+          <div className="text-center">{receiptFooter}</div>
+        </div>
+        <button className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={() => {
+            if (onReprint()) {
+                window.print();
+            }
+        }}>
+          <Printer aria-hidden="true"/>
+          Print receipt
+        </button>
+      </div>
+    </div>);
+}
+function ReceiptRow({ label, strong = false, value }: {
+    label: string;
+    strong?: boolean;
+    value: number;
+}) {
+    return (<div className={cn("flex justify-between gap-3", strong && "font-bold")}>
+      <span>{label}</span>
+      <span>{formatLak(value)} LAK</span>
+    </div>);
+}
+function productKey(product: Pick<PosProduct, "id" | "sku" | "unitId">, index: number) {
+    return `${product.id || product.sku || "product"}:${product.unitId ?? "default"}:${index}`;
+}
+function cartLineKey(item: Pick<PosCartItem, "cartLineId" | "id" | "sku" | "unitId">, index: number) {
+    return item.cartLineId ?? `${item.id || item.sku || "cart"}:${item.unitId ?? "default"}:${index}`;
+}
+function mapStoredProductToPosProduct(product: Record<string, any>): PosProduct {
+    const activeUnits = Array.isArray(product.units) ? product.units.filter((unit: Record<string, any>) => unit.status !== "inactive") : [];
+    const defaultUnit = activeUnits.find((unit: Record<string, any>) => unit.isDefaultSaleUnit) ?? activeUnits.find((unit: Record<string, any>) => unit.isBaseUnit) ?? activeUnits[0];
+    return {
+        barcode: String(product.barcode ?? ""),
+        categoryName: String(product.categoryName ?? ""),
+        conversionQty: Number(defaultUnit?.conversionQty ?? product.conversionQty ?? 1),
+        costPriceLak: Number(defaultUnit?.costPriceLak ?? product.costPriceLak ?? 0),
+        expiryDate: product.expiryDate ?? null,
+        id: String(product.id),
+        imageKey: String(product.imageUrl ?? product.imageKey ?? "generic"),
+        isFavorite: Boolean(product.isFavorite),
+        lowStockThreshold: Number(product.minStock ?? product.lowStockThreshold ?? 0),
+        nameEn: String(product.nameEn ?? product.nameLo ?? "Product"),
+        nameLo: String(product.nameLo ?? product.nameEn ?? "Product"),
+        priceLak: Number(defaultUnit?.sellingPriceLak ?? product.sellingPriceLak ?? product.priceLak ?? 0),
+        productCode: String(product.productCode ?? ""),
+        sku: String(product.sku ?? ""),
+        stockQty: Number(product.stockQty ?? product.currentStock ?? 0),
+        unitId: defaultUnit?.id,
+        unitImageUrl: defaultUnit?.imageUrl ?? product.unitImageUrl ?? product.imageUrl,
+        unitName: String(defaultUnit?.unitName ?? product.unitName ?? "Piece"),
+        units: activeUnits.map((unit: Record<string, any>, index: number) => ({
+            allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
+            barcode: String(unit.barcode ?? ""),
+            conversionQty: Number(unit.conversionQty ?? 1),
+            costPriceLak: Number(unit.costPriceLak ?? product.costPriceLak ?? 0),
+            id: String(unit.id ?? `${product.id}-unit-${index}`),
+            imageUrl: unit.imageUrl,
+            isBaseUnit: Boolean(unit.isBaseUnit),
+            isDefaultSaleUnit: Boolean(unit.isDefaultSaleUnit),
+            isPurchaseUnit: Boolean(unit.isPurchaseUnit),
+            sellingPriceLak: Number(unit.sellingPriceLak ?? product.sellingPriceLak ?? product.priceLak ?? 0),
+            sortOrder: Number(unit.sortOrder ?? index),
+            status: unit.status === "inactive" ? "inactive" : "active",
+            unitName: String(unit.unitName ?? product.unitName ?? "Piece"),
+        })),
+    };
+}
+function isMembershipActive(customer: PosCustomer | null | undefined) {
+    if (!customer || customer.membershipStatus !== "Active")
+        return false;
+    const expiry = new Date(`${customer.membershipExpiry}T23:59:59`);
+    return expiry.getTime() >= Date.now();
+}
+function getSaleUnits(product: PosProduct) {
+    const units = (product.units ?? []).filter((unit) => unit.status !== "inactive" && unit.allowManualUnitSelect !== false);
+    if (units.length === 0) {
+        return [{
+                allowManualUnitSelect: true,
+                barcode: product.barcode,
+                conversionQty: 1,
+                costPriceLak: product.costPriceLak ?? 0,
+                id: `${product.id}-default-unit`,
+                isBaseUnit: true,
+                isDefaultSaleUnit: true,
+                isPurchaseUnit: true,
+                sellingPriceLak: product.priceLak,
+                sortOrder: 0,
+                status: "active" as const,
+                unitName: product.unitName,
+            }];
+    }
+    return units;
+}
+function productWithSelectedUnit(product: PosProduct, unit: PosProductUnit): PosProduct {
+    return {
+        ...product,
+        barcode: unit.barcode || product.barcode,
+        conversionQty: unit.conversionQty,
+        costPriceLak: unit.costPriceLak,
+        priceLak: unit.sellingPriceLak,
+        unitId: unit.id,
+        unitImageUrl: unit.imageUrl || product.unitImageUrl,
+        unitName: unit.unitName,
+    } as PosProduct;
+}
+function productWithSortedMatchedUnit(product: PosProduct, unit: PosProductUnit) {
+    return {
+        ...product,
+        units: [...(product.units ?? [])].sort((left, right) => {
+            if (left.id === unit.id)
+                return -1;
+            if (right.id === unit.id)
+                return 1;
+            return left.sortOrder - right.sortOrder;
+        }),
+    };
+}
+function applyCustomerPricing(product: PosProduct, customer: PosCustomer | null): PosCartItem {
+    const retailPriceLak = product.priceLak;
+    if (!customer) {
+        return { ...product, priceLak: retailPriceLak, quantity: 1, retailPriceLak };
+    }
+    if (customer.membershipType === "Student" && product.specialStudentPriceLak) {
+        return {
+            ...product,
+            priceLak: product.specialStudentPriceLak,
+            quantity: 1,
+            retailPriceLak,
+            pricingNote: "Student special price",
+        };
+    }
+    if (customer.discountPercent && customer.discountPercent > 0) {
+        return {
+            ...product,
+            priceLak: Math.round(retailPriceLak * (1 - customer.discountPercent / 100)),
+            quantity: 1,
+            retailPriceLak,
+            pricingNote: `${customer.discountPercent}% member discount`,
+        };
+    }
+    return { ...product, priceLak: retailPriceLak, quantity: 1, retailPriceLak };
+}
+function getStockWarning(product: PosProduct, referenceDate: Date): PosCartItem["stockWarning"] {
+    if (product.expiryDate) {
+        const expiry = new Date(`${product.expiryDate}T00:00:00`);
+        const days = Math.ceil((expiry.getTime() - referenceDate.getTime()) / 86400000);
+        if (days < 0)
+            return { label: "Expired", tone: "red" };
+        if (days <= 7)
+            return { label: "Near Expiry", tone: "yellow" };
+    }
+    if (product.stockQty <= (product.lowStockThreshold ?? 5)) {
+        return { label: "Low Stock", tone: "orange" };
+    }
+    return undefined;
+}
+function warningBadgeClass(tone: "orange" | "yellow" | "red") {
+    if (tone === "red")
+        return "bg-danger/10 text-danger";
+    if (tone === "yellow")
+        return "bg-warning/10 text-warning";
+    return "bg-orange-500/10 text-orange-500";
+}
+function warningTextClass(tone: "orange" | "yellow" | "red") {
+    if (tone === "red")
+        return "text-danger";
+    if (tone === "yellow")
+        return "text-warning";
+    return "text-orange-500";
+}
+function nextHoldName(index: number) {
+    let value = index;
+    let name = "";
+    do {
+        name = String.fromCharCode(65 + (value % 26)) + name;
+        value = Math.floor(value / 26) - 1;
+    } while (value >= 0);
+    return name;
+}
+function formatPosTime(date: Date) {
+    return new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+    }).format(date);
+}
+function formatBusinessDate(date: Date) {
+    return new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    }).format(date);
+}
+function formatStaffTime(date: Date | null) {
+    return date ? formatPosTime(date) : "-";
+}
+function calculateHours(start: Date | null, end: Date | null) {
+    if (!start || !end)
+        return 0;
+    return Math.max(0, (end.getTime() - start.getTime()) / 3600000);
+}

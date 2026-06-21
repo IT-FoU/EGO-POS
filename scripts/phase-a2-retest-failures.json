@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-06-21T15:06:24.126Z",
+  "results": [
+    {
+      "detail": "sku=A2R-1782054296664 listed=true",
+      "id": "F1-product-search",
+      "pass": true
+    },
+    {
+      "detail": "name=A2R Customer 1782054310946 visible=true",
+      "id": "F2-customer-refresh",
+      "pass": true
+    },
+    {
+      "detail": "sale completed bill=A1574",
+      "id": "F3-pos-owner",
+      "pass": true
+    },
+    {
+      "detail": "sale completed bill=A1574",
+      "id": "F3-pos-manager",
+      "pass": true
+    },
+    {
+      "detail": "sale completed bill=A1574",
+      "id": "F3-pos-cashier",
+      "pass": true
+    }
+  ]
+}
