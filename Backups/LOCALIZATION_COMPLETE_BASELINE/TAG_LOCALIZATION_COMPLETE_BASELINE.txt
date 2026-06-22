@@ -1,6 +1,0 @@
-LOCALIZATION_COMPLETE_BASELINE
-
-Filesystem rollback checkpoint created because Git metadata was not usable in this workspace.
-
-Snapshot:
-source-snapshot-20260620-200216.zip

@@ -8,4 +8,17 @@ dist
 *.tsbuildinfo
 prisma/dev.db
 coverage
+
+# Logs (runtime / test output - never commit)
+*.log
 dev-server*.log
+
+# Screenshot & browser-profile automation artifacts
+.tmp-*/
+screenshots/
+
+# Source/code backup snapshots (not required to run the app)
+Backups/
+
+# Agent / remote attachment artifacts
+.codex-remote-attachments/

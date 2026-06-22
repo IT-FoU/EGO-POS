@@ -1,269 +1,136 @@
-# EGO POS Data Source Map
+# EGO POS — Data Source Map
 
-This document defines current source, target source of truth, repository/service, storage key or database table, read path, write path, mock status, localStorage status, server mock status, and migration needs for every module.
+> Code-verified at commit `29af75d` (+ audit-doc phase). Documents where each screen/module gets its data.
+> **Production-real** = live PostgreSQL via Prisma when `IGO_DEMO_MODE` is unset/false. **Demo/Mock** = static fixtures or browser localStorage.
+> `isDemoMode()` is fail-safe OFF (requires `IGO_DEMO_MODE="true"`).
 
-## 1. Auth / Login
+---
 
-- Current data source: NextAuth, built-in demo users, demo staff cookie/storage, Prisma users.
-- Target source of truth: `User`, `CompanyUser`, `Role`, `Permission`, `UserRole`, `LoginHistory`.
-- Demo repository/service: `demoStaffRepository`, `lib/auth/demo-staff-access.ts`.
-- Demo storage key: `ego.pos.staff.access.users`.
-- Database tables: `User`, `CompanyUser`, `Role`, `Permission`, `RolePermission`, `UserRole`, `LoginHistory`.
-- Read path: `lib/auth/options.ts`, `lib/auth/session.ts`.
-- Write path: Settings staff access UI; production future user repository.
-- Still mock: built-in users.
-- Still localStorage: demo staff users through central repository.
-- Still server mock: no, but production/demo branches coexist.
-- Migration needed: Settings staff must write production users/roles.
+## Quick matrix
 
-## 2. Business Selection / Onboarding
+| Screen / Module | Primary data source | Production-real? |
+| --- | --- | --- |
+| Dashboard | Prisma (SSR service) + localStorage (header logo/plan) | Mostly real; header chrome localStorage |
+| POS (checkout) | Server action → Prisma | **Real** (demo path only if flag on) |
+| Recent Sales | **localStorage** (`demoSalesRepository`) | **No — client-only** |
+| Receipt View / Reprint | **localStorage** (`demoReceiptsRepository`) | **No — client-only** |
+| Products | Prisma (SSR + actions/REST) | Real (images stubbed) |
+| Inventory | Prisma (SSR + actions/REST) | **Real** |
+| Suppliers | Prisma (SSR + actions/REST) | Real (detail panels stubbed) |
+| Purchase | Prisma (SSR + actions/REST) | **Real** |
+| Customers | Prisma (SSR + actions/REST) | Real (import/export stub) |
+| Membership | Prisma (SSR + actions/REST) | **Real** |
+| Promotions | Prisma (SSR + actions/REST) | Real (analytics/stack-rules stub) |
+| Reports | Prisma (sub-pages) + **mock-full-data** (Report Center) | Partial |
+| Settings | Prisma (`CompanySetting`) + localStorage mirror | Real; localStorage mirror for logo/print mode |
+| Role / Permission system | Prisma | **Real** |
 
-- Current data source: demo storage.
-- Target source of truth: `Company`, `Branch`, `Warehouse`, `CompanySetting`, `CompanyModule`.
-- Demo repository/service: onboarding context using demo storage helper.
-- Demo storage keys: `ego-pos:onboarding-business`, `ego-pos:onboarding-complete`, `ego-pos:onboarding-draft`, `ego-pos:onboarding-template`.
-- Database tables: `Company`, `Branch`, `Warehouse`, `CompanySetting`, `Plan`.
-- Read path: `features/platform/onboarding-context.ts`.
-- Write path: same context.
-- Still mock: non-Mini-Mart templates are shell/placeholder.
-- Still localStorage: yes in demo.
-- Still server mock: no.
-- Migration needed: persist business setup to production company tables.
+---
 
-## 3. Dashboard
+## 1. Dashboard
+- **UI file:** `app/(dashboard)/dashboard/page.tsx`, `features/dashboard/dashboard-service.ts`, `features/dashboard/components/*`, `components/layout/dashboard-shell.tsx`.
+- **Data source:** Prisma SSR (`getMiniMartDashboardSnapshot`) for metrics/charts; **localStorage** (`demoSettingsRepository`) for header logo + plan name/days.
+- **DB models:** `Sale`, `SaleItem`, `InventoryBalance`, `CashSession`, `Product`, `Company`, `Plan`.
+- **Real vs mock:** KPIs/charts **real**; "Status: OPEN" + Close Day button are **hardcoded UI** (no action); header logo/plan from localStorage.
+- **Before production:** Wire Close Day to a real cash/shift action; move logo/plan to DB-served props.
 
-- Current data source: dashboard service and mixed derived/mock values.
-- Target source of truth: Reports repositories reading sales, inventory, customers, purchasing, payments, audit.
-- Demo repository/service target: future `dashboardRepository` backed by sales/products/inventory/purchasing repositories.
-- Demo storage keys: sales, products, inventory movements, customers, audit logs.
-- Database tables: `Sale`, `SaleItem`, `SalePayment`, `InventoryBalance`, `StockMovement`, `Customer`, `SupplierPayable`, `PromotionUsage`, `AuditLog`.
-- Read path: `features/dashboard/dashboard-service.ts`, shell components.
-- Write path: none.
-- Still mock: yes.
-- Still localStorage: indirect plan/logo settings in demo.
-- Still server mock: yes.
-- Migration needed: replace independent metrics with report/dashboard repository.
+## 2. POS (checkout)
+- **UI file:** `app/(dashboard)/pos/page.tsx`, `features/pos/components/pos-page-client.tsx`.
+- **Data source:** SSR snapshot (`getPosSnapshot` → Prisma) for products/customers/promotions/loyalty/QR/settings; checkout via server action `completeSaleAction` → `completePrismaSale` (Prisma). Demo path (`completeDemoSale`) only when `IGO_DEMO_MODE=true`.
+- **DB models:** `Sale`, `SaleItem`, `SalePayment`, `Product`, `ProductUnit`, `InventoryBalance`, `StockMovement`, `Customer`, `MembershipLevel`, `Promotion*`, `LoyaltyPointLedger`.
+- **Real vs mock:** Checkout **production-real** and server-authoritative (B8-1/B8-3). Customer-display state via localStorage.
+- **Before production:** Ensure `IGO_DEMO_MODE` is false in prod; the completed sale must also surface in a DB-backed Recent Sales (see #3).
 
-## 4. Products
+## 3. Recent Sales  ⚠️
+- **UI file:** `features/pos/components/pos-page-client.tsx` (`recentSales`, `RecentSalesModal`).
+- **Data source:** **Browser localStorage** via `demoSalesRepository` — in **all modes**. Production `completeSaleAction` does NOT populate it.
+- **DB models:** none used (`Sale` exists but unused here).
+- **Real vs mock:** **Demo/Client-only.** Device-local, non-durable, not auditable.
+- **Before production:** Add `GET /api/pos/sales` (history) + DTO; load Recent Sales from DB; persist refund/void/edit/soft-delete server-side.
 
-- Current data source: central demo product repository for client create/list/edit/delete; server service still has mock/Prisma paths.
-- Target source of truth: Product repository adapter.
-- Demo repository/service: `demoProductsRepository`, `demoCategoryRepository`.
-- Demo storage keys: `ego.pos.products`, `ego.pos.categories`.
-- Database tables: `Product`, `ProductUnit`, `ProductImage`, `Category`, `Brand`, `ProductPriceHistory`, `ProductBarcodeHistory`.
-- Read path: Product list/form client; server product service still for categories/images and legacy paths.
-- Write path: Product form/list through demo repositories; production future via actions/repository.
-- Still mock: product server service still imports mock data.
-- Still localStorage: yes via central demo repository only.
-- Still server mock: yes in `product-service.ts`.
-- Migration needed: repository interface shared by server/client and Prisma/demo adapters.
+## 4. Receipt View / Reprint  ⚠️
+- **UI file:** `features/pos/components/pos-page-client.tsx` (`openReceiptForSale`, `receiptFromSale`, `ReceiptModal`).
+- **Data source:** **localStorage** `demoReceiptsRepository` (falls back to reconstructing from the localStorage sale record).
+- **DB models:** none (no receipt persistence model wired).
+- **Real vs mock:** **Demo/Client-only.**
+- **Before production:** Persist receipt snapshots server-side (or render from DB `Sale`/`SaleItem`); back reprint with a DB read + audit.
 
-## 5. POS
-
-- Current data source: POS server snapshot plus central demo repositories on client.
-- Target source of truth: POS checkout service and sales repository.
-- Demo repository/service: products, sales, receipts, audit, pending approval, QR, settings repositories.
-- Demo storage keys: `ego.pos.products`, `ego.pos.sales`, `ego.pos.receipts`, `ego.pos.auditLogs`, `ego.pos.pendingApprovals`, `ego.pos.customerDisplay.state`.
-- Database tables: `Sale`, `SaleItem`, `SalePayment`, `Receipt`, `StockMovement`, `InventoryBalance`, `AuditLog`.
-- Read path: `features/pos/pos-service.ts`, `features/pos/components/pos-page-client.tsx`.
-- Write path: POS complete sale client demo path; production `completeSaleAction`.
-- Still mock: POS service returns empty products/customers in demo; product grid hydrates from repository.
-- Still localStorage: yes via central demo repository.
-- Still server mock: partial.
-- Migration needed: central checkout service with demo and Prisma adapters.
+## 5. Products
+- **UI file:** `app/(dashboard)/products/**`, `features/products/components/*`, `features/products/product-service.ts`.
+- **Data source:** Prisma SSR + server actions; `GET/POST /api/products`, `PATCH/DELETE /api/products/[id]`, categories routes.
+- **DB models:** `Product`, `ProductUnit`, `Category`, `Brand`, `ProductPriceHistory`, `ProductBarcodeHistory`, `ProductImage`.
+- **Real vs mock:** CRUD **real**. **Product images stub** — `getPrismaProductImages()` returns `[]`; image search/scanner are mock UI. Import/export/barcode-audit modals are placeholders.
+- **Before production:** Implement image storage backend; complete/disable import-export placeholders.
 
 ## 6. Inventory
+- **UI file:** `app/(dashboard)/inventory/**`, `features/inventory/components/*`, `features/inventory/inventory-service.ts`.
+- **Data source:** Prisma SSR + actions; `POST /api/inventory/stock-in|adjustment|count`.
+- **DB models:** `InventoryBalance`, `InventoryLot`, `StockMovement`, `StockAdjustment`.
+- **Real vs mock:** **Production-real** (B7-4 removed mock fallbacks). Locale read from localStorage for formatting only.
+- **Before production:** None critical (consider stock-transfer if needed — models unused).
 
-- Current data source: server mock data and partial Prisma APIs.
-- Target source of truth: `InventoryBalance`, `InventoryLot`, `StockMovement`.
-- Demo repository/service: `demoInventoryMovementRepository` plus future inventory balance adapter.
-- Demo storage key: `ego.pos.inventory.movements`.
-- Database tables: `InventoryBalance`, `InventoryLot`, `StockMovement`, `StockAdjustment`, `StockTransfer`, `StockTransferItem`.
-- Read path: `features/inventory/inventory-service.ts`, inventory mock data.
-- Write path: inventory APIs for stock-in/adjustment/count.
-- Still mock: yes.
-- Still localStorage: only future/demo movement repository; UI still server mock.
-- Still server mock: yes.
-- Migration needed: derive inventory UI from products + movements in demo; use Prisma transaction in production.
+## 7. Suppliers
+- **UI file:** `app/(dashboard)/suppliers/**`, `app/(dashboard)/purchasing/suppliers/page.tsx`, `features/suppliers/*`.
+- **Data source:** Prisma SSR + actions; `GET/POST /api/suppliers`, `PATCH/DELETE /api/suppliers/[id]`.
+- **DB models:** `Supplier`, `SupplierPayable`, `Purchase`, `PurchasePayment`.
+- **Real vs mock:** CRUD + payable reads **real**. Detail-page documents, linked products, AP invoices, charts, "Record Payment" modal, activate/deactivate = **placeholders**.
+- **Before production:** Complete or hide detail placeholders; wire activate/deactivate.
 
-## 7. Purchasing
-
-- Current data source: purchasing mock data plus API/actions.
-- Target source of truth: Purchasing/AP repository.
-- Demo repository/service: not complete.
-- Demo storage key: not finalized.
-- Database tables: `Purchase`, `PurchaseItem`, `GoodsReceipt`, `GoodsReceiptItem`, `PurchasePayment`, `SupplierPayable`.
-- Read path: `features/purchasing/purchasing-service.ts`.
-- Write path: purchasing APIs/actions.
-- Still mock: yes.
-- Still localStorage: no centralized purchasing demo store yet.
-- Still server mock: yes.
-- Migration needed: create purchase/receiving/payable repository and connect inventory movements.
-
-## 8. Suppliers
-
-- Current data source: mock data and Prisma repository.
-- Target source of truth: Supplier repository.
-- Demo repository/service: not complete.
-- Demo storage key: future `ego.pos.suppliers`.
-- Database tables: `Supplier`, `SupplierPayable`, `Purchase`, `PurchasePayment`, `GoodsReceipt`.
-- Read path: `features/suppliers/supplier-service.ts`.
-- Write path: supplier actions/API.
-- Still mock: yes for UI-rich sections.
-- Still localStorage: not centralized.
-- Still server mock: partial.
-- Migration needed: supplier profile repository and ledger derived from purchasing/AP.
+## 8. Purchase
+- **UI file:** `app/(dashboard)/purchasing/**`, `features/purchasing/*`.
+- **Data source:** Prisma SSR + actions; `POST /api/purchasing/purchase-orders|status|receiving|payments`.
+- **DB models:** `Purchase`, `PurchaseItem`, `GoodsReceipt`, `GoodsReceiptItem`, `SupplierPayable`, `PurchasePayment`, `StockMovement`, `InventoryBalance`.
+- **Real vs mock:** **Production-real** (B7-1/2/3). Locale from localStorage for formatting only.
+- **Before production:** None critical.
 
 ## 9. Customers
+- **UI file:** `app/(dashboard)/customers/**`, `features/customers/*`.
+- **Data source:** Prisma SSR + actions; `GET/POST /api/customers`, `PATCH/DELETE /api/customers/[id]`, `POST /api/customers/payments`.
+- **DB models:** `Customer`, `CustomerPayment`, `LoyaltyPointLedger`, `MembershipLevel`.
+- **Real vs mock:** CRUD + payments **real**. CSV/Excel import/export = **placeholder**.
+- **Before production:** Complete or hide import/export.
 
-- Current data source: mock data and Prisma APIs.
-- Target source of truth: Customer repository.
-- Demo repository/service: `demoCustomerRepository` exists as foundation but not fully connected.
-- Demo storage key: `ego.pos.customers`.
-- Database tables: `Customer`, `CustomerGroup`, `CustomerGroupMember`, `CustomerPayment`, `LoyaltyPointLedger`.
-- Read path: customer services/components.
-- Write path: `/api/customers`, `/api/customers/[id]`, customer payment API.
-- Still mock: yes.
-- Still localStorage: foundation only.
-- Still server mock: yes.
-- Migration needed: connect POS customer lookup and customer page to same repository.
-
-## 10. Membership / Loyalty
-
-- Current data source: API/repository plus UI state.
-- Target source of truth: Membership repository and loyalty service.
-- Demo repository/service: `demoMembershipRepository` foundation only.
-- Demo storage key: `ego.pos.memberships`.
-- Database tables: `MembershipLevel`, `LoyaltyPointLedger`, `CustomerSubscription`.
-- Read path: membership pages/API.
-- Write path: membership API/actions.
-- Still mock: partial.
-- Still localStorage: foundation only.
-- Still server mock: partial.
-- Migration needed: connect POS membership discount/points engine.
+## 10. Membership
+- **UI file:** `app/(dashboard)/membership-levels/page.tsx`, `features/membership-levels/*`.
+- **Data source:** Prisma SSR + actions; `GET/POST /api/membership-levels`, `PATCH/DELETE /api/membership-levels/[id]`.
+- **DB models:** `MembershipLevel`, `Customer`.
+- **Real vs mock:** **Production-real.** (REST GET returns `[]` only during the `next build` static phase.)
+- **Before production:** None critical.
 
 ## 11. Promotions
-
-- Current data source: mock data, Prisma repository, wizard UI state.
-- Target source of truth: Promotion repository and promotion engine.
-- Demo repository/service: `demoPromotionRepository` foundation only.
-- Demo storage key: `ego.pos.promotions`.
-- Database tables: `Promotion`, `PromotionRule`, `PromotionAction`, `PromotionProduct`, `PromotionCategory`, `PromotionMembershipLevel`, `PromotionUsage`.
-- Read path: `features/promotions/promotion-service.ts`.
-- Write path: promotion actions/API.
-- Still mock: yes.
-- Still localStorage: foundation only.
-- Still server mock: yes.
-- Migration needed: build promotion engine and connect POS checkout.
+- **UI file:** `app/(dashboard)/promotions/**`, `features/promotions/*`.
+- **Data source:** Prisma SSR + actions; `GET/POST /api/promotions`, `PATCH/DELETE /api/promotions/[id]`.
+- **DB models:** `Promotion`, `PromotionProduct`, `PromotionCategory`, `PromotionMembershipLevel`, `PromotionUsage`.
+- **Real vs mock:** CRUD + checkout application **real**. `/promotions/analytics` (ratios/charts), `/promotions/stack-rules`, `/promotions/integration-map`, parts of `/promotions/calendar` = **static/placeholder** (`PromotionRule`/`PromotionAction` models unused).
+- **Before production:** Implement analytics aggregation + stack-rule persistence or mark as roadmap.
 
 ## 12. Reports
-
-- Current data source: report mock data/full mock UI data plus partial API.
-- Target source of truth: Reports repository reading real modules.
-- Demo repository/service: future report adapter reading sales/products/inventory/customers/purchasing/promotions/audit demo repositories.
-- Demo storage keys: `ego.pos.sales`, `ego.pos.receipts`, `ego.pos.products`, `ego.pos.inventory.movements`, `ego.pos.customers`, `ego.pos.promotions`, `ego.pos.auditLogs`.
-- Database tables: `Sale`, `SaleItem`, `SalePayment`, `InventoryBalance`, `StockMovement`, `Purchase`, `SupplierPayable`, `Customer`, `PromotionUsage`, `AuditLog`.
-- Read path: `features/reports/report-service.ts`, report clients.
-- Write path: favorite/schedule future.
-- Still mock: yes.
-- Still localStorage: no direct real report source yet.
-- Still server mock: yes.
-- Migration needed: replace report mock metrics with repository-derived metrics.
+- **UI file:** `app/(dashboard)/reports/**`, `features/reports/components/reports-analytics-client.tsx`, `features/reports/report-service.ts`.
+- **Data source:** Prisma SSR (`getReportsSnapshot`) + `GET /api/reports` for sub-pages and dashboard KPIs; **`features/reports/mock-full-data.ts`** for the Report Center tab.
+- **DB models:** `Sale`, `SaleItem`, `SalePayment`, `Purchase`, `InventoryBalance`, `Supplier`, `Customer`, `PromotionUsage`.
+- **Real vs mock:** Sub-pages + KPIs **real**; **Report Center tab = mock**; date-range filters partly **UI-only**; aggregates all-time.
+- **Before production:** Remove `mock-full-data` from runtime; add server date-range filtering.
 
 ## 13. Settings
+- **UI file:** `app/(dashboard)/settings/page.tsx`, `features/settings/components/settings-form.tsx`, `features/settings/prisma-repository.ts`.
+- **Data source:** Prisma (`CompanySetting`) via `GET/PATCH /api/settings` + actions; **localStorage mirror** (`demoSettingsRepository`) for logo URL and `receiptPrintMode` consumed by POS.
+- **DB models:** `CompanySetting`, `Company`.
+- **Real vs mock:** Settings writes **real**; logo + receipt-print-mode are **also** mirrored to localStorage and POS reads the localStorage copy (divergence risk). Demo "GO BOX" fallback only if no company row **and** demo mode on.
+- **Before production:** POS should consume DB settings (logo, print mode) directly; drop localStorage mirror.
 
-- Current data source: central demo repositories for some client settings, server action/Prisma setting path.
-- Target source of truth: Settings repository and `CompanySetting`.
-- Demo repository/service: `demoSettingsRepository`, `demoQrRepository`, `demoStaffRepository`.
-- Demo storage keys: `ego-pos:company-logo-url`, `ego.pos.settings`, `ego.pos.qr.banks`, `ego.pos.qr.accounts`, `ego.pos.staff.access.users`, `ego.pos.staff.access.audit`.
-- Database tables: `CompanySetting`, future `Bank`, `QrAccount`, `PrinterProfile`, `StaffSetting`.
-- Read path: `features/settings/components/settings-form.tsx`.
-- Write path: settings form and actions.
-- Still mock: settings cards include UI-only sections.
-- Still localStorage: yes via central repositories.
-- Still server mock: partial.
-- Migration needed: define production models/settings JSON schema for each settings section.
+## 14. Role / Permission system
+- **UI file:** `app/(dashboard)/settings/page.tsx` (staff section), `features/access-control/*`, `features/settings/components/staff-control-section.tsx`.
+- **Data source:** Prisma (`getStaffAccessSnapshot`, `getUserPermissionKeys`) + server actions; approvals via `POST /api/approvals` + `/decision`.
+- **DB models:** `Role`, `Permission`, `RolePermission`, `UserRole`, `CompanyUser`, `ApprovalRule`, `Approval`, `AuditLog`.
+- **Real vs mock:** **Production-real.** POS checkout enforcement uses the **actual** user role (B8-3). NOTE: POS *override* approvals (void/refund/over-limit) are still recorded to **localStorage**, not the DB engine (see Integration Map #10).
+- **Before production:** Wire POS override approvals to the DB approval engine; ensure `IGO_DEMO_MODE` off disables demo login/session fallbacks.
 
-## 14. QR Payment Banks
+---
 
-- Current data source: central demo QR repository in Settings/POS.
-- Target source of truth: QR account repository.
-- Demo repository/service: `demoQrRepository`.
-- Demo storage keys: `ego.pos.qr.banks`, `ego.pos.qr.accounts`.
-- Database tables: future `Bank`, `QrAccount` or `CompanySetting` JSON schema.
-- Read path: Settings QR section, POS QR field.
-- Write path: Settings QR section.
-- Still mock: seeded example banks may exist.
-- Still localStorage: yes through central repository.
-- Still server mock: no dedicated production source yet.
-- Migration needed: create production schema and branch default rule.
-
-## 15. Printer / Receipt / Barcode / Price Label
-
-- Current data source: receipt preview/settings partial; printer architecture documented.
-- Target source of truth: Printer profile repository and print job service.
-- Demo repository/service: future `demoPrinterRepository`.
-- Demo storage key: future `ego.pos.printers`.
-- Database tables: future `PrinterProfile`, `PrintTemplate`, `PrintJob`.
-- Read path: receipt/customer display/settings partial.
-- Write path: future settings printer section.
-- Still mock: yes.
-- Still localStorage: not centralized.
-- Still server mock: no implementation.
-- Migration needed: build printing module after core transaction workflow.
-
-## 16. Approval Workflow
-
-- Current data source: POS pending approval demo key and Settings UI rules.
-- Target source of truth: approval service.
-- Demo repository/service: `demoPendingApprovalRepository`.
-- Demo storage key: `ego.pos.pendingApprovals`.
-- Database tables: `Approval`, `AuditLog`.
-- Read path: POS and Settings pending approval UI.
-- Write path: POS guarded actions; future all modules.
-- Still mock: partial.
-- Still localStorage: yes through central repository.
-- Still server mock: no global service yet.
-- Migration needed: central approval service and server enforcement.
-
-## 17. Audit Logs
-
-- Current data source: POS/staff demo audit and Prisma/platform audit.
-- Target source of truth: audit service.
-- Demo repository/service: `demoAuditLogRepository`, staff audit repository.
-- Demo storage keys: `ego.pos.auditLogs`, `ego.pos.staff.access.audit`.
-- Database tables: `AuditLog`, `LoginHistory`, `CompanyAccessLog`.
-- Read path: POS panels, Super Admin audit, future Reports.
-- Write path: POS client, Settings staff client, Prisma actions.
-- Still mock: partial.
-- Still localStorage: yes through central repository.
-- Still server mock: partial.
-- Migration needed: one audit service for all modules.
-
-## 18. Super Admin / Subscription
-
-- Current data source: Super Admin session and mixed demo/Prisma admin data.
-- Target source of truth: platform repository.
-- Demo repository/service: admin data fallback.
-- Demo storage key: none for merchant localStorage.
-- Database tables: `SuperAdmin`, `Company`, `User`, `Plan`, `SaaSSubscription`, `CompanyAccessLog`.
-- Read path: `features/igo-admin/admin-data.ts`, admin session.
-- Write path: admin APIs/actions future.
-- Still mock: partial.
-- Still localStorage: no.
-- Still server mock: partial.
-- Migration needed: enforce feature locks in merchant portal.
-
-## 19. Localization
-
-- Current data source: translation helpers plus runtime repair layer.
-- Target source of truth: translation dictionaries.
-- Demo repository/service: locale storage helper.
-- Demo storage key: `ego-pos:locale`.
-- Database table: user/company locale setting future.
-- Read path: language toggles, runtime localization, components.
-- Write path: language toggle.
-- Still mock: no.
-- Still localStorage: yes through stable key.
-- Still server mock: no.
-- Migration needed: remove runtime bridge after all UI strings use keys.
+## Global "must change before production"
+1. **POS sales history/receipts/refund/void → DB** (currently localStorage in all modes).
+2. **POS override approvals/audit → DB approval engine** (currently localStorage).
+3. **Reports Report Center → DB** (remove `mock-full-data`); add date-range queries.
+4. **Settings logo + receipt print mode → DB-served** (drop localStorage mirror).
+5. **Product image storage backend** (currently stub).
+6. Confirm **`IGO_DEMO_MODE` is false** in production so demo login/session/checkout fallbacks are inert.

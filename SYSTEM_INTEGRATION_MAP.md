@@ -1,322 +1,121 @@
-# EGO POS System Integration Map
-
-This document is the central module connection map. Future implementation must follow these flows before changing UI behavior.
-
-## 1. Product -> POS
-
-Flow:
-
-1. Product is created/edited/deleted in Products.
-2. Product repository stores product, units, barcode, SKU, price, cost, category, image, status.
-3. POS reads active products and active sale units from product repository.
-4. Deleted/inactive products are hidden from POS.
-5. Edited name, price, barcode, SKU, unit, image, and stock display update in POS.
-
-Owner:
-
-- Products module owns product catalog data.
-
-Dependencies:
-
-- POS depends on Products.
-- Inventory depends on Products for product metadata.
-- Reports depend on Products for display names/categories.
-
-## 2. POS -> Sales
-
-Flow:
-
-1. POS cart is confirmed.
-2. Checkout engine validates cart, permission, stock, customer, promotion, VAT, currency, and payment.
-3. Sale header and sale items are written.
-4. Sale payments are written.
-
-Owner:
-
-- Sales/POS module owns sale transaction records.
-
-Consumers:
-
-- Reports
-- Dashboard
-- Customer purchase history
-- Staff ranking/activity
-- Audit logs
-
-## 3. POS -> Receipts
-
-Flow:
-
-1. Sale completes.
-2. Receipt snapshot is generated.
-3. Receipt settings apply logo/header/footer/VAT/QR/print options.
-4. Receipt is stored.
-5. Print service receives receipt print job.
-
-Settings dependencies:
-
-- Receipt settings
-- QR account settings
-- Currency settings
-- Printer profile
-
-## 4. POS -> Stock Deduction
-
-Flow:
-
-1. Each sale item converts selected unit quantity to base-unit quantity.
-2. Inventory balance decreases.
-3. Stock movement is written as sale deduction.
-4. Low stock/expiry alerts update.
-
-Owner:
-
-- Inventory owns stock balances and stock movements.
-- POS emits the deduction event.
-
-## 5. POS -> Inventory Movement
-
-Movement type:
-
-- `SALE_DEDUCTION`
-
-Required data:
-
-- companyId
-- branchId
-- warehouseId
-- saleId
-- saleItemId
-- productId
-- productUnitId
-- quantity entered
-- conversion quantity
-- base quantity deducted
-- before stock
-- after stock
-- cashier userId
-- createdAt
-
-## 6. POS -> Customer
-
-Flow:
-
-1. Cashier searches/scans customer by phone, code, QR, or barcode.
-2. POS attaches customerId to sale.
-3. Sale updates customer lifetime spend, visits, last purchase, credit if applicable.
-4. Customer purchase history reads sale records.
-
-Customer module owns profile and credit data.
-
-## 7. POS -> Membership
-
-Flow:
-
-1. Customer references membership level.
-2. POS loads active membership rules.
-3. Checkout applies membership discount according to discount type and rounding rule.
-4. Points are earned/redeemed.
-5. Tier auto-upgrade may run after sale.
-
-Membership owns rules; POS applies them.
-
-## 8. POS -> Promotion Engine
-
-Flow:
-
-1. POS loads active promotions for branch/warehouse/date/customer/product/category.
-2. Promotion engine orders by priority.
-3. Stack engine applies stack rules.
-4. Coupon/QR coupon is validated if present.
-5. Profit protection checks final price against cost/min margin.
-6. Valid discount is applied.
-7. Promotion usage is saved with sale.
-
-Promotion engine must be shared by:
-
-- POS checkout
-- Promotion preview
-- Reports
-- Promotion analytics
-
-## 9. POS -> Payment / QR / Currency
-
-Flow:
-
-1. Cashier selects payment method.
-2. If QR/Transfer, POS loads branch default QR account.
-3. If multi-currency, POS loads exchange rate and rounding rules.
-4. SalePayment records method, amount, currency, rate, base LAK value.
-5. Receipt and Customer Display show correct payment details.
-
-Settings owns QR/currency configuration.
-
-## 10. Sales -> Reports
-
-Reports read:
-
-- Sale
-- SaleItem
-- SalePayment
-- Refund/Void
-- PromotionUsage
-- LoyaltyPointLedger
-- CashTransaction
-
-Dashboard must use the same report repositories.
-
-## 11. Inventory -> Reports
-
-Reports read:
-
-- InventoryBalance
-- InventoryLot
-- StockMovement
-- StockAdjustment
-- StockTransfer
-- Product metadata
-
-Inventory valuation = current stock in base unit multiplied by cost basis.
-
-## 12. Purchasing -> Inventory
-
-Flow:
-
-1. Purchase order is created.
-2. Goods receiving confirms received product/unit/quantity.
-3. Receiving converts to base unit.
-4. Inventory balance increases.
-5. Stock movement is written as purchase receive.
-6. Lot/expiry is created if needed.
-7. PO status updates.
-
-Movement type:
-
-- `PURCHASE_RECEIVE`
-
-## 13. Supplier -> Purchasing / Debt / Payment
-
-Flow:
-
-1. Supplier is selected on PO.
-2. Receiving or invoice creates payable.
-3. Payment reduces payable.
-4. Supplier ledger derives balance from purchases, receiving, invoices, payments, credit notes, debit notes, and adjustments.
-
-Supplier owns profile. Purchasing/AP owns debt.
-
-## 14. Staff Permission -> Every Module
-
-All modules must check:
-
-- View
-- Create
-- Edit
-- Delete
-- Approve
-- Export
-- Print
-
-Permission checks must exist in:
-
-- Navigation/sidebar
-- Buttons/actions
-- Client handlers
-- Server actions
-- API routes
-
-Unauthorized message:
-
-- "You do not have permission to perform this action."
-
-## 15. Approval Rules -> Action Modules
-
-Approval rules connect to:
-
-- POS: refund, void, discount, manual price, cash out
-- Products: price change, delete
-- Inventory: adjustment, stock count variance
-- Purchasing: PO above amount, supplier payment
-- Promotions: create/edit/activate high-risk promotion
-- Customers: credit/point adjustment
-
-If approval is required:
-
-1. Create pending approval.
-2. Do not apply change.
-3. Owner/authorized approver approves/rejects.
-4. Approved action applies change.
-5. Rejected action does nothing.
-6. Audit log records all steps.
-
-## 16. Settings -> POS / Receipt / Printer / Customer Display / QR
-
-Settings drives:
-
-- POS VAT and currency
-- POS QR account
-- POS customer display mode
-- Receipt logo/header/footer/QR/VAT
-- Printer profile selection
-- Permission matrix
-- Approval rules
-- Staff login access
-
-Settings must not be UI-only.
-
-## 17. Super Admin -> Business / User / Plan / Feature Lock
-
-Super Admin controls:
-
-- Business status
-- Tenant suspension
-- Subscription plan
-- Plan expiry
-- Feature locks
-- Add-ons
-- Platform users overview
-- Platform audit
-
-Merchant feature access requires:
-
-1. Business subscription allows feature.
-2. Staff permission allows action.
-
-## 18. Localization -> Every Page
-
-Language preference connects to:
-
-- Login
-- Dashboard
-- POS
-- Products
-- Inventory
-- Purchasing
-- Customers
-- Membership
-- Suppliers
-- Promotions
-- Reports
-- Settings
-- Customer Display
-- Super Admin
-
-Storage keys must be stable and untranslated.
-
-## 19. Integration Status Summary
-
-Connected/partially connected now:
-
-- Products and POS demo product source are moving toward one repository.
-- POS demo sale writes sales, receipts, audit logs, and product stock.
-- Settings QR/staff/logo are moving toward stable repository paths.
-
-Major remaining gaps:
-
-- Reports still use independent mock data.
-- Inventory demo page still uses server mock data.
-- Purchasing and Promotions still use product mocks.
-- Global permission enforcement is not complete.
-- Approval flow is not consistently connected.
-- Printing module is specification-only.
-- Feature locks are not globally enforced.
+# EGO POS — System Integration Map
+
+> Code-verified integration status at commit `29af75d` (+ audit-doc phase).
+> Legend — **Connected** = production DB end-to-end · **Partial** = real backend but gaps · **Client-only** = browser/localStorage logic, no server persistence · **Mock** = static/demo data · **Missing** = not implemented.
+> Project renamed IGO POS → EGO POS (legacy `IGO_DEMO_MODE` / `igo-admin` names remain in code).
+
+---
+
+## Summary table
+
+| # | Integration | Status | Risk |
+| --- | --- | --- | --- |
+| 1 | POS → Inventory | **Connected** | Medium |
+| 2 | POS → Membership | **Connected** | Low |
+| 3 | POS → Promotion | **Connected** | Low |
+| 4 | POS → Reports | **Partial** | Medium |
+| 5 | Promotion → Reports | **Partial** | Medium |
+| 6 | Supplier → Purchase | **Connected** | Low |
+| 7 | Purchase → Inventory | **Connected** | Medium |
+| 8 | Recent Sales → Receipt View / Reprint | **Client-only / Mock** | **Critical** |
+| 9 | POS → Receipt Print Workflow | **Client-only** | High |
+| 10 | POS → Permissions / Approval Rules | **Partial** (checkout enforced; rest client-only) | **Critical** |
+
+---
+
+## 1. POS → Inventory — **Connected**
+- **Source files:** `features/pos/prisma-repository.ts` (`completePrismaSale`), `features/inventory/stock-concurrency.ts` (`applyAtomicStockDelta`), `features/pos/components/pos-page-client.tsx` (checkout call), `features/pos/actions.ts`.
+- **DB models:** `Sale`, `SaleItem`, `SalePayment`, `InventoryBalance`, `StockMovement`, `Product`, `ProductUnit`.
+- **API / actions:** `POST /api/pos/sales`; server action `completeSaleAction`.
+- **Flow:** On checkout (non-demo), each line is converted to base units (`quantity × conversionQty`) and stock is decremented atomically inside `withTenantTransaction`; a `StockMovement` (sale) row is written.
+- **Missing endpoints:** None for the sell path. Stock **restock on void/refund is NOT persisted** (see #8) — voids in Recent Sales restore stock only in localStorage.
+- **Risk:** Medium — sell path is solid; reversal path (void/refund) does not touch DB stock, so DB stock can drift from reality once voids/refunds are used.
+- **Recommended next fix phase:** Phase that wires void/refund to DB (POS lifecycle persistence).
+
+## 2. POS → Membership — **Connected**
+- **Source files:** `features/pos/prisma-repository.ts` (`resolveMembershipDiscountPercent`, `completePrismaSale`), `features/membership-levels/*`.
+- **DB models:** `Customer`, `MembershipLevel`, `LoyaltyPointLedger`.
+- **API / actions:** `completeSaleAction` / `POST /api/pos/sales`.
+- **Flow:** Membership discount % is resolved **server-side** from the customer's `MembershipLevel.discountPercent` (B8-1); client-sent prices are ignored. Loyalty points earned/redeemed are computed server-side.
+- **Missing endpoints:** None.
+- **Risk:** Low.
+- **Recommended next fix phase:** N/A (monitor only).
+
+## 3. POS → Promotion — **Connected**
+- **Source files:** `features/pos/prisma-repository.ts` (`applyActivePromotions`), `features/promotions/*`.
+- **DB models:** `Promotion`, `PromotionProduct`, `PromotionCategory`, `PromotionMembershipLevel`, `PromotionUsage`.
+- **API / actions:** `completeSaleAction`.
+- **Flow:** Active promotions are loaded server-side and applied to qualifying lines using pre-resolved category/membership context; a `PromotionUsage` row is written per applied promotion.
+- **Gap:** The **client cart does not preview DB promotions** (only banner promos), so the on-screen total can differ from the server total; B8-1 added a directional mismatch guard (rejects only client-below-server).
+- **Risk:** Low (integrity) / Medium (UX mismatch).
+- **Recommended next fix phase:** Client promo-preview parity (UI phase).
+
+## 4. POS → Reports — **Partial**
+- **Source files:** `features/reports/prisma-repository.ts`, `features/reports/report-service.ts`, `app/(dashboard)/reports/**`, `features/reports/components/reports-analytics-client.tsx`.
+- **DB models:** `Sale`, `SaleItem`, `SalePayment` (+ inventory/purchasing for other tabs).
+- **API / actions:** `GET /api/reports`; SSR via `getReportsSnapshot()`.
+- **Flow:** Sub-report pages (`/reports/sales|inventory|customers|products|purchasing`) and dashboard KPIs aggregate **real `Sale` data**. BUT the **Report Center tab** in `reports-analytics-client.tsx` renders `features/reports/mock-full-data.ts` (executive reports, catalog rows, currency rates), and several hub filters are **UI-only** (no server re-query); aggregates are all-time (no server date-range param).
+- **Missing endpoints:** Date-range-parameterized reports query.
+- **Risk:** Medium — decisions may be made on mock figures in the Report Center.
+- **Recommended next fix phase:** Reports authority phase (remove `mock-full-data`, add server date filtering).
+
+## 5. Promotion → Reports — **Partial**
+- **Source files:** `features/reports/prisma-repository.ts`, `app/(dashboard)/promotions/analytics/page.tsx`, `features/promotions/*`.
+- **DB models:** `PromotionUsage`, `Promotion`, `Sale`.
+- **API / actions:** SSR snapshot reads.
+- **Flow:** `PromotionUsage` is written at checkout and is readable; however `/promotions/analytics` shows **placeholder** ratios (e.g., "62% / 38%"), placeholder usage-trend charts and margin panels; `/promotions/stack-rules` and `/promotions/integration-map` are static.
+- **Missing endpoints:** Promotion analytics aggregation; stack-rule persistence (`PromotionRule`/`PromotionAction` models unused).
+- **Risk:** Medium.
+- **Recommended next fix phase:** Promotion analytics phase.
+
+## 6. Supplier → Purchase — **Connected**
+- **Source files:** `features/purchasing/prisma-repository.ts`, `features/suppliers/prisma-repository.ts`, `features/purchasing/components/*`.
+- **DB models:** `Supplier`, `Purchase`, `PurchaseItem`, `SupplierPayable`, `PurchasePayment`.
+- **API / actions:** `POST /api/purchasing/purchase-orders`, `/status`, `/receiving`, `/payments`; purchasing server actions.
+- **Flow:** POs reference a supplier; lifecycle (draft→ordered→partial→received→closed/cancelled) and payables/outstanding-balance sync are DB-backed (B7-1/2/3).
+- **Missing endpoints:** Supplier activate/deactivate from the supplier **detail** page (UI stub); supplier documents/linked-products panels are placeholders.
+- **Risk:** Low.
+- **Recommended next fix phase:** Supplier detail completion (UI phase).
+
+## 7. Purchase → Inventory — **Connected**
+- **Source files:** `features/purchasing/prisma-repository.ts` (`receiveGoods`), `features/inventory/stock-concurrency.ts`.
+- **DB models:** `GoodsReceipt`, `GoodsReceiptItem`, `StockMovement`, `InventoryBalance`, `InventoryLot`.
+- **API / actions:** `POST /api/purchasing/receiving`.
+- **Flow:** Receiving converts to base units and increments stock atomically with a traceable `StockMovement` (purchase) row; partial/over-receive guarded (B7-2).
+- **Missing endpoints:** None.
+- **Risk:** Medium (only because no independent reconciliation/count-vs-receipt audit exists yet).
+- **Recommended next fix phase:** N/A (monitor).
+
+## 8. Recent Sales → Receipt View / Reprint — **Client-only / Mock**  ⚠️
+- **Source files:** `features/pos/components/pos-page-client.tsx` (`recentSales`, `openReceiptForSale`, `refundSale`, `voidSale`, `softDeleteSale`, `duplicateSaleToCart`), `lib/demo/repositories.ts` (`demoSalesRepository`, `demoReceiptsRepository`).
+- **DB models:** **NONE used.** (`Sale`, `Refund`, `RefundItem` exist in schema but are not read/written by Recent Sales.)
+- **API / actions:** **None.** All reads/writes go to **browser localStorage** in *every* mode.
+- **Flow:** Recent Sales is loaded only from `demoSalesRepository.listSales()`. Critically, the **production** `completeSaleAction` (DB sale) does **not** add to `demoSalesRepository`, so DB sales never appear in Recent Sales; only `completeDemoSale` (demo mode) populates it. Refund/Void/Edit/Soft-delete/Duplicate mutate localStorage only.
+- **Missing endpoints:** `GET /api/pos/sales` (list/history), `GET` receipt by sale, `POST /api/pos/refund`, `POST /api/pos/void`, sale-edit/soft-delete/timeline endpoints.
+- **Risk:** **Critical** — sales history, refunds, and voids are not durable, not auditable in DB, device-local, and lost on cache clear.
+- **Recommended next fix phase:** **POS Sales History & Lifecycle Persistence** (highest priority POS phase).
+
+## 9. POS → Receipt Print Workflow — **Client-only**
+- **Source files:** `features/pos/components/pos-page-client.tsx` (`receiptPrintMode`, `handleReceiptPrintModeAfterSale`, `buildReceiptSnapshot`), `features/settings/prisma-repository.ts` + `features/settings/types.ts` (DB `receiptPrintMode`), `features/settings/components/settings-form.tsx`, `lib/demo/repositories.ts` (`demoSettingsRepository`).
+- **DB models:** `CompanySetting` (stores `receiptPrintMode` + receipt display settings).
+- **API / actions:** `GET/PATCH /api/settings` (mode is saved to DB), but POS **reads the mode from `demoSettingsRepository` (localStorage)**, not the DB value passed to the page.
+- **Flow:** Modes = Ask Every Time / Auto Print / No Auto Print. Receipt renders from an in-memory/saved snapshot; printing uses the **browser print dialog**. No printer-profile / ESC-POS / hardware integration.
+- **Missing endpoints:** Direct printer integration; reconciling localStorage print mode with the DB setting.
+- **Risk:** High — print behavior is device-local and diverges from saved settings; no hardware printing.
+- **Recommended next fix phase:** Receipt/printing productionization (after Sales History persistence).
+
+## 10. POS → Permissions / Approval Rules — **Partial**  ⚠️
+- **Source files:** `features/pos/pos-permission-guard.ts`, `features/access-control/pos-policy-loader.ts`, `features/pos/permissions.ts` (`evaluatePosPermission`), `features/pos/prisma-repository.ts` (server enforcement), `features/pos/components/pos-page-client.tsx` (`enforcePosAction`), `features/approvals/approval-engine.ts`, `lib/demo/repositories.ts` (`demoPendingApprovalRepository`, `demoAuditLogRepository`).
+- **DB models:** `Role`, `Permission`, `RolePermission`, `UserRole`, `CompanyUser`, `ApprovalRule`, `Approval`, `AuditLog`.
+- **API / actions:** `completeSaleAction` (server-enforces `create_sale` + `apply_discount` using the user's **actual role**, B8-3); `POST /api/approvals` + `/decision` (DB approval engine, B8-2).
+- **Flow:** **Checkout** discount/create are enforced **server-side** with role-aware limits (Owner 100% / Manager threshold / Cashier 0%). BUT all **Recent Sales actions** and over-limit/override approvals in `enforcePosAction` are **client-only**, recording to **localStorage** `demoPendingApprovalRepository`/`demoAuditLogRepository`. The hardened **B8-2 DB approval engine is NOT wired** to POS overrides (void/refund/over-limit discount).
+- **Missing endpoints:** Server actions for void/refund/cash/shift that call the guard + approval engine; replacing the localStorage approval/audit panel with `POST /api/approvals`.
+- **Risk:** **Critical** — high-value overrides (void, refund, over-limit discount outside checkout) are authorized only in the browser and audited only in localStorage; bypassable and non-durable.
+- **Recommended next fix phase:** **Wire POS overrides → B8-2 approval engine + DB audit** (security phase, pairs with #8).
+
+---
+
+## Cross-cutting conclusions
+- **Production-solid core:** Sell path (POS→Inventory/Membership/Promotion), Purchasing (Supplier→Purchase→Inventory), and checkout permission enforcement are real and DB-backed.
+- **Biggest integration debt is the POS post-sale surface:** Recent Sales, receipts, refunds, voids, and POS-side approvals/audit are **localStorage**, disconnected from the DB sale that checkout actually persisted. This is the dominant correctness/audit risk.
+- **Reports** are half-real (sub-pages) and half-mock (Report Center).
