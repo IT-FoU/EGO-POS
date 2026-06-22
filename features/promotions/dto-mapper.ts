@@ -10,7 +10,7 @@ function dateOnly(value: unknown) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : "";
 }
 
-export function mapPrismaPromotion(promotion: Row): Promotion {
+export function mapPrismaPromotion(promotion: Row, totalSalesLak = 0): Promotion {
   return {
     applicableCategoryIds: (promotion.categories ?? []).map((entry: Row) => entry.categoryId),
     applicableProductIds: (promotion.products ?? []).map((entry: Row) => entry.productId),
@@ -31,7 +31,7 @@ export function mapPrismaPromotion(promotion: Row): Promotion {
     startDate: dateOnly(promotion.startDate),
     status: (promotion.status ?? "active") as PromotionStatus,
     totalDiscountLak: toNumber(promotion.totalDiscountLak),
-    totalSalesLak: 0,
+    totalSalesLak,
     type: (promotion.promotionType ?? "percentage") as PromotionType,
     usageCount: promotion.usageCount ?? 0,
   };

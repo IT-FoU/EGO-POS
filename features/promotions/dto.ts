@@ -30,6 +30,8 @@ const createFields = [
 ] as const;
 
 const updateFields = [
+  "applicableCategoryIds",
+  "applicableProductIds",
   "buyQuantity",
   "comboPriceLak",
   "description",
@@ -38,6 +40,7 @@ const updateFields = [
   "endDate",
   "getQuantity",
   "isActive",
+  "membershipLevelIds",
   "priority",
   "promotionCode",
   "promotionName",
@@ -68,7 +71,7 @@ export type PromotionCreateInput = {
   status?: (typeof statuses)[number];
 };
 
-export type PromotionUpdateInput = Partial<Omit<PromotionCreateInput, "applicableCategoryIds" | "applicableProductIds" | "membershipLevelIds">> & {
+export type PromotionUpdateInput = Partial<PromotionCreateInput> & {
   isActive?: boolean;
 };
 
@@ -113,6 +116,8 @@ export function parsePromotionUpdateInput(input: unknown): PromotionUpdateInput 
   assertDateOrder(startDate, endDate);
 
   return cleanUndefined({
+    applicableCategoryIds: parseStringArray(dto, "applicableCategoryIds"),
+    applicableProductIds: parseStringArray(dto, "applicableProductIds"),
     buyQuantity: parseNumber(dto, "buyQuantity", { integer: true, min: 1 }),
     comboPriceLak: parseNumber(dto, "comboPriceLak", { min: 0 }),
     description: parseString(dto, "description", { nullable: true }),
@@ -121,6 +126,7 @@ export function parsePromotionUpdateInput(input: unknown): PromotionUpdateInput 
     endDate,
     getQuantity: parseNumber(dto, "getQuantity", { integer: true, min: 1 }),
     isActive: parseBoolean(dto, "isActive"),
+    membershipLevelIds: parseStringArray(dto, "membershipLevelIds"),
     priority: parseNumber(dto, "priority", { integer: true, min: 0 }),
     promotionCode: parseString(dto, "promotionCode", { max: 80, nullable: true }),
     promotionName: parseString(dto, "promotionName", { max: 255 }),

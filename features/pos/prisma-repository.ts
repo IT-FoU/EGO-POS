@@ -59,6 +59,12 @@ import {
   calculateLoyaltyRedemption,
   resolveMembershipDiscountPercent,
 } from "@/features/loyalty/loyalty-service";
+import {
+  applyActivePromotions,
+  assertPromotionProfitSafe,
+  recordPromotionUsage,
+  rejectClientPromotionClaims,
+} from "@/features/promotions/promotion-checkout";
 
 export async function getNextPosSaleNo(companyId: string, prefix: string | null | undefined, tx: any = db) {
   const normalizedPrefix = normalizeReceiptPrefix(prefix);
@@ -100,20 +106,6 @@ async function resolvePosSaleNo(
 
   return getNextPosSaleNo(companyId, normalizedPrefix, tx);
 }
-
-type SaleLine = {
-  baseQuantity: number;
-  costPrice: number;
-  discountAmount: number;
-  productId: string;
-  profitAmount: number;
-  promotionDiscount: number;
-  promotionId?: string;
-  quantity: number;
-  sellingPrice: number;
-  totalAmount: number;
-  unitId?: string;
-};
 
 export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
@@ -246,6 +238,7 @@ export async function completePrismaSale(input: {
   discountPercent: number;
   items: Array<{ conversionQty?: number; costPrice?: number; productId: string; promotionDiscount?: number; promotionId?: string; quantity: number; sellingPrice: number; unitId?: string }>;
   paymentMode: PaymentMode;
+  promotionCodes?: string[];
   qrAmount: number;
   redeemPoints?: number;
   saleNo: string;
@@ -274,6 +267,7 @@ export async function completePrismaSale(input: {
         throw new Error("POS branch and warehouse scopes do not match.");
       }
       await assertOpenCashSessionForSale(tenant, tx);
+      rejectClientPromotionClaims(input.items);
       const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
       const receiptPrefix = settings?.receiptPrefix ?? "INV";
       const saleNo = await resolvePosSaleNo(tx, tenant.companyId, input.saleNo, receiptPrefix);
@@ -356,10 +350,14 @@ export async function completePrismaSale(input: {
         };
       });
       const saleItems = await applyActivePromotions(tx, rawSaleItems, {
+        appliedPromotionCodes: input.promotionCodes,
+        allowStacking: false,
+        blockBelowCostSales: true,
         categoryByProduct,
         companyId: tenant.companyId,
         membershipLevelId: (customerRecord as Record<string, any> | null)?.membershipLevelId ?? null,
       });
+      assertPromotionProfitSafe(saleItems, true);
       const subtotal = saleItems.reduce((total, item) => total + item.quantity * item.sellingPrice, 0);
       const promotionDiscountAmount = saleItems.reduce((total, item) => total + item.promotionDiscount, 0);
 
@@ -516,31 +514,11 @@ export async function completePrismaSale(input: {
         runningQtyByProduct.set(item.productId, afterQty);
       }
 
-      const discountByPromotion = saleItems.reduce<Map<string, number>>((totals, item) => {
-        if (item.promotionId && item.promotionDiscount > 0) {
-          totals.set(item.promotionId, (totals.get(item.promotionId) ?? 0) + item.promotionDiscount);
-        }
-        return totals;
-      }, new Map());
-
-      for (const [promotionId, discountLak] of discountByPromotion) {
-        await tx.promotionUsage.create({
-          data: {
-            companyId: tenant.companyId,
-            discountAmountLak: discountLak,
-            promotionId,
-            saleId: sale.id,
-          },
-        });
-
-        await tx.promotion.update({
-          data: {
-            totalDiscountLak: { increment: discountLak },
-            usageCount: { increment: 1 },
-          },
-          where: { id: promotionId },
-        });
-      }
+      await recordPromotionUsage(tx, {
+        companyId: tenant.companyId,
+        saleId: sale.id,
+        saleItems,
+      });
 
       if (loyaltyRedemption.customer) {
         await applyLoyaltyLedger(tx, {
@@ -558,102 +536,4 @@ export async function completePrismaSale(input: {
       return sale;
     },
   });
-}
-
-async function applyActivePromotions(
-  tx: any,
-  items: SaleLine[],
-  context: {
-    categoryByProduct: Map<string, string | null>;
-    companyId: string;
-    membershipLevelId: string | null;
-  },
-) {
-  const now = new Date();
-  const { categoryByProduct, companyId, membershipLevelId } = context;
-  const productIds = items.map((item) => item.productId);
-  const categoryIds = Array.from(
-    new Set(Array.from(categoryByProduct.values()).filter((value): value is string => Boolean(value))),
-  );
-  const promotions = await tx.promotion.findMany({
-    include: {
-      categories: true,
-      membershipLevels: true,
-      products: true,
-    },
-    orderBy: [{ priority: "desc" }, { startDate: "desc" }],
-    where: {
-      companyId,
-      endDate: { gte: now },
-      isActive: true,
-      OR: [
-        { products: { some: { productId: { in: productIds } } } },
-        { categories: { some: { categoryId: { in: categoryIds } } } },
-        { products: { none: {} }, categories: { none: {} } },
-      ],
-      startDate: { lte: now },
-      status: "active",
-    },
-  });
-
-  return items.map((item) => {
-    const lineSubtotal = item.quantity * item.sellingPrice;
-    const best = (promotions as Array<Record<string, any>>).reduce((current: { discount: number; promotionId?: string }, promotion) => {
-      if (!isPromotionEligibleForLine(promotion, item.productId, categoryByProduct.get(item.productId), membershipLevelId)) {
-        return current;
-      }
-
-      const discount = calculatePromotionDiscount(promotion, item.quantity, item.sellingPrice, lineSubtotal);
-      return discount > current.discount ? { discount, promotionId: promotion.id } : current;
-    }, { discount: 0 });
-    const promotionDiscount = Math.min(best.discount, lineSubtotal);
-    const totalAmount = lineSubtotal - promotionDiscount;
-
-    return {
-      ...item,
-      discountAmount: promotionDiscount,
-      profitAmount: totalAmount - item.costPrice * item.quantity,
-      promotionDiscount,
-      promotionId: best.promotionId,
-      totalAmount,
-    };
-  });
-}
-
-function isPromotionEligibleForLine(
-  promotion: Record<string, any>,
-  productId: string,
-  categoryId: string | null | undefined,
-  membershipLevelId: string | null | undefined,
-) {
-  const productTargets = promotion.products ?? [];
-  const categoryTargets = promotion.categories ?? [];
-  const membershipTargets = promotion.membershipLevels ?? [];
-  const productMatch = productTargets.length === 0 || productTargets.some((target: Record<string, any>) => target.productId === productId);
-  const categoryMatch = categoryTargets.length === 0 || categoryTargets.some((target: Record<string, any>) => target.categoryId === categoryId);
-  const membershipMatch =
-    membershipTargets.length === 0 ||
-    !membershipLevelId ||
-    membershipTargets.some((target: Record<string, any>) => target.membershipLevelId === membershipLevelId);
-
-  return productMatch && categoryMatch && membershipMatch;
-}
-
-function calculatePromotionDiscount(promotion: Record<string, any>, quantity: number, sellingPrice: number, lineSubtotal: number) {
-  switch (promotion.promotionType) {
-    case "percentage":
-    case "member_discount":
-      return lineSubtotal * numberValue(promotion.discountPercent) / 100;
-    case "fixed_amount":
-      return Math.min(numberValue(promotion.discountAmountLak), lineSubtotal);
-    case "buy_x_get_y": {
-      const buyQuantity = Math.max(Number(promotion.buyQuantity ?? 0), 0);
-      const getQuantity = Math.max(Number(promotion.getQuantity ?? 0), 0);
-      if (buyQuantity <= 0 || getQuantity <= 0) return 0;
-      const freeQuantity = Math.floor(quantity / (buyQuantity + getQuantity)) * getQuantity;
-      return freeQuantity * sellingPrice;
-    }
-    default:
-      return 0;
-  }
 }
