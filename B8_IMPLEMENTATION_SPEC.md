@@ -20,7 +20,7 @@ Engineering baseline is green: `typecheck` PASS, `build` PASS, B7 harnesses 64/6
 | **Customers** | Prisma only | `withTenantTransaction` | Yes | per action | **Mostly solid** (loyalty redeem/adjust gaps) |
 | **Membership Levels** | Prisma only | manual assignment only | Yes | per action | **Partial** (no spend-based tiering) |
 | **Promotions** | Prisma only | usage persisted on sale | Yes (sale) | per action | **Partial** (POS totals omit promos; combo unimplemented; analytics stubbed) |
-| **Reports** | Prisma only | n/a (read) | n/a | session | **Weak** (mock UI, calc gaps, scoping) |
+| **Reports** | Prisma only | n/a (read) | n/a | `reports.view` (B8-3) | **Solid** (B8-4) |
 | **Dashboard** | Prisma | n/a | n/a | session | **Mostly real** (shift cash bug, error-masking) |
 | **POS** | Prisma snapshot | sale fully persisted + audited | Yes (sale) | only `pos.sell` server-side | **Core solid, controls weak** |
 | **Settings** | Prisma (+demo fallback when no company) | `withTenantTransaction` | Yes | `settingsManage` | **Mostly solid** (logo/display localStorage) |
@@ -73,12 +73,20 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 
 **Remaining (NOT B8-3):** POS void/refund/hold/cash/shift (no server endpoints); POS localStorage approval panel; wire overrides to B8-2 engine.
 
-### G4 — Reports financial accuracy & mock UI **(HIGH; spec requires 5 accurate reports)**
-- `reports-analytics-client.tsx` still renders **mock** data: `reportRows`, `executiveReports`, `reportCategories`, `currencyRates` from `mock-full-data.ts`; hardcoded modal KPIs (day/hour/detail), AI insights, health sub-bars, client FX.
-- Filters (date range) are **UI-only** — never re-query the server; `getReportsSnapshot` has no date-range parameter (all-time aggregates).
-- `reports/prisma-repository.ts` builds **synthetic duplicate PO rows** (L201–209) merged with real supplier POs → double counting; `supplierPayments` fetched but unused; reports AP uses `Supplier.outstandingBalance` while dashboard uses `supplierPayable` (can disagree).
-- No explicit **COGS / gross-vs-net margin** metric; profit trusts sale-time `profitAmount` (≈ revenue if `costPrice` was 0).
-- Detail: [Reports/Dashboard audit](456adaf0-7f04-4bd0-b156-2109c35a5040).
+### G4 — Reports financial accuracy & mock UI **(HIGH; spec requires 5 accurate reports)** — **DONE (B8-4)**
+
+**B8-4 status (report engine hardened):**
+- Removed runtime dependency on `mock-full-data.ts` in `reports-analytics-client.tsx`; Report Center catalog moved to `report-catalog.ts`; FX display rates to `currency-rates.ts`; KPI keys to `types.ts`.
+- `getPrismaReportsSnapshot(tenant, filters?)` accepts server-side filters (date preset/range, branch, warehouse, category, supplier, cashier, payment method, customer) via `report-filters.ts`; `/reports` page and `GET /api/reports` pass query params; FilterBar Apply triggers server re-fetch.
+- Removed synthetic `supplier-*` PO rows; purchasing report uses real `Purchase` records only.
+- Supplier payables exposed from `SupplierPayable` groupBy (`supplierPayables`); purchasing report prefers payable balance with outstanding fallback.
+- COGS computed from `SaleItem.costPrice × quantity` (`cogsLak` on snapshot).
+- Inventory `daysWithoutSale` and `unitsSold30Days` computed from real sale history (`inventory/prisma-repository.ts`); dead-stock hub KPIs now DB-backed.
+- Report modal product tables use live `productRows` from Prisma.
+- Permissions remain server-enforced via B8-3 `runRead` + `reports.view`.
+- Verified by `scripts/phase-b8-4-report-check.ts` (**13/13 PASS**). B8-3 (42/42), B8-2 (29/29), B8-1 (29/29), B7-1..B7-4 regressions still pass.
+
+**Remaining (NOT B8-4):** Day/hour detail modals and business-health sub-bars still use illustrative UI copy (not financial data); AI insights panel is heuristic text; report sub-pages do not yet expose filter query params; dashboard shift-cash bug (G8) unchanged.
 
 ### G5 — Loyalty redemption & spend-based tiers **(MEDIUM)**
 - Earn is persisted on sale; **redeem path exists server-side but POS UI never sends `redeemPoints`**. No manual points adjust/redeem action.

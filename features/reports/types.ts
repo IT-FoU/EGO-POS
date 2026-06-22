@@ -1,4 +1,19 @@
+export type ReportKpiKey =
+  | "revenue"
+  | "profit"
+  | "transactions"
+  | "customers"
+  | "averageBill"
+  | "itemsSold"
+  | "inventoryValue"
+  | "profitMargin";
+
 export type PeriodKey = "daily" | "weekly" | "monthly" | "yearly";
+
+export type SupplierPayableSummary = {
+  payableBalanceLak: number;
+  supplierId: string;
+};
 
 export type SalesMetric = {
   period: PeriodKey;

@@ -1,7 +1,19 @@
 import { ReportsAnalyticsClient } from "@/features/reports/components/reports-analytics-client";
-import { getReportsSnapshot } from "@/features/reports/report-service";
+import { getReportsPageData } from "@/features/reports/report-service";
 
-export default async function ReportsPage() {
-    const { hub } = await getReportsSnapshot();
-    return <ReportsAnalyticsClient hub={hub} />;
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = searchParams ? await searchParams : undefined;
+  const { filterOptions, filters, hub, productRows } = await getReportsPageData(params);
+  return (
+    <ReportsAnalyticsClient
+      filterOptions={filterOptions}
+      filters={filters}
+      hub={hub}
+      productRows={productRows}
+    />
+  );
 }

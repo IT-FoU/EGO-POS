@@ -3,11 +3,29 @@
 import { t } from "@/lib/i18n/ui";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BarChart3, CalendarClock, ChevronDown, Download, Eye, FileSpreadsheet, FileText, HeartPulse, Printer, RefreshCcw, Search, Send, Star, TrendingUp, type LucideIcon, } from "lucide-react";
 import type { ReportsAnalyticsHub } from "@/features/reports/build-analytics-hub";
-import { currencyRates, executiveReports, reportCategories, reportRows, type ReportKpiKey } from "@/features/reports/mock-full-data";
+import { currencyRates, type ReportCurrency } from "@/features/reports/currency-rates";
+import { executiveReports, reportCategories, type ReportCategory } from "@/features/reports/report-catalog";
+import type { ReportFilterOptions, ReportFilters } from "@/features/reports/report-filters";
+import { reportFiltersToSearchParams } from "@/features/reports/report-filters";
 import { formatLak, formatNumber } from "@/features/reports/format";
+import type { ProductReportRow, ReportKpiKey } from "@/features/reports/types";
+const datePresetLabels = {
+    all: "All Time",
+    custom: "Custom",
+    this_month: "This Month",
+    this_week: "This Week",
+    today: "Today",
+    yesterday: "Yesterday",
+} as const;
+
 type TabKey = "dashboard" | "center";
+
+function buildSelectOptions(allLabel: string, options: Array<{ id: string; label: string }>) {
+    return [{ label: allLabel, value: "" }, ...options.map((option) => ({ label: option.label, value: option.id }))];
+}
 type ModalKind = "kpi" | "health" | "daily" | "hour" | "category" | "inventory" | "product" | "deadstock" | "report" | "export" | "schedule" | "favorites" | "dataSource";
 type DataSourceStatus = {
     count: number;
@@ -100,19 +118,28 @@ const reportCopy = {
         viewSales: "ເບິ່ງລາຍງານການຂາຍ",
     },
 };
-export function ReportsAnalyticsClient({ hub }: {
+export function ReportsAnalyticsClient({
+    filterOptions,
+    filters,
+    hub,
+    productRows,
+}: {
+    filterOptions: ReportFilterOptions;
+    filters: ReportFilters;
     hub: ReportsAnalyticsHub;
+    productRows: ProductReportRow[];
 }) {
+    const router = useRouter();
     const [locale, setLocale] = useState<"en" | "lo">("en");
     const [tab, setTab] = useState<TabKey>("dashboard");
     const [reportQuery, setReportQuery] = useState("");
-    const [dateRange, setDateRange] = useState("This Month");
-    const [branch, setBranch] = useState("All Branches");
-    const [warehouse, setWarehouse] = useState("All Warehouses");
-    const [category, setCategory] = useState("All Categories");
-    const [supplier, setSupplier] = useState("All Suppliers");
-    const [cashier, setCashier] = useState("All Cashiers");
-    const [currency, setCurrency] = useState<keyof typeof currencyRates>("LAK");
+    const [datePreset, setDatePreset] = useState(filters.datePreset);
+    const [branchId, setBranchId] = useState(filters.branchId ?? "");
+    const [warehouseId, setWarehouseId] = useState(filters.warehouseId ?? "");
+    const [categoryId, setCategoryId] = useState(filters.categoryId ?? "");
+    const [supplierId, setSupplierId] = useState(filters.supplierId ?? "");
+    const [cashierId, setCashierId] = useState(filters.cashierId ?? "");
+    const [currency, setCurrency] = useState<ReportCurrency>("LAK");
     const [modal, setModal] = useState<ModalKind | null>(null);
     const [modalTitle, setModalTitle] = useState("");
     const [activeKpi, setActiveKpi] = useState<ReportKpiKey>("revenue");
@@ -145,14 +172,30 @@ export function ReportsAnalyticsClient({ hub }: {
         setModalTitle(reportName);
         setModal("report");
     }
+    function applyFilters() {
+        const params = reportFiltersToSearchParams({
+            branchId: branchId || undefined,
+            cashierId: cashierId || undefined,
+            categoryId: categoryId || undefined,
+            dateFrom: filters.dateFrom,
+            datePreset,
+            dateTo: filters.dateTo,
+            supplierId: supplierId || undefined,
+            warehouseId: warehouseId || undefined,
+        });
+        router.push(`/reports?${params.toString()}`);
+        router.refresh();
+    }
     function resetFilters() {
-        setDateRange("This Month");
-        setBranch("All Branches");
-        setWarehouse("All Warehouses");
-        setCategory("All Categories");
-        setSupplier("All Suppliers");
-        setCashier("All Cashiers");
+        setDatePreset("this_month");
+        setBranchId("");
+        setWarehouseId("");
+        setCategoryId("");
+        setSupplierId("");
+        setCashierId("");
         setCurrency("LAK");
+        router.push("/reports");
+        router.refresh();
     }
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
       {modal === "kpi" ? <KpiDetailModal activeKpi={activeKpi} currency={currency} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle}/> : null}
@@ -160,10 +203,10 @@ export function ReportsAnalyticsClient({ hub }: {
       {modal === "daily" ? <DayDetailModal locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.dayDetail} topSellers={hub.topSellers}/> : null}
       {modal === "hour" ? <HourDetailModal locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.hourDetail} topSellers={hub.topSellers}/> : null}
       {modal === "category" ? <CategoryModal currency={currency} onClose={() => setModal(null)} title={modalTitle} topSellers={hub.topSellers}/> : null}
-      {modal === "inventory" ? <InventoryAlertModal onClose={() => setModal(null)} title={modalTitle}/> : null}
+      {modal === "inventory" ? <InventoryAlertModal onClose={() => setModal(null)} productRows={productRows} title={modalTitle}/> : null}
       {modal === "product" ? <ProductAnalyticsModal currency={currency} onClose={() => setModal(null)} revenueProfitTrend={hub.revenueProfitTrend} title={modalTitle}/> : null}
       {modal === "deadstock" ? <DeadStockModal deadStockProducts={hub.deadStockProducts} onClose={() => setModal(null)}/> : null}
-      {modal === "report" ? <ReportDetailModal categoryBreakdown={hub.categoryBreakdown} currency={currency} onClose={() => setModal(null)} reportName={activeReport}/> : null}
+      {modal === "report" ? <ReportDetailModal categoryBreakdown={hub.categoryBreakdown} currency={currency} onClose={() => setModal(null)} productRows={productRows} reportName={activeReport}/> : null}
       {modal === "export" ? <ExportModal onClose={() => setModal(null)}/> : null}
       {modal === "schedule" ? <ScheduleModal onClose={() => setModal(null)} reportName={activeReport}/> : null}
       {modal === "favorites" ? <FavoritesModal favorites={favorites} onClose={() => setModal(null)} onOpen={openReport}/> : null}
@@ -185,7 +228,29 @@ export function ReportsAnalyticsClient({ hub }: {
         </div>
       </section>
 
-      <FilterBar branch={branch} cashier={cashier} category={category} currency={currency} dateRange={dateRange} onApply={() => setModalTitle(`Filters applied: ${dateRange}`)} onReset={resetFilters} setBranch={setBranch} setCashier={setCashier} setCategory={setCategory} setCurrency={setCurrency} setDateRange={setDateRange} setSupplier={setSupplier} setWarehouse={setWarehouse} supplier={supplier} warehouse={warehouse}/>
+      <FilterBar
+        branchId={branchId}
+        branchOptions={buildSelectOptions("All Branches", filterOptions.branches)}
+        cashierId={cashierId}
+        cashierOptions={buildSelectOptions("All Cashiers", filterOptions.cashiers)}
+        categoryId={categoryId}
+        categoryOptions={buildSelectOptions("All Categories", filterOptions.categories)}
+        currency={currency}
+        datePreset={datePreset}
+        onApply={applyFilters}
+        onReset={resetFilters}
+        setBranchId={setBranchId}
+        setCashierId={setCashierId}
+        setCategoryId={setCategoryId}
+        setCurrency={setCurrency}
+        setDatePreset={setDatePreset}
+        setSupplierId={setSupplierId}
+        setWarehouseId={setWarehouseId}
+        supplierId={supplierId}
+        supplierOptions={buildSelectOptions("All Suppliers", filterOptions.suppliers)}
+        warehouseId={warehouseId}
+        warehouseOptions={buildSelectOptions("All Warehouses", filterOptions.warehouses)}
+      />
 
       <section className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-2">
         <button className={tab === "dashboard" ? "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" : "h-10 rounded-md px-4 text-sm font-semibold hover:bg-background"} type="button" onClick={() => setTab("dashboard")}>{copy.dashboard}</button>
@@ -225,32 +290,37 @@ export function ReportsAnalyticsClient({ hub }: {
     </div>);
 }
 function FilterBar(props: {
-    branch: string;
-    cashier: string;
-    category: string;
-    currency: keyof typeof currencyRates;
-    dateRange: string;
+    branchId: string;
+    branchOptions: Array<{ label: string; value: string }>;
+    cashierId: string;
+    cashierOptions: Array<{ label: string; value: string }>;
+    categoryId: string;
+    categoryOptions: Array<{ label: string; value: string }>;
+    currency: ReportCurrency;
+    datePreset: ReportFilters["datePreset"];
     onApply: () => void;
     onReset: () => void;
-    setBranch: (value: string) => void;
-    setCashier: (value: string) => void;
-    setCategory: (value: string) => void;
-    setCurrency: (value: keyof typeof currencyRates) => void;
-    setDateRange: (value: string) => void;
-    setSupplier: (value: string) => void;
-    setWarehouse: (value: string) => void;
-    supplier: string;
-    warehouse: string;
+    setBranchId: (value: string) => void;
+    setCashierId: (value: string) => void;
+    setCategoryId: (value: string) => void;
+    setCurrency: (value: ReportCurrency) => void;
+    setDatePreset: (value: ReportFilters["datePreset"]) => void;
+    setSupplierId: (value: string) => void;
+    setWarehouseId: (value: string) => void;
+    supplierId: string;
+    supplierOptions: Array<{ label: string; value: string }>;
+    warehouseId: string;
+    warehouseOptions: Array<{ label: string; value: string }>;
 }) {
     return (<section className="sticky top-20 z-10 rounded-lg border border-border bg-card/95 p-4 backdrop-blur">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-        <Select label="Date Range" value={props.dateRange} onChange={props.setDateRange} options={["Today", "Yesterday", "This Week", "This Month", "Custom"]}/>
-        <Select label="Branch" value={props.branch} onChange={props.setBranch} options={["All Branches", "GO BOX Main", "Market Branch"]}/>
-        <Select label="Warehouse" value={props.warehouse} onChange={props.setWarehouse} options={["All Warehouses", "Main Warehouse", "Cold Storage"]}/>
-        <Select label="Category" value={props.category} onChange={props.setCategory} options={["All Categories", "Drinks", "Snacks", "Cold Goods", "Household", "Stationery"]}/>
-        <Select label="Supplier" value={props.supplier} onChange={props.setSupplier} options={["All Suppliers", "ABC Trading", "Pepsi Laos", "Lao Beverage Supplier"]}/>
-        <Select label="Cashier" value={props.cashier} onChange={props.setCashier} options={["All Cashiers", "Owner", "Cashier 1"]}/>
-        <Select label="Currency" value={props.currency} onChange={(value) => props.setCurrency(value as keyof typeof currencyRates)} options={["LAK", "THB", "USD"]}/>
+        <Select label="Date Range" value={props.datePreset} onChange={(value) => props.setDatePreset(value as ReportFilters["datePreset"])} options={Object.entries(datePresetLabels).map(([value, label]) => ({ label, value }))}/>
+        <Select label="Branch" value={props.branchId} onChange={props.setBranchId} options={props.branchOptions}/>
+        <Select label="Warehouse" value={props.warehouseId} onChange={props.setWarehouseId} options={props.warehouseOptions}/>
+        <Select label="Category" value={props.categoryId} onChange={props.setCategoryId} options={props.categoryOptions}/>
+        <Select label="Supplier" value={props.supplierId} onChange={props.setSupplierId} options={props.supplierOptions}/>
+        <Select label="Cashier" value={props.cashierId} onChange={props.setCashierId} options={props.cashierOptions}/>
+        <Select label="Currency" value={props.currency} onChange={(value) => props.setCurrency(value as ReportCurrency)} options={[{ label: "LAK", value: "LAK" }, { label: "THB", value: "THB" }, { label: "USD", value: "USD" }]}/>
         <div className="flex items-end gap-2">
           <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={props.onApply}>Apply</button>
           <button className="grid h-10 w-10 place-items-center rounded-md border border-border" type="button" onClick={props.onReset} aria-label="Reset filters"><RefreshCcw className="size-4"/></button>
@@ -261,13 +331,13 @@ function FilterBar(props: {
 function Select({ label, onChange, options, value }: {
     label: string;
     onChange: (value: string) => void;
-    options: string[];
+    options: Array<{ label: string; value: string }>;
     value: string;
 }) {
     return (<label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       <select className="field-input h-10 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option) => <option key={`${option.value}-${option.label}`} value={option.value}>{option.label}</option>)}
       </select>
     </label>);
 }
@@ -387,7 +457,7 @@ function StatusBadge({ locale, status }: {
     return <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}>{label}</span>;
 }
 function RevenueProfitTrend({ currency, data, locale, onOpen }: {
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     data: ReportsAnalyticsHub["revenueProfitTrend"];
     locale: "en" | "lo";
     onOpen: (label: string) => void;
@@ -432,7 +502,7 @@ function HourlySalesTrend({ data, locale, onOpen }: {
     </section>);
 }
 function CategoryBreakdown({ currency, data, onOpen }: {
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     data: ReportsAnalyticsHub["categoryBreakdown"];
     onOpen: (category: string) => void;
 }) {
@@ -467,7 +537,7 @@ function OperationalAlerts({ data, onOpen }: {
     </section>);
 }
 function TopSellers({ currency, data, onOpen }: {
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     data: ReportsAnalyticsHub["topSellers"];
     onOpen: (name: string) => void;
 }) {
@@ -530,7 +600,7 @@ function ReportCenter({ favorites, locale, onFavorite, onOpen, onSchedule, query
     </div>);
 }
 function ReportCategoryCard({ category, favorites, onFavorite, onOpen, onSchedule }: {
-    category: typeof reportCategories[number];
+    category: ReportCategory;
     favorites: string[];
     onFavorite: (title: string) => void;
     onOpen: (title: string) => void;
@@ -596,7 +666,7 @@ function ExportMenu({ onExport }: {
 }
 function KpiDetailModal({ activeKpi, currency, onClose, paymentBreakdown, title }: {
     activeKpi: ReportKpiKey;
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
@@ -636,25 +706,41 @@ function KpiDetailModal({ activeKpi, currency, onClose, paymentBreakdown, title 
       </div>
     </ModalFrame>);
 }
-function ReportDetailModal({ categoryBreakdown, currency, onClose, reportName }: {
+function ReportDetailModal({ categoryBreakdown, currency, onClose, productRows, reportName }: {
     categoryBreakdown: ReportsAnalyticsHub["categoryBreakdown"];
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     onClose: () => void;
+    productRows: ProductReportRow[];
     reportName: string;
 }) {
     const [query, setQuery] = useState("");
     const [page, setPage] = useState(1);
     const [showProfit, setShowProfit] = useState(true);
-    const rows = reportRows.filter((row) => row.join(" ").toLowerCase().includes(query.toLowerCase()));
+    const rows = productRows
+        .map((row) => {
+            const margin = row.revenueLak > 0 ? `${((row.profitLak / row.revenueLak) * 100).toFixed(1)}%` : "0%";
+            return {
+                category: row.categoryName,
+                margin,
+                name: row.productName,
+                profit: `${formatLak(row.profitLak)} LAK`,
+                qty: formatNumber(row.quantitySold),
+                revenue: `${formatLak(row.revenueLak)} LAK`,
+            };
+        })
+        .filter((row) => `${row.name} ${row.category} ${row.qty} ${row.revenue} ${row.profit} ${row.margin}`.toLowerCase().includes(query.toLowerCase()));
+    const pageSize = 10;
+    const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+    const pagedRows = rows.slice((page - 1) * pageSize, page * pageSize);
     const totalRevenue = categoryBreakdown.reduce((total, row) => total + row.revenue, 0);
     const totalProfit = categoryBreakdown.reduce((total, row) => total + row.profit, 0);
     const margin = totalRevenue > 0 ? `${((totalProfit / totalRevenue) * 100).toFixed(1)}%` : "0%";
     return (<ModalFrame onClose={onClose} title={reportName}>
       <div className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-4">
-          <Select label="Date Range" value="This Month" onChange={() => undefined} options={["Today", "This Week", "This Month"]}/>
-          <Select label="Branch" value="All Branches" onChange={() => undefined} options={["All Branches", "GO BOX Main"]}/>
-          <Select label="Category" value="All Categories" onChange={() => undefined} options={["All Categories", "Drinks", "Snacks"]}/>
+          <Select label="Date Range" value="this_month" onChange={() => undefined} options={[{ label: "Today", value: "today" }, { label: "This Week", value: "this_week" }, { label: "This Month", value: "this_month" }]}/>
+          <Select label="Branch" value="" onChange={() => undefined} options={[{ label: "All Branches", value: "" }, { label: "Current Branch", value: "current" }]}/>
+          <Select label="Category" value="" onChange={() => undefined} options={[{ label: "All Categories", value: "" }]}/>
           <label className="flex items-end gap-2 text-sm"><input className="size-5 accent-[var(--primary)]" type="checkbox" checked={showProfit} onChange={(event) => setShowProfit(event.target.checked)}/> Show profit column</label>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
@@ -679,20 +765,27 @@ function ReportDetailModal({ categoryBreakdown, currency, onClose, reportName }:
               <tr>{["Product", "Category", "Qty", "Revenue", ...(showProfit ? ["Profit"] : []), "Margin"].map((column) => <th className="px-3 py-3" key={column}>{column}</th>)}</tr>
             </thead>
             <tbody>
-              {rows.map((row) => <tr className="border-b border-border last:border-b-0" key={row[0]}>{row.filter((_, index) => showProfit || index !== 4).map((cell) => <td className="px-3 py-3" key={cell}>{cell}</td>)}</tr>)}
+              {pagedRows.map((row) => <tr className="border-b border-border last:border-b-0" key={row.name}>
+                  <td className="px-3 py-3">{row.name}</td>
+                  <td className="px-3 py-3">{row.category}</td>
+                  <td className="px-3 py-3">{row.qty}</td>
+                  <td className="px-3 py-3">{row.revenue}</td>
+                  {showProfit ? <td className="px-3 py-3">{row.profit}</td> : null}
+                  <td className="px-3 py-3">{row.margin}</td>
+                </tr>)}
             </tbody>
           </table>
         </div>
         <div className="flex items-center justify-between gap-3 text-sm">
           <button className="h-9 rounded-md border border-border px-3 disabled:opacity-40" type="button" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
-          <span>Page {page} of 3</span>
-          <button className="h-9 rounded-md border border-border px-3" type="button" onClick={() => setPage((current) => Math.min(3, current + 1))}>Next</button>
+          <span>Page {page} of {pageCount}</span>
+          <button className="h-9 rounded-md border border-border px-3 disabled:opacity-40" type="button" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button>
         </div>
       </div>
     </ModalFrame>);
 }
 function SimpleBars({ currency, rows, title }: {
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     rows: Array<{
         label: string;
         value: number;
@@ -707,11 +800,12 @@ function SimpleBars({ currency, rows, title }: {
       </div>
     </section>);
 }
-function GenericDetailModal({ onClose, title }: {
+function GenericDetailModal({ onClose, productRows, title }: {
     onClose: () => void;
+    productRows: ProductReportRow[];
     title: string;
 }) {
-    return <ModalFrame onClose={onClose} title={title}><ReportRowsTable /></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={title}><ReportRowsTable productRows={productRows}/></ModalFrame>;
 }
 function DayDetailModal({ locale, onClose, paymentBreakdown, title, topSellers }: {
     locale: "en" | "lo";
@@ -775,22 +869,23 @@ function DataSourceModal({ dataSourceStatuses, locale, onClose, source }: {
     </ModalFrame>);
 }
 function CategoryModal({ currency, onClose, title, topSellers }: {
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     onClose: () => void;
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
     return <ModalFrame onClose={onClose} title={title}><SimpleBars title="Top products and margin analysis" rows={topSellers.slice(0, 5).map((item) => ({ label: item.name, value: item.revenue }))} currency={currency}/><div className="mt-4 flex gap-2"><Link className="h-10 rounded-md border border-border px-4 py-2 text-sm font-semibold" href="/promotions/new">Create Promotion</Link><Link className="h-10 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" href="/products">View Products</Link></div></ModalFrame>;
 }
-function InventoryAlertModal({ onClose, title }: {
+function InventoryAlertModal({ onClose, productRows, title }: {
     onClose: () => void;
+    productRows: ProductReportRow[];
     title: string;
 }) {
     const action = title.includes("Expiring") ? "Create Promotion" : title.includes("Dead") ? "Clearance Promotion" : "Create PO";
-    return <ModalFrame onClose={onClose} title={`${title} Report`}><ReportRowsTable /><div className="mt-4"><button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{action}</button></div></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={`${title} Report`}><ReportRowsTable productRows={productRows}/><div className="mt-4"><button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{action}</button></div></ModalFrame>;
 }
 function ProductAnalyticsModal({ currency, onClose, revenueProfitTrend, title }: {
-    currency: keyof typeof currencyRates;
+    currency: ReportCurrency;
     onClose: () => void;
     revenueProfitTrend: ReportsAnalyticsHub["revenueProfitTrend"];
     title: string;
@@ -822,10 +917,10 @@ function ScheduleModal({ onClose, reportName }: {
     return (<ModalFrame onClose={onClose} title="Schedule Report">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-medium">Report name<input className="field-input mt-2" defaultValue={reportName}/></label>
-        <Select label="Frequency" value="Daily" onChange={() => undefined} options={["Daily", "Weekly", "Monthly"]}/>
+        <Select label="Frequency" value="Daily" onChange={() => undefined} options={[{ label: "Daily", value: "Daily" }, { label: "Weekly", value: "Weekly" }, { label: "Monthly", value: "Monthly" }]}/>
         <label className="text-sm font-medium">Time<input className="field-input mt-2" type="time" defaultValue="08:00"/></label>
-        <Select label="Send to" value="Email" onChange={() => undefined} options={["Email", "Telegram", "WhatsApp", "EGO POS App notification"]}/>
-        <Select label="File format" value="PDF" onChange={() => undefined} options={["PDF", "Excel"]}/>
+        <Select label="Send to" value="Email" onChange={() => undefined} options={[{ label: "Email", value: "Email" }, { label: "Telegram", value: "Telegram" }, { label: "WhatsApp", value: "WhatsApp" }, { label: "EGO POS App notification", value: "EGO POS App notification" }]}/>
+        <Select label="File format" value="PDF" onChange={() => undefined} options={[{ label: "PDF", value: "PDF" }, { label: "Excel", value: "Excel" }]}/>
         <label className="flex items-end gap-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" defaultChecked/> Active</label>
       </div>
       <button className="mt-5 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">Save Schedule</button>
@@ -853,11 +948,21 @@ function ModalFrame({ children, onClose, title }: {
       </div>
     </div>);
 }
-function ReportRowsTable() {
+function ReportRowsTable({ productRows }: { productRows: ProductReportRow[] }) {
     return (<div className="max-w-full overflow-x-auto rounded-lg border border-border">
       <table className="w-full min-w-[720px] text-left text-sm">
         <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground"><tr>{["Name", "Category", "Qty", "Revenue", "Profit", "Margin"].map((column) => <th className="px-3 py-3" key={column}>{column}</th>)}</tr></thead>
-        <tbody>{reportRows.map((row) => <tr className="border-b border-border last:border-b-0" key={row[0]}>{row.map((cell) => <td className="px-3 py-3" key={cell}>{cell}</td>)}</tr>)}</tbody>
+        <tbody>{productRows.map((row) => {
+            const margin = row.revenueLak > 0 ? `${((row.profitLak / row.revenueLak) * 100).toFixed(1)}%` : "0%";
+            return (<tr className="border-b border-border last:border-b-0" key={row.productName}>
+                <td className="px-3 py-3">{row.productName}</td>
+                <td className="px-3 py-3">{row.categoryName}</td>
+                <td className="px-3 py-3">{formatNumber(row.quantitySold)}</td>
+                <td className="px-3 py-3">{formatLak(row.revenueLak)} LAK</td>
+                <td className="px-3 py-3">{formatLak(row.profitLak)} LAK</td>
+                <td className="px-3 py-3">{margin}</td>
+              </tr>);
+        })}</tbody>
       </table>
     </div>);
 }
@@ -921,7 +1026,7 @@ function performanceTooltip(value: number, max: number, locale: "en" | "lo", typ
     const recommendation = percent >= 75 ? t("ui.prepare.more.cashier.coverage") : percent >= 35 ? t("ui.maintain.normal.operation") : t("ui.consider.promotion.or.staffing.reduction");
     return `${status}. ${value} (${percent}% of max). ${recommendation}`;
 }
-function formatCurrency(value: number, currency: keyof typeof currencyRates) {
+function formatCurrency(value: number, currency: ReportCurrency) {
     const converted = Math.round(value * currencyRates[currency]);
     return currency === "LAK" ? formatLak(converted) : converted.toLocaleString("en-US");
 }

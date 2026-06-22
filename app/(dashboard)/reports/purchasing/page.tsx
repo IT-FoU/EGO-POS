@@ -4,18 +4,20 @@ import { BarChart, DataTable, MetricCard, ReportHeader, } from "@/features/repor
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 export default async function PurchasingReportPage() {
-    const { purchaseTrend, supplierPurchaseOrders, suppliers } = await getReportsSnapshot();
+    const { purchaseTrend, supplierPayables, supplierPurchaseOrders, suppliers } = await getReportsSnapshot();
+    const payableBySupplier = new Map(supplierPayables.map((row) => [row.supplierId, row.payableBalanceLak]));
     const purchasesBySupplier = suppliers.map((supplier) => {
         const orders = supplierPurchaseOrders.filter((order) => order.supplierId === supplier.id);
+        const payableBalance = payableBySupplier.get(supplier.id) ?? supplier.outstandingBalanceLak;
         return {
             orderCount: orders.length,
-            outstandingLak: supplier.outstandingBalanceLak,
+            outstandingLak: payableBalance,
             supplierName: supplier.companyName,
             totalLak: orders.reduce((total, order) => total + order.totalLak, 0),
         };
     });
     const totalPurchases = purchasesBySupplier.reduce((total, row) => total + row.totalLak, 0);
-    const outstandingPayables = suppliers.reduce((total, supplier) => total + supplier.outstandingBalanceLak, 0);
+    const outstandingPayables = supplierPayables.reduce((total, row) => total + row.payableBalanceLak, 0);
     const totalOrders = supplierPurchaseOrders.length;
     return (<div className="flex flex-col gap-6">
       <ReportHeader title="Purchasing Report" description={t("ui.purchases.by.supplier.outstanding.payables.a")}/>

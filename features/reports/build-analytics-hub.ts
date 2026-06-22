@@ -1,6 +1,6 @@
 import type { InventoryItem } from "@/features/inventory/types";
 import type { ProductReportRow } from "@/features/reports/types";
-import type { ReportKpiKey } from "@/features/reports/mock-full-data";
+import type { ReportKpiKey } from "@/features/reports/types";
 
 export type CategoryBreakdownRow = {
   category: string;

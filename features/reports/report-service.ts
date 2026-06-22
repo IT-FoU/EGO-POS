@@ -1,12 +1,14 @@
 import type { Customer } from "@/features/customers/types";
 import type { InventoryItem } from "@/features/inventory/types";
 import type { Product } from "@/features/products/types";
-import type { Supplier, SupplierPayment, SupplierPurchaseOrder } from "@/features/suppliers/types";
+import type { Supplier, SupplierPayment, SupplierPurchaseOrder, SupplierReceiving } from "@/features/suppliers/types";
 import type { ReportsAnalyticsHub } from "@/features/reports/build-analytics-hub";
-import type { ProductReportRow, PurchaseTrendPoint, SalesMetric, TrendPoint } from "@/features/reports/types";
+import type { ReportFilterOptions, ReportFilters } from "@/features/reports/report-filters";
+import { parseReportFilters } from "@/features/reports/report-filters";
+import type { ProductReportRow, PurchaseTrendPoint, SalesMetric, SupplierPayableSummary, TrendPoint } from "@/features/reports/types";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
-import { getPrismaReportsSnapshot } from "@/features/reports/prisma-repository";
+import { getPrismaReportsSnapshot, getReportFilterOptions } from "@/features/reports/prisma-repository";
 
 export type ReportsSnapshot = {
   analytics: {
@@ -16,7 +18,9 @@ export type ReportsSnapshot = {
     totalRevenue: number;
     totalTransactions: number;
   };
+  cogsLak: number;
   customers: Customer[];
+  filters: ReportFilters;
   hub: ReportsAnalyticsHub;
   inventoryItems: InventoryItem[];
   products: Product[];
@@ -24,11 +28,33 @@ export type ReportsSnapshot = {
   purchaseTrend: PurchaseTrendPoint[];
   revenueTrend: TrendPoint[];
   salesMetrics: SalesMetric[];
+  supplierPayables: SupplierPayableSummary[];
   supplierPayments: SupplierPayment[];
   supplierPurchaseOrders: SupplierPurchaseOrder[];
+  supplierReceivings: SupplierReceiving[];
   suppliers: Supplier[];
 };
 
-export async function getReportsSnapshot(): Promise<ReportsSnapshot> {
-  return getPrismaReportsSnapshot(tenantFromSession(await requireSession()));
+export type ReportsPageData = ReportsSnapshot & {
+  filterOptions: ReportFilterOptions;
+};
+
+export async function getReportsSnapshot(filters?: ReportFilters): Promise<ReportsSnapshot> {
+  return getPrismaReportsSnapshot(tenantFromSession(await requireSession()), filters);
+}
+
+export async function getReportsPageData(
+  searchParams?: Record<string, string | string[] | undefined>,
+): Promise<ReportsPageData> {
+  const session = await requireSession();
+  const tenant = tenantFromSession(session);
+  const normalizedParams = Object.fromEntries(
+    Object.entries(searchParams ?? {}).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]),
+  );
+  const filters = parseReportFilters(normalizedParams);
+  const [snapshot, filterOptions] = await Promise.all([
+    getPrismaReportsSnapshot(tenant, filters),
+    getReportFilterOptions(tenant),
+  ]);
+  return { ...snapshot, filterOptions };
 }

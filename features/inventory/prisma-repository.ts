@@ -21,6 +21,9 @@ const db = prisma as any;
 
 export async function getPrismaInventorySnapshot(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const [warehouses, balances, movements] = await Promise.all([
     db.warehouse.findMany({
       include: { branch: true },
@@ -50,11 +53,67 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext) {
     }),
   ]);
 
+  const productIds = balances.map((balance: Record<string, any>) => balance.productId);
+  const [lastSaleItems, sold30Days] = productIds.length
+    ? await Promise.all([
+        db.saleItem.findMany({
+          orderBy: { sale: { createdAt: "desc" } },
+          select: { productId: true, sale: { select: { createdAt: true } } },
+          where: {
+            productId: { in: productIds },
+            sale: { branchId: scope.branchId, companyId: scope.companyId, saleStatus: "completed" },
+          },
+        }),
+        db.saleItem.groupBy({
+          by: ["productId"],
+          _sum: { quantity: true },
+          where: {
+            productId: { in: productIds },
+            sale: {
+              branchId: scope.branchId,
+              companyId: scope.companyId,
+              createdAt: { gte: thirtyDaysAgo },
+              saleStatus: "completed",
+            },
+          },
+        }),
+      ])
+    : [[], []];
+
+  const lastSaleByProduct = new Map<string, Date>();
+  for (const row of lastSaleItems as Array<{ productId: string; sale: { createdAt: Date } }>) {
+    if (!lastSaleByProduct.has(row.productId)) {
+      lastSaleByProduct.set(row.productId, row.sale.createdAt);
+    }
+  }
+  const sold30ByProduct = new Map<string, number>(
+    sold30Days.map((row: Record<string, any>) => [row.productId, amount(row._sum.quantity)]),
+  );
+  const nowMs = Date.now();
+
   return {
-    items: balances.map(mapPrismaInventoryBalance),
+    items: balances.map((balance: Record<string, any>) => {
+      const item = mapPrismaInventoryBalance(balance);
+      const lastSale = lastSaleByProduct.get(balance.productId);
+      const daysWithoutSale = lastSale
+        ? Math.max(0, Math.floor((nowMs - lastSale.getTime()) / 86_400_000))
+        : item.quantity > 0
+          ? 999
+          : 0;
+      return {
+        ...item,
+        daysWithoutSale,
+        unitsSold30Days: sold30ByProduct.get(balance.productId) ?? 0,
+      };
+    }),
     movements: movements.map(mapPrismaStockMovement),
     warehouses: warehouses.map(mapPrismaWarehouse),
   };
+}
+
+function amount(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export async function createStockIn(input: StockInInput, tenant: TenantContext) {
