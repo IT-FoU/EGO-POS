@@ -152,7 +152,9 @@ Receive → payable visible in `/purchasing/payables`, supplier `outstandingBala
 
 ---
 
-## 5. B7-4 — Demo Fallback Removal Plan
+## 5. B7-4 — Demo Fallback Removal Plan — **DONE**
+
+> **Status:** Implemented and verified (14/14 demo-fallback harness PASS; B7-1/B7-2/B7-3 not regressed). `isDemoMode()` is now fail-safe (default OFF); purchasing and inventory read services are Prisma-only; mock-data files retained as documented test/demo artifacts. See `B7_4_COMPLETION_REPORT.md`.
 
 ### 5.1 Scope
 

@@ -1,10 +1,4 @@
-import {
-  mockInventoryItems,
-  mockStockMovements,
-  mockWarehouses,
-} from "@/features/inventory/mock-data";
 import type { InventoryItem, StockMovement, Warehouse } from "@/features/inventory/types";
-import { isDemoMode } from "@/lib/demo-mode";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { getPrismaInventorySnapshot } from "@/features/inventory/prisma-repository";
@@ -14,13 +8,8 @@ export async function getInventorySnapshot(): Promise<{
   items: InventoryItem[];
   movements: StockMovement[];
 }> {
-  if (!isDemoMode()) {
-    return getPrismaInventorySnapshot(tenantFromSession(await requireSession()));
-  }
-
-  return {
-    warehouses: mockWarehouses,
-    items: mockInventoryItems,
-    movements: mockStockMovements,
-  };
+  // DB-only (B7-4): warehouses, stock items, movements, and lots are read from
+  // PostgreSQL via Prisma, scoped to the active tenant/company/warehouse.
+  // Missing data yields empty live results, never mock.
+  return getPrismaInventorySnapshot(tenantFromSession(await requireSession()));
 }

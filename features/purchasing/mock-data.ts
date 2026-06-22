@@ -1,3 +1,7 @@
+// TEST/DEMO ARTIFACT ONLY (B7-4): not used by any runtime read path.
+// Runtime purchasing reads come exclusively from PostgreSQL via Prisma
+// (features/purchasing/prisma-repository.ts). Retained for verification
+// harnesses/local demos; do not wire into production services.
 import type {
   PurchaseOrder,
   Supplier,

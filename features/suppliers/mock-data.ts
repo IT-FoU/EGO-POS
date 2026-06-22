@@ -1,3 +1,6 @@
+// TEST/DEMO ARTIFACT ONLY (B7-4): not used by any runtime read path.
+// supplier-service.ts reads exclusively from PostgreSQL via Prisma. This file
+// has no runtime importers; retained only for local demos/reference.
 import type {
   Supplier,
   SupplierPayment,
