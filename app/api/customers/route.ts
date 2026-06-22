@@ -1,10 +1,9 @@
-import { getCustomers } from "@/features/customers/customer-service";
-import { createPrismaCustomer } from "@/features/customers/prisma-repository";
-import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { getPrismaCustomers, createPrismaCustomer } from "@/features/customers/prisma-repository";
+import { runRead, runWrite } from "@/lib/api/write-response";
+import { READ_PERMISSIONS, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET() {
-  return Response.json({ data: await getCustomers(), ok: true });
+  return runRead((tenant) => getPrismaCustomers(tenant), READ_PERMISSIONS.customersView);
 }
 
 export async function POST(request: Request) {

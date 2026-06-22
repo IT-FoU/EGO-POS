@@ -1,6 +1,6 @@
 "use server";
 
-import { requireWritePermission, WRITE_PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
+import { requireWritePermission, WRITE_PERMISSIONS, type WritePermissionKey } from "@/lib/auth/permissions";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import {
   createPurchaseOrder,
@@ -9,7 +9,7 @@ import {
   updatePurchaseOrderStatus,
 } from "@/features/purchasing/prisma-repository";
 
-async function tenant(permission: PermissionKey) {
+async function tenant(permission: WritePermissionKey) {
   return requireWritePermission(permission);
 }
 

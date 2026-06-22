@@ -1,0 +1,15 @@
+B8-3 Server-side Permission Enforcement Completed
+
+Close permission gaps across all critical modules: secure API read
+paths, standardize 401/403 responses, and verify the full Owner/Manager/
+Cashier matrix.
+
+- requireApiSession: API routes return 401 JSON (no redirect).
+- READ_PERMISSIONS + runRead: GET routes gated (products, customers,
+  suppliers, promotions, membership, reports, settings).
+- runWrite: requireApiSession + 403 on PermissionDeniedError.
+- Harness expanded to 42 checks (POS + cross-module matrix).
+- Reports data unchanged; auth gate only.
+
+Preserves B7, B8-1 checkout hardening, B8-2 approvals, purchasing
+lifecycle. Verified: typecheck, build, B8-3 42/42, B8-1/B8-2, B7-1..4.

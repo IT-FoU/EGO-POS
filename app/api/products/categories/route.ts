@@ -1,10 +1,9 @@
-import { getCategories } from "@/features/products/product-service";
-import { upsertPrismaCategory } from "@/features/products/prisma-repository";
-import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { getPrismaCategories, upsertPrismaCategory } from "@/features/products/prisma-repository";
+import { runRead, runWrite } from "@/lib/api/write-response";
+import { READ_PERMISSIONS, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET() {
-  return Response.json({ data: await getCategories(), ok: true });
+  return runRead((tenant) => getPrismaCategories(tenant), READ_PERMISSIONS.productsView);
 }
 
 export async function POST(request: Request) {

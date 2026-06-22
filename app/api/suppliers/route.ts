@@ -1,10 +1,9 @@
-import { getSuppliers } from "@/features/suppliers/supplier-service";
-import { createPrismaSupplier } from "@/features/suppliers/prisma-repository";
-import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { getPrismaSuppliers, createPrismaSupplier } from "@/features/suppliers/prisma-repository";
+import { runRead, runWrite } from "@/lib/api/write-response";
+import { READ_PERMISSIONS, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET() {
-  return Response.json({ data: await getSuppliers(), ok: true });
+  return runRead((tenant) => getPrismaSuppliers(tenant), READ_PERMISSIONS.purchasingView);
 }
 
 export async function POST(request: Request) {

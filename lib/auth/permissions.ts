@@ -42,7 +42,24 @@ export const WRITE_PERMISSIONS = {
   suppliersUpdate: "suppliers.update",
 } as const;
 
-export type PermissionKey = (typeof WRITE_PERMISSIONS)[keyof typeof WRITE_PERMISSIONS];
+export const READ_PERMISSIONS = {
+  approvalsView: "approvals.view",
+  customersView: "customers.view",
+  dashboardView: "dashboard.view",
+  inventoryView: "inventory.view",
+  membershipView: "membership.view",
+  posView: "pos.view",
+  productsView: "products.view",
+  promotionsView: "promotions.view",
+  purchasingView: "purchasing.view",
+  reportsView: "reports.view",
+  settingsView: "settings.view",
+  staffView: "staff.view",
+} as const;
+
+export type WritePermissionKey = (typeof WRITE_PERMISSIONS)[keyof typeof WRITE_PERMISSIONS];
+export type ReadPermissionKey = (typeof READ_PERMISSIONS)[keyof typeof READ_PERMISSIONS];
+export type PermissionKey = WritePermissionKey | ReadPermissionKey;
 
 export class PermissionDeniedError extends Error {
   constructor(permission: string) {
@@ -65,7 +82,14 @@ export async function assertPermission(tenant: TenantContext, permission: Permis
   throw new PermissionDeniedError(permission);
 }
 
-export async function requireWritePermission(permission: PermissionKey) {
+export async function requireWritePermission(permission: WritePermissionKey) {
+  const { requireSession } = await import("@/lib/auth/session");
+  const tenant = tenantFromSession(await requireSession());
+  await assertPermission(tenant, permission);
+  return tenant;
+}
+
+export async function requireReadPermission(permission: ReadPermissionKey) {
   const { requireSession } = await import("@/lib/auth/session");
   const tenant = tenantFromSession(await requireSession());
   await assertPermission(tenant, permission);

@@ -1,7 +1,6 @@
-import { getMembershipLevels } from "@/features/membership-levels/membership-level-service";
-import { createPrismaMembershipLevel } from "@/features/membership-levels/prisma-repository";
-import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { getPrismaMembershipLevels, createPrismaMembershipLevel } from "@/features/membership-levels/prisma-repository";
+import { runRead, runWrite } from "@/lib/api/write-response";
+import { READ_PERMISSIONS, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 import { isNextProductionBuildPhase } from "@/lib/build/build-phase";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +10,7 @@ export async function GET() {
     return Response.json({ data: [], ok: true });
   }
 
-  return Response.json({ data: await getMembershipLevels(), ok: true });
+  return runRead((tenant) => getPrismaMembershipLevels(tenant), READ_PERMISSIONS.membershipView);
 }
 
 export async function POST(request: Request) {

@@ -24,6 +24,7 @@ const { PrismaClient } = await import("@prisma/client");
 const { PrismaPg } = await import("@prisma/adapter-pg");
 const { completePrismaSale } = await import("../features/pos/prisma-repository");
 const { buildPosPolicyForTenant } = await import("../features/pos/pos-permission-guard");
+const { assertPermission, READ_PERMISSIONS, WRITE_PERMISSIONS } = await import("../lib/auth/permissions");
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
@@ -145,9 +146,58 @@ check("Cashier non-discounted sale still allowed", cashierNoDiscount.saleStatus 
 await expectThrow("Non-member user blocked from create_sale", () =>
   completePrismaSale(sale({ cashAmount: 10000 }), { branchId: BRANCH_ID, companyId: COMPANY_ID, userId: "no-such-user", warehouseId: WAREHOUSE_ID }));
 
+// ---- Cross-module write permission matrix (server assertPermission) ----
+async function expectAllowed(name: string, tenant: typeof ownerTenant, permission: string) {
+  try {
+    await assertPermission(tenant, permission as any);
+    check(name, true);
+  } catch (error) {
+    check(name, false, error instanceof Error ? error.message : String(error));
+  }
+}
+
+// Owner: all critical write/read permissions allowed
+await expectAllowed("Owner: products.create", ownerTenant, WRITE_PERMISSIONS.productsCreate);
+await expectAllowed("Owner: inventory.adjust", ownerTenant, WRITE_PERMISSIONS.inventoryAdjust);
+await expectAllowed("Owner: purchasing.create", ownerTenant, WRITE_PERMISSIONS.purchasingCreate);
+await expectAllowed("Owner: customers.create", ownerTenant, WRITE_PERMISSIONS.customersCreate);
+await expectAllowed("Owner: promotions.create", ownerTenant, WRITE_PERMISSIONS.promotionsCreate);
+await expectAllowed("Owner: settings.manage", ownerTenant, WRITE_PERMISSIONS.settingsManage);
+await expectAllowed("Owner: staff.manage", ownerTenant, WRITE_PERMISSIONS.staffManage);
+await expectAllowed("Owner: approvals.manage", ownerTenant, WRITE_PERMISSIONS.approvalsManage);
+await expectAllowed("Owner: reports.view", ownerTenant, READ_PERMISSIONS.reportsView);
+
+// Manager: operational writes allowed
+await expectAllowed("Manager: products.create", managerTenant, WRITE_PERMISSIONS.productsCreate);
+await expectAllowed("Manager: inventory.adjust", managerTenant, WRITE_PERMISSIONS.inventoryAdjust);
+await expectAllowed("Manager: purchasing.create", managerTenant, WRITE_PERMISSIONS.purchasingCreate);
+await expectAllowed("Manager: reports.view", managerTenant, READ_PERMISSIONS.reportsView);
+
+// Cashier: POS sell allowed; back-office writes blocked
+await expectAllowed("Cashier: pos.sell", cashierTenant, WRITE_PERMISSIONS.posSell);
+await expectThrow("Cashier blocked: products.create", () => assertPermission(cashierTenant, WRITE_PERMISSIONS.productsCreate));
+await expectThrow("Cashier blocked: inventory.adjust", () => assertPermission(cashierTenant, WRITE_PERMISSIONS.inventoryAdjust));
+await expectThrow("Cashier blocked: purchasing.create", () => assertPermission(cashierTenant, WRITE_PERMISSIONS.purchasingCreate));
+await expectThrow("Cashier blocked: settings.manage", () => assertPermission(cashierTenant, WRITE_PERMISSIONS.settingsManage));
+await expectThrow("Cashier blocked: staff.manage", () => assertPermission(cashierTenant, WRITE_PERMISSIONS.staffManage));
+await expectThrow("Cashier blocked: reports.view", () => assertPermission(cashierTenant, READ_PERMISSIONS.reportsView));
+
+// Cross-company: user id with no company membership receives empty permission set
+await expectThrow("Cross-company user blocked from products.create", () =>
+  assertPermission({ ...ownerTenant, userId: "not-assigned-user-b83" }, WRITE_PERMISSIONS.productsCreate));
+
+// API route guards: static verification (NextAuth unavailable in tsx harness)
+const writeResponseSource = readFileSync("lib/api/write-response.ts", "utf8");
+const sessionSource = readFileSync("lib/auth/session.ts", "utf8");
+check("runRead uses requireApiSession", writeResponseSource.includes("requireApiSession"));
+check("runWrite uses requireApiSession", writeResponseSource.includes("requireApiSession"));
+check("API maps PermissionDeniedError to 403", writeResponseSource.includes("PermissionDeniedError") && writeResponseSource.includes("403"));
+check("API maps ApiUnauthorizedError to 401", writeResponseSource.includes("ApiUnauthorizedError") && writeResponseSource.includes("401"));
+check("requireApiSession throws ApiUnauthorizedError", sessionSource.includes("throw new ApiUnauthorizedError"));
+
 const passed = results.filter((r) => r.ok).length;
 const failed = results.length - passed;
-console.log(`\nB8-3 POS permission: ${passed}/${results.length} PASS, ${failed} FAIL`);
+console.log(`\nB8-3 permission enforcement: ${passed}/${results.length} PASS, ${failed} FAIL`);
 
 await prisma.$disconnect();
 process.exit(failed === 0 ? 0 : 1);

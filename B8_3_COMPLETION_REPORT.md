@@ -1,63 +1,88 @@
-# B8-3 — POS Permission Enforcement — Completion Report
+# B8-3 — Server-side Permission Enforcement — Completion Report
 
-**Phase:** B8-3 (POS granular permission enforcement, gap G3)
-**Scope:** B8-3 only. Server-side permission enforcement for POS. Approval engine, purchasing workflow, and inventory workflow **not modified**. Git `main` baseline. B7 / B8-1 / B8-2 behavior preserved.
+**Phase:** B8-3 (G3 — granular permissions, expanded to all critical modules)
+**Scope:** Server-side permission enforcement across POS, Products, Inventory, Purchasing, Suppliers, Customers, Membership, Promotions, Reports, Settings, Staff, and Approvals. No B8-4 reports work. No UI redesign. B7 / B8-1 / B8-2 behavior preserved.
 **Result:** **PASS**
 
 ---
 
-## 1. Audit — all POS actions and where they were enforced
+## 1. Audit summary
 
-| POS action | Server endpoint? | Before B8-3 | After B8-3 |
-| --- | --- | --- | --- |
-| `create_sale` | **Yes** (`completeSaleAction` → `completePrismaSale`) | `pos.sell` only | `pos.sell` **+ server policy `create_sale` check** |
-| `apply_discount` | Embedded in checkout payload | **client-only** (`enforcePosAction`), bypassable via API | **server-enforced**: requires permission + within role discount limit; over-limit rejected |
-| `manual_price_override` | Embedded in checkout payload | client-only | **structurally neutralized by B8-1** (server ignores client prices, recomputes from DB) |
-| `void_bill`, `refund_bill`, `hold_bill`, `resume_bill`, `delete_item_from_bill`, `cash_in`, `cash_out`, `split_payment`, `multi_currency_payment` | **No server endpoint** (client cart only) | client-only | unchanged — no server write surface yet; guard ready for when they get endpoints |
-
-Two concrete gaps were closed: (a) the policy was built from a **template-role lookup**, not the user's actual role; (b) **`apply_discount` had no server enforcement** and was bypassable by calling the checkout API directly with a discount.
+| Layer | Before B8-3 (expanded) | After B8-3 |
+| --- | --- | --- |
+| **Server actions (writes)** | Already used `requireWritePermission` per module | Unchanged — verified complete |
+| **API POST/PATCH/DELETE** | Used `runWrite` + `WRITE_PERMISSIONS` | Now uses `requireApiSession` (401 JSON, no redirect) + 403 on deny |
+| **API GET** | **No session or read-permission checks** on products/customers/suppliers/promotions/membership/reports/settings | **`runRead`** with `requireApiSession` + `READ_PERMISSIONS` |
+| **POS checkout** | `pos.sell` + POS policy guard (`create_sale`, `apply_discount`) | Preserved (B8-3 initial + this pass) |
+| **Client UI** | `enforcePosAction` client-only for void/refund/hold/etc. | Unchanged — no server endpoints for those actions yet |
 
 ---
 
 ## 2. Changes implemented
 
-### `features/access-control/pos-policy-loader.ts`
-- Permission keys are now sourced from the logged-in user's **actual assigned roles** via `getUserPermissionKeys(tenant)` (owner ⇒ `*`), replacing the `snapshot.roles.find(templateKey === …)` template lookup. Requirement #3 satisfied.
-- `maxDiscountPercent` is now **role-aware** to preserve the hierarchy: **Owner 100%**, **Manager = company discount threshold (default 10%)**, **Cashier 0%**. The threshold raises only the Manager ceiling, never the Cashier's.
+### `lib/auth/session.ts`
+- Added `ApiUnauthorizedError` and `requireApiSession()` — API routes return **401 JSON** instead of redirecting unauthenticated callers.
+- `requireSession()` (pages/server actions) unchanged — still redirects to `/login`.
 
-### `features/pos/pos-permission-guard.ts` (new)
-- `buildPosPolicyForTenant(tenant)` — resolves the user's **actual** role from the DB (`companyUser.isOwner` + `userRole.role.templateKey`; unknown/custom ⇒ cashier/least-privilege) and builds the authoritative server policy.
-- `assertPosActionAllowed(policy, action, ctx)` — evaluates `evaluatePosPermission` and throws `PermissionDeniedError` when not allowed. "Approval required" is treated as **deny** server-side (no approved-decision token participates in a live checkout payload).
+### `lib/auth/permissions.ts`
+- Added `READ_PERMISSIONS` for module view access (`products.view`, `inventory.view`, `reports.view`, etc.).
+- Split `WritePermissionKey` / `ReadPermissionKey` / `PermissionKey` types.
+- Added `requireReadPermission()` for server-side read guards.
 
-### `features/pos/prisma-repository.ts` (`completePrismaSale`)
-- Builds the server policy and asserts **`create_sale`** before persistence.
-- Asserts **`apply_discount`** whenever the payload carries a manual (non-promotional) discount; the effective discount percent (`manualDiscountAmount / subtotal`) must be within the user's role limit, else the checkout is rejected.
+### `features/access-control/permission-catalog.ts`
+- Added read-permission alias groups and `purchasing.edit` alias.
 
-No changes to the approval engine, purchasing, or inventory workflows.
+### `lib/api/write-response.ts`
+- Added `runRead()` for authenticated, permission-gated GET handlers.
+- `runWrite()` now uses `requireApiSession` and maps errors: **401** unauthorized, **403** permission denied, **400** other.
+
+### API GET routes secured (session + read permission + tenant-scoped Prisma)
+- `/api/products`, `/api/products/categories` → `products.view`
+- `/api/customers` → `customers.view`
+- `/api/suppliers` → `purchasing.view`
+- `/api/promotions` → `promotions.view`
+- `/api/membership-levels` → `membership.view`
+- `/api/reports` → `reports.view` (report **data/calculations unchanged** — auth gate only)
+- `/api/settings` GET → `settings.view`
+
+### POS (preserved from initial B8-3)
+- `features/pos/pos-permission-guard.ts` — actual-role policy + `assertPosActionAllowed`
+- `features/access-control/pos-policy-loader.ts` — `getUserPermissionKeys` (not template lookup)
+- `completePrismaSale` — enforces `create_sale` + `apply_discount` server-side
+
+### Harness
+- `scripts/phase-b8-3-pos-permission-check.ts` expanded to **42 checks**: POS policy, checkout discount caps, cross-module write/read matrix (Owner/Manager/Cashier), cross-company block, API guard static verification.
 
 ---
 
-## 3. Owner / Manager / Cashier hierarchy (preserved)
+## 3. Module enforcement matrix
 
-| Role | create_sale | Manual discount limit | Over-limit discount |
+| Module | Server actions | API writes | API reads |
 | --- | --- | --- | --- |
-| Owner | allowed | 100% (unlimited) | allowed |
-| Manager | allowed | company threshold (default 10%) | **rejected server-side** |
-| Cashier | allowed | 0% (no manual discount) | **rejected server-side** |
-| Non-member | **rejected** | — | — |
+| POS | `pos.sell` + policy guard | `pos.sell` + policy guard | N/A (SSR snapshot) |
+| Products | `products.*`, `categories.manage` | same | `products.view` |
+| Inventory | `inventory.*` | same | SSR only |
+| Purchasing | `purchasing.*` | same | SSR only |
+| Suppliers | `suppliers.*` | same | `purchasing.view` |
+| Customers | `customers.*` | same | `customers.view` |
+| Membership | `membership_levels.manage` | same | `membership.view` |
+| Promotions | `promotions.*` | same | `promotions.view` |
+| Reports | N/A | N/A | `reports.view` |
+| Settings | `settings.manage` | PATCH gated | `settings.view` |
+| Staff / Roles | `staff.edit`, `roles.manage` | via actions | SSR only |
+| Approvals | `approvals.approve` + rule-specific requester perm | same | SSR only |
+| QR payments | `settings.manage` | via actions | SSR only |
 
 ---
 
-## 4. Files changed / added
+## 4. Role hierarchy (preserved)
 
-| File | Change |
-| --- | --- |
-| `features/access-control/pos-policy-loader.ts` | actual-role permission keys; role-aware `maxDiscountPercent` |
-| `features/pos/pos-permission-guard.ts` | **New** — server policy builder + `assertPosActionAllowed` |
-| `features/pos/prisma-repository.ts` | enforce `create_sale` + `apply_discount` at checkout |
-| `scripts/phase-b8-3-pos-permission-check.ts` | **New** — B8-3 harness (16 checks) |
-| `B8_IMPLEMENTATION_SPEC.md` | G3 status updated |
-| `B8_3_COMPLETION_REPORT.md` | **New** — this report |
+| Role | POS sell | Manual discount | Back-office writes | Reports view |
+| --- | --- | --- | --- | --- |
+| Owner | ✓ | unlimited | ✓ all | ✓ |
+| Manager | ✓ | ≤ threshold (10%) | ✓ operational | ✓ |
+| Cashier | ✓ | 0% (blocked) | ✗ blocked | ✗ blocked |
+| Non-member | ✗ | — | ✗ | ✗ |
 
 ---
 
@@ -65,27 +90,25 @@ No changes to the approval engine, purchasing, or inventory workflows.
 
 | Check | Result |
 | --- | --- |
-| `npm run typecheck` | **PASS** (exit 0) |
+| `npm run typecheck` | **PASS** |
 | `npm run build` | **PASS** (60/60 pages) |
-| `scripts/phase-b8-3-pos-permission-check.ts` | **16 / 16 PASS** |
+| B8-3 harness | **42 / 42 PASS** |
 | B8-1 checkout regression | 29 / 29 PASS |
 | B8-2 approval regression | 29 / 29 PASS |
 | B7-1 / B7-2 / B7-3 / B7-4 | 12 / 16 / 22 / 14 — all PASS |
 
-### B8-3 scenarios covered
-Actual-role resolution (Owner/Manager/Cashier), role-aware discount caps (100/10/0), `create_sale` allowed for all roles, Owner large discount allowed, Manager within-limit discount allowed, **Manager over-limit discount rejected**, **Cashier any discount rejected** (amount and percent), Cashier non-discounted sale still works, **non-member blocked from checkout**.
-
 ---
 
-## 6. Remaining risks / out-of-scope (NOT B8-3)
+## 6. Remaining (NOT B8-3 / NOT B8-4)
 
-- `void_bill`, `refund_bill`, `hold/resume`, `delete_item`, `cash_in/out`, `split/multi_currency_payment` have **no server endpoint** today (client cart only). When those flows gain server endpoints, they must call `assertPosActionAllowed` (the guard is ready). This is future-phase work.
-- The demo-gated client POS permission panel (`enforcePosAction`) is unchanged — it remains a client preview; the server is now authoritative for the checkout surface.
+- POS void/refund/hold/cash/shift — still client-only (no server endpoints); when added, must call `assertPosActionAllowed` + B8-2 approval engine.
+- POS override approvals still localStorage in UI — wiring to DB approval engine is a separate phase.
+- Reports Report Center mock UI — **deferred to B8-4** (reports data/auth gate added here only).
 
 ---
 
 ## 7. Result
 
-**B8-3 POS Permission Enforcement: PASS.** The POS checkout surface is now server-enforced using the user's actual role; `apply_discount` can no longer be bypassed via the API; the Owner/Manager/Cashier hierarchy is preserved. Approval, purchasing, and inventory workflows untouched; all regressions green.
+**B8-3 Server-side Permission Enforcement: PASS.** All critical module writes were already server-gated; this pass closes the API read-path gap, standardizes 401/403 responses, and verifies the full Owner/Manager/Cashier matrix. Reports calculations unchanged.
 
-**Do not start B8-4.**
+**GO for B8-4 planning** — pending your confirmation before starting implementation.

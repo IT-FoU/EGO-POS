@@ -1,10 +1,10 @@
-import { getProducts } from "@/features/products/product-service";
+import { getPrismaProducts } from "@/features/products/prisma-repository";
 import { createPrismaProduct } from "@/features/products/prisma-repository";
-import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { runRead, runWrite } from "@/lib/api/write-response";
+import { READ_PERMISSIONS, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET() {
-  return Response.json({ data: await getProducts(), ok: true });
+  return runRead((tenant) => getPrismaProducts(tenant), READ_PERMISSIONS.productsView);
 }
 
 export async function POST(request: Request) {

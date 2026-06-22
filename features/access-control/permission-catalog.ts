@@ -172,6 +172,7 @@ export const PERMISSION_ALIAS_GROUPS: Record<string, string[]> = {
   "promotions.delete": ["promotions.delete"],
   "promotions.update": ["promotions.edit", "promotions.update"],
   "purchasing.create": ["purchasing.create"],
+  "purchasing.edit": ["purchasing.edit", "purchasing.create"],
   "purchasing.payment": ["purchasing.edit", "purchasing.payment"],
   "purchasing.receive": ["purchasing.edit", "purchasing.receive"],
   "roles.manage": ["staff.edit", "roles.manage"],
@@ -182,6 +183,18 @@ export const PERMISSION_ALIAS_GROUPS: Record<string, string[]> = {
   "users.manage": ["staff.create", "staff.edit", "users.manage"],
   "approvals.approve": ["approvals.approve", "settings.approve"],
   "warehouse.manage": ["inventory.edit", "warehouse.manage"],
+  "products.view": ["products.view"],
+  "inventory.view": ["inventory.view"],
+  "purchasing.view": ["purchasing.view"],
+  "customers.view": ["customers.view"],
+  "membership.view": ["membership.view"],
+  "promotions.view": ["promotions.view", "promotion.view"],
+  "reports.view": ["reports.view"],
+  "settings.view": ["settings.view"],
+  "staff.view": ["staff.view"],
+  "approvals.view": ["approvals.view"],
+  "dashboard.view": ["dashboard.view"],
+  "pos.view": ["pos.view", "pos.create"],
 };
 
 export function permissionKeysForCheck(permission: string) {

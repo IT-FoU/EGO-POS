@@ -1,5 +1,7 @@
-import { getReportsSnapshot } from "@/features/reports/report-service";
+import { getPrismaReportsSnapshot } from "@/features/reports/prisma-repository";
+import { runRead } from "@/lib/api/write-response";
+import { READ_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET() {
-  return Response.json({ data: await getReportsSnapshot(), ok: true });
+  return runRead((tenant) => getPrismaReportsSnapshot(tenant), READ_PERMISSIONS.reportsView);
 }

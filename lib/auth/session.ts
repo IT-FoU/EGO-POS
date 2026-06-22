@@ -3,8 +3,45 @@ import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 
+export class ApiUnauthorizedError extends Error {
+  constructor() {
+    super("Unauthorized");
+    this.name = "ApiUnauthorizedError";
+  }
+}
+
+function demoSession(): Session {
+  return {
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    user: {
+      activeBranchId: "gobox-main-branch",
+      activeCompanyId: "gobox-company",
+      activeCompanyName: "GO BOX",
+      activeWarehouseId: "gobox-default-warehouse",
+      email: "owner@igopos.local",
+      id: "demo-owner",
+      locale: "lo",
+      name: "EGO Store Owner",
+      roles: ["Owner"],
+      username: "owner",
+    },
+  };
+}
+
 export async function getCurrentSession() {
   return getServerSession(authOptions);
+}
+
+/** API routes: return 401 JSON instead of redirecting unauthenticated callers. */
+export async function requireApiSession() {
+  const session = await getCurrentSession();
+  if (!session?.user) {
+    if (process.env.IGO_DEMO_MODE === "true") {
+      return demoSession();
+    }
+    throw new ApiUnauthorizedError();
+  }
+  return session;
 }
 
 export async function requireSession() {
@@ -12,21 +49,7 @@ export async function requireSession() {
 
   if (!session?.user) {
     if (process.env.IGO_DEMO_MODE === "true") {
-      return {
-        user: {
-          id: "demo-owner",
-          username: "owner",
-          name: "EGO Store Owner",
-          email: "owner@igopos.local",
-          activeBranchId: "gobox-main-branch",
-          activeWarehouseId: "gobox-default-warehouse",
-          activeCompanyId: "gobox-company",
-          activeCompanyName: "GO BOX",
-          locale: "lo",
-          roles: ["Owner"],
-        },
-        expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      } satisfies Session;
+      return demoSession();
     }
 
     redirect("/login");

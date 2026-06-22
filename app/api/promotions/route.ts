@@ -1,10 +1,9 @@
-import { getPromotions } from "@/features/promotions/promotion-service";
-import { createPrismaPromotion } from "@/features/promotions/prisma-repository";
-import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { getPrismaPromotions, createPrismaPromotion } from "@/features/promotions/prisma-repository";
+import { runRead, runWrite } from "@/lib/api/write-response";
+import { READ_PERMISSIONS, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function GET() {
-  return Response.json({ data: await getPromotions(), ok: true });
+  return runRead((tenant) => getPrismaPromotions(tenant), READ_PERMISSIONS.promotionsView);
 }
 
 export async function POST(request: Request) {
