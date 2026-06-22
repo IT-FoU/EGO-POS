@@ -26,6 +26,31 @@ import { resolvePurchaseNo } from "@/features/purchasing/purchase-no";
 
 const db = prisma as any;
 
+function payableStatusFor(totalAmount: number, paidAmount: number): "unpaid" | "partial" | "paid" {
+  const balance = totalAmount - paidAmount;
+  if (balance <= 0.0000001) {
+    return "paid";
+  }
+  return paidAmount > 0 ? "partial" : "unpaid";
+}
+
+function dueDateFromCreditTerms(creditTerms: unknown): Date | undefined {
+  if (typeof creditTerms !== "string") {
+    return undefined;
+  }
+  const match = creditTerms.match(/(\d+)/);
+  if (!match) {
+    return undefined;
+  }
+  const days = Number(match[1]);
+  if (!Number.isFinite(days) || days <= 0) {
+    return undefined;
+  }
+  const due = new Date();
+  due.setDate(due.getDate() + days);
+  return due;
+}
+
 export async function getPrismaPurchasingSnapshot(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
   const branchWhere = branchOwnedWhere(scope);
@@ -335,6 +360,52 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
         where: { id: data.purchaseId },
       });
 
+      // Supplier payable + outstanding balance sync (B7-3).
+      // Payable value reflects the RECEIVED value (partial receives create partial payables),
+      // accumulated into a single open payable row per purchase to avoid duplicates.
+      const exchangeRate = numberValue(purchase.exchangeRate, 1) || 1;
+      const receivedValueLak = receiptItems.reduce((total, item) => {
+        const unitCost = numberValue(item.purchaseItem?.unitCost, 0);
+        return total + item.quantity * unitCost * exchangeRate;
+      }, 0);
+
+      if (receivedValueLak > 0) {
+        const existingPayable = await tx.supplierPayable.findFirst({
+          where: { companyId: tenant.companyId, purchaseId: data.purchaseId },
+        });
+
+        if (existingPayable) {
+          const totalAmount = numberValue(existingPayable.totalAmount) + receivedValueLak;
+          const paidAmount = numberValue(existingPayable.paidAmount);
+          await tx.supplierPayable.update({
+            data: {
+              balanceAmount: Math.max(totalAmount - paidAmount, 0),
+              status: payableStatusFor(totalAmount, paidAmount),
+              totalAmount,
+            },
+            where: { id: existingPayable.id },
+          });
+        } else {
+          await tx.supplierPayable.create({
+            data: {
+              balanceAmount: receivedValueLak,
+              companyId: tenant.companyId,
+              dueDate: dueDateFromCreditTerms(purchase.supplier?.creditTerms),
+              paidAmount: 0,
+              purchaseId: data.purchaseId,
+              status: payableStatusFor(receivedValueLak, 0),
+              supplierId: purchase.supplierId,
+              totalAmount: receivedValueLak,
+            },
+          });
+        }
+
+        await tx.supplier.update({
+          data: { outstandingBalance: { increment: receivedValueLak } },
+          where: { id: purchase.supplierId },
+        });
+      }
+
       return receipt;
     },
   });
@@ -357,6 +428,21 @@ export async function createSupplierPayment(input: SupplierPaymentInput, tenant:
         },
       });
       const amount = numberValue(data.amount);
+      if (amount <= 0) {
+        throw new Error("Payment amount must be greater than zero.");
+      }
+
+      const payable = await tx.supplierPayable.findFirst({
+        where: { companyId: tenant.companyId, purchaseId: purchase.id },
+      });
+      if (!payable) {
+        throw new Error("No outstanding payable for this purchase. Receive goods first.");
+      }
+
+      const currentBalance = numberValue(payable.balanceAmount);
+      if (amount > currentBalance + 0.0000001) {
+        throw new Error(`Payment ${amount} exceeds outstanding balance ${currentBalance}.`);
+      }
 
       const payment = await tx.purchasePayment.create({
         data: {
@@ -367,19 +453,32 @@ export async function createSupplierPayment(input: SupplierPaymentInput, tenant:
         },
       });
 
-      const paidAmount = Number(purchase.paidAmount ?? 0) + amount;
-      const balanceAmount = Math.max(Number(purchase.totalAmount ?? 0) - paidAmount, 0);
-      await tx.purchase.update({
-        data: { balanceAmount, paidAmount },
-        where: { id: purchase.id },
-      });
-      await tx.supplierPayable.updateMany({
+      const payableTotal = numberValue(payable.totalAmount);
+      const payablePaid = numberValue(payable.paidAmount) + amount;
+      const payableBalance = Math.max(payableTotal - payablePaid, 0);
+      await tx.supplierPayable.update({
         data: {
-          balanceAmount,
-          paidAmount,
-          status: balanceAmount <= 0 ? "paid" : paidAmount > 0 ? "partial" : "unpaid",
+          balanceAmount: payableBalance,
+          paidAmount: payablePaid,
+          status: payableStatusFor(payableTotal, payablePaid),
         },
-        where: { purchaseId: purchase.id },
+        where: { id: payable.id },
+      });
+
+      // Reduce supplier outstanding balance, never below zero.
+      const supplier = await tx.supplier.findUniqueOrThrow({ where: { id: payable.supplierId } });
+      const nextOutstanding = Math.max(numberValue(supplier.outstandingBalance) - amount, 0);
+      await tx.supplier.update({
+        data: { outstandingBalance: nextOutstanding },
+        where: { id: payable.supplierId },
+      });
+
+      // Keep purchase header paid/balance in sync for PO-level display.
+      const purchasePaid = numberValue(purchase.paidAmount) + amount;
+      const purchaseBalance = Math.max(numberValue(purchase.totalAmount) - purchasePaid, 0);
+      await tx.purchase.update({
+        data: { balanceAmount: purchaseBalance, paidAmount: purchasePaid },
+        where: { id: purchase.id },
       });
 
       return payment;
