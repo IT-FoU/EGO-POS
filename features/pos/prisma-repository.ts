@@ -23,6 +23,52 @@ function amount(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Safe rounding tolerance for money comparisons (LAK is a 0-decimal currency).
+const CHECKOUT_TOLERANCE_LAK = 1;
+
+// Resolve the authoritative DB sale unit for a line. The client only supplies a
+// unitId hint; price/cost/conversion always come from the database, never trusted
+// client values (B8-1).
+function resolveSaleUnit(product: Record<string, any>, unitId: string | undefined) {
+  const units: Array<Record<string, any>> = product.units ?? [];
+  if (unitId) {
+    const found = units.find((unit) => unit.id === unitId);
+    if (!found) {
+      throw new Error(`Sale unit ${unitId} was not found for product ${product.id}.`);
+    }
+    if (found.status === "inactive") {
+      throw new Error(`Sale unit ${unitId} is inactive for product ${product.id}.`);
+    }
+    return found;
+  }
+  const active = units.filter((unit) => unit.status !== "inactive");
+  const fallback =
+    active.find((unit) => unit.isDefaultSaleUnit) ??
+    active.find((unit) => unit.isBaseUnit) ??
+    active[0];
+  if (!fallback) {
+    throw new Error(`Product ${product.id} has no active sale unit.`);
+  }
+  return fallback;
+}
+
+// Server-side membership tier discount, mirroring the POS client pricing rules so
+// the persisted price matches what an eligible member is charged.
+function resolveMembershipDiscountPercent(customer: Record<string, any> | null) {
+  if (!customer || customer.status !== "active") {
+    return 0;
+  }
+  const subscriptions: Array<Record<string, any>> = customer.subscriptions ?? [];
+  if (subscriptions.length > 0) {
+    const endDate = subscriptions[0]?.endDate ? new Date(subscriptions[0].endDate).getTime() : 0;
+    if (endDate < Date.now()) {
+      return 0;
+    }
+  }
+  const percent = numberValue(customer.membershipLevel?.discountPercent);
+  return percent > 0 ? Math.min(percent, 100) : 0;
+}
+
 export async function getNextPosSaleNo(companyId: string, prefix: string | null | undefined, tx: any = db) {
   const normalizedPrefix = normalizeReceiptPrefix(prefix);
   const sales = await tx.sale.findMany({
@@ -232,15 +278,62 @@ export async function completePrismaSale(input: {
       const loyaltyPointValueLak = Math.max(numberValue(settings?.loyaltyPointValueLak, DEFAULT_LOYALTY_REDEMPTION_VALUE_LAK), 0);
       const loyaltyMinRedeemPoints = Math.max(Math.floor(numberValue(settings?.loyaltyMinRedeemPoints, 1)), 1);
 
-      const rawSaleItems = input.items.map((item) => {
-        const quantity = numberValue(item.quantity);
-        const conversionQty = Math.max(numberValue(item.conversionQty, 1), 1);
-        const sellingPrice = numberValue(item.sellingPrice);
-        const costPrice = numberValue(item.costPrice);
+      if (!Array.isArray(input.items) || input.items.length === 0) {
+        throw new Error("A sale must contain at least one item.");
+      }
 
-        if (quantity <= 0) {
+      // DB-authoritative pricing (B8-1): fetch live products/units and the customer
+      // membership so price, cost, unit conversion, and membership discount are
+      // sourced from PostgreSQL, never trusted from the client payload.
+      const productIds = Array.from(new Set(input.items.map((item) => item.productId)));
+      const [products, customerRecord] = await Promise.all([
+        tx.product.findMany({
+          include: { units: true },
+          where: { companyId: tenant.companyId, id: { in: productIds }, isActive: true },
+        }),
+        input.customerId
+          ? tx.customer.findFirst({
+              include: {
+                membershipLevel: { select: { discountPercent: true } },
+                subscriptions: {
+                  orderBy: { endDate: "desc" },
+                  take: 1,
+                  where: { status: "active" },
+                },
+              },
+              where: { companyId: tenant.companyId, id: input.customerId },
+            })
+          : Promise.resolve(null),
+      ]);
+      const productMap = new Map<string, Record<string, any>>(
+        (products as Array<Record<string, any>>).map((product) => [product.id, product]),
+      );
+      const membershipDiscountPercent = resolveMembershipDiscountPercent(customerRecord);
+      const categoryByProduct = new Map<string, string | null>(
+        (products as Array<Record<string, any>>).map((product) => [product.id, product.categoryId ?? null]),
+      );
+
+      const rawSaleItems = input.items.map((item) => {
+        const product = productMap.get(item.productId);
+        if (!product) {
+          throw new Error(`Product ${item.productId} was not found or is inactive.`);
+        }
+
+        const quantity = numberValue(item.quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0) {
           throw new Error(`Sale quantity must be greater than zero for product ${item.productId}.`);
         }
+
+        const unit = resolveSaleUnit(product, item.unitId);
+        const conversionQty = Math.max(numberValue(unit.conversionQty, 1), 1);
+        const retailPrice = numberValue(unit.sellingPriceLak ?? product.sellingPriceLak);
+        if (retailPrice < 0) {
+          throw new Error(`Invalid selling price for product ${item.productId}.`);
+        }
+        const costPrice = numberValue(unit.costPriceLak ?? product.costPriceLak);
+        const sellingPrice = membershipDiscountPercent > 0
+          ? Math.round(retailPrice * (1 - membershipDiscountPercent / 100))
+          : retailPrice;
 
         return {
           baseQuantity: quantity * conversionQty,
@@ -253,15 +346,28 @@ export async function completePrismaSale(input: {
           quantity,
           sellingPrice,
           totalAmount: quantity * sellingPrice,
-          unitId: item.unitId,
+          unitId: unit.id,
         };
       });
-      const saleItems = await applyActivePromotions(tx, rawSaleItems, input.customerId, tenant.companyId);
+      const saleItems = await applyActivePromotions(tx, rawSaleItems, {
+        categoryByProduct,
+        companyId: tenant.companyId,
+        membershipLevelId: (customerRecord as Record<string, any> | null)?.membershipLevelId ?? null,
+      });
       const subtotal = saleItems.reduce((total, item) => total + item.quantity * item.sellingPrice, 0);
       const promotionDiscountAmount = saleItems.reduce((total, item) => total + item.promotionDiscount, 0);
+
+      const requestedDiscountAmount = numberValue(input.discountAmount);
+      const requestedDiscountPercent = numberValue(input.discountPercent);
+      if (requestedDiscountAmount < 0 || requestedDiscountPercent < 0) {
+        throw new Error("Discount cannot be negative.");
+      }
+      if (requestedDiscountPercent > 100) {
+        throw new Error("Discount percent cannot exceed 100.");
+      }
       const manualDiscountAmount = Math.min(
         Math.max(subtotal - promotionDiscountAmount, 0),
-        numberValue(input.discountAmount) + subtotal * numberValue(input.discountPercent) / 100,
+        requestedDiscountAmount + subtotal * requestedDiscountPercent / 100,
       );
       const loyaltyRedemption = await calculateLoyaltyRedemption(tx, {
         companyId: tenant.companyId,
@@ -281,9 +387,38 @@ export async function completePrismaSale(input: {
           : taxableAmount * taxRate / 100
         : 0;
       const totalAmount = taxInclusive ? taxableAmount : taxableAmount + taxAmount;
+      if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+        throw new Error("Computed sale total is invalid.");
+      }
       const earnedPoints = loyaltyRedemption.customer
         ? Math.floor(totalAmount / loyaltySpendPerPointLak)
         : 0;
+
+      // Server total is authoritative. A client total below the server total beyond
+      // the rounding tolerance indicates tampering/divergence and is rejected so the
+      // customer can never be charged less than the DB-computed price (B8-1).
+      const clientTotal = numberValue(input.totalAmount);
+      if (clientTotal + CHECKOUT_TOLERANCE_LAK < totalAmount) {
+        throw new Error(
+          `Checkout total mismatch: client ${clientTotal} is below server total ${totalAmount}.`,
+        );
+      }
+
+      // Payment validation (B8-1): tender amounts may be entered by the cashier, but
+      // they must be non-negative and cover the authoritative total. Change is always
+      // recomputed on the server; the client value is ignored.
+      const cashAmount = numberValue(input.cashAmount);
+      const cardAmount = numberValue(input.cardAmount);
+      const qrAmount = numberValue(input.qrAmount);
+      const transferAmount = numberValue(input.transferAmount);
+      if ([cashAmount, cardAmount, qrAmount, transferAmount].some((value) => value < 0)) {
+        throw new Error("Payment amounts cannot be negative.");
+      }
+      const paidAmount = cashAmount + cardAmount + qrAmount + transferAmount;
+      if (paidAmount + CHECKOUT_TOLERANCE_LAK < totalAmount) {
+        throw new Error(`Insufficient payment. Paid ${paidAmount}, required ${totalAmount}.`);
+      }
+      const changeAmount = Math.max(paidAmount - totalAmount, 0);
 
       const quantityByProduct = saleItems.reduce<Map<string, number>>((totals, item) => {
         totals.set(item.productId, (totals.get(item.productId) ?? 0) + item.baseQuantity);
@@ -294,21 +429,21 @@ export async function completePrismaSale(input: {
       const sale = await tx.sale.create({
         data: {
           branchId: input.branchId,
-          changeAmount: numberValue(input.changeAmount),
+          changeAmount,
           companyId: tenant.companyId,
           createdBy: tenant.userId,
           customerId: input.customerId,
-          discountPercent: subtotal > 0 ? discountAmount / subtotal * 100 : numberValue(input.discountPercent),
+          discountPercent: subtotal > 0 ? discountAmount / subtotal * 100 : requestedDiscountPercent,
           discountAmount,
           items: { create: saleItemCreateData },
           payments: {
             create: mapPaymentModeToSalePayments({
-              cashAmount: numberValue(input.cashAmount),
-              cardAmount: numberValue(input.cardAmount),
-              changeAmount: numberValue(input.changeAmount),
+              cashAmount,
+              cardAmount,
+              changeAmount,
               paymentMode: input.paymentMode,
-              qrAmount: numberValue(input.qrAmount),
-              transferAmount: numberValue(input.transferAmount),
+              qrAmount,
+              transferAmount,
             }),
           },
           paymentStatus: "paid",
@@ -523,22 +658,21 @@ async function applyLoyaltyLedger(
   });
 }
 
-async function applyActivePromotions(tx: any, items: SaleLine[], customerId: string | undefined, companyId: string) {
+async function applyActivePromotions(
+  tx: any,
+  items: SaleLine[],
+  context: {
+    categoryByProduct: Map<string, string | null>;
+    companyId: string;
+    membershipLevelId: string | null;
+  },
+) {
   const now = new Date();
+  const { categoryByProduct, companyId, membershipLevelId } = context;
   const productIds = items.map((item) => item.productId);
-  const [products, customer] = await Promise.all([
-    tx.product.findMany({
-      select: { categoryId: true, id: true },
-      where: { companyId, id: { in: productIds } },
-    }),
-    customerId
-      ? tx.customer.findFirst({ select: { membershipLevelId: true }, where: { companyId, id: customerId } })
-      : Promise.resolve(null),
-  ]);
-  const categoryByProduct = new Map<string, string | null>(
-    products.map((product: Record<string, any>) => [product.id, product.categoryId ?? null]),
+  const categoryIds = Array.from(
+    new Set(Array.from(categoryByProduct.values()).filter((value): value is string => Boolean(value))),
   );
-  const categoryIds = Array.from(new Set(products.map((product: Record<string, any>) => product.categoryId).filter(Boolean)));
   const promotions = await tx.promotion.findMany({
     include: {
       categories: true,
@@ -563,7 +697,7 @@ async function applyActivePromotions(tx: any, items: SaleLine[], customerId: str
   return items.map((item) => {
     const lineSubtotal = item.quantity * item.sellingPrice;
     const best = (promotions as Array<Record<string, any>>).reduce((current: { discount: number; promotionId?: string }, promotion) => {
-      if (!isPromotionEligibleForLine(promotion, item.productId, categoryByProduct.get(item.productId), customer?.membershipLevelId)) {
+      if (!isPromotionEligibleForLine(promotion, item.productId, categoryByProduct.get(item.productId), membershipLevelId)) {
         return current;
       }
 
