@@ -41,7 +41,7 @@
 
 **Single-store critical path (fix order):** ~~1 → 2/3 → 4 → 5 → 6~~ **B8-5/B8-6 closed items 1–4, 6–7.** Remaining: POS approval UI wiring (#5), hold bills (#8), reports polish (#9–10), settings/print (#11–12).
 
-> **Updated 2026-06-22:** B8-5 (cash session) and B8-6 (post-sale) resolve production blockers #1–4, #6–7 for single-store GO BOX usage.
+> **Updated 2026-06-22:** B8-5 (cash session), B8-6 (post-sale), and B8-7 (loyalty/membership) resolve production blockers #1–4, #6–7 for single-store GO BOX usage. Loyalty earn/redeem/tier/reversal is now DB-backed with ledger integrity.
 
 ---
 

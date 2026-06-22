@@ -58,12 +58,13 @@ export function mapPrismaCustomer(customer: Row): Customer {
   };
 }
 
-export function mapPrismaCustomerPurchase(sale: Row): CustomerPurchase {
+export function mapPrismaCustomerPurchase(sale: Row, loyaltySpendPerPointLak = 10_000): CustomerPurchase {
+  const spendPerPoint = Math.max(Number(loyaltySpendPerPointLak) || 10_000, 1);
   return {
     customerId: sale.customerId ?? "",
     id: sale.id,
     paymentType: sale.payments?.length > 1 ? "mixed" : (sale.payments?.[0]?.paymentMethod ?? "cash"),
-    pointsEarned: Math.floor(toNumber(sale.totalAmount) / 10_000),
+    pointsEarned: Math.floor(toNumber(sale.totalAmount) / spendPerPoint),
     saleDate: dateOnly(sale.createdAt),
     saleNo: sale.saleNo,
     totalLak: toNumber(sale.totalAmount),

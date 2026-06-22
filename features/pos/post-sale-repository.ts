@@ -1,3 +1,4 @@
+import { reverseSaleLoyalty } from "@/features/loyalty/loyalty-service";
 import { computeCashRefundLak } from "@/features/cash-sessions/cash-session-calculator";
 import { createApprovalRequest } from "@/features/approvals/approval-engine";
 import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
@@ -321,66 +322,6 @@ async function restoreSaleStock(
 
     runningQtyByProduct.set(productId, afterQty);
   }
-}
-
-async function reverseSaleLoyalty(tx: Record<string, any>, sale: Record<string, any>) {
-  if (!sale.customerId) {
-    return;
-  }
-
-  const ledgerRows = await tx.loyaltyPointLedger.findMany({
-    where: { companyId: sale.companyId, saleId: sale.id },
-  });
-  if (ledgerRows.length === 0) {
-    return;
-  }
-
-  let earnedPoints = 0;
-  let redeemedPoints = 0;
-  let redeemDiscountLak = 0;
-  let totalSpentDelta = 0;
-
-  for (const row of ledgerRows) {
-    const points = amount(row.points);
-    if (String(row.pointType) === "earn") {
-      earnedPoints += points;
-      totalSpentDelta += amount(row.amountLak);
-      await tx.loyaltyPointLedger.create({
-        data: {
-          amountLak: -amount(row.amountLak),
-          companyId: sale.companyId,
-          customerId: sale.customerId,
-          note: `Reversed earn from sale ${sale.saleNo}`,
-          pointType: "adjust",
-          points: -points,
-          saleId: sale.id,
-        },
-      });
-    }
-    if (String(row.pointType) === "redeem") {
-      redeemedPoints += Math.abs(points);
-      redeemDiscountLak += amount(row.amountLak);
-      await tx.loyaltyPointLedger.create({
-        data: {
-          amountLak: amount(row.amountLak),
-          companyId: sale.companyId,
-          customerId: sale.customerId,
-          note: `Reversed redeem from sale ${sale.saleNo}`,
-          pointType: "adjust",
-          points: Math.abs(points),
-          saleId: sale.id,
-        },
-      });
-    }
-  }
-
-  await tx.customer.update({
-    data: {
-      pointsBalance: { increment: redeemedPoints - earnedPoints },
-      totalSpent: { decrement: totalSpentDelta },
-    },
-    where: { id: sale.customerId },
-  });
 }
 
 async function reverseSalePromotions(tx: Record<string, any>, sale: Record<string, any>) {

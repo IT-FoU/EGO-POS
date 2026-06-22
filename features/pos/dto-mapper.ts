@@ -16,12 +16,16 @@ export function mapPrismaPosCustomer(customer: Row): PosCustomer {
       ? "Monthly"
       : "Yearly";
   const activeSubscription = (customer.subscriptions ?? []).find((entry: Row) => entry.status === "active");
-  const membershipExpiry = activeSubscription?.endDate
-    ? new Date(activeSubscription.endDate).toISOString().slice(0, 10)
-    : isActive
-      ? "2099-12-31"
-      : "2020-01-01";
-  const membershipActive = isActive && (!activeSubscription || new Date(`${membershipExpiry}T23:59:59`).getTime() >= Date.now());
+  const hasMembershipLevel = Boolean(customer.membershipLevelId || customer.membershipLevel);
+  let membershipExpiry = "";
+  let membershipActive = isActive && hasMembershipLevel;
+
+  if (activeSubscription?.endDate) {
+    membershipExpiry = new Date(activeSubscription.endDate).toISOString().slice(0, 10);
+    membershipActive = membershipActive && new Date(`${membershipExpiry}T23:59:59`).getTime() >= Date.now();
+  } else if (!hasMembershipLevel) {
+    membershipActive = false;
+  }
 
   return {
     customerCode: customer.customerCode ?? "",

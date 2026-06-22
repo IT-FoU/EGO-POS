@@ -135,6 +135,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(null);
     const [discountAmount, setDiscountAmount] = useState(0);
     const [discountPercent, setDiscountPercent] = useState(0);
+    const [redeemPoints, setRedeemPoints] = useState(0);
     const [taxEnabled, setTaxEnabled] = useState(true);
     const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
     const [cashAmount, setCashAmount] = useState(0);
@@ -270,7 +271,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const membershipSavings = cartItems.reduce((total, item) => total + Math.max(item.retailPriceLak - item.priceLak, 0) * item.quantity, 0);
     const percentDiscountValue = Math.round(subtotal * (discountPercent / 100));
     const discountTotal = Math.min(subtotal, discountAmount + percentDiscountValue);
-    const taxableAmount = Math.max(subtotal - discountTotal, 0);
+    const maxRedeemablePoints = loyaltySettings.loyaltyEnabled && selectedCustomer
+        ? Math.min(
+            selectedCustomer.pointsBalance,
+            loyaltySettings.loyaltyPointValueLak > 0
+                ? Math.floor(Math.max(subtotal - discountTotal, 0) / loyaltySettings.loyaltyPointValueLak)
+                : 0,
+        )
+        : 0;
+    const effectiveRedeemPoints = loyaltySettings.loyaltyEnabled
+        ? Math.min(Math.max(redeemPoints, 0), maxRedeemablePoints)
+        : 0;
+    const loyaltyRedeemDiscount = effectiveRedeemPoints * loyaltySettings.loyaltyPointValueLak;
+    const taxableAmount = Math.max(subtotal - discountTotal - loyaltyRedeemDiscount, 0);
     const taxAmount = taxEnabled
         ? Math.round(taxInclusive ? taxableAmount * (taxRatePercent / (100 + taxRatePercent)) : taxableAmount * (taxRatePercent / 100))
         : 0;
@@ -495,6 +508,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         setSelectedCustomer(customer);
+        setRedeemPoints(0);
         setMessage(isMembershipActive(customer)
             ? `${customer.name} membership active.`
             : `${customer.name} membership expired. Retail pricing applies.`);
@@ -677,6 +691,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 })),
                 paymentMode,
                 qrAmount: payment.qrAmount,
+                redeemPoints: effectiveRedeemPoints,
                 saleNo,
                 taxAmount,
                 taxRate: taxEnabled ? taxRatePercent : 0,
@@ -970,6 +985,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setCartItems([]);
         setDiscountAmount(0);
         setDiscountPercent(0);
+        setRedeemPoints(0);
         setCashAmount(0);
         setQrAmount(0);
         setTransferAmount(0);
@@ -1277,7 +1293,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 Find Member
               </button>
             </div>
-            <CustomerCard customer={selectedCustomer}/>
+            <CustomerCard
+              customer={selectedCustomer}
+              loyaltyEnabled={loyaltySettings.loyaltyEnabled}
+              maxRedeemPoints={maxRedeemablePoints}
+              minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints}
+              redeemPoints={effectiveRedeemPoints}
+              onRedeemPointsChange={setRedeemPoints}
+              redeemDiscountLak={loyaltyRedeemDiscount}
+            />
           </Panel>
 
           <Panel className="p-3">
@@ -1377,8 +1401,14 @@ function Panel({ children, className }: {
 }) {
     return <section className={cn("min-w-0 rounded-lg border border-border bg-card", className)}>{children}</section>;
 }
-function CustomerCard({ customer }: {
+function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, minRedeemPoints = 1, onRedeemPointsChange, redeemDiscountLak = 0, redeemPoints = 0, }: {
     customer: PosCustomer | null;
+    loyaltyEnabled?: boolean;
+    maxRedeemPoints?: number;
+    minRedeemPoints?: number;
+    onRedeemPointsChange?: (value: number) => void;
+    redeemDiscountLak?: number;
+    redeemPoints?: number;
 }) {
     if (!customer) {
         return (<div className="mt-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground">{t("ui.guest.sale.search.for.member.pricing")}</div>);
@@ -1400,6 +1430,25 @@ function CustomerCard({ customer }: {
         <InfoLine label="Expiry" value={customer.membershipExpiry}/>
         <InfoLine label="Points" value={String(customer.pointsBalance)}/>
       </div>
+      {loyaltyEnabled && active && customer.pointsBalance >= minRedeemPoints ? (
+        <div className="mt-2 space-y-1 rounded-md border border-border p-2">
+          <label className="block text-[11px] font-semibold" htmlFor="redeem-points">
+            Redeem points ({minRedeemPoints} min, max {maxRedeemPoints})
+          </label>
+          <input
+            className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
+            id="redeem-points"
+            max={maxRedeemPoints}
+            min={0}
+            onChange={(event) => onRedeemPointsChange?.(Math.max(0, Number(event.target.value) || 0))}
+            type="number"
+            value={redeemPoints}
+          />
+          {redeemDiscountLak > 0 ? (
+            <div className="text-[11px] text-primary">Redeem discount: {formatLak(redeemDiscountLak)} LAK</div>
+          ) : null}
+        </div>
+      ) : null}
       {customer.membershipType === "Student" ? (<div className="mt-1.5 rounded-md bg-primary/10 p-1.5 text-[11px] text-primary">
           <div className="flex items-center gap-1 font-semibold"><GraduationCap className="size-4" aria-hidden="true"/> Student verified</div>
           <div className="line-clamp-1">{customer.schoolName} - {customer.studentIdNumber}</div>
@@ -2256,6 +2305,8 @@ function mapStoredProductToPosProduct(product: Record<string, any>): PosProduct 
 function isMembershipActive(customer: PosCustomer | null | undefined) {
     if (!customer || customer.membershipStatus !== "Active")
         return false;
+    if (!customer.membershipExpiry)
+        return true;
     const expiry = new Date(`${customer.membershipExpiry}T23:59:59`);
     return expiry.getTime() >= Date.now();
 }

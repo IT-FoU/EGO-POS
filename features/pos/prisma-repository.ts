@@ -54,22 +54,11 @@ function resolveSaleUnit(product: Record<string, any>, unitId: string | undefine
   return fallback;
 }
 
-// Server-side membership tier discount, mirroring the POS client pricing rules so
-// the persisted price matches what an eligible member is charged.
-function resolveMembershipDiscountPercent(customer: Record<string, any> | null) {
-  if (!customer || customer.status !== "active") {
-    return 0;
-  }
-  const subscriptions: Array<Record<string, any>> = customer.subscriptions ?? [];
-  if (subscriptions.length > 0) {
-    const endDate = subscriptions[0]?.endDate ? new Date(subscriptions[0].endDate).getTime() : 0;
-    if (endDate < Date.now()) {
-      return 0;
-    }
-  }
-  const percent = numberValue(customer.membershipLevel?.discountPercent);
-  return percent > 0 ? Math.min(percent, 100) : 0;
-}
+import {
+  applyLoyaltyLedger,
+  calculateLoyaltyRedemption,
+  resolveMembershipDiscountPercent,
+} from "@/features/loyalty/loyalty-service";
 
 export async function getNextPosSaleNo(companyId: string, prefix: string | null | undefined, tx: any = db) {
   const normalizedPrefix = normalizeReceiptPrefix(prefix);
@@ -568,120 +557,6 @@ export async function completePrismaSale(input: {
 
       return sale;
     },
-  });
-}
-
-async function calculateLoyaltyRedemption(
-  tx: any,
-  input: {
-    companyId: string;
-    customerId?: string;
-    enabled: boolean;
-    minRedeemPoints: number;
-    pointValueLak: number;
-    redeemableAmountLak: number;
-    redeemPoints?: number;
-  },
-) {
-  const redeemPoints = Math.max(Math.floor(numberValue(input.redeemPoints)), 0);
-
-  if (!input.enabled) {
-    if (redeemPoints > 0) {
-      throw new Error("Loyalty point redemption is disabled.");
-    }
-
-    return { customer: null, discountAmountLak: 0, redeemPoints: 0 };
-  }
-
-  if (!input.customerId) {
-    if (redeemPoints > 0) {
-      throw new Error("A customer is required to redeem loyalty points.");
-    }
-
-    return { customer: null, discountAmountLak: 0, redeemPoints: 0 };
-  }
-
-  const customer = await tx.customer.findFirst({
-    select: { id: true, pointsBalance: true, status: true },
-    where: { companyId: input.companyId, id: input.customerId, status: "active" },
-  });
-
-  if (!customer) {
-    throw new Error("Active customer was not found for loyalty points.");
-  }
-
-  if (redeemPoints <= 0) {
-    return { customer, discountAmountLak: 0, redeemPoints: 0 };
-  }
-
-  if (redeemPoints < input.minRedeemPoints) {
-    throw new Error(`Minimum redeem points is ${input.minRedeemPoints}.`);
-  }
-
-  const currentBalance = Number(customer.pointsBalance ?? 0);
-  if (currentBalance < redeemPoints) {
-    throw new Error(`Insufficient loyalty points. Available ${currentBalance}, requested ${redeemPoints}.`);
-  }
-
-  const maxRedeemablePoints = input.pointValueLak > 0 ? Math.floor(input.redeemableAmountLak / input.pointValueLak) : 0;
-  if (redeemPoints > maxRedeemablePoints) {
-    throw new Error(`Redeem points exceed sale amount. Maximum redeemable points ${maxRedeemablePoints}.`);
-  }
-
-  return {
-    customer,
-    discountAmountLak: redeemPoints * input.pointValueLak,
-    redeemPoints,
-  };
-}
-
-async function applyLoyaltyLedger(
-  tx: any,
-  input: {
-    companyId: string;
-    customerId: string;
-    earnedPoints: number;
-    redeemDiscountLak: number;
-    redeemPoints: number;
-    saleId: string;
-    saleNo: string;
-    totalAmountLak: number;
-  },
-) {
-  if (input.redeemPoints > 0) {
-    await tx.loyaltyPointLedger.create({
-      data: {
-        amountLak: input.redeemDiscountLak,
-        companyId: input.companyId,
-        customerId: input.customerId,
-        note: `Redeemed on POS sale ${input.saleNo}`,
-        pointType: "redeem",
-        points: -input.redeemPoints,
-        saleId: input.saleId,
-      },
-    });
-  }
-
-  if (input.earnedPoints > 0) {
-    await tx.loyaltyPointLedger.create({
-      data: {
-        amountLak: input.totalAmountLak,
-        companyId: input.companyId,
-        customerId: input.customerId,
-        note: `Earned from POS sale ${input.saleNo}`,
-        pointType: "earn",
-        points: input.earnedPoints,
-        saleId: input.saleId,
-      },
-    });
-  }
-
-  await tx.customer.update({
-    data: {
-      pointsBalance: { increment: input.earnedPoints - input.redeemPoints },
-      totalSpent: { increment: input.totalAmountLak },
-    },
-    where: { id: input.customerId },
   });
 }
 

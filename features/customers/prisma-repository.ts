@@ -17,12 +17,20 @@ import {
   type CustomerPaymentInput,
   type CustomerUpdateInput,
 } from "@/features/customers/dto";
+import { adjustCustomerLoyaltyPoints } from "@/features/loyalty/loyalty-service";
+
+export { adjustCustomerLoyaltyPoints };
 
 const db = prisma as any;
 
 export async function getPrismaCustomersSnapshot(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
   const branchWhere = branchOwnedWhere(scope);
+  const settings = await db.companySetting.findUnique({
+    select: { loyaltySpendPerPointLak: true },
+    where: { companyId: scope.companyId },
+  });
+  const loyaltySpendPerPointLak = Math.max(Number(settings?.loyaltySpendPerPointLak ?? 10_000), 1);
   const [customers, levels, payments, purchases] = await Promise.all([
     db.customer.findMany({
       include: { loyaltyPointLedger: true, membershipLevel: true },
@@ -48,7 +56,7 @@ export async function getPrismaCustomersSnapshot(tenant: TenantContext) {
     customers: customers.map(mapPrismaCustomer),
     levels: levels.map(mapPrismaMembershipLevel),
     payments: payments.map(mapPrismaCustomerPayment),
-    purchases: purchases.map(mapPrismaCustomerPurchase),
+    purchases: purchases.map((sale: Record<string, unknown>) => mapPrismaCustomerPurchase(sale, loyaltySpendPerPointLak)),
   };
 }
 

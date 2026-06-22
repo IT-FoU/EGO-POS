@@ -88,10 +88,20 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 
 **Remaining (NOT B8-4):** Day/hour detail modals and business-health sub-bars still use illustrative UI copy (not financial data); AI insights panel is heuristic text; report sub-pages do not yet expose filter query params; dashboard shift-cash fixed in B8-5.
 
-### G5 — Loyalty redemption & spend-based tiers **(MEDIUM)**
-- Earn is persisted on sale; **redeem path exists server-side but POS UI never sends `redeemPoints`**. No manual points adjust/redeem action.
-- `membershipLevel.minSpendLak` is stored but **never evaluated** — no auto tier upgrade on `totalSpent` change. Membership expiry in POS is synthetic (`2099-12-31`).
-- Customer purchase-history `pointsEarned` uses a hardcoded `total/10000` formula, not company loyalty settings.
+### G5 — Loyalty redemption & spend-based tiers **(MEDIUM)** — **DONE (B8-7)**
+
+**B8-7 status (loyalty/membership hardened):**
+- Central `features/loyalty/loyalty-service.ts`: earn, redeem, manual adjust, tier recompute, refund/void reversal.
+- Server-authoritative member discount (`resolveMembershipDiscountPercent`); expired subscription blocks benefits.
+- POS sends `redeemPoints` on checkout; redeem discount included in server total.
+- Duplicate earn/redeem and double loyalty reversal blocked; negative balance rejected.
+- `recomputeMembershipTier` evaluates `membershipLevel.minSpendLak` on spend changes.
+- Manual point adjustment via `POST /api/customers/points-adjust` + `customers.update` permission.
+- Customer purchase-history `pointsEarned` uses company `loyaltySpendPerPointLak` (not hardcoded `/10000`).
+- POS customer mapper: no synthetic `2099-12-31` expiry; admin tier without subscription stays active.
+- Verified by `scripts/phase-b8-7-loyalty-check.ts` (**18/18 PASS**). B8-6..B8-1 and B7 regressions still pass.
+
+**Remaining (NOT B8-7):** partial-refund loyalty split; dedicated redeem approval rule/UX; subscription billing automation; student-plan lifecycle automation.
 
 ### G6 — Promotions completeness **(MEDIUM)**
 - `combo_set` discount returns 0 (unimplemented at checkout). `PromotionRule`/`PromotionAction` models unused (dead rules engine).

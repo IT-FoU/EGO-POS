@@ -2,6 +2,7 @@
 
 import { requireWritePermission, WRITE_PERMISSIONS, type WritePermissionKey } from "@/lib/auth/permissions";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
+import { adjustCustomerLoyaltyPoints } from "@/features/loyalty/loyalty-service";
 import {
   archivePrismaCustomer,
   createPrismaCustomer,
@@ -28,4 +29,12 @@ export async function archiveCustomerAction(customerId: string) {
 
 export async function createCustomerPaymentAction(input: Parameters<typeof createPrismaCustomerPayment>[0]) {
   try { return writeSuccess(await createPrismaCustomerPayment(input, await tenant(WRITE_PERMISSIONS.customersPayment))); } catch (error) { return writeFailure(error); }
+}
+
+export async function adjustCustomerPointsAction(input: { customerId: string; note?: string; pointsDelta: number }) {
+  try {
+    return writeSuccess(await adjustCustomerLoyaltyPoints(await tenant(WRITE_PERMISSIONS.customersUpdate), input));
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
