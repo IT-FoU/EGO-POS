@@ -1,14 +1,11 @@
-import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
+import { getStaffAccessSnapshot, getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import {
   APPROVAL_RULE_KEYS,
   type ApprovalRuleKey,
 } from "@/features/access-control/permission-catalog";
 import type { PosPermissionAction, PosPermissionPolicy, PosRole } from "@/features/pos/permissions";
 import { normalizePosRole } from "@/features/pos/permissions";
-import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
-
-const db = prisma as any;
 
 const allPosActions: PosPermissionAction[] = [
   "create_sale",
@@ -57,23 +54,12 @@ export async function createPosPermissionPolicyFromDatabase(input: {
 }): Promise<PosPermissionPolicy> {
   const role = normalizePosRole(input.roles) as PosRole;
   const snapshot = await getStaffAccessSnapshot(input.tenant);
-  const permissionKeys = new Set<string>();
 
-  if (role === "Owner") {
-    permissionKeys.add("*");
-  } else {
-  const templateLabel = role === "Cashier" ? "Staff/Cashier" : role;
-    const templateRole = snapshot.roles.find((entry) => entry.templateKey === templateLabel || entry.name === role);
-    if (templateRole) {
-      const rows = await db.rolePermission.findMany({
-        select: { permission: { select: { key: true } } },
-        where: { roleId: templateRole.id },
-      });
-      for (const row of rows as Array<{ permission: { key: string } }>) {
-        permissionKeys.add(row.permission.key);
-      }
-    }
-  }
+  // B8-3: derive permission keys from the logged-in user's ACTUAL assigned roles
+  // (getUserPermissionKeys resolves the user's real roleId(s); owner => "*"),
+  // not from a role matched only by template label. This keeps the client preview
+  // in sync with the server-enforced policy.
+  const permissionKeys = new Set<string>(((await getUserPermissionKeys(input.tenant)) as string[]).map(String));
 
   const rules = Object.fromEntries(
     APPROVAL_RULE_KEYS.map((ruleKey) => [ruleKey, snapshot.approvalRules.find((rule) => rule.ruleKey === ruleKey)]),
@@ -98,14 +84,18 @@ export async function createPosPermissionPolicyFromDatabase(input: {
     assignedTerminal: input.assignedTerminal ?? "POS-01",
     branchName: input.branchName ?? "Main Branch",
     displayName: input.displayName ?? input.username ?? role,
+    // Role hierarchy is preserved: Owner is unlimited, Manager is capped at the
+    // company discount threshold (default 10%), Cashier cannot apply manual
+    // discounts (0%). The threshold only raises the Manager ceiling, never the
+    // Cashier's.
     maxDiscountPercent:
-      discountRule?.thresholdPercent != null
-        ? Number(discountRule.thresholdPercent)
-        : role === "Owner"
-          ? 100
-          : role === "Manager"
-            ? 10
-            : 0,
+      role === "Owner"
+        ? 100
+        : role === "Manager"
+          ? discountRule?.thresholdPercent != null
+            ? Number(discountRule.thresholdPercent)
+            : 10
+          : 0,
     permissions: Object.fromEntries(
       allPosActions.map((action) => [action, posActionFromPermissionKeys(permissionKeys, action)]),
     ) as Record<PosPermissionAction, boolean>,

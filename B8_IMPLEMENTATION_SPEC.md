@@ -61,9 +61,17 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 - Verified by `scripts/phase-b8-2-approval-check.ts` (29/29). B8-1 and B7-1..B7-4 regressions still pass.
 - **Remaining for later sub-phases (NOT B8-2):** wire originating flows to *raise* requests through the engine (POS over-limit discount/refund, purchasing over-threshold) and register their executors; replace the demo-gated POS localStorage approval panel (`demoPendingApprovalRepository`/`demoAuditLogRepository`, shown only when `demoMode && devDebug`) with the server actions in the POS UI. These are UI/flow-wiring items tracked under G2/G3 and are out of B8-2 scope.
 
-### G3 — POS granular permissions client-only **(HIGH)**
+### G3 — POS granular permissions client-only **(HIGH)** — checkout enforcement + actual-role fix **DONE (B8-3)**
 - Server enforces only `pos.sell`. `apply_discount`, `void_bill`, `delete_item`, `cash_in/out`, refund/override are gated **only in the client** (`enforcePosAction`) and bypassable via the API.
 - `pos-policy-loader.ts` loads permissions from a **template role** (by `templateKey`), not the logged-in user's actual `roleId` → custom roles / per-user matrix edits may not match POS behavior.
+
+**B8-3 status (server enforcement for the live POS write surface):**
+- **Actual-role fix:** `pos-policy-loader.ts` now derives permission keys from the logged-in user's **actual assigned roles** via `getUserPermissionKeys` (owner ⇒ `*`), not a template-label lookup. The client preview and the server policy are now built from the same source.
+- **Server guard:** new `features/pos/pos-permission-guard.ts` resolves the acting user's real role from the DB (`companyUser.isOwner` + `userRole.role.templateKey`; unknown/custom ⇒ cashier/least-privilege) and exposes `buildPosPolicyForTenant` + `assertPosActionAllowed` (treats "approval required" as deny — no approved token exists in a live checkout).
+- **Checkout enforcement:** `completePrismaSale` now enforces `create_sale` server-side, and enforces `apply_discount` whenever the payload carries a manual discount — the effective discount must be within the user's **role limit** (Owner 100% / Manager = company threshold, default 10% / Cashier 0%). Over-limit discounts are rejected server-side, closing the "discount bypassable via API" hole.
+- `manual_price_override` is already structurally neutralized by B8-1 (the server ignores all client item prices and recomputes from DB), so there is no client price to override.
+- Verified by `scripts/phase-b8-3-pos-permission-check.ts` (16/16). B8-1, B8-2 and B7-1..B7-4 regressions still pass.
+- **Remaining (NOT B8-3):** `void_bill`, `refund_bill`, `hold/resume`, `delete_item`, `cash_in/out`, `split/multi_currency_payment` have **no server endpoint** today (they live in the client cart). When those flows gain server endpoints, they must call `assertPosActionAllowed` with the same guard. The demo-gated POS permission panel (client `enforcePosAction`) is unchanged.
 
 ### G4 — Reports financial accuracy & mock UI **(HIGH; spec requires 5 accurate reports)**
 - `reports-analytics-client.tsx` still renders **mock** data: `reportRows`, `executiveReports`, `reportCategories`, `currencyRates` from `mock-full-data.ts`; hardcoded modal KPIs (day/hour/detail), AI insights, health sub-bars, client FX.

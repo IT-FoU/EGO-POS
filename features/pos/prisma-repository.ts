@@ -8,6 +8,7 @@ import { numberValue, stringValue, withTenantTransaction } from "@/lib/db/write-
 import { assertBranchInScope, assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { getPrismaTaxAndLoyaltySettings } from "@/features/settings/prisma-repository";
 import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
+import { assertPosActionAllowed, buildPosPolicyForTenant } from "@/features/pos/pos-permission-guard";
 import {
   getNextPosSaleNoFromExisting,
   normalizeReceiptPrefix,
@@ -255,6 +256,11 @@ export async function completePrismaSale(input: {
   transferAmount?: number;
   warehouseId: string;
 }, tenant: TenantContext) {
+  // B8-3: resolve the acting user's authoritative POS policy from live DB role
+  // permissions and enforce create_sale server-side (never trust the client gate).
+  const posPolicy = await buildPosPolicyForTenant(tenant);
+  assertPosActionAllowed(posPolicy, "create_sale");
+
   return withTenantTransaction({
     action: "complete",
     module: "pos",
@@ -369,6 +375,15 @@ export async function completePrismaSale(input: {
         Math.max(subtotal - promotionDiscountAmount, 0),
         requestedDiscountAmount + subtotal * requestedDiscountPercent / 100,
       );
+
+      // B8-3: a manual (non-promotional) discount on the sale requires the
+      // apply_discount permission, and the effective discount must be within the
+      // user's role limit. Over-limit discounts are rejected server-side (there is
+      // no approved-decision token in a live checkout payload).
+      if (manualDiscountAmount > 0 || requestedDiscountAmount > 0 || requestedDiscountPercent > 0) {
+        const effectiveDiscountPercent = subtotal > 0 ? manualDiscountAmount / subtotal * 100 : requestedDiscountPercent;
+        assertPosActionAllowed(posPolicy, "apply_discount", { discountPercent: effectiveDiscountPercent });
+      }
       const loyaltyRedemption = await calculateLoyaltyRedemption(tx, {
         companyId: tenant.companyId,
         customerId: input.customerId,
