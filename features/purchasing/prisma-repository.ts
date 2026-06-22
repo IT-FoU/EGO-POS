@@ -201,6 +201,36 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
         };
       });
 
+      // Resolve unit -> base-unit conversion factors so received pack/carton quantities
+      // increase base stock correctly. Units without a unitId are treated as base units.
+      const unitIds = [
+        ...new Set(receiptItems.map((item) => item.unitId).filter((id: unknown): id is string => Boolean(id))),
+      ];
+      const unitsById = new Map<string, Record<string, any>>();
+      if (unitIds.length > 0) {
+        const units = await tx.productUnit.findMany({ where: { id: { in: unitIds } } });
+        for (const unit of units) {
+          unitsById.set(unit.id, unit);
+        }
+      }
+      const baseQuantityFor = (item: { productId: string; quantity: number; unitId?: string }) => {
+        if (!item.unitId) {
+          return item.quantity;
+        }
+        const unit = unitsById.get(item.unitId);
+        if (!unit) {
+          throw new Error(`Receipt unit ${item.unitId} was not found for product ${item.productId}.`);
+        }
+        if (unit.productId !== item.productId) {
+          throw new Error(`Receipt unit ${item.unitId} does not belong to product ${item.productId}.`);
+        }
+        const conversionQty = numberValue(unit.conversionQty, 1);
+        if (conversionQty <= 0) {
+          throw new Error(`Invalid unit conversion factor for product ${item.productId}.`);
+        }
+        return item.quantity * conversionQty;
+      };
+
       const receipt = await tx.goodsReceipt.create({
         data: {
           companyId: tenant.companyId,
@@ -225,10 +255,11 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
       });
 
       for (const item of receiptItems) {
+        const baseQuantity = baseQuantityFor(item);
         const balance = await applyAtomicStockDelta(tx, {
           companyId: tenant.companyId,
           productId: item.productId,
-          quantityDelta: item.quantity,
+          quantityDelta: baseQuantity,
           warehouseId: data.warehouseId,
         });
 
@@ -238,7 +269,7 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
             expiryDate: item.expiryDate,
             lotNumber: item.lotNumber,
             productId: item.productId,
-            quantity: item.quantity,
+            quantity: baseQuantity,
             receivedAt: new Date(),
             warehouseId: data.warehouseId,
           },
@@ -255,7 +286,7 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
             movementType: "purchase",
             note: `Goods receipt ${receipt.receiptNo}`,
             productId: item.productId,
-            quantity: item.quantity,
+            quantity: baseQuantity,
             referenceId: receipt.id,
             referenceType: "goods_receipt",
             unitId: item.unitId,
