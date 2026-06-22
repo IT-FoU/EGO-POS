@@ -47,11 +47,19 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 - Verified by `scripts/phase-b8-1-checkout-check.ts` (29/29). B7-1/B7-2/B7-3/B7-4 regression harnesses still pass.
 - **Remaining for a later sub-phase (NOT B8-1):** the POS client UI should call a shared server quote so the *displayed* preview equals the server total when DB promotions apply (currently the client preview omits DB promotions; the server simply charges the correct lower amount). This UI parity work is tracked under the G1 quote-engine item and is out of B8-1 scope.
 
-### G2 — Approval workflow is half-built **(CRITICAL)**
+### G2 — Approval workflow is half-built **(CRITICAL)** — server engine **DONE (B8-2)**
 - `ApprovalRule` (thresholds) is DB-backed and seeded; `decideApproval` updates status. **But no code ever creates an `Approval`/pending request** (`approval.create` — zero matches). POS pending approvals + POS permission audit go to **localStorage** (`demoPendingApprovalRepository`, `demoAuditLogRepository`).
 - `decideApproval` updates status only — does **not** execute the approved action (PO/payment/refund/discount).
 - Manager-discount (≤20%) / refund / stock-adjustment approval rules from spec are **not enforced server-side**.
 - Detail: [POS/Settings/Permissions audit](5219055a-415c-4c07-8166-8c322df41fae).
+
+**B8-2 status (server engine complete):** a DB-backed approval engine now exists (`features/approvals/`):
+- **Creation:** `createApprovalRequest` persists a pending `Approval` (company/branch scoped, requester role captured, execution payload stored in `newValue`) and writes an audit row. Exposed via `createApprovalRequestAction` (server action) and `POST /api/approvals`, both gated by the requester's base module permission.
+- **Decision:** `decideApprovalRequest` enforces **approver role** (owner/manager per `ApprovalRule.approverRole`; cashier/custom blocked), blocks **self-approval**, and is **cross-company isolated**. The existing settings `decideApproval` now delegates to this engine. Exposed via `decideApprovalRequestAction` and `POST /api/approvals/decision`, gated by `approvals.approve`.
+- **Execution on approve:** an executor registry runs the approved action. `stock_adjustment` is fully wired — stock is unchanged until approval, then the balance is updated atomically with a `StockMovement` (`adjustment`, referenced to the approval) and a `StockAdjustment` record (`approvedBy` = approver). Reject performs no mutation.
+- **Audit:** every create/approve/reject writes an `AuditLog` row (who/when/action/before-after via `withTenantTransaction`); the `Approval` row also retains `requestBy`, `approvedBy`, `decidedAt`, `reason`, `decisionNote`.
+- Verified by `scripts/phase-b8-2-approval-check.ts` (29/29). B8-1 and B7-1..B7-4 regressions still pass.
+- **Remaining for later sub-phases (NOT B8-2):** wire originating flows to *raise* requests through the engine (POS over-limit discount/refund, purchasing over-threshold) and register their executors; replace the demo-gated POS localStorage approval panel (`demoPendingApprovalRepository`/`demoAuditLogRepository`, shown only when `demoMode && devDebug`) with the server actions in the POS UI. These are UI/flow-wiring items tracked under G2/G3 and are out of B8-2 scope.
 
 ### G3 — POS granular permissions client-only **(HIGH)**
 - Server enforces only `pos.sell`. `apply_discount`, `void_bill`, `delete_item`, `cash_in/out`, refund/override are gated **only in the client** (`enforcePosAction`) and bypassable via the API.

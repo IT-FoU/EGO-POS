@@ -2,6 +2,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
+import { decideApprovalRequest } from "@/features/approvals/approval-engine";
 import {
   APPROVAL_RULE_KEYS,
   APPROVAL_RULE_LABELS,
@@ -507,31 +508,11 @@ export async function saveApprovalRule(input: SaveApprovalRuleInput, tenant: Ten
 }
 
 export async function decideApproval(input: DecideApprovalInput, tenant: TenantContext) {
-  return withTenantTransaction({
-    action: input.status,
-    module: "approvals",
-    newData: input,
-    tenant,
-    write: async (tx) => {
-      const approval = await tx.approval.findFirst({
-        where: { companyId: tenant.companyId, id: input.approvalId, status: "pending" },
-      });
-      if (!approval) {
-        throw new Error("Pending approval was not found.");
-      }
-
-      const row = await tx.approval.update({
-        data: {
-          approvedBy: tenant.userId,
-          decisionNote: input.decisionNote ?? null,
-          decidedAt: new Date(),
-          status: input.status,
-        },
-        where: { id: approval.id },
-      });
-      return mapPendingApproval(row);
-    },
-  });
+  // B8-2: delegate to the hardened approval engine so the decision enforces
+  // approver role (owner/manager per ApprovalRule), blocks self-approval and
+  // cross-company access, and executes the approved action when an executor is
+  // registered for the request type.
+  return decideApprovalRequest(input, tenant);
 }
 
 export async function getUserPermissionKeys(tenant: TenantContext) {
