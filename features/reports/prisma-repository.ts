@@ -125,12 +125,12 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext) {
       _sum: { totalAmount: true },
       _count: { id: true },
       orderBy: { _sum: { totalAmount: "desc" } },
-      where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
+      where: { companyId: scope.companyId, status: { not: "cancelled" }, warehouseId: { in: scope.warehouseIds } },
     }),
     db.purchase.findMany({
       orderBy: { purchaseDate: "asc" },
       select: { purchaseDate: true, totalAmount: true },
-      where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
+      where: { companyId: scope.companyId, status: { not: "cancelled" }, warehouseId: { in: scope.warehouseIds } },
     }),
     db.salePayment.groupBy({
       by: ["paymentMethod"],

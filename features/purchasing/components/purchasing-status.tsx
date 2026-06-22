@@ -4,9 +4,11 @@ import type {
   PurchaseStatus,
   Supplier,
 } from "@/features/purchasing/types";
+import { PURCHASE_STATUS_LABELS } from "@/features/purchasing/purchase-status";
 
 const purchaseStyles: Record<PurchaseStatus, string> = {
   cancelled: "border-danger/40 bg-danger/10 text-danger",
+  closed: "border-muted-foreground/40 bg-muted-foreground/10 text-muted-foreground",
   draft: "border-muted-foreground/30 bg-muted text-muted-foreground",
   ordered: "border-primary/40 bg-primary/10 text-primary",
   partial: "border-warning/40 bg-warning/10 text-warning",
@@ -25,7 +27,7 @@ const supplierStyles: Record<Supplier["status"], string> = {
 };
 
 export function PurchaseStatusBadge({ status }: { status: PurchaseStatus }) {
-  return <Badge className={purchaseStyles[status]} label={status} />;
+  return <Badge className={purchaseStyles[status]} label={PURCHASE_STATUS_LABELS[status]} />;
 }
 
 export function PayableStatusBadge({ status }: { status: PayableStatus }) {

@@ -1,5 +1,5 @@
 export type CurrencyCode = "LAK" | "THB" | "USD";
-export type PurchaseStatus = "draft" | "ordered" | "partial" | "received" | "cancelled";
+export type PurchaseStatus = "draft" | "ordered" | "partial" | "received" | "closed" | "cancelled";
 export type PayableStatus = "unpaid" | "partial" | "paid";
 
 export type Supplier = {

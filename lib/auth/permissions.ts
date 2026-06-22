@@ -30,6 +30,7 @@ export const WRITE_PERMISSIONS = {
   promotionStackRulesManage: "promotion.stackRules.manage",
   promotionView: "promotion.view",
   purchasingCreate: "purchasing.create",
+  purchasingEdit: "purchasing.edit",
   purchasingPayment: "purchasing.payment",
   purchasingReceive: "purchasing.receive",
   settingsManage: "settings.manage",

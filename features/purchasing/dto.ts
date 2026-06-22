@@ -13,8 +13,10 @@ const orderItemFields = ["expiryDate", "lotNumber", "productId", "quantity", "un
 const receiveFields = ["items", "note", "purchaseId", "receiptNo", "status", "warehouseId"] as const;
 const receiveItemFields = ["expiryDate", "lotNumber", "productId", "purchaseItemId", "quantity", "unitId"] as const;
 const paymentFields = ["amount", "note", "paymentMethod", "purchaseId"] as const;
+const statusFields = ["purchaseId", "status"] as const;
 const currencies = ["LAK", "THB", "USD"] as const;
 const receiptStatuses = ["draft", "partial", "received", "cancelled"] as const;
+const purchaseStatuses = ["draft", "ordered", "partial", "received", "closed", "cancelled"] as const;
 
 export type PurchaseOrderItemInput = {
   expiryDate?: string | null;
@@ -30,9 +32,14 @@ export type PurchaseOrderInput = {
   exchangeRate?: number;
   items: PurchaseOrderItemInput[];
   paidAmount?: number;
-  purchaseNo: string;
+  purchaseNo?: string;
   supplierId: string;
   warehouseId: string;
+};
+
+export type PurchaseStatusInput = {
+  purchaseId: string;
+  status: (typeof purchaseStatuses)[number];
 };
 
 export type ReceiveGoodsInput = {
@@ -88,10 +95,20 @@ export function parsePurchaseOrderInput(input: unknown): PurchaseOrderInput {
     exchangeRate: parseNumber(dto, "exchangeRate", { min: 0.000001 }),
     items: parseItems(dto.items, "Purchase order", orderItemFields, true) as PurchaseOrderItemInput[],
     paidAmount: parseNumber(dto, "paidAmount", { min: 0 }),
-    purchaseNo: parseString(dto, "purchaseNo", { max: 120, required: true })!,
+    purchaseNo: parseString(dto, "purchaseNo", { max: 120, nullable: true }),
     supplierId: parseString(dto, "supplierId", { required: true })!,
     warehouseId: parseString(dto, "warehouseId", { required: true })!,
   }) as PurchaseOrderInput;
+}
+
+export function parsePurchaseStatusInput(input: unknown): PurchaseStatusInput {
+  const dto = asDtoObject(input, "Purchase status payload");
+  rejectUnknownFields(dto, [...statusFields], "Purchase status payload");
+
+  return cleanUndefined({
+    purchaseId: parseString(dto, "purchaseId", { required: true })!,
+    status: parseEnum(dto, "status", purchaseStatuses, { required: true })!,
+  }) as PurchaseStatusInput;
 }
 
 export function parseReceiveGoodsInput(input: unknown): ReceiveGoodsInput {

@@ -99,7 +99,6 @@ export function PurchaseOrderForm({ products, suppliers, warehouses, }: {
                     unitCost: line.unitCost,
                 })),
                 paidAmount,
-                purchaseNo: `PO-${Date.now()}`,
                 supplierId,
                 warehouseId,
             });

@@ -2,7 +2,12 @@
 
 import { requireWritePermission, WRITE_PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
-import { createPurchaseOrder, createSupplierPayment, receiveGoods } from "@/features/purchasing/prisma-repository";
+import {
+  createPurchaseOrder,
+  createSupplierPayment,
+  receiveGoods,
+  updatePurchaseOrderStatus,
+} from "@/features/purchasing/prisma-repository";
 
 async function tenant(permission: PermissionKey) {
   return requireWritePermission(permission);
@@ -18,4 +23,8 @@ export async function receiveGoodsAction(input: Parameters<typeof receiveGoods>[
 
 export async function createSupplierPaymentAction(input: Parameters<typeof createSupplierPayment>[0]) {
   try { return writeSuccess(await createSupplierPayment(input, await tenant(WRITE_PERMISSIONS.purchasingPayment))); } catch (error) { return writeFailure(error); }
+}
+
+export async function updatePurchaseStatusAction(input: Parameters<typeof updatePurchaseOrderStatus>[0]) {
+  try { return writeSuccess(await updatePurchaseOrderStatus(input, await tenant(WRITE_PERMISSIONS.purchasingEdit))); } catch (error) { return writeFailure(error); }
 }

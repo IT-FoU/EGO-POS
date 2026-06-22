@@ -1,12 +1,22 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, CircleDollarSign, ClipboardList, PackageCheck, Plus, Search, Truck, WalletCards, } from "lucide-react";
-import type { CurrencyCode, PurchaseOrder, Supplier, SupplierPayable, } from "@/features/purchasing/types";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Ban, CircleDollarSign, ClipboardList, Lock, PackageCheck, Plus, Search, Send, Truck, WalletCards, } from "lucide-react";
+import type { CurrencyCode, PurchaseOrder, PurchaseStatus, Supplier, SupplierPayable, } from "@/features/purchasing/types";
 import { formatMoney, formatNumber } from "@/features/purchasing/format";
 import { PurchaseStatusBadge, SupplierStatusBadge } from "@/features/purchasing/components/purchasing-status";
+import {
+  MANUAL_ACTION_TARGET,
+  PURCHASE_STATUS_LABELS,
+  PURCHASE_STATUS_VALUES,
+  manualActionsForStatus,
+  isReceivableStatus,
+  type ManualPurchaseAction,
+} from "@/features/purchasing/purchase-status";
+import { updatePurchaseStatusAction } from "@/features/purchasing/actions";
 import { cn } from "@/lib/utils";
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readStringFromStorage } from "@/lib/demo/storage";
@@ -23,10 +33,32 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
     suppliers: Supplier[];
     payables: SupplierPayable[];
 }) {
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
     const [query, setQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState<PurchaseStatus | "all">("all");
+    const [pendingId, setPendingId] = useState<string | null>(null);
     const [locale, setLocale] = useState<"en" | "lo">("en");
     const [todayIso, setTodayIso] = useState("");
     const [profileMessage, setProfileMessage] = useState<string | null>(null);
+    function runStatusAction(order: PurchaseOrder, action: ManualPurchaseAction) {
+        const nextStatus = MANUAL_ACTION_TARGET[action];
+        if (action === "cancel" && typeof window !== "undefined" && !window.confirm(`Cancel ${order.purchaseNo}?`)) {
+            return;
+        }
+        setProfileMessage(null);
+        setPendingId(order.id);
+        startTransition(async () => {
+            const result = await updatePurchaseStatusAction({ purchaseId: order.id, status: nextStatus });
+            setPendingId(null);
+            if (!result.ok) {
+                setProfileMessage(result.error ?? "Failed to update purchase order status.");
+                return;
+            }
+            setProfileMessage(`${order.purchaseNo} is now ${PURCHASE_STATUS_LABELS[nextStatus]}.`);
+            router.refresh();
+        });
+    }
     useEffect(() => {
         const readLocale = () => {
             const storedLocale = readStringFromStorage(DemoStorageKeys.locale);
@@ -39,9 +71,13 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
     }, []);
     const filteredOrders = useMemo(() => {
         const normalized = query.toLowerCase();
-        return purchaseOrders.filter((order) => order.purchaseNo.toLowerCase().includes(normalized) ||
-            order.supplierName.toLowerCase().includes(normalized));
-    }, [purchaseOrders, query]);
+        return purchaseOrders.filter((order) => {
+            const matchesQuery = order.purchaseNo.toLowerCase().includes(normalized) ||
+                order.supplierName.toLowerCase().includes(normalized);
+            const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+            return matchesQuery && matchesStatus;
+        });
+    }, [purchaseOrders, query, statusFilter]);
     const supplierInsights = useMemo(() => {
         return suppliers.map((supplier) => {
             const supplierOrders = purchaseOrders.filter((order) => order.supplierId === supplier.id);
@@ -131,10 +167,16 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
             <h2 className="text-lg font-semibold">Purchase orders</h2>
             <p className="mt-1 text-sm text-muted-foreground">{t("ui.multi.currency.order.list.with.receiving.pro")}</p>
           </div>
-          <label className="relative w-full md:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
-            <input className="field-input pl-10" placeholder="Search PO or supplier" value={query} onChange={(event) => setQuery(event.target.value)}/>
-          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="relative w-full md:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
+              <input className="field-input pl-10" placeholder="Search PO or supplier" value={query} onChange={(event) => setQuery(event.target.value)}/>
+            </label>
+            <select className="field-input sm:w-48" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PurchaseStatus | "all")} aria-label="Filter by status">
+              <option value="all">All statuses</option>
+              {PURCHASE_STATUS_VALUES.map((status) => (<option key={status} value={status}>{PURCHASE_STATUS_LABELS[status]}</option>))}
+            </select>
+          </div>
         </div>
         <div className="mt-5 max-w-full overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
@@ -169,10 +211,25 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
                       <ReceivingProgress progress={progress}/>
                     </td>
                     <td className="px-3 py-3"><PurchaseStatusBadge status={order.status}/></td>
-                    <td className="px-3 py-3 text-right">
-                      <Link className="inline-flex items-center gap-2 text-sm font-semibold text-primary" href="/purchasing/receiving">
-                        Receive <ArrowRight aria-hidden="true"/>
-                      </Link>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {manualActionsForStatus(order.status).map((action) => (
+                          <StatusActionButton
+                            key={action}
+                            action={action}
+                            disabled={isPending && pendingId === order.id}
+                            onClick={() => runStatusAction(order, action)}
+                          />
+                        ))}
+                        {isReceivableStatus(order.status) ? (
+                          <Link className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm font-semibold text-primary transition hover:border-primary" href="/purchasing/receiving">
+                            Receive <ArrowRight aria-hidden="true" className="size-4"/>
+                          </Link>
+                        ) : null}
+                        {manualActionsForStatus(order.status).length === 0 && !isReceivableStatus(order.status) ? (
+                          <span className="text-xs text-muted-foreground">--</span>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>);
         })}
@@ -247,6 +304,23 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
         </section>
       </section>
     </div>);
+}
+const statusActionConfig: Record<ManualPurchaseAction, { icon: typeof Send; label: string; className: string }> = {
+    cancel: { icon: Ban, label: "Cancel", className: "border-danger/40 text-danger hover:border-danger" },
+    close: { icon: Lock, label: "Close", className: "border-border text-foreground hover:border-primary" },
+    send: { icon: Send, label: "Send", className: "border-primary/40 bg-primary/10 text-primary hover:border-primary" },
+};
+function StatusActionButton({ action, disabled, onClick, }: {
+    action: ManualPurchaseAction;
+    disabled: boolean;
+    onClick: () => void;
+}) {
+    const config = statusActionConfig[action];
+    const Icon = config.icon;
+    return (<button className={cn("inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition disabled:opacity-50", config.className)} type="button" disabled={disabled} onClick={onClick}>
+      <Icon aria-hidden="true" className="size-4"/>
+      {config.label}
+    </button>);
 }
 function SummaryCard({ icon: Icon, label, value, }: {
     icon: typeof Truck;

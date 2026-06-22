@@ -12,12 +12,17 @@ import {
 } from "@/features/purchasing/dto-mapper";
 import {
   parsePurchaseOrderInput,
+  parsePurchaseStatusInput,
   parseReceiveGoodsInput,
   parseSupplierPaymentInput,
   type PurchaseOrderInput,
+  type PurchaseStatusInput,
   type ReceiveGoodsInput,
   type SupplierPaymentInput,
 } from "@/features/purchasing/dto";
+import { assertTransition, isPurchaseStatus, isReceivableStatus } from "@/features/purchasing/purchase-status";
+import type { PurchaseStatus } from "@/features/purchasing/types";
+import { resolvePurchaseNo } from "@/features/purchasing/purchase-no";
 
 const db = prisma as any;
 
@@ -90,6 +95,7 @@ export async function createPurchaseOrder(input: PurchaseOrderInput, tenant: Ten
           });
         }
       }
+      const purchaseNo = await resolvePurchaseNo(tx, tenant.companyId, data.purchaseNo);
       return tx.purchase.create({
         data: {
           balanceAmount: Math.max(subtotal - paidAmount, 0),
@@ -108,7 +114,7 @@ export async function createPurchaseOrder(input: PurchaseOrderInput, tenant: Ten
             })),
           },
           paidAmount,
-          purchaseNo: stringValue(data.purchaseNo),
+          purchaseNo,
           status: "draft",
           subtotal,
           supplierId: data.supplierId,
@@ -142,6 +148,13 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
 
       if (purchase.warehouseId !== data.warehouseId) {
         throw new Error("Goods receipt warehouse must match the purchase warehouse.");
+      }
+
+      const currentStatus: PurchaseStatus = isPurchaseStatus(purchase.status) ? purchase.status : "draft";
+      if (!isReceivableStatus(currentStatus)) {
+        throw new Error(
+          `Purchase order must be Ordered or Partial Received before receiving goods (current: ${currentStatus}).`,
+        );
       }
 
       const purchaseItemsById = new Map<string, Record<string, any>>(
@@ -339,6 +352,36 @@ export async function createSupplierPayment(input: SupplierPaymentInput, tenant:
       });
 
       return payment;
+    },
+  });
+}
+
+export async function updatePurchaseOrderStatus(input: PurchaseStatusInput, tenant: TenantContext) {
+  const data = parsePurchaseStatusInput(input);
+  const nextStatus = data.status as PurchaseStatus;
+  return withTenantTransaction({
+    action: "status",
+    module: "purchasing",
+    newData: data,
+    tenant,
+    write: async (tx) => {
+      const scope = await resolveTenantScope(tenant, tx);
+      const purchase = await tx.purchase.findFirstOrThrow({
+        where: {
+          companyId: tenant.companyId,
+          id: data.purchaseId,
+          warehouseId: { in: scope.warehouseIds },
+        },
+      });
+
+      const currentStatus: PurchaseStatus = isPurchaseStatus(purchase.status) ? purchase.status : "draft";
+      assertTransition(currentStatus, nextStatus);
+
+      return tx.purchase.update({
+        data: { status: nextStatus },
+        include: { items: true },
+        where: { id: data.purchaseId },
+      });
     },
   });
 }
