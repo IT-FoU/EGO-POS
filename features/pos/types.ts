@@ -104,6 +104,11 @@ export type PosLoyaltySettings = {
 };
 
 export type PosCashSessionContext = {
+  cashInLak: number;
+  cashOutLak: number;
+  cashSalesLak: number;
+  expectedCashLak: number;
+  nonCashSalesLak: number;
   openedAt: string | null;
   openingCashLak: number;
   sessionId: string | null;

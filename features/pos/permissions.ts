@@ -120,6 +120,8 @@ const cashierAllowed = new Set<PosPermissionAction>([
   "view_receipt",
   "view_recent_sales",
   "duplicate_sale",
+  "cash_in",
+  "cash_out",
 ]);
 
 export const POS_PERMISSION_DENIED_MESSAGE = "You do not have permission to perform this action.";

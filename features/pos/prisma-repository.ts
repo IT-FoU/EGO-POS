@@ -1,8 +1,9 @@
-import { prisma } from "@/lib/db/prisma";
+import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
 import { mapPrismaPosCustomer, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
 import { mapPaymentModeToSalePayments } from "@/features/pos/dto-mapper";
 import { getPrismaPosQrBanks } from "@/features/qr-payments/prisma-repository";
 import type { PaymentMode } from "@/features/pos/types";
+import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { assertBranchInScope, assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
@@ -129,7 +130,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
   const branchWhere = branchOwnedWhere(scope);
   const now = new Date();
-  const [products, company, settings, customers, promotions, membershipLevels, cashSession] = await Promise.all([
+  const [products, company, settings, customers, promotions, membershipLevels] = await Promise.all([
     db.product.findMany({
       include: {
         balances: { where: { warehouseId: { in: scope.warehouseIds } } },
@@ -179,16 +180,8 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       select: { discountPercent: true, id: true, name: true },
       where: { companyId: scope.companyId, isActive: true },
     }),
-    db.cashSession.findFirst({
-      orderBy: { openedAt: "desc" },
-      where: {
-        branchId: scope.branchId,
-        cashierId: tenant.userId,
-        closedAt: null,
-        companyId: scope.companyId,
-      },
-    }),
   ]);
+  const openSession = await getOpenCashSession(tenant);
   const taxAndLoyalty = await getPrismaTaxAndLoyaltySettings(scope.companyId);
   const qrBanks = await getPrismaPosQrBanks(tenant, scope.branchId);
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
@@ -198,12 +191,29 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     branchId: scope.branchId,
     branchName: scope.branchName,
     cashierName: "Current Cashier",
-    cashSession: {
-      openedAt: cashSession?.openedAt ? new Date(cashSession.openedAt).toISOString() : null,
-      openingCashLak: amount(cashSession?.openingCash),
-      sessionId: cashSession?.id ?? null,
-      status: cashSession ? "open" as const : "not_started" as const,
-    },
+    cashSession: openSession
+      ? {
+          cashInLak: openSession.cashInLak,
+          cashOutLak: openSession.cashOutLak,
+          cashSalesLak: openSession.cashSalesLak,
+          expectedCashLak: openSession.expectedCashLak,
+          nonCashSalesLak: openSession.nonCashSalesLak,
+          openedAt: openSession.openedAt,
+          openingCashLak: openSession.openingCashLak,
+          sessionId: openSession.id,
+          status: "open" as const,
+        }
+      : {
+          cashInLak: 0,
+          cashOutLak: 0,
+          cashSalesLak: 0,
+          expectedCashLak: 0,
+          nonCashSalesLak: 0,
+          openedAt: null,
+          openingCashLak: 0,
+          sessionId: null,
+          status: "not_started" as const,
+        },
     companyName: company?.name ?? "Business",
     customers: customers.map(mapPrismaPosCustomer),
     loyaltySettings: {
@@ -274,6 +284,7 @@ export async function completePrismaSale(input: {
       if (branchScope.branchId !== warehouseScope.branchId) {
         throw new Error("POS branch and warehouse scopes do not match.");
       }
+      await assertOpenCashSessionForSale(tenant, tx);
       const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
       const receiptPrefix = settings?.receiptPrefix ?? "INV";
       const saleNo = await resolvePosSaleNo(tx, tenant.companyId, input.saleNo, receiptPrefix);

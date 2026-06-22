@@ -1,3 +1,4 @@
+import { computeCashSessionTotalsForShift } from "@/features/cash-sessions/prisma-repository";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
@@ -428,7 +429,10 @@ async function getPrismaDashboardSnapshot(
         .filter((transaction) => transaction.transactionType === "cash_out")
         .reduce((total, transaction) => total + amount(transaction.amount), 0) ?? 0;
     const openingCashLak = amount(currentShift?.openingCash);
-    const expectedCashLak = amount(currentShift?.expectedCash) || openingCashLak + cashSalesLak - cashOutLak;
+    const currentShiftTotals = currentShift
+      ? await computeCashSessionTotalsForShift(currentShift)
+      : null;
+    const expectedCashLak = currentShiftTotals?.expectedCashLak ?? openingCashLak;
     const hourlySales = emptySnapshot().hourlySales.map((point, hour) => ({
       ...point,
       salesLak: sales
@@ -448,23 +452,24 @@ async function getPrismaDashboardSnapshot(
     const topProducts = Array.from(topProductMap.values())
       .sort((left, right) => right.quantity - left.quantity)
       .slice(0, 10);
-    const shiftSummaries = todayShifts.map<ShiftSummary>((shift) => {
-      const shiftCashOut = shift.transactions
-        .filter((transaction) => transaction.transactionType === "cash_out")
-        .reduce((total, transaction) => total + amount(transaction.amount), 0);
-      const shiftExpected = amount(shift.expectedCash) || amount(shift.openingCash) + cashSalesLak - shiftCashOut;
-      const counted = amount(shift.closingCash);
-      return {
-        cashierId: shift.cashierId,
-        closedAt: shift.closedAt?.toISOString() ?? null,
-        countedCashLak: counted,
-        differenceLak: amount(shift.cashDifference) || counted - shiftExpected,
-        expectedCashLak: shiftExpected,
-        openedAt: shift.openedAt.toISOString(),
-        openingCashLak: amount(shift.openingCash),
-        status: shift.closedAt ? "closed" : "open",
-      };
-    });
+    const shiftSummaries = await Promise.all(
+      todayShifts.map(async (shift) => {
+        const shiftEnd = shift.closedAt ?? new Date();
+        const totals = await computeCashSessionTotalsForShift(shift, shiftEnd);
+        const counted = amount(shift.closingCash);
+        const expectedCashLak = amount(shift.expectedCash) || totals.expectedCashLak;
+        return {
+          cashierId: shift.cashierId,
+          closedAt: shift.closedAt?.toISOString() ?? null,
+          countedCashLak: counted,
+          differenceLak: amount(shift.cashDifference) || counted - expectedCashLak,
+          expectedCashLak,
+          openedAt: shift.openedAt.toISOString(),
+          openingCashLak: amount(shift.openingCash),
+          status: shift.closedAt ? "closed" : "open",
+        } satisfies ShiftSummary;
+      }),
+    );
     const alerts: DashboardAlert[] = [
       deadStockProducts > 0
         ? {

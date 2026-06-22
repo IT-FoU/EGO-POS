@@ -10,6 +10,11 @@ import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { formatLak } from "@/features/pos/format";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
+import {
+  closeCashSessionRequest,
+  fetchCurrentCashSession,
+  openCashSessionRequest,
+} from "@/features/pos/cash-session-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
 import {
@@ -131,9 +136,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
     const [selectedHeldSaleId, setSelectedHeldSaleId] = useState("");
     const [selectedStaffName, setSelectedStaffName] = useState(cashierName || "Current User");
-    const [staffStatus, setStaffStatus] = useState("Not Started");
+    const [activeCashSession, setActiveCashSession] = useState<PosCashSessionContext>(cashSession);
+    const [staffStatus, setStaffStatus] = useState(cashSession.status === "open" ? "Working" : "Not Started");
     const [staffControlExpanded, setStaffControlExpanded] = useState(true);
-    const [workStartedAt, setWorkStartedAt] = useState<Date | null>(null);
+    const [workStartedAt, setWorkStartedAt] = useState<Date | null>(
+        cashSession.status === "open" && cashSession.openedAt ? new Date(cashSession.openedAt) : null,
+    );
     const [workEndedAt, setWorkEndedAt] = useState<Date | null>(null);
     const [otStartedAt, setOtStartedAt] = useState<Date | null>(null);
     const [otEndedAt, setOtEndedAt] = useState<Date | null>(null);
@@ -167,6 +175,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setBillNo(nextSaleNo);
     }, [nextSaleNo]);
+    useEffect(() => {
+        setActiveCashSession(cashSession);
+        if (cashSession.status === "open") {
+            setStaffStatus("Working");
+            setWorkStartedAt(cashSession.openedAt ? new Date(cashSession.openedAt) : null);
+            setWorkEndedAt(null);
+            setClosingSummaryVisible(false);
+        }
+    }, [cashSession]);
     useEffect(() => {
         setVisibleProducts(products);
     }, [products]);
@@ -264,10 +281,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     : cashAmount + qrAmount + transferAmount + cardAmount;
     const changeAmount = Math.max(paidAmount - totalAmount, 0);
     const dueAmount = Math.max(totalAmount - paidAmount, 0);
-    const cashSales = cashAmount;
-    const qrTransferSales = qrAmount + transferAmount;
-    const expectedCash = openingCashTotal + cashSales;
-    const cashDifference = actualClosingCash - expectedCash;
+    const cashSales = activeCashSession.status === "open" ? activeCashSession.cashSalesLak : 0;
+    const qrTransferSales = activeCashSession.status === "open" ? activeCashSession.nonCashSalesLak : qrAmount + transferAmount;
+    const effectiveOpeningCash = activeCashSession.status === "open" ? activeCashSession.openingCashLak : openingCashTotal;
+    const expectedCash = activeCashSession.status === "open" ? activeCashSession.expectedCashLak : openingCashTotal;
+    const cashDifference = actualClosingCash - (activeCashSession.status === "open" ? activeCashSession.expectedCashLak : expectedCash);
     const appliedPromotions = useMemo(() => {
         const labels = cartItems
             .map((item) => item.pricingNote)
@@ -658,6 +676,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setCustomerDisplayMode("thank_you");
             clearSale();
             setBillNo(getFollowingPosSaleNo(assignedSaleNo, receiptSettings.receiptPrefix));
+            try {
+                const session = await fetchCurrentCashSession();
+                setActiveCashSession(session);
+            } catch {
+                // Session totals refresh is best-effort after sale completion.
+            }
             router.refresh();
             const displaySettings = readCustomerDisplaySettingsFromStorage();
             window.setTimeout(() => {
@@ -885,18 +909,55 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         if (!enforcePosAction("cash_in", { amountLak: openingCashTotal, newValue: `${formatLak(openingCashTotal)} LAK` })) {
             return;
         }
-        setWorkStartedAt(new Date());
-        setWorkEndedAt(null);
-        setStaffStatus("Working");
-        setClosingSummaryVisible(false);
+        if (demoMode) {
+            setWorkStartedAt(new Date());
+            setWorkEndedAt(null);
+            setStaffStatus("Working");
+            setClosingSummaryVisible(false);
+            return;
+        }
+        startTransition(async () => {
+            try {
+                const session = await openCashSessionRequest(openingCashTotal);
+                setActiveCashSession(session);
+                setWorkStartedAt(session.openedAt ? new Date(session.openedAt) : new Date());
+                setWorkEndedAt(null);
+                setStaffStatus("Working");
+                setClosingSummaryVisible(false);
+                setMessage("Cash session opened.");
+                router.refresh();
+            } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Failed to open cash session.");
+            }
+        });
     }
     function recordEndWork() {
         if (!enforcePosAction("cash_out", { amountLak: actualClosingCash, newValue: `${formatLak(actualClosingCash)} LAK` })) {
             return;
         }
-        setWorkEndedAt(new Date());
-        setStaffStatus("Closed");
-        setClosingSummaryVisible(true);
+        if (!activeCashSession.sessionId) {
+            setMessage("No open cash session to close.");
+            return;
+        }
+        if (demoMode) {
+            setWorkEndedAt(new Date());
+            setStaffStatus("Closed");
+            setClosingSummaryVisible(true);
+            return;
+        }
+        startTransition(async () => {
+            try {
+                const session = await closeCashSessionRequest(activeCashSession.sessionId!, actualClosingCash);
+                setActiveCashSession(session);
+                setWorkEndedAt(new Date());
+                setStaffStatus("Closed");
+                setClosingSummaryVisible(true);
+                setMessage(`Shift closed. Variance ${formatLak(session.expectedCashLak - actualClosingCash)} LAK.`);
+                router.refresh();
+            } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Failed to close cash session.");
+            }
+        });
     }
     function recordStartOt() {
         setOtStartedAt(new Date());
@@ -1209,7 +1270,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
           {demoMode && devDebug ? (<PosPermissionPanel auditEntries={auditEntries} pendingApprovals={pendingApprovals} policy={posPermissionPolicy} onApprove={(requestId) => resolvePendingApproval(requestId, "approved")} onReject={(requestId) => resolvePendingApproval(requestId, "rejected")} onTestAction={runControlledPosAction}/>) : null}
 
-          <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={openingCashTotal} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
+          <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
         </aside>
       </section>
 

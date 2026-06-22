@@ -58,7 +58,20 @@ const ownerTenant = { branchId: BRANCH_ID, companyId: COMPANY_ID, userId: ownerU
 const managerTenant = { branchId: BRANCH_ID, companyId: COMPANY_ID, userId: managerUser.id, warehouseId: WAREHOUSE_ID };
 const cashierTenant = { branchId: BRANCH_ID, companyId: COMPANY_ID, userId: cashierUser.id, warehouseId: WAREHOUSE_ID };
 
-// Test product with stock and a 10,000 base price.
+const { getOpenCashSession, openCashSession } = await import("../features/cash-sessions/prisma-repository");
+async function ensureCashSessionFor(tenant: typeof ownerTenant) {
+  if (await getOpenCashSession(tenant)) return;
+  await openCashSession({ openingCashLak: 0 }, tenant);
+}
+for (const userId of [ownerUser.id, managerUser.id, cashierUser.id]) {
+  await prisma.cashSession.updateMany({
+    data: { cashDifference: 0, closedAt: new Date(), closingCash: 0, expectedCash: 0 },
+    where: { cashierId: userId, closedAt: null, companyId: COMPANY_ID },
+  });
+}
+await ensureCashSessionFor(ownerTenant);
+await ensureCashSessionFor(managerTenant);
+await ensureCashSessionFor(cashierTenant);
 const PRODUCT = "b83-test-product";
 const UNIT = "b83-test-unit";
 await prisma.product.upsert({

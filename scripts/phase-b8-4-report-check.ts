@@ -78,7 +78,10 @@ const dbPayables = await prisma.supplierPayable.groupBy({
 });
 const dbInventory = await getPrismaInventorySnapshot(ownerTenant);
 const expectedCogs = dbCogsRows.reduce((total, row) => total + Number(row.costPrice) * Number(row.quantity), 0);
-const expectedInventoryValue = dbInventory.items.reduce((total, item) => total + (item.inventoryValueLak ?? 0), 0);
+const expectedInventoryValue = dbInventory.items.reduce(
+  (total: number, item: { inventoryValueLak?: number }) => total + (item.inventoryValueLak ?? 0),
+  0,
+);
 const expectedPayableTotal = dbPayables.reduce((total, row) => total + Number(row._sum.balanceAmount ?? 0), 0);
 
 const allTimeSnapshot = await getPrismaReportsSnapshot(ownerTenant, { datePreset: "all" });

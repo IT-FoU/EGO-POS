@@ -21,8 +21,8 @@ Engineering baseline is green: `typecheck` PASS, `build` PASS, B7 harnesses 64/6
 | **Membership Levels** | Prisma only | manual assignment only | Yes | per action | **Partial** (no spend-based tiering) |
 | **Promotions** | Prisma only | usage persisted on sale | Yes (sale) | per action | **Partial** (POS totals omit promos; combo unimplemented; analytics stubbed) |
 | **Reports** | Prisma only | n/a (read) | n/a | `reports.view` (B8-3) | **Solid** (B8-4) |
-| **Dashboard** | Prisma | n/a | n/a | session | **Mostly real** (shift cash bug, error-masking) |
-| **POS** | Prisma snapshot | sale fully persisted + audited | Yes (sale) | only `pos.sell` server-side | **Core solid, controls weak** |
+| **Dashboard** | Prisma | n/a | n/a | session | **Mostly real** (per-shift cash fixed B8-5; error-masking remains) |
+| **POS** | Prisma snapshot | sale + cash session persisted + audited | Yes (sale, cash session) | `pos.sell` + cash session manage | **Core solid** (checkout B8-1; session B8-5) |
 | **Settings** | Prisma (+demo fallback when no company) | `withTenantTransaction` | Yes | `settingsManage` | **Mostly solid** (logo/display localStorage) |
 | **Permissions** | Prisma (`getUserPermissionKeys`) | `withTenantTransaction` | Yes | per action | **Solid for admin CRUD** |
 | **Approval Flows** | rules in DB; requests not created | decide-only | partial | `approvalsManage` | **Half-built** (no request creation; POS approvals localStorage) |
@@ -86,7 +86,7 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 - Permissions remain server-enforced via B8-3 `runRead` + `reports.view`.
 - Verified by `scripts/phase-b8-4-report-check.ts` (**13/13 PASS**). B8-3 (42/42), B8-2 (29/29), B8-1 (29/29), B7-1..B7-4 regressions still pass.
 
-**Remaining (NOT B8-4):** Day/hour detail modals and business-health sub-bars still use illustrative UI copy (not financial data); AI insights panel is heuristic text; report sub-pages do not yet expose filter query params; dashboard shift-cash bug (G8) unchanged.
+**Remaining (NOT B8-4):** Day/hour detail modals and business-health sub-bars still use illustrative UI copy (not financial data); AI insights panel is heuristic text; report sub-pages do not yet expose filter query params; dashboard shift-cash fixed in B8-5.
 
 ### G5 — Loyalty redemption & spend-based tiers **(MEDIUM)**
 - Earn is persisted on sale; **redeem path exists server-side but POS UI never sends `redeemPoints`**. No manual points adjust/redeem action.
@@ -99,11 +99,21 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 - `updatePrismaPromotion` updates scalars only — does **not** replace product/category/membership targets.
 - Analytics: `totalSalesLak` hardcoded 0; `PromotionUsage` has no read/report surface.
 
-### G7 — Audit-trail gaps **(MEDIUM)**
-- No audit log for: held bills, cash session start/end (not persisted at all), company logo, customer display settings, POS permission actions. Spec requires cash reconciliation accuracy → cash session persistence is required.
+### G7 — Cash session persistence + audit **(MEDIUM)** — **DONE (B8-5)**
+
+**B8-5 status (cash session hardened):**
+- `CashSession` / `CashTransaction` are the source of truth in PostgreSQL (no localStorage for shift state).
+- Server calculator: expected cash = opening + cash sales + cash in − cash out − refunds − void cash; variance = counted − expected.
+- API routes: open, close, cash-in, cash-out, current — all permission-gated (`pos.cash_session.manage` / view aliases).
+- POS `StaffControl` start/end work wired to server; sale completion requires open session (`assertOpenCashSessionForSale`).
+- Dashboard shift summaries use per-session `computeCashSessionTotalsForShift` (fixes company-wide cash KPI bug).
+- Audit via `withTenantTransaction` on all session mutations; owner-only mutation scoping (cashier manages own session).
+- Verified by `scripts/phase-b8-5-cash-session-check.ts` (**13/13 PASS**). B8-4 (13/13), B8-3 (42/42), B8-2 (29/29), B8-1 (29/29), B7-1..B7-4 regressions still pass.
+
+**Remaining (NOT B8-5):** refund/void POS flows not fully wired; `CashierShiftPanel` legacy component unused; demo mode local shift UI; manager session list/detail API; dedicated cash reconciliation report page.
 
 ### G8 — Dashboard correctness **(LOW/MEDIUM)**
-- Shift expected-cash uses period-wide cash for each shift (wrong for multi-shift days).
+- ~~Shift expected-cash uses period-wide cash for each shift (wrong for multi-shift days).~~ **Fixed in B8-5** for `CashSession`-backed shifts.
 - `emptySnapshot` fallback silently returns zeros on Prisma error (masks failures).
 - Optional branch filter: company-wide sales when session lacks `activeBranchId`.
 
@@ -129,7 +139,7 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 | P0 | **G2** Approval request creation + server enforcement | Critical | Manager/Owner approval rules are a hard spec requirement |
 | P1 | **G3** POS server-side granular permissions | High | Cashier cannot discount/refund — must be server-enforced |
 | P1 | **G4** Reports accuracy (5 financial reports) + remove mock UI | High | "Reports are accurate" is a pilot gate |
-| P2 | **G7** Cash session persistence + audit | Medium | Cash reconciliation is a required accurate report |
+| P2 | **G7** Cash session persistence + audit | Medium | **DONE (B8-5)** |
 | P2 | **G5** Loyalty redeem + spend-based tiers | Medium | Membership earn/redeem/tier in spec |
 | P2 | **G6** Promotions completeness (combo, targets, eligibility) | Medium | 5 promo types required |
 | P3 | **G8/G9** Dashboard + inventory analytics correctness | Low/Med | Informational may be approximate |
@@ -186,7 +196,7 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 2. Over-threshold discount / refund / stock adjustment creates a DB `Approval`, blocks until decided, and on approval executes the action; POS approvals + audit persisted to Prisma (G2).
 3. Server rejects POS discount/void/refund/cash actions without the matching permission (G3).
 4. The 5 financial reports (Sales, Profit, Inventory valuation, Supplier payable, Cash reconciliation) compute from live Prisma with consistent AP source and no mock rows; report filters re-query (G4).
-5. Cash sessions persisted with audit; reconciliation accurate (G7).
+5. Cash sessions persisted with audit; reconciliation accurate (G7). **DONE (B8-5)**
 6. Loyalty redeem works end-to-end; tiers update on spend (G5).
 7. `typecheck`, `build`, all B7 harnesses, and new B8 harnesses PASS; no B7 regression.
 

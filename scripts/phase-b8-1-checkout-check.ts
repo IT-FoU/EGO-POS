@@ -65,6 +65,15 @@ const tenant = {
   warehouseId: WAREHOUSE_ID,
 };
 
+const { getOpenCashSession, openCashSession } = await import("../features/cash-sessions/prisma-repository");
+await prisma.cashSession.updateMany({
+  data: { cashDifference: 0, closedAt: new Date(), closingCash: 0, expectedCash: 0 },
+  where: { cashierId: user.id, closedAt: null, companyId: COMPANY_ID },
+});
+if (!(await getOpenCashSession(tenant))) {
+  await openCashSession({ openingCashLak: 0 }, tenant);
+}
+
 // Capture original company settings so the tax test can toggle VAT then restore.
 const originalSettings = await prisma.companySetting.findUnique({ where: { companyId: COMPANY_ID } });
 
