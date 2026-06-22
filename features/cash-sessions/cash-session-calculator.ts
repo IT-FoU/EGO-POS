@@ -73,3 +73,17 @@ export function buildCashSessionTotals(input: {
     expectedCashLak: calculateExpectedCash(input),
   };
 }
+
+export function computeCashRefundLak(
+  payments: Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }>,
+  saleTotalLak: number,
+  refundAmountLak: number,
+) {
+  const saleTotal = amount(saleTotalLak);
+  if (saleTotal <= 0) {
+    return 0;
+  }
+  const cashPortion = summarizeSalePayments(payments).cashSalesLak;
+  const ratio = Math.min(amount(refundAmountLak) / saleTotal, 1);
+  return Math.round(cashPortion * ratio);
+}

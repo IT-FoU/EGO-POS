@@ -15,6 +15,13 @@ import {
   fetchCurrentCashSession,
   openCashSessionRequest,
 } from "@/features/pos/cash-session-client";
+import {
+  fetchRecentSales,
+  fetchSaleReceipt,
+  refundSaleRequest,
+  reprintSaleReceipt,
+  voidSaleRequest,
+} from "@/features/pos/post-sale-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
 import {
@@ -76,6 +83,7 @@ type DemoSaleRecord = {
     deleteReason?: string;
     discountAmount: number;
     discountPercent: number;
+    id?: string;
     items: PosCartItem[];
     note?: string;
     paidAmount: number;
@@ -194,21 +202,21 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
         setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
-        setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+        void refreshRecentSalesFromServer();
         const storedSettings = demoSettingsRepository.readSettings<{ receiptPrintMode?: ReceiptPrintMode }>({ receiptPrintMode: "ask_every_time" });
         setReceiptPrintMode(storedSettings.receiptPrintMode ?? "ask_every_time");
     }, []);
     useEffect(() => {
-        function refreshRecentSales() {
-            setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+        function refreshOnFocus() {
+            void refreshRecentSalesFromServer();
             const storedSettings = demoSettingsRepository.readSettings<{ receiptPrintMode?: ReceiptPrintMode }>({ receiptPrintMode: "ask_every_time" });
             setReceiptPrintMode(storedSettings.receiptPrintMode ?? "ask_every_time");
         }
-        window.addEventListener("storage", refreshRecentSales);
-        window.addEventListener("focus", refreshRecentSales);
+        window.addEventListener("storage", refreshOnFocus);
+        window.addEventListener("focus", refreshOnFocus);
         return () => {
-            window.removeEventListener("storage", refreshRecentSales);
-            window.removeEventListener("focus", refreshRecentSales);
+            window.removeEventListener("storage", refreshOnFocus);
+            window.removeEventListener("focus", refreshOnFocus);
         };
     }, []);
     useEffect(() => {
@@ -320,8 +328,20 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 .some((value) => String(value).toLowerCase().includes(query));
         });
     }, [recentSales, recentSalesCustomEnd, recentSalesCustomStart, recentSalesFilter, recentSalesSearch, recentSalesShowDeleted]);
+    async function refreshRecentSalesFromServer() {
+        if (demoMode) {
+            setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+            return;
+        }
+        try {
+            const sales = await fetchRecentSales();
+            setRecentSales(sales as DemoSaleRecord[]);
+        } catch {
+            // Keep the current list when the server read fails.
+        }
+    }
     function refreshRecentSales() {
-        setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+        void refreshRecentSalesFromServer();
     }
     function recordPosAudit(action: PosPermissionAction, result: PosAuditEntry["result"], approvalStatus: PosAuditEntry["approvalStatus"], details: string) {
         const entry: PosAuditEntry = {
@@ -682,6 +702,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             } catch {
                 // Session totals refresh is best-effort after sale completion.
             }
+            void refreshRecentSalesFromServer();
             router.refresh();
             const displaySettings = readCustomerDisplaySettingsFromStorage();
             window.setTimeout(() => {
@@ -784,13 +805,33 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         if (!enforcePosAction(autoPrint ? "reprint_receipt" : "view_receipt")) {
             return;
         }
-        const receipt = receiptFromSale(sale);
-        setLastReceipt(receipt);
-        setReceiptAutoPrint(autoPrint);
-        setReceiptOpen(true);
-        if (autoPrint) {
-            appendSaleTimeline(sale.saleNo, "Reprinted");
-        }
+        void (async () => {
+            let receipt: ReceiptSnapshot;
+            if (!demoMode && sale.id) {
+                try {
+                    if (autoPrint) {
+                        await reprintSaleReceipt(sale.id);
+                    }
+                    const loaded = await fetchSaleReceipt(sale.id);
+                    receipt = {
+                        ...loaded,
+                        branchName: loaded.branchName || branchName,
+                        cartItems: loaded.cartItems as PosCartItem[],
+                    };
+                } catch (error) {
+                    setMessage(error instanceof Error ? error.message : "Receipt load failed.");
+                    return;
+                }
+            } else {
+                receipt = receiptFromSale(sale);
+                if (autoPrint) {
+                    appendSaleTimeline(sale.saleNo, "Reprinted");
+                }
+            }
+            setLastReceipt(receipt);
+            setReceiptAutoPrint(autoPrint);
+            setReceiptOpen(true);
+        })();
     }
     function appendSaleTimeline(saleNo: string, label: string) {
         const now = new Date().toISOString();
@@ -813,12 +854,46 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         if (!enforcePosAction("refund_bill", { amountLak: sale.totalAmount })) {
             return;
         }
+        if (!demoMode && sale.id) {
+            void (async () => {
+                try {
+                    const result = await refundSaleRequest(sale.id!);
+                    if (result.status === "pending_approval") {
+                        setMessage(`Refund pending approval for ${sale.saleNo}.`);
+                        return;
+                    }
+                    await refreshRecentSalesFromServer();
+                    recordPosAudit("refund_bill", "allowed", "not_required", `${sale.saleNo} refunded.`);
+                    setMessage(`${sale.saleNo} refunded.`);
+                } catch (error) {
+                    setMessage(error instanceof Error ? error.message : "Refund failed.");
+                }
+            })();
+            return;
+        }
         updateRecentSaleStatus(sale, "refunded", "Refunded");
         recordPosAudit("refund_bill", "allowed", "not_required", `${sale.saleNo} marked refunded.`);
         setMessage(`${sale.saleNo} marked refunded.`);
     }
     function voidSale(sale: DemoSaleRecord) {
         if (!enforcePosAction("void_bill", { amountLak: sale.totalAmount })) {
+            return;
+        }
+        if (!demoMode && sale.id) {
+            void (async () => {
+                try {
+                    const result = await voidSaleRequest(sale.id!);
+                    if (result.status === "pending_approval") {
+                        setMessage(`Void pending approval for ${sale.saleNo}.`);
+                        return;
+                    }
+                    await refreshRecentSalesFromServer();
+                    recordPosAudit("void_bill", "allowed", "not_required", `${sale.saleNo} voided.`);
+                    setMessage(`${sale.saleNo} voided. Stock restored.`);
+                } catch (error) {
+                    setMessage(error instanceof Error ? error.message : "Void failed.");
+                }
+            })();
             return;
         }
         const restoredByProduct = sale.items.reduce<Record<string, number>>((totals, item) => {

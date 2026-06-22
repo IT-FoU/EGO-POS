@@ -18,13 +18,13 @@
 
 | # | Blocker | Severity | Impact | Fix order |
 | --- | --- | --- | --- | --- |
-| 1 | **Sales history (Recent Sales) is localStorage-only** — DB sales never appear; device-local, lost on cache clear. | **Critical** | POS, RPT, CASH | 1 |
-| 2 | **Refund is localStorage status-only** — no DB reversal of money or stock; `Refund`/`RefundItem` unused. | **Critical** | CASH, INV, RPT | 2 |
-| 3 | **Void is localStorage-only** — DB sale stays "completed"; stock restored only in browser. | **Critical** | CASH, INV, RPT | 2 |
-| 4 | **Receipts persisted only in localStorage** — View/Reprint not backed by DB; no durable record. | **Critical** | POS, CASH | 3 |
-| 5 | **POS override approvals/audit are localStorage** (void/refund/over-limit) — B8-2 DB engine not wired; bypassable, non-durable audit. | **Critical** | SEC, CASH | 4 |
-| 6 | **No end-of-day close / cash reconciliation** — Close Day button cosmetic; `CashSession` read-only. | **Critical** | CASH | 5 |
-| 7 | **No cash-in / cash-out persistence** — drawer movements client-only; `CashTransaction` unused. | High | CASH | 5 |
+| 1 | ~~**Sales history (Recent Sales) is localStorage-only**~~ — **RESOLVED (B8-6):** DB-backed via `GET /api/pos/sales`. | ~~**Critical**~~ **Closed** | POS, RPT, CASH | — |
+| 2 | ~~**Refund is localStorage status-only**~~ — **RESOLVED (B8-6):** `Refund`/`RefundItem`, stock, loyalty, cash session. | ~~**Critical**~~ **Closed** | CASH, INV, RPT | — |
+| 3 | ~~**Void is localStorage-only**~~ — **RESOLVED (B8-6):** `saleStatus: cancelled`, stock restore, cash session. | ~~**Critical**~~ **Closed** | CASH, INV, RPT | — |
+| 4 | ~~**Receipts persisted only in localStorage**~~ — **RESOLVED (B8-6):** receipt from DB; reprint audited. | ~~**Critical**~~ **Closed** | POS, CASH | — |
+| 5 | **POS override approvals/audit are localStorage** (void/refund/over-limit) — B8-2 engine wired server-side (B8-6 executors); POS UI still uses localStorage panel in demo. | **High** | SEC, CASH | 4 |
+| 6 | ~~**No end-of-day close / cash reconciliation**~~ — **RESOLVED (B8-5):** `CashSession` open/close/cash-in/out persisted. | ~~**Critical**~~ **Closed** | CASH | — |
+| 7 | ~~**No cash-in / cash-out persistence**~~ — **RESOLVED (B8-5).** | ~~High~~ **Closed** | CASH | — |
 | 8 | **Hold/Resume bill is client state only** — `HoldBill*` models unused; bills lost on refresh. | High | POS | 6 |
 | 9 | **Reports "Report Center" tab shows mock data** (`mock-full-data.ts`) — risk of decisions on fake figures. | High | RPT | 7 |
 | 10 | **Report date-range filters are UI-only / all-time aggregates** — cannot trust filtered totals. | High | RPT | 7 |
@@ -39,7 +39,9 @@
 | 19 | **Dashboard "Status: OPEN" hardcoded** — not tied to a real shift/session state. | Medium | CASH | 5 |
 | 20 | **Repo hygiene / legacy naming** — IGO→EGO rename incomplete (`IGO_DEMO_MODE`, `igo-admin`); artifact bloat (now cleaned). | Low | DEPLOY | 11 |
 
-**Single-store critical path (fix order):** 1 → 2/3 → 4 → 5 → 6 (sales history & lifecycle persistence, then refund/void, receipts, approvals wiring, then cash/close-day). Verify #13 (`IGO_DEMO_MODE=false`) before any go-live.
+**Single-store critical path (fix order):** ~~1 → 2/3 → 4 → 5 → 6~~ **B8-5/B8-6 closed items 1–4, 6–7.** Remaining: POS approval UI wiring (#5), hold bills (#8), reports polish (#9–10), settings/print (#11–12).
+
+> **Updated 2026-06-22:** B8-5 (cash session) and B8-6 (post-sale) resolve production blockers #1–4, #6–7 for single-store GO BOX usage.
 
 ---
 

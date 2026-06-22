@@ -22,7 +22,7 @@ Engineering baseline is green: `typecheck` PASS, `build` PASS, B7 harnesses 64/6
 | **Promotions** | Prisma only | usage persisted on sale | Yes (sale) | per action | **Partial** (POS totals omit promos; combo unimplemented; analytics stubbed) |
 | **Reports** | Prisma only | n/a (read) | n/a | `reports.view` (B8-3) | **Solid** (B8-4) |
 | **Dashboard** | Prisma | n/a | n/a | session | **Mostly real** (per-shift cash fixed B8-5; error-masking remains) |
-| **POS** | Prisma snapshot | sale + cash session persisted + audited | Yes (sale, cash session) | `pos.sell` + cash session manage | **Core solid** (checkout B8-1; session B8-5) |
+| **POS** | Prisma snapshot | sale + cash session + refund/void persisted + audited | Yes (sale, cash session, post-sale) | `pos.sell` + granular post-sale actions | **Core solid** (checkout B8-1; session B8-5; post-sale B8-6) |
 | **Settings** | Prisma (+demo fallback when no company) | `withTenantTransaction` | Yes | `settingsManage` | **Mostly solid** (logo/display localStorage) |
 | **Permissions** | Prisma (`getUserPermissionKeys`) | `withTenantTransaction` | Yes | per action | **Solid for admin CRUD** |
 | **Approval Flows** | rules in DB; requests not created | decide-only | partial | `approvalsManage` | **Half-built** (no request creation; POS approvals localStorage) |
@@ -110,7 +110,19 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 - Audit via `withTenantTransaction` on all session mutations; owner-only mutation scoping (cashier manages own session).
 - Verified by `scripts/phase-b8-5-cash-session-check.ts` (**13/13 PASS**). B8-4 (13/13), B8-3 (42/42), B8-2 (29/29), B8-1 (29/29), B7-1..B7-4 regressions still pass.
 
-**Remaining (NOT B8-5):** refund/void POS flows not fully wired; `CashierShiftPanel` legacy component unused; demo mode local shift UI; manager session list/detail API; dedicated cash reconciliation report page.
+**Remaining (NOT B8-5):** ~~refund/void POS flows not fully wired~~ **DONE (B8-6)**; `CashierShiftPanel` legacy component unused; demo mode local shift UI; manager session list/detail API; dedicated cash reconciliation report page.
+
+### G13 — Post-sale refund/void/receipt **(CRITICAL)** — **DONE (B8-6)**
+
+**B8-6 status (post-sale hardened):**
+- Recent Sales reads from PostgreSQL via `GET /api/pos/sales` (no localStorage in production).
+- Receipt view/reprint from `Sale` + items + payments; reprint writes audit log.
+- Full refund: `Refund`/`RefundItem`, stock restore, loyalty/promotion reversal, `saleStatus: refunded`, cash-session impact (cash portion only).
+- Void: `saleStatus: cancelled`, stock restore, loyalty/promotion reversal, cash-session impact via completed-sale removal.
+- Server permissions via `assertPosActionAllowed`; approval executors for refund/void when policy requires.
+- Verified by `scripts/phase-b8-6-post-sale-check.ts` (**18/18 PASS**). B8-5..B8-1 and B7 regressions still pass.
+
+**Remaining (NOT B8-6):** partial refund UI; manager approval UX wiring in POS; soft-delete/edit sale server paths; demo localStorage audit panel.
 
 ### G8 — Dashboard correctness **(LOW/MEDIUM)**
 - ~~Shift expected-cash uses period-wide cash for each shift (wrong for multi-shift days).~~ **Fixed in B8-5** for `CashSession`-backed shifts.
@@ -140,6 +152,7 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 | P1 | **G3** POS server-side granular permissions | High | Cashier cannot discount/refund — must be server-enforced |
 | P1 | **G4** Reports accuracy (5 financial reports) + remove mock UI | High | "Reports are accurate" is a pilot gate |
 | P2 | **G7** Cash session persistence + audit | Medium | **DONE (B8-5)** |
+| P2 | **G13** Post-sale refund/void/receipt | Critical | **DONE (B8-6)** |
 | P2 | **G5** Loyalty redeem + spend-based tiers | Medium | Membership earn/redeem/tier in spec |
 | P2 | **G6** Promotions completeness (combo, targets, eligibility) | Medium | 5 promo types required |
 | P3 | **G8/G9** Dashboard + inventory analytics correctness | Low/Med | Informational may be approximate |

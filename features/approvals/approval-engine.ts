@@ -219,16 +219,55 @@ export async function decideApprovalRequest(input: DecideApprovalRequestInput, t
 type ApprovalExecutor = (tx: any, approval: Record<string, any>, tenant: TenantContext) => Promise<{ detail?: string; executed: boolean }>;
 
 const EXECUTORS: Partial<Record<ApprovalRuleKey, ApprovalExecutor>> = {
+  refund: executePostSaleApproval,
   stock_adjustment: executeStockAdjustment,
 };
 
 async function executeApprovedAction(tx: any, approval: Record<string, any>, tenant: TenantContext) {
   const requestType = approval.requestType ? String(approval.requestType) : "";
+  const action = approval.action ? String(approval.action) : "";
+  if (requestType === "refund" && (action === "void_sale" || action === "refund_sale")) {
+    return executePostSaleApproval(tx, approval, tenant);
+  }
   const executor = EXECUTORS[requestType as ApprovalRuleKey];
   if (!executor) {
     return { detail: `No auto-execution for request type "${requestType}".`, executed: false };
   }
   return executor(tx, approval, tenant);
+}
+
+async function executePostSaleApproval(tx: any, approval: Record<string, any>, tenant: TenantContext) {
+  const { refundSaleCore, voidSaleCore } = await import("@/features/pos/post-sale-repository");
+  const payload = (approval.newValue ?? {}) as Record<string, any>;
+  const saleId = String(payload.saleId ?? approval.referenceId ?? "").trim();
+  if (!saleId) {
+    throw new Error("Post-sale approval is missing sale id.");
+  }
+
+  const sale = await tx.sale.findFirst({
+    include: {
+      customer: { select: { fullName: true, phone: true } },
+      items: { include: { product: true, unit: true } },
+      payments: true,
+      refunds: { select: { id: true, totalAmount: true } },
+    },
+    where: { companyId: tenant.companyId, id: saleId },
+  });
+  if (!sale) {
+    throw new Error("Sale was not found for approved post-sale action.");
+  }
+
+  const action = String(approval.action ?? "");
+  if (action === "void_sale") {
+    await voidSaleCore(tx, tenant, sale, payload.reason ? String(payload.reason) : null, tenant.userId);
+    return { detail: `Voided sale ${sale.saleNo}.`, executed: true };
+  }
+  if (action === "refund_sale") {
+    await refundSaleCore(tx, tenant, sale, payload.reason ? String(payload.reason) : null, tenant.userId);
+    return { detail: `Refunded sale ${sale.saleNo}.`, executed: true };
+  }
+
+  return { detail: `Unsupported post-sale approval action "${action}".`, executed: false };
 }
 
 async function executeStockAdjustment(tx: any, approval: Record<string, any>, tenant: TenantContext) {

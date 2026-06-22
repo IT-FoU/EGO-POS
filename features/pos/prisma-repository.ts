@@ -474,6 +474,7 @@ export async function completePrismaSale(input: {
           },
           paymentStatus: "paid",
           profitAmount: saleItems.reduce((total, item) => total + item.profitAmount, 0) - manualDiscountAmount - loyaltyRedemption.discountAmountLak,
+          receiptNo: `RCPT-${saleNo}`,
           saleNo,
           saleStatus: "completed",
           subtotal,

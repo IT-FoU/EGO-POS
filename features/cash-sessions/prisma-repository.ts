@@ -3,6 +3,7 @@ import {
   buildCashSessionTotals,
   calculateExpectedCash,
   calculateVariance,
+  computeCashRefundLak,
   sumCashTransactions,
   summarizeSalePayments,
 } from "@/features/cash-sessions/cash-session-calculator";
@@ -63,7 +64,7 @@ async function loadSessionTotals(
     createdBy: session.cashierId,
   };
 
-  const [payments, refunds, cancelledSales] = await Promise.all([
+  const [payments, refundRows] = await Promise.all([
     tx.salePayment.findMany({
       select: { amount: true, changeAmount: true, paymentMethod: true },
       where: {
@@ -73,19 +74,12 @@ async function loadSessionTotals(
         },
       },
     }),
-    tx.refund.aggregate({
-      _sum: { totalAmount: true },
+    tx.refund.findMany({
+      include: { sale: { include: { payments: true } } },
       where: {
         companyId: session.companyId,
         createdAt: { gte: openedAt, lte: endAt },
         createdBy: session.cashierId,
-      },
-    }),
-    tx.sale.findMany({
-      include: { payments: true },
-      where: {
-        ...saleWindow,
-        saleStatus: "cancelled",
       },
     }),
   ]);
@@ -93,13 +87,18 @@ async function loadSessionTotals(
   const paymentTotals = summarizeSalePayments(payments);
   const cashInLak = sumCashTransactions(session.transactions ?? [], "cash_in");
   const cashOutLak = sumCashTransactions(session.transactions ?? [], "cash_out");
-  const refundLak = amount(refunds._sum.totalAmount);
-  const voidCashLak = Math.round(
-    cancelledSales.reduce((total: number, sale: Record<string, any>) => {
-      const cashPayments = summarizeSalePayments(sale.payments ?? []);
-      return total + cashPayments.cashSalesLak;
+  const refundLak = Math.round(
+    refundRows.reduce((total: number, refund: Record<string, any>) => {
+      const sale = refund.sale ?? {};
+      // Full refunds move the sale out of completed cash sales; only partial refunds
+      // on still-completed sales should reduce expected drawer cash here.
+      if (String(sale.saleStatus) !== "completed") {
+        return total;
+      }
+      return total + computeCashRefundLak(sale.payments ?? [], amount(sale.totalAmount), amount(refund.totalAmount));
     }, 0),
   );
+  const voidCashLak = 0;
 
   return buildCashSessionTotals({
     cashInLak,
