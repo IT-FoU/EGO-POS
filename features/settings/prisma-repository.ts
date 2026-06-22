@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
   loyaltyPointValueLak: 1000,
   loyaltySpendPerPointLak: 10000,
   receiptPrefix: "INV",
+  receiptPrintMode: "ask_every_time" as const,
   roundingMethod: "nearest",
   showLogoOnReceipt: true,
   showTaxOnReceipt: true,
@@ -55,6 +56,9 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
     profilePhone: optionalString(input.profilePhone),
     receiptFooter: optionalString(input.receiptFooter),
     receiptHeader: optionalString(input.receiptHeader),
+    receiptPrintMode: ["ask_every_time", "auto_print", "no_auto_print"].includes(String(input.receiptPrintMode))
+      ? (String(input.receiptPrintMode) as SettingsFormData["receiptPrintMode"])
+      : DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: stringValue(input.receiptPrefix, DEFAULT_SETTINGS.receiptPrefix),
     roundingMethod: ["down", "nearest", "up"].includes(String(input.roundingMethod)) ? String(input.roundingMethod) : DEFAULT_SETTINGS.roundingMethod,
     showLogoOnReceipt: Boolean(input.showLogoOnReceipt),
@@ -83,6 +87,7 @@ function mapSettings(company: SettingsRow): SettingsFormData {
     profilePhone: settings.profilePhone ?? undefined,
     receiptFooter: settings.receiptFooter ?? undefined,
     receiptHeader: settings.receiptHeader ?? undefined,
+    receiptPrintMode: settings.receiptPrintMode ?? DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: settings.receiptPrefix ?? DEFAULT_SETTINGS.receiptPrefix,
     roundingMethod: settings.roundingMethod ?? DEFAULT_SETTINGS.roundingMethod,
     showLogoOnReceipt: settings.showLogoOnReceipt ?? DEFAULT_SETTINGS.showLogoOnReceipt,

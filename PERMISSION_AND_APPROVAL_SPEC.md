@@ -277,3 +277,37 @@ Permission enforcement must exist in:
 - API routes
 
 UI-only permission hiding is not enough.
+
+## 15. POS Recent Sales Permissions
+
+Recent Sales actions must pass through the same POS permission guard used by Pay and cart actions.
+
+Permissions:
+
+- View Recent Sales
+- View Receipt
+- Reprint Receipt
+- Refund Sale
+- Void Sale
+- Edit Sale Note
+- Edit Sale Customer
+- Edit Sale Payment
+- Delete Sale
+- Duplicate Sale
+
+Defaults:
+
+- Owner: full access.
+- Manager: view/reprint/duplicate/edit metadata if enabled; refund/void/delete may require Owner approval.
+- Cashier: view own sales and own receipts by default; refund, void, and delete are blocked unless explicitly configured.
+
+Approval requirements:
+
+- Refund/Void/Delete must create pending approval when the approval rule requires it.
+- The sale must not be refunded, voided, deleted, or stock-restored until approval is granted.
+- Soft delete must always preserve the sale and audit history.
+
+Audit requirements:
+
+- View/reprint/refund/void/edit/delete/duplicate writes audit entries.
+- Timeline entries should remain attached to the sale for receipt history and future reports.

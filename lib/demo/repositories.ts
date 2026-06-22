@@ -138,6 +138,22 @@ export const demoProductsRepository = {
     });
     return this.saveProducts(nextProducts);
   },
+
+  restoreStock(restoredByProduct: Record<string, number>) {
+    const products = this.listProducts<GenericRecord>();
+    const nextProducts = products.map((product) => {
+      const restoredQty = restoredByProduct[String(product.id)] ?? 0;
+      const currentStock = Number(product.currentStock ?? product.stockQty ?? 0);
+      const nextStock = currentStock + restoredQty;
+      return {
+        ...product,
+        currentStock: nextStock,
+        stockQty: "stockQty" in product ? nextStock : product.stockQty,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    return this.saveProducts(nextProducts);
+  },
 };
 
 function normalizeCategories(categories: GenericRecord[]) {
@@ -233,6 +249,16 @@ export const demoSalesRepository = {
     runDemoStorageMigrations();
     return readListFromStorage<T>(DemoStorageKeys.sales);
   },
+  saveSales<T extends GenericRecord>(sales: T[]) {
+    writeListToStorage(DemoStorageKeys.sales, sales);
+    return sales;
+  },
+  updateSale<T extends GenericRecord>(saleNo: string, updater: (sale: T) => T) {
+    const sales = readListFromStorage<T>(DemoStorageKeys.sales);
+    const nextSales = sales.map((sale) => (String(sale.saleNo ?? sale.id) === saleNo ? updater(sale) : sale));
+    writeListToStorage(DemoStorageKeys.sales, nextSales);
+    return nextSales;
+  },
 };
 
 export const demoReceiptsRepository = {
@@ -243,6 +269,12 @@ export const demoReceiptsRepository = {
   listReceipts<T extends GenericRecord>() {
     runDemoStorageMigrations();
     return readListFromStorage<T>(DemoStorageKeys.receipts);
+  },
+  updateReceipt<T extends GenericRecord>(receiptNo: string, updater: (receipt: T) => T) {
+    const receipts = readListFromStorage<T>(DemoStorageKeys.receipts);
+    const nextReceipts = receipts.map((receipt) => (String(receipt.receiptNo ?? receipt.saleNo ?? receipt.id) === receiptNo ? updater(receipt) : receipt));
+    writeListToStorage(DemoStorageKeys.receipts, nextReceipts);
+    return nextReceipts;
   },
 };
 

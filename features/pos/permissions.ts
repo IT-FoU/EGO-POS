@@ -9,7 +9,14 @@ export type PosPermissionAction =
   | "apply_discount"
   | "manual_price_override"
   | "delete_item_from_bill"
+  | "delete_sale"
+  | "duplicate_sale"
+  | "edit_sale_customer"
+  | "edit_sale_note"
+  | "edit_sale_payment"
   | "reprint_receipt"
+  | "view_receipt"
+  | "view_recent_sales"
   | "cash_in"
   | "cash_out"
   | "split_payment"
@@ -68,7 +75,14 @@ const allPosActions: PosPermissionAction[] = [
   "apply_discount",
   "manual_price_override",
   "delete_item_from_bill",
+  "delete_sale",
+  "duplicate_sale",
+  "edit_sale_customer",
+  "edit_sale_note",
+  "edit_sale_payment",
   "reprint_receipt",
+  "view_receipt",
+  "view_recent_sales",
   "cash_in",
   "cash_out",
   "split_payment",
@@ -84,7 +98,13 @@ const managerAllowed = new Set<PosPermissionAction>([
   "apply_discount",
   "manual_price_override",
   "delete_item_from_bill",
+  "duplicate_sale",
+  "edit_sale_customer",
+  "edit_sale_note",
+  "edit_sale_payment",
   "reprint_receipt",
+  "view_receipt",
+  "view_recent_sales",
   "cash_in",
   "cash_out",
   "split_payment",
@@ -97,6 +117,9 @@ const cashierAllowed = new Set<PosPermissionAction>([
   "resume_bill",
   "delete_item_from_bill",
   "reprint_receipt",
+  "view_receipt",
+  "view_recent_sales",
+  "duplicate_sale",
 ]);
 
 export const POS_PERMISSION_DENIED_MESSAGE = "You do not have permission to perform this action.";
@@ -131,6 +154,7 @@ export function createPosPermissionPolicy(input: {
         : {
             apply_discount: "owner_above_threshold",
             manual_price_override: "owner",
+            delete_sale: "owner",
             refund_bill: role === "Manager" ? "owner_above_threshold" : "manager",
             void_bill: "manager",
           },

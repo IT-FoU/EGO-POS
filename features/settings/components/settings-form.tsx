@@ -150,6 +150,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 setMessage({ text: result.error ?? t("ui.settings.save.failed"), tone: "error" });
                 return;
             }
+            demoSettingsRepository.writeSettings(settings);
             setSettings(result.data as SettingsFormData);
             setMessage({ text: t("ui.settings.saved.successfully"), tone: "success" });
             router.refresh();
@@ -211,6 +212,13 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <Field label="Receipt prefix">
             <input className="field-input font-mono" required value={settings.receiptPrefix} onChange={(event) => update("receiptPrefix", event.target.value)}/>
+          </Field>
+          <Field label="Receipt Print Mode">
+            <select className="field-input" value={settings.receiptPrintMode} onChange={(event) => update("receiptPrintMode", event.target.value as SettingsFormData["receiptPrintMode"])}>
+              <option value="ask_every_time">Ask Every Time</option>
+              <option value="auto_print">Auto Print</option>
+              <option value="no_auto_print">No Auto Print</option>
+            </select>
           </Field>
           <Toggle label="Show logo on receipt" checked={settings.showLogoOnReceipt} onChange={(value) => update("showLogoOnReceipt", value)}/>
           <div className="md:col-span-2">

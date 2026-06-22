@@ -205,3 +205,21 @@ Later:
 - ESC/POS receipt commands
 - Xprinter profile
 - Godex profile
+
+## 13. POS Receipt Print Mode
+
+Receipt Print Mode is configured in Settings -> Receipt Settings.
+
+Modes:
+
+- Ask Every Time: after Pay, show Sale completed modal with Print Receipt, View Receipt, and New Sale.
+- Auto Print: after Pay, open receipt preview and trigger browser print automatically.
+- No Auto Print: after Pay, show sale completion and New Sale only.
+
+Receipt print workflow:
+
+1. POS creates sale and receipt records.
+2. Receipt preview renders from the saved receipt record, not from the active cart.
+3. Print Receipt and Reprint Receipt call browser print in demo mode.
+4. Reprint Receipt writes audit/timeline entries.
+5. Future printer service will route the same receipt payload to receipt printer profiles.

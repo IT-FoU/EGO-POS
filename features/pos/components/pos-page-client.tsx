@@ -15,6 +15,10 @@ import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-
 import {
     demoAuditLogRepository,
     demoPendingApprovalRepository,
+    demoProductsRepository,
+    demoReceiptsRepository,
+    demoSalesRepository,
+    demoSettingsRepository,
 } from "@/lib/demo/repositories";
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { writeJsonToStorage } from "@/lib/demo/storage";
@@ -31,17 +35,54 @@ const OPENING_CASH_DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500] 
 const HYDRATION_SAFE_TIME = "--:--";
 const HYDRATION_SAFE_BUSINESS_DATE = "--";
 const HYDRATION_SAFE_REFERENCE_DATE = new Date("2026-06-20T00:00:00");
+type ReceiptPrintMode = "ask_every_time" | "auto_print" | "no_auto_print";
 type ReceiptSnapshot = {
     branchName: string;
     cashierName: string;
     cartItems: PosCartItem[];
     changeAmount: number;
+    createdAt: string;
+    customerName: string;
     discountTotal: number;
     paidAmount: number;
     paymentMode: PaymentMode;
+    receiptNo: string;
+    saleNo: string;
     subtotal: number;
     taxAmount: number;
     totalAmount: number;
+};
+type DemoSaleStatus = "paid" | "refunded" | "partial_refunded" | "voided" | "deleted";
+type DemoSaleTimelineEvent = {
+    at: string;
+    label: string;
+    user: string;
+};
+type DemoSaleRecord = {
+    branchId: string;
+    cashierName: string;
+    changeAmount: number;
+    createdAt: string;
+    customerId?: string;
+    customerName: string;
+    customerPhone?: string;
+    deletedAt?: string;
+    deletedBy?: string;
+    deleteReason?: string;
+    discountAmount: number;
+    discountPercent: number;
+    items: PosCartItem[];
+    note?: string;
+    paidAmount: number;
+    paymentMode: PaymentMode;
+    receiptNo: string;
+    saleNo: string;
+    status: DemoSaleStatus;
+    subtotal: number;
+    taxAmount: number;
+    timeline: DemoSaleTimelineEvent[];
+    totalAmount: number;
+    warehouseId: string;
 };
 type ResolvedPayment = {
     cardAmount: number;
@@ -101,6 +142,16 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [openingCashCounts, setOpeningCashCounts] = useState<Record<number, number>>(() => Object.fromEntries(OPENING_CASH_DENOMINATIONS.map((denomination) => [denomination, 0])));
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [lastReceipt, setLastReceipt] = useState<ReceiptSnapshot | null>(null);
+    const [receiptAutoPrint, setReceiptAutoPrint] = useState(false);
+    const [receiptPrintMode, setReceiptPrintMode] = useState<ReceiptPrintMode>("ask_every_time");
+    const [saleCompletedReceipt, setSaleCompletedReceipt] = useState<ReceiptSnapshot | null>(null);
+    const [recentSalesOpen, setRecentSalesOpen] = useState(false);
+    const [recentSales, setRecentSales] = useState<DemoSaleRecord[]>([]);
+    const [recentSalesFilter, setRecentSalesFilter] = useState<"today" | "yesterday" | "week" | "month" | "custom">("today");
+    const [recentSalesSearch, setRecentSalesSearch] = useState("");
+    const [recentSalesShowDeleted, setRecentSalesShowDeleted] = useState(false);
+    const [recentSalesCustomStart, setRecentSalesCustomStart] = useState("");
+    const [recentSalesCustomEnd, setRecentSalesCustomEnd] = useState("");
     const [mixedPaymentOpen, setMixedPaymentOpen] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [pendingApprovals, setPendingApprovals] = useState<PosPendingApprovalRequest[]>([]);
@@ -126,6 +177,22 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
         setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
+        setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+        const storedSettings = demoSettingsRepository.readSettings<{ receiptPrintMode?: ReceiptPrintMode }>({ receiptPrintMode: "ask_every_time" });
+        setReceiptPrintMode(storedSettings.receiptPrintMode ?? "ask_every_time");
+    }, []);
+    useEffect(() => {
+        function refreshRecentSales() {
+            setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+            const storedSettings = demoSettingsRepository.readSettings<{ receiptPrintMode?: ReceiptPrintMode }>({ receiptPrintMode: "ask_every_time" });
+            setReceiptPrintMode(storedSettings.receiptPrintMode ?? "ask_every_time");
+        }
+        window.addEventListener("storage", refreshRecentSales);
+        window.addEventListener("focus", refreshRecentSales);
+        return () => {
+            window.removeEventListener("storage", refreshRecentSales);
+            window.removeEventListener("focus", refreshRecentSales);
+        };
     }, []);
     useEffect(() => {
         const updateClock = () => {
@@ -211,6 +278,33 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             labels.push(promotionBanners[0]);
         return Array.from(new Set(labels)).slice(0, 4);
     }, [cartItems, discountTotal, promotionBanners]);
+    const filteredRecentSales = useMemo(() => {
+        const query = recentSalesSearch.trim().toLowerCase();
+        return recentSales
+            .filter((sale) => {
+            if (!recentSalesShowDeleted && sale.status === "deleted")
+                return false;
+            return isSaleInDateFilter(sale.createdAt, recentSalesFilter, recentSalesCustomStart, recentSalesCustomEnd);
+        })
+            .filter((sale) => {
+            if (!query)
+                return true;
+            return [
+                sale.saleNo,
+                sale.receiptNo,
+                sale.customerName,
+                sale.customerPhone,
+                sale.cashierName,
+                sale.paymentMode,
+                ...sale.items.map((item) => item.nameEn),
+            ]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(query));
+        });
+    }, [recentSales, recentSalesCustomEnd, recentSalesCustomStart, recentSalesFilter, recentSalesSearch, recentSalesShowDeleted]);
+    function refreshRecentSales() {
+        setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+    }
     function recordPosAudit(action: PosPermissionAction, result: PosAuditEntry["result"], approvalStatus: PosAuditEntry["approvalStatus"], details: string) {
         const entry: PosAuditEntry = {
             action,
@@ -476,15 +570,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         return null;
     }
-    function buildReceiptSnapshot(payment: ResolvedPayment): ReceiptSnapshot {
+    function buildReceiptSnapshot(payment: ResolvedPayment, saleNo: string, createdAt = new Date().toISOString()): ReceiptSnapshot {
         return {
             branchName,
             cashierName,
             cartItems,
             changeAmount: payment.changeAmount,
+            createdAt,
+            customerName: selectedCustomer?.name ?? "Guest",
             discountTotal,
             paidAmount: payment.paidAmount,
             paymentMode,
+            receiptNo: `RCPT-${saleNo}`,
+            saleNo,
             subtotal,
             taxAmount,
             totalAmount,
@@ -518,6 +616,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         applyResolvedPayment(payment);
         const saleNo = billNo;
+        if (demoMode) {
+            completeDemoSale(saleNo, payment);
+            return;
+        }
         startTransition(async () => {
             const result = await completeSaleAction({
                 branchId,
@@ -549,7 +651,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 return;
             }
             const assignedSaleNo = result.data?.saleNo ?? saleNo;
-            setLastReceipt(buildReceiptSnapshot(payment));
+            const receipt = buildReceiptSnapshot(payment, assignedSaleNo);
+            setLastReceipt(receipt);
             setReceiptOpen(true);
             setMessage(`${assignedSaleNo} completed and saved.`);
             setCustomerDisplayMode("thank_you");
@@ -561,6 +664,208 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 setCustomerDisplayMode("advertising");
             }, displaySettings.autoReturnSeconds * 1000);
         });
+    }
+    function completeDemoSale(saleNo: string, payment: ResolvedPayment) {
+        const createdAt = new Date().toISOString();
+        const receipt = buildReceiptSnapshot(payment, saleNo, createdAt);
+        const saleRecord: DemoSaleRecord = {
+            branchId,
+            cashierName,
+            changeAmount: payment.changeAmount,
+            createdAt,
+            customerId: selectedCustomer?.id,
+            customerName: selectedCustomer?.name ?? "Guest",
+            customerPhone: selectedCustomer?.phone,
+            discountAmount,
+            discountPercent,
+            items: cartItems.map((item) => ({ ...item })),
+            paidAmount: payment.paidAmount,
+            paymentMode,
+            receiptNo: receipt.receiptNo,
+            saleNo,
+            status: "paid",
+            subtotal,
+            taxAmount,
+            timeline: [
+                { at: createdAt, label: "Created", user: cashierName },
+                { at: createdAt, label: "Paid", user: cashierName },
+            ],
+            totalAmount,
+            warehouseId,
+        };
+        try {
+            const nextSales = demoSalesRepository.addSale<DemoSaleRecord>(saleRecord);
+            demoReceiptsRepository.addReceipt({ ...receipt, type: "receipt" });
+            const soldByProduct = cartItems.reduce<Record<string, number>>((totals, item) => {
+                totals[item.id] = (totals[item.id] ?? 0) + item.quantity * (item.conversionQty ?? 1);
+                return totals;
+            }, {});
+            const nextProducts = demoProductsRepository.deductStock(soldByProduct);
+            setVisibleProducts(nextProducts.map(mapStoredProductToPosProduct).filter((product) => product.stockQty >= 0));
+            setRecentSales(nextSales);
+            setLastReceipt(receipt);
+            setSaleCompletedReceipt(receipt);
+            recordPosAudit("create_sale", "allowed", "not_required", `${saleNo} completed. Stock, receipt, sales, and audit updated.`);
+            setMessage(`${saleNo} completed and saved.`);
+            setCustomerDisplayMode("thank_you");
+            clearSale();
+            setBillNo(getFollowingPosSaleNo(saleNo, receiptSettings.receiptPrefix));
+            handleReceiptPrintModeAfterSale(receipt);
+            const displaySettings = readCustomerDisplaySettingsFromStorage();
+            window.setTimeout(() => {
+                setCustomerDisplayMode("advertising");
+            }, displaySettings.autoReturnSeconds * 1000);
+        }
+        catch {
+            setMessage("Storage save failed. Sale was not completed.");
+        }
+    }
+    function handleReceiptPrintModeAfterSale(receipt: ReceiptSnapshot) {
+        if (receiptPrintMode === "auto_print") {
+            setLastReceipt(receipt);
+            setReceiptAutoPrint(true);
+            setReceiptOpen(true);
+            return;
+        }
+        if (receiptPrintMode === "no_auto_print") {
+            return;
+        }
+        setSaleCompletedReceipt(receipt);
+    }
+    function receiptFromSale(sale: DemoSaleRecord): ReceiptSnapshot {
+        const savedReceipt = demoReceiptsRepository
+            .listReceipts<ReceiptSnapshot>()
+            .find((receipt) => receipt.receiptNo === sale.receiptNo || receipt.saleNo === sale.saleNo);
+        if (savedReceipt) {
+            return savedReceipt;
+        }
+        return {
+            branchName,
+            cashierName: sale.cashierName,
+            cartItems: sale.items,
+            changeAmount: sale.changeAmount,
+            createdAt: sale.createdAt,
+            customerName: sale.customerName,
+            discountTotal: sale.discountAmount + Math.round(sale.subtotal * (sale.discountPercent / 100)),
+            paidAmount: sale.paidAmount,
+            paymentMode: sale.paymentMode,
+            receiptNo: sale.receiptNo,
+            saleNo: sale.saleNo,
+            subtotal: sale.subtotal,
+            taxAmount: sale.taxAmount,
+            totalAmount: sale.totalAmount,
+        };
+    }
+    function openReceiptForSale(sale: DemoSaleRecord, autoPrint = false) {
+        if (!enforcePosAction(autoPrint ? "reprint_receipt" : "view_receipt")) {
+            return;
+        }
+        const receipt = receiptFromSale(sale);
+        setLastReceipt(receipt);
+        setReceiptAutoPrint(autoPrint);
+        setReceiptOpen(true);
+        if (autoPrint) {
+            appendSaleTimeline(sale.saleNo, "Reprinted");
+        }
+    }
+    function appendSaleTimeline(saleNo: string, label: string) {
+        const now = new Date().toISOString();
+        const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(saleNo, (sale) => ({
+            ...sale,
+            timeline: [...(sale.timeline ?? []), { at: now, label, user: posPermissionPolicy.displayName }],
+        }));
+        setRecentSales(nextSales);
+    }
+    function updateRecentSaleStatus(sale: DemoSaleRecord, status: DemoSaleStatus, label: string) {
+        const now = new Date().toISOString();
+        const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(sale.saleNo, (currentSale) => ({
+            ...currentSale,
+            status,
+            timeline: [...(currentSale.timeline ?? []), { at: now, label, user: posPermissionPolicy.displayName }],
+        }));
+        setRecentSales(nextSales);
+    }
+    function refundSale(sale: DemoSaleRecord) {
+        if (!enforcePosAction("refund_bill", { amountLak: sale.totalAmount })) {
+            return;
+        }
+        updateRecentSaleStatus(sale, "refunded", "Refunded");
+        recordPosAudit("refund_bill", "allowed", "not_required", `${sale.saleNo} marked refunded.`);
+        setMessage(`${sale.saleNo} marked refunded.`);
+    }
+    function voidSale(sale: DemoSaleRecord) {
+        if (!enforcePosAction("void_bill", { amountLak: sale.totalAmount })) {
+            return;
+        }
+        const restoredByProduct = sale.items.reduce<Record<string, number>>((totals, item) => {
+            totals[item.id] = (totals[item.id] ?? 0) + item.quantity * (item.conversionQty ?? 1);
+            return totals;
+        }, {});
+        const nextProducts = demoProductsRepository.restoreStock(restoredByProduct);
+        setVisibleProducts(nextProducts.map(mapStoredProductToPosProduct).filter((product) => product.stockQty >= 0));
+        updateRecentSaleStatus(sale, "voided", "Voided");
+        recordPosAudit("void_bill", "allowed", "not_required", `${sale.saleNo} voided and stock restored.`);
+        setMessage(`${sale.saleNo} voided. Stock restored.`);
+    }
+    function editSaleField(sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") {
+        const action = field === "note" ? "edit_sale_note" : field === "customerName" ? "edit_sale_customer" : "edit_sale_payment";
+        if (!enforcePosAction(action)) {
+            return;
+        }
+        const label = field === "note" ? "Note" : field === "customerName" ? "Customer" : "Payment method";
+        const value = window.prompt(`Update ${label}`, String(sale[field] ?? ""));
+        if (value === null)
+            return;
+        const nextValue = field === "paymentMode" && !isPaymentMode(value) ? sale.paymentMode : value.trim();
+        const now = new Date().toISOString();
+        const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(sale.saleNo, (currentSale) => ({
+            ...currentSale,
+            [field]: nextValue,
+            timeline: [...(currentSale.timeline ?? []), { at: now, label: `${label} edited`, user: posPermissionPolicy.displayName }],
+        }));
+        setRecentSales(nextSales);
+        recordPosAudit(action, "allowed", "not_required", `${sale.saleNo} ${label.toLowerCase()} updated.`);
+        setMessage(`${sale.saleNo} updated.`);
+    }
+    function softDeleteSale(sale: DemoSaleRecord) {
+        if (!enforcePosAction("delete_sale")) {
+            return;
+        }
+        const reason = window.prompt("Delete reason");
+        if (!reason?.trim()) {
+            setMessage("Delete reason is required.");
+            return;
+        }
+        const now = new Date().toISOString();
+        const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(sale.saleNo, (currentSale) => ({
+            ...currentSale,
+            deletedAt: now,
+            deletedBy: posPermissionPolicy.displayName,
+            deleteReason: reason.trim(),
+            status: "deleted",
+            timeline: [...(currentSale.timeline ?? []), { at: now, label: "Deleted", user: posPermissionPolicy.displayName }],
+        }));
+        setRecentSales(nextSales);
+        recordPosAudit("delete_sale", "allowed", "not_required", `${sale.saleNo} soft deleted.`);
+        setMessage(`${sale.saleNo} soft deleted.`);
+    }
+    function duplicateSaleToCart(sale: DemoSaleRecord) {
+        if (!enforcePosAction("duplicate_sale")) {
+            return;
+        }
+        setCartItems(sale.items.map((item, index) => ({
+            ...item,
+            cartLineId: `${item.id}:${item.unitId ?? "default"}:copy-${Date.now()}-${index}`,
+        })));
+        setPaymentMode("cash");
+        setCashAmount(0);
+        setQrAmount(0);
+        setTransferAmount(0);
+        setCardAmount(0);
+        appendSaleTimeline(sale.saleNo, "Duplicated");
+        recordPosAudit("duplicate_sale", "allowed", "not_required", `${sale.saleNo} copied to cart.`);
+        setRecentSalesOpen(false);
+        setMessage("Sale copied to cart.");
     }
     function clearSale() {
         setCartItems([]);
@@ -842,9 +1147,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           <Panel className="p-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-semibold">Payment</h2>
-              <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
-                Mixed popup
-              </button>
+              <div className="flex items-center gap-3">
+                <button className="text-xs font-semibold text-primary" type="button" onClick={() => {
+            if (enforcePosAction("view_recent_sales")) {
+                refreshRecentSales();
+                setRecentSalesOpen(true);
+            }
+        }}>
+                  Recent Sales
+                </button>
+                <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
+                  Mixed popup
+                </button>
+              </div>
             </div>
             <dl className="mt-3">
               <div className="flex items-center justify-between rounded-md border border-primary/25 bg-primary/10 px-3 py-3 text-xl font-semibold">
@@ -902,7 +1217,22 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       {unitSelectionProduct ? (<UnitSelectorModal product={unitSelectionProduct} onClose={() => setUnitSelectionProduct(null)} onSelect={(unit) => addToCart(unitSelectionProduct, unit)}/>) : null}
 
-      {receiptOpen && lastReceipt ? (<ReceiptPreview branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} discountTotal={lastReceipt.discountTotal} onClose={() => setReceiptOpen(false)} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptSettings={receiptSettings} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
+      {saleCompletedReceipt ? (<SaleCompletedModal receipt={saleCompletedReceipt} printMode={receiptPrintMode} onClose={() => setSaleCompletedReceipt(null)} onNewSale={() => setSaleCompletedReceipt(null)} onPrint={() => {
+            setLastReceipt(saleCompletedReceipt);
+            setReceiptAutoPrint(true);
+            setReceiptOpen(true);
+        }} onView={() => {
+            setLastReceipt(saleCompletedReceipt);
+            setReceiptAutoPrint(false);
+            setReceiptOpen(true);
+        }}/>) : null}
+
+      {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
+
+      {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
+            setReceiptOpen(false);
+            setReceiptAutoPrint(false);
+        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
     </div>);
 }
 function Panel({ children, className }: {
@@ -1459,22 +1789,182 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardA
       </div>
     </div>);
 }
-function ReceiptPreview({ branchName, cashierName, cartItems, changeAmount, discountTotal, onClose, onReprint, paidAmount, paymentMode, receiptSettings, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, receipt }: {
+    onClose: () => void;
+    onNewSale: () => void;
+    onPrint: () => void;
+    onView: () => void;
+    printMode: ReceiptPrintMode;
+    receipt: ReceiptSnapshot;
+}) {
+    return (<div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Sale completed</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{receipt.saleNo} saved successfully.</p>
+          </div>
+          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close sale completed modal">
+            <X className="size-4" aria-hidden="true"/>
+          </button>
+        </div>
+        <dl className="mt-4 grid gap-2 rounded-md border border-border bg-background p-3 text-sm">
+          <InfoLine label="Bill number" value={receipt.saleNo}/>
+          <InfoLine label="Total" value={`${formatLak(receipt.totalAmount)} LAK`}/>
+          <InfoLine label="Payment method" value={receipt.paymentMode.toUpperCase()}/>
+          <InfoLine label="Cashier" value={receipt.cashierName}/>
+          <InfoLine label="Date/time" value={formatReceiptDateTime(receipt.createdAt)}/>
+        </dl>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {printMode !== "no_auto_print" ? (<button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={onPrint}>
+              Print Receipt
+            </button>) : null}
+          {printMode !== "no_auto_print" ? (<button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onView}>
+              View Receipt
+            </button>) : null}
+          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onNewSale}>
+            New Sale
+          </button>
+        </div>
+      </div>
+    </div>);
+}
+function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
+    currentRole: string;
+    customEnd: string;
+    customStart: string;
+    filter: "today" | "yesterday" | "week" | "month" | "custom";
+    onClose: () => void;
+    onCustomEnd: (value: string) => void;
+    onCustomStart: (value: string) => void;
+    onDuplicate: (sale: DemoSaleRecord) => void;
+    onEditField: (sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") => void;
+    onFilter: (filter: "today" | "yesterday" | "week" | "month" | "custom") => void;
+    onRefund: (sale: DemoSaleRecord) => void;
+    onReprint: (sale: DemoSaleRecord) => void;
+    onSearch: (value: string) => void;
+    onShowDeleted: (value: boolean) => void;
+    onSoftDelete: (sale: DemoSaleRecord) => void;
+    onViewReceipt: (sale: DemoSaleRecord) => void;
+    onVoid: (sale: DemoSaleRecord) => void;
+    sales: DemoSaleRecord[];
+    search: string;
+    showDeleted: boolean;
+}) {
+    const filterOptions: Array<{ label: string; value: "today" | "yesterday" | "week" | "month" | "custom" }> = [
+        { label: "Today", value: "today" },
+        { label: "Yesterday", value: "yesterday" },
+        { label: "This Week", value: "week" },
+        { label: "This Month", value: "month" },
+        { label: "Custom", value: "custom" },
+    ];
+    return (<div className="fixed inset-0 z-40 flex justify-end bg-black/60">
+      <div className="h-full w-full max-w-5xl overflow-y-auto border-l border-border bg-card p-5 shadow-2xl">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Recent Sales</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Search, view receipts, reprint, refund, void, duplicate, or soft-delete bills.</p>
+          </div>
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
+            <input className="field-input pl-10" placeholder="Search bill, customer, cashier, phone, product..." value={search} onChange={(event) => onSearch(event.target.value)}/>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {filterOptions.map((option) => (<button className={cn("h-10 rounded-md border px-3 text-xs font-semibold", filter === option.value ? "border-primary bg-primary/10 text-primary" : "border-border")} key={option.value} type="button" onClick={() => onFilter(option.value)}>
+                {option.label}
+              </button>))}
+          </div>
+        </div>
+        {filter === "custom" ? (<div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <input className="field-input" type="date" value={customStart} onChange={(event) => onCustomStart(event.target.value)}/>
+            <input className="field-input" type="date" value={customEnd} onChange={(event) => onCustomEnd(event.target.value)}/>
+          </div>) : null}
+        {currentRole === "Owner" ? (<label className="mt-3 flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={showDeleted} onChange={(event) => onShowDeleted(event.target.checked)}/>
+            Show deleted bills
+          </label>) : null}
+        <div className="mt-4 grid gap-3">
+          {sales.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No recent sales found.</div>) : sales.map((sale) => (<div className="rounded-lg border border-border bg-background p-3" key={sale.saleNo}>
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">{sale.saleNo}</span>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", sale.status === "paid" ? "bg-success/10 text-success" : sale.status === "deleted" || sale.status === "voided" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning")}>
+                      {sale.status}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatReceiptDateTime(sale.createdAt)}</span>
+                  </div>
+                  <div className="mt-2 grid gap-2 text-sm md:grid-cols-4">
+                    <InfoLine label="Customer" value={sale.customerName || "Guest"}/>
+                    <InfoLine label="Cashier" value={sale.cashierName}/>
+                    <InfoLine label="Total" value={`${formatLak(sale.totalAmount)} LAK`}/>
+                    <InfoLine label="Payment" value={sale.paymentMode.toUpperCase()}/>
+                  </div>
+                  <details className="mt-2 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer font-semibold text-foreground">Sale Timeline</summary>
+                    <div className="mt-2 grid gap-1">
+                      {(sale.timeline ?? []).map((event, index) => (<div className="flex justify-between gap-3" key={`${sale.saleNo}-timeline-${index}`}>
+                          <span>{event.label} by {event.user}</span>
+                          <span>{formatReceiptDateTime(event.at)}</span>
+                        </div>))}
+                    </div>
+                  </details>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:w-[360px]">
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onViewReceipt(sale)}>View Receipt</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>Reprint</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onDuplicate(sale)}>Duplicate</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>Edit Note</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>Edit Customer</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>Edit Payment</button>
+                  <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>Refund</button>
+                  <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>Void</button>
+                  <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>
+                </div>
+              </div>
+            </div>))}
+        </div>
+      </div>
+    </div>);
+}
+function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+    autoPrint?: boolean;
     branchName: string;
     cashierName: string;
     cartItems: PosCartItem[];
     changeAmount: number;
+    createdAt: string;
+    customerName: string;
     discountTotal: number;
     onClose: () => void;
     onReprint: () => boolean;
     paidAmount: number;
     paymentMode: PaymentMode;
+    receiptNo: string;
     receiptSettings: PosReceiptSettings;
+    saleNo: string;
     showTaxOnReceipt: boolean;
     subtotal: number;
     taxAmount: number;
     totalAmount: number;
 }) {
+    const [autoPrintStarted, setAutoPrintStarted] = useState(false);
+    useEffect(() => {
+        if (!autoPrint || autoPrintStarted)
+            return;
+        setAutoPrintStarted(true);
+        const timeout = window.setTimeout(() => {
+            if (onReprint()) {
+                window.print();
+            }
+        }, 250);
+        return () => window.clearTimeout(timeout);
+    }, [autoPrint, autoPrintStarted, onReprint]);
     const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
     const receiptFooter = receiptSettings.receiptFooter || "Thank you";
     return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -1487,8 +1977,11 @@ function ReceiptPreview({ branchName, cashierName, cartItems, changeAmount, disc
           <div className="text-center">
             <div className="text-lg font-bold">{receiptTitle}</div>
             <div>{branchName}</div>
+            <div>Bill: {saleNo}</div>
+            <div>Receipt: {receiptNo}</div>
+            <div>Customer: {customerName}</div>
             <div>{t("ui.cashier")}{cashierName}</div>
-            <div>{new Date().toLocaleString("en-GB")}</div>
+            <div>{formatReceiptDateTime(createdAt)}</div>
           </div>
           <div className="my-4 border-t border-dashed border-border"/>
           <div className="flex flex-col gap-3">
@@ -1536,6 +2029,54 @@ function productKey(product: Pick<PosProduct, "id" | "sku" | "unitId">, index: n
 }
 function cartLineKey(item: Pick<PosCartItem, "cartLineId" | "id" | "sku" | "unitId">, index: number) {
     return item.cartLineId ?? `${item.id || item.sku || "cart"}:${item.unitId ?? "default"}:${index}`;
+}
+function isPaymentMode(value: string): value is PaymentMode {
+    return ["cash", "qr", "transfer", "card", "mixed"].includes(value);
+}
+function formatReceiptDateTime(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value || "--";
+    }
+    return date.toLocaleString("en-GB", {
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "short",
+        year: "numeric",
+    });
+}
+function isSaleInDateFilter(createdAt: string, filter: "today" | "yesterday" | "week" | "month" | "custom", customStart: string, customEnd: string) {
+    const saleDate = new Date(createdAt);
+    if (Number.isNaN(saleDate.getTime())) {
+        return false;
+    }
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfSaleDay = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
+    if (filter === "today") {
+        return startOfSaleDay.getTime() === startOfToday.getTime();
+    }
+    if (filter === "yesterday") {
+        const yesterday = new Date(startOfToday);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return startOfSaleDay.getTime() === yesterday.getTime();
+    }
+    if (filter === "week") {
+        const weekStart = new Date(startOfToday);
+        weekStart.setDate(weekStart.getDate() - 6);
+        return saleDate >= weekStart && saleDate <= now;
+    }
+    if (filter === "month") {
+        return saleDate.getFullYear() === now.getFullYear() && saleDate.getMonth() === now.getMonth();
+    }
+    const start = customStart ? new Date(`${customStart}T00:00:00`) : null;
+    const end = customEnd ? new Date(`${customEnd}T23:59:59`) : null;
+    if (start && saleDate < start)
+        return false;
+    if (end && saleDate > end)
+        return false;
+    return true;
 }
 function mapStoredProductToPosProduct(product: Record<string, any>): PosProduct {
     const activeUnits = Array.isArray(product.units) ? product.units.filter((unit: Record<string, any>) => unit.status !== "inactive") : [];

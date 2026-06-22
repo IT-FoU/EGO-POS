@@ -535,3 +535,21 @@ Target architecture:
 
 - Same service contracts for demo and production.
 - Different adapters for local demo storage and Prisma database.
+
+## 25. POS Recent Sales + Receipt Print Workflow
+
+- After Pay succeeds, POS creates a sale, creates a receipt, deducts stock, writes an audit log, and refreshes Recent Sales from the central sales repository.
+- Receipt print mode is controlled by Settings -> Receipt Settings:
+  - Ask Every Time: show Sale completed modal with Print Receipt, View Receipt, and New Sale.
+  - Auto Print: open receipt preview and trigger browser print.
+  - No Auto Print: show sale completion with New Sale only.
+- Recent Sales is part of POS and reads from `demoSalesRepository` in demo mode.
+- Recent Sales actions:
+  - View Receipt reads the saved receipt and opens receipt preview.
+  - Reprint Receipt reads settings, opens receipt preview, triggers print, and writes audit log.
+  - Refund updates sale status; it never deletes the original sale.
+  - Void updates sale status and restores stock only after permission or approval allows the action.
+  - Edit note/customer/payment changes metadata only, never completed sale items.
+  - Delete Bill is soft delete only and requires a reason.
+  - Duplicate Sale copies items to the current cart and does not affect stock until the new Pay succeeds.
+- Sale timeline records Created, Paid, Reprinted, Refunded, Voided, Deleted, Edited, and Duplicated events.

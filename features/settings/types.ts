@@ -1,4 +1,5 @@
 export type CurrencyCode = "LAK" | "THB" | "USD";
+export type ReceiptPrintMode = "ask_every_time" | "auto_print" | "no_auto_print";
 
 export type SettingsFormData = {
   baseCurrency: CurrencyCode;
@@ -14,6 +15,7 @@ export type SettingsFormData = {
   profilePhone?: string;
   receiptFooter?: string;
   receiptHeader?: string;
+  receiptPrintMode: ReceiptPrintMode;
   receiptPrefix: string;
   roundingMethod: string;
   showLogoOnReceipt: boolean;
