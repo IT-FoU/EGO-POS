@@ -43,6 +43,8 @@
 
 > **Updated 2026-06-22:** B8-5 (cash session), B8-6 (post-sale), and B8-7 (loyalty/membership) resolve production blockers #1–4, #6–7 for single-store GO BOX usage. Loyalty earn/redeem/tier/reversal is now DB-backed with ledger integrity.
 
+> **Updated 2026-06-25 (B8-8):** Promotion hardening blocker (G6) is closed by commit `c07a41f` with server-side promotion calculation, client-promotion tamper rejection, member/loyalty interaction coverage, and refund/void promotion reversal coverage. Remaining promotion-related medium/low risks are documented (POS preview parity for DB promotions, advanced promo analytics/UI polish, and cost-missing below-cost edge cases).
+
 ---
 
 ## B) TOP 20 BLOCKERS — Future multi-tenant SaaS usage

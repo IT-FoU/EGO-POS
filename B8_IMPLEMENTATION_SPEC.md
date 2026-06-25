@@ -103,11 +103,19 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 
 **Remaining (NOT B8-7):** partial-refund loyalty split; dedicated redeem approval rule/UX; subscription billing automation; student-plan lifecycle automation.
 
-### G6 — Promotions completeness **(MEDIUM)**
-- `combo_set` discount returns 0 (unimplemented at checkout). `PromotionRule`/`PromotionAction` models unused (dead rules engine).
-- Guest eligibility bug: member-target promos match customers without `membershipLevelId`.
-- `updatePrismaPromotion` updates scalars only — does **not** replace product/category/membership targets.
-- Analytics: `totalSalesLak` hardcoded 0; `PromotionUsage` has no read/report surface.
+### G6 — Promotions completeness **(MEDIUM)** — **DONE (B8-8)**
+
+**B8-8 status (promotion hardening complete):**
+- Server-authoritative promotion engine added in `features/promotions/promotion-checkout.ts` and integrated into checkout.
+- Client promotion claims are rejected; server recalculates discounts from DB rules.
+- Eligibility hardened: active/schedule/coupon/member/product/category/store-wide threshold checks.
+- Priority and non-stacking behavior enforced server-side; duplicate promotion usage blocked.
+- Below-cost protection enforced where cost is available.
+- Promotion target update now replaces product/category/membership scopes in promotion update flow.
+- Promotion usage and sales totals are surfaced through `PromotionUsage` aggregation (`totalSalesLak` no longer stubbed).
+- Verified by `scripts/phase-b8-8-promotion-check.ts` (**24/24 PASS**).
+- Implementation reference: commit `c07a41f`.
+- Deliverable report: `B8_8_COMPLETION_REPORT.md`.
 
 ### G7 — Cash session persistence + audit **(MEDIUM)** — **DONE (B8-5)**
 
