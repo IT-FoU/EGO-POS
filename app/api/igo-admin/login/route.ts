@@ -1,7 +1,7 @@
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import { createAdminSession, DEMO_SUPER_ADMIN } from "@/lib/admin/session";
-import { isDemoMode } from "@/lib/demo-mode";
+import { isDemoFallbackEnabled } from "@/lib/demo-mode";
 
 const INVALID_ADMIN_LOGIN = "Invalid admin username or password.";
 const DEMO_SUPER_ADMIN_PASSWORD = "AdminChangeMe123!";
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
 }
 
 async function loginWithDemoFallback(identifier: string, password: string, reason: string) {
-  if (!isDemoMode()) {
+  if (!isDemoFallbackEnabled()) {
     return Response.json({ error: INVALID_ADMIN_LOGIN, ok: false }, { status: reason === "database query failed" ? 500 : 401 });
   }
 

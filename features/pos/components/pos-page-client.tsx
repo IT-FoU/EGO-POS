@@ -24,13 +24,13 @@ import {
 } from "@/features/pos/post-sale-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
+import { readReceiptPrintModePreference } from "@/features/settings/receipt-print-mode";
 import {
     demoAuditLogRepository,
     demoPendingApprovalRepository,
     demoProductsRepository,
     demoReceiptsRepository,
     demoSalesRepository,
-    demoSettingsRepository,
 } from "@/lib/demo/repositories";
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { writeJsonToStorage } from "@/lib/demo/storage";
@@ -160,7 +160,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [lastReceipt, setLastReceipt] = useState<ReceiptSnapshot | null>(null);
     const [receiptAutoPrint, setReceiptAutoPrint] = useState(false);
-    const [receiptPrintMode, setReceiptPrintMode] = useState<ReceiptPrintMode>("ask_every_time");
+    const [receiptPrintMode, setReceiptPrintMode] = useState<ReceiptPrintMode>(() =>
+        readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"),
+    );
     const [saleCompletedReceipt, setSaleCompletedReceipt] = useState<ReceiptSnapshot | null>(null);
     const [recentSalesOpen, setRecentSalesOpen] = useState(false);
     const [recentSales, setRecentSales] = useState<DemoSaleRecord[]>([]);
@@ -204,22 +206,20 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
         setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
         void refreshRecentSalesFromServer();
-        const storedSettings = demoSettingsRepository.readSettings<{ receiptPrintMode?: ReceiptPrintMode }>({ receiptPrintMode: "ask_every_time" });
-        setReceiptPrintMode(storedSettings.receiptPrintMode ?? "ask_every_time");
+        setReceiptPrintMode(readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"));
     }, []);
     useEffect(() => {
         function refreshOnFocus() {
             void refreshRecentSalesFromServer();
-            const storedSettings = demoSettingsRepository.readSettings<{ receiptPrintMode?: ReceiptPrintMode }>({ receiptPrintMode: "ask_every_time" });
-            setReceiptPrintMode(storedSettings.receiptPrintMode ?? "ask_every_time");
+            setReceiptPrintMode(readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"));
         }
-        window.addEventListener("storage", refreshOnFocus);
         window.addEventListener("focus", refreshOnFocus);
+        window.addEventListener("storage", refreshOnFocus);
         return () => {
-            window.removeEventListener("storage", refreshOnFocus);
             window.removeEventListener("focus", refreshOnFocus);
+            window.removeEventListener("storage", refreshOnFocus);
         };
-    }, []);
+    }, [receiptSettings.receiptPrintMode]);
     useEffect(() => {
         const updateClock = () => {
             const now = new Date();

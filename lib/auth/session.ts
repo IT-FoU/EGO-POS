@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
+import { isDemoFallbackEnabled } from "@/lib/demo-mode";
 
 export class ApiUnauthorizedError extends Error {
   constructor() {
@@ -36,7 +37,7 @@ export async function getCurrentSession() {
 export async function requireApiSession() {
   const session = await getCurrentSession();
   if (!session?.user) {
-    if (process.env.IGO_DEMO_MODE === "true") {
+    if (isDemoFallbackEnabled()) {
       return demoSession();
     }
     throw new ApiUnauthorizedError();
@@ -48,7 +49,7 @@ export async function requireSession() {
   const session = await getCurrentSession();
 
   if (!session?.user) {
-    if (process.env.IGO_DEMO_MODE === "true") {
+    if (isDemoFallbackEnabled()) {
       return demoSession();
     }
 

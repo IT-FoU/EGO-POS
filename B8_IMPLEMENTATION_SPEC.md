@@ -155,14 +155,21 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 - Dead-stock/slow-moving operational alerts use DB-backed inventory/report hub data (no mock fixture leakage in dashboard outputs).
 - Verified in B8-9 harness checks for inventory valuation parity and mock-fixture leakage.
 
-### G10 — Settings propagation & residual localStorage **(LOW)**
-- Company logo and customer-display settings persist to localStorage, not DB; `getPrismaSettings` returns fake "GO BOX" company under `isDemoMode` when no company row.
+### G10 — Settings propagation & residual localStorage **(LOW)** — **DONE (B8-10)**
+- Production settings source-of-truth is DB-backed (`CompanySetting`, QR banks/accounts, receipt/tax/loyalty/currency/profile).
+- POS no longer reads receipt mode from demo settings repositories; receipt print mode is explicitly treated as a safe device-local preference.
+- Settings writes no longer mirror production values to demo settings localStorage.
+- `getPrismaSettings` no longer falls back to synthetic company settings in runtime reads.
+- Safe local-only preferences retained and documented (theme, locale, customer-display runtime/media state, setup draft context).
+- Verified by `scripts/phase-b8-10-settings-check.ts` and full B8/B7 regression matrix.
 
 ### G11 — Offline mode **(OUT OF B8 SCOPE — FLAG)**
 - `MASTER_SPECIFICATION` lists offline POS as required; current architecture is online-first. Large, separate initiative; **explicitly out of B8** unless re-scoped.
 
-### G12 — Naming / housekeeping **(LOW)**
-- IGO→EGO split in env/storage keys/`igo-admin`; `igo-admin/admin-data.ts` demo fallback; dead mock-data files retained as test artifacts.
+### G12 — Naming / housekeeping **(LOW)** — **PARTIAL (B8-10)**
+- Demo fallback paths are now explicitly gated with `IGO_ENABLE_DEMO_FALLBACK` in addition to `IGO_DEMO_MODE`.
+- Core production paths avoid hidden fail-open demo fallbacks for settings/session-dependent runtime behavior.
+- Remaining naming/dead-artifact cleanup is low-priority housekeeping and does not affect production source-of-truth.
 
 ---
 

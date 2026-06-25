@@ -217,6 +217,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       companyName: company?.name ?? "Business",
       receiptFooter: settings?.receiptFooter ?? undefined,
       receiptHeader: settings?.receiptHeader ?? undefined,
+      receiptPrintMode: settings?.receiptPrintMode ?? "ask_every_time",
       receiptPrefix,
       showLogoOnReceipt: settings?.showLogoOnReceipt ?? true,
       showTaxOnReceipt: settings?.showTaxOnReceipt ?? true,

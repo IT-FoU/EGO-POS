@@ -2,7 +2,6 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import type { SettingsFormData } from "@/features/settings/types";
-import { isDemoMode } from "@/lib/demo-mode";
 
 const db = prisma as any;
 
@@ -109,14 +108,6 @@ export async function getPrismaSettings(tenant: TenantContext) {
   });
 
   if (!company) {
-    if (isDemoMode()) {
-      return mapSettings({
-        baseCurrency: DEFAULT_SETTINGS.baseCurrency,
-        name: "GO BOX",
-        settings: DEFAULT_SETTINGS,
-      });
-    }
-
     throw new Error("Company settings not found.");
   }
 

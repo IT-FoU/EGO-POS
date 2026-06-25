@@ -47,6 +47,8 @@
 
 > **Updated 2026-06-25 (B8-9):** Dashboard/analytics hardening closes KPI-accuracy blocker scope by reconciling dashboard sales/profit/inventory/supplier-payable totals with Prisma report aggregates, enforcing `dashboard.view`/`reports.view` server-side checks, and validating refund/void, loyalty, and promotion impacts in dashboard metrics. Remaining risk is mainly non-critical drilldown modal narrative content and heuristic health-score interpretation.
 
+> **Updated 2026-06-25 (B8-10):** Settings/localStorage hardening closes production source-of-truth ambiguity for critical settings. Tax/loyalty/currency/profile and QR bank/account settings are DB-backed, runtime synthetic settings fallback was removed, and receipt print mode is explicitly isolated as a device-local preference (not financial source-of-truth). LocalStorage is retained only for safe UI/device preferences (theme/locale/customer-display runtime/setup draft), with demo fallback paths explicitly gated.
+
 ---
 
 ## B) TOP 20 BLOCKERS — Future multi-tenant SaaS usage

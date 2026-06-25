@@ -6,3 +6,7 @@
 export function isDemoMode() {
   return process.env.IGO_DEMO_MODE === "true";
 }
+
+export function isDemoFallbackEnabled() {
+  return isDemoMode() && process.env.IGO_ENABLE_DEMO_FALLBACK === "true";
+}

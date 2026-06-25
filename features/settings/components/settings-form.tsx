@@ -19,7 +19,10 @@ import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "
 import { CUSTOMER_DISPLAY_TEMPLATES, DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
-import { demoSettingsRepository } from "@/lib/demo/repositories";
+import {
+  readReceiptPrintModePreference,
+  writeReceiptPrintModePreference,
+} from "@/features/settings/receipt-print-mode";
 export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, qrBranches, }: {
     initialQrAccounts: QrPaymentAccountRecord[];
     initialQrBanks: QrPaymentBankRecord[];
@@ -38,7 +41,10 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         text: string;
     } | null>(null);
     useEffect(() => {
-        setLogoUrl(demoSettingsRepository.getCompanyLogoUrl());
+        setSettings((current) => ({
+            ...current,
+            receiptPrintMode: readReceiptPrintModePreference(current.receiptPrintMode),
+        }));
         setDisplaySettings(readCustomerDisplaySettingsFromStorage());
     }, []);
     function update<K extends keyof SettingsFormData>(key: K, value: SettingsFormData[K]) {
@@ -55,9 +61,8 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             if (typeof reader.result !== "string") {
                 return;
             }
-            demoSettingsRepository.setCompanyLogoUrl(reader.result);
             setLogoUrl(reader.result);
-            setMessage({ text: t("ui.company.logo.saved.for.this.business.profile"), tone: "success" });
+            setMessage({ text: "Company logo preview updated.", tone: "success" });
         };
         reader.readAsDataURL(file);
     }
@@ -150,8 +155,9 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 setMessage({ text: result.error ?? t("ui.settings.save.failed"), tone: "error" });
                 return;
             }
-            demoSettingsRepository.writeSettings(settings);
-            setSettings(result.data as SettingsFormData);
+            const printMode = readReceiptPrintModePreference(settings.receiptPrintMode);
+            writeReceiptPrintModePreference(printMode);
+            setSettings({ ...(result.data as SettingsFormData), receiptPrintMode: printMode });
             setMessage({ text: t("ui.settings.saved.successfully"), tone: "success" });
             router.refresh();
         });

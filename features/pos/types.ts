@@ -91,6 +91,7 @@ export type PosReceiptSettings = {
   companyName: string;
   receiptFooter?: string;
   receiptHeader?: string;
+  receiptPrintMode?: "ask_every_time" | "auto_print" | "no_auto_print";
   receiptPrefix: string;
   showLogoOnReceipt: boolean;
   showTaxOnReceipt: boolean;

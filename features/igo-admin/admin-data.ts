@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { isDemoMode } from "@/lib/demo-mode";
+import { isDemoFallbackEnabled } from "@/lib/demo-mode";
 
 const db = prisma as any;
 
@@ -40,7 +40,7 @@ function demoDashboardSnapshot() {
 }
 
 function shouldUseDemoAdminFallback(error: unknown) {
-  if (!isDemoMode()) {
+  if (!isDemoFallbackEnabled()) {
     return false;
   }
 

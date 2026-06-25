@@ -25,9 +25,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { FullScreenToggle } from "@/components/layout/full-screen-toggle";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { LogoContainer } from "@/components/brand/logo-container";
-import { getStoredBusinessContext } from "@/features/platform/onboarding-context";
 import { APP_NAME, SLOGAN } from "@/lib/constants";
-import { demoSettingsRepository } from "@/lib/demo/repositories";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -108,27 +106,13 @@ export function DashboardShell({
   const [locale, setLocale] = useState<"lo" | "en">(session.user.locale === "en" ? "en" : "lo");
 
   useEffect(() => {
-    const business = getStoredBusinessContext();
-    if (business?.storeName) {
-      setStoreName(normalizeStoreName(business.storeName));
-    } else if (session.user.activeCompanyName) {
+    if (session.user.activeCompanyName) {
       setStoreName(normalizeStoreName(session.user.activeCompanyName));
     }
-    if (business?.logoUrl) {
-      setLogoUrl(business.logoUrl);
-    } else {
-      setLogoUrl(demoSettingsRepository.getCompanyLogoUrl());
-    }
-    const rawPlan = demoSettingsRepository.getPlanName();
-    const rawDays = demoSettingsRepository.getPlanDaysLeft();
-    const parsedDays = rawDays ? Number(rawDays) : NaN;
-    if (rawPlan) {
-      setPlanName(rawPlan);
-    }
-    if (Number.isFinite(parsedDays)) {
-      setDaysLeft(parsedDays);
-    }
-  }, []);
+    setLogoUrl(null);
+    setPlanName("Free Plan");
+    setDaysLeft(null);
+  }, [session.user.activeCompanyName]);
 
   const showDaysLeft = planName.toLowerCase() !== "free plan" && daysLeft !== null;
   const copy = shellCopy[locale];
