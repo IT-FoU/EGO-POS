@@ -255,6 +255,29 @@
 
 ---
 
+## Planned — not implemented during UAT
+
+### UAT-5: Register / email verification
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-PLAN-001 |
+| **Page** | `/register`, `/businesses`, Super Admin businesses |
+| **Status** | **PLANNED** (documentation only) |
+
+**Note:** Register/email verification is planned but not implemented during UAT.
+
+**Current state:**
+
+- `/register` is a static UI shell; "Continue" links to `/businesses` without creating users or sending email.
+- No `POST /api/auth/register`, no email verification tokens, no approval queue.
+- Onboarding after login uses `localStorage` only — not production tenant provisioning.
+- Super Admin business controls are read-only placeholders.
+
+**Planning artifact:** `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_
