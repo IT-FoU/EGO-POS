@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { translateToLao } from "@/lib/i18n/lao-ui-translations";
-import { DemoStorageKeys } from "@/lib/demo/storage-keys";
-import { readStringFromStorage } from "@/lib/demo/storage";
+import { DEFAULT_LOCALE } from "@/lib/constants";
+import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 
 const textOriginals = new WeakMap<Text, string>();
 const attrOriginalPrefix = "data-ego-original-";
@@ -14,11 +14,7 @@ export function LocalizationRepairRuntime() {
     let rafId = 0;
 
     function getLocale() {
-      const stored = readStringFromStorage(DemoStorageKeys.locale);
-      if (stored === "lo" || stored === "en") {
-        return stored;
-      }
-      return document.documentElement.dataset.locale === "en" ? "en" : "lo";
+      return readClientLocale(document.documentElement.dataset.locale ?? DEFAULT_LOCALE);
     }
 
     function translateTextNode(node: Text, locale: "lo" | "en") {
@@ -118,11 +114,13 @@ export function LocalizationRepairRuntime() {
     });
 
     window.addEventListener("focus", () => scheduleTranslate());
+    window.addEventListener(LOCALE_CHANGE_EVENT, () => scheduleTranslate());
 
     return () => {
       window.cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener("focus", () => scheduleTranslate());
+      window.removeEventListener(LOCALE_CHANGE_EVENT, () => scheduleTranslate());
     };
   }, []);
 

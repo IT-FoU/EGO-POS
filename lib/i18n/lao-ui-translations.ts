@@ -13,6 +13,20 @@ const approvedTechnicalTerms = new Set([
   "Username",
   "Password",
   "EGO POS",
+  "Dashboard",
+  "Store Dashboard",
+  "Report",
+  "Reports",
+  "Promotion",
+  "Promotions",
+  "Membership",
+  "Refund",
+  "Void",
+  "Receipt",
+  "Barcode",
+  "Cashier",
+  "Manager",
+  "Owner",
 ]);
 
 export const laoUiTranslations: Record<string, string> = {

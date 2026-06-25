@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
+import { DEFAULT_LOCALE } from "@/lib/constants";
 import { isDemoFallbackEnabled } from "@/lib/demo-mode";
 
 export class ApiUnauthorizedError extends Error {
@@ -21,7 +22,7 @@ function demoSession(): Session {
       activeWarehouseId: "gobox-default-warehouse",
       email: "owner@igopos.local",
       id: "demo-owner-login",
-      locale: "lo",
+      locale: DEFAULT_LOCALE,
       name: "EGO Store Owner",
       roles: ["Owner"],
       username: "igo-admin",

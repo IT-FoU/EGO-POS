@@ -2,35 +2,44 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { DemoStorageKeys } from "@/lib/demo/storage-keys";
-import { readStringFromStorage, runDemoStorageMigrations, writeStringToStorage } from "@/lib/demo/storage";
-
-const LANGUAGE_KEY = DemoStorageKeys.locale;
+import { DEFAULT_LOCALE } from "@/lib/constants";
+import type { SupportedLocale } from "@/lib/constants";
+import { LOCALE_CHANGE_EVENT, persistClientLocale, readClientLocale } from "@/lib/i18n/locale";
+import { runDemoStorageMigrations } from "@/lib/demo/storage";
 
 export function LanguageToggle({
   locale,
   onLocaleChange,
 }: {
   locale?: string;
-  onLocaleChange?: (locale: "lo" | "en") => void;
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }) {
-  const [currentLocale, setCurrentLocale] = useState<"lo" | "en">(locale === "en" ? "en" : "lo");
+  const [currentLocale, setCurrentLocale] = useState<SupportedLocale>(
+    locale === "lo" ? "lo" : DEFAULT_LOCALE,
+  );
 
   useEffect(() => {
     runDemoStorageMigrations();
-    const stored = readStringFromStorage(LANGUAGE_KEY);
-    const nextLocale = stored === "en" || stored === "lo" ? stored : locale === "en" ? "en" : "lo";
-    document.documentElement.lang = nextLocale;
-    document.documentElement.dataset.locale = nextLocale;
+    const nextLocale = readClientLocale(locale);
     setCurrentLocale(nextLocale);
     onLocaleChange?.(nextLocale);
   }, [locale, onLocaleChange]);
 
-  function updateLocale(nextLocale: "lo" | "en") {
-    writeStringToStorage(LANGUAGE_KEY, nextLocale);
-    document.documentElement.lang = nextLocale;
-    document.documentElement.dataset.locale = nextLocale;
-    window.dispatchEvent(new CustomEvent("ego-pos:locale-change", { detail: { locale: nextLocale } }));
+  useEffect(() => {
+    function handleLocaleChange(event: Event) {
+      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+      if (detail?.locale === "en" || detail?.locale === "lo") {
+        setCurrentLocale(detail.locale);
+        onLocaleChange?.(detail.locale);
+      }
+    }
+
+    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+  }, [onLocaleChange]);
+
+  function updateLocale(nextLocale: SupportedLocale) {
+    persistClientLocale(nextLocale);
     setCurrentLocale(nextLocale);
     onLocaleChange?.(nextLocale);
   }

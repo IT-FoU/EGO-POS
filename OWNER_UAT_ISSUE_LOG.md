@@ -157,6 +157,104 @@
 
 ---
 
+### UAT-4: Language toggle inconsistent between English and Lao
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-006 |
+| **Page** | Dashboard header / global shell |
+| **Role used** | Owner |
+| **Reported error** | ENG/LAO toggle did not consistently apply or persist across refresh |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Locale resolution was split across URL query (login only), session `preferredLocale` (default Lao), and `localStorage` without a shared cookie for SSR.
+- `LanguageToggle` defaulted to Lao when storage was empty and did not broadcast locale changes to all shell consumers.
+
+**Fix:**
+
+- Added shared locale source-of-truth (`lib/i18n/locale.ts`) with English default, cookie persistence, and `ego-pos:locale-change` events.
+- Updated `LanguageToggle`, `LocaleBootstrap`, and `DashboardShell` to read/write the same locale store.
+
+**Verification:** `scripts/phase-owner-uat-4-language-check.ts`
+
+---
+
+### UAT-4: Login page language not fully applied
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-007 |
+| **Page** | `/login` |
+| **Role used** | All merchant roles |
+| **Reported error** | Login page defaulted to Lao and used separate query links that did not persist with dashboard locale |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Login page defaulted to Lao when `?locale=` was absent and used ad-hoc locale links instead of the shared toggle/persistence path.
+
+**Fix:**
+
+- Login page now resolves locale from cookie + query via `getServerLocale`, defaults to English, and uses `LoginLocaleSwitcher` (shared `LanguageToggle`).
+- Login form aria labels and invalid-credentials copy come from dictionaries per selected locale.
+
+**Verification:** `scripts/phase-owner-uat-4-language-check.ts`
+
+---
+
+### UAT-4: Dashboard/sidebar mixed language
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-008 |
+| **Page** | `/dashboard` sidebar |
+| **Role used** | Owner |
+| **Reported error** | Sidebar mixed Lao labels with English business terms inconsistently |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Sidebar Lao copy translated approved business terms (Dashboard, Report, Promotion, Membership) while other surfaces kept English POS terms.
+
+**Fix:**
+
+- Updated Lao shell navigation copy to keep approved English business terms while translating general UI labels.
+- Dashboard server page now uses locale-aware `dashboard-copy` resolved from the same cookie/store.
+
+**Verification:** `scripts/phase-owner-uat-4-language-check.ts`
+
+---
+
+### UAT-4: Key owner UAT pages not respecting selected language
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-009 |
+| **Page** | `/dashboard`, `/products`, global layout |
+| **Role used** | Owner |
+| **Reported error** | Server-rendered pages ignored stored locale and fell back to Lao/session defaults |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Root layout hardcoded `<html lang="lo">`; server pages did not read persisted locale cookie; `getDictionary()` defaulted to Lao.
+
+**Fix:**
+
+- Root layout resolves locale from cookie with English default and bootstraps client storage sync.
+- `getDictionary()` now defaults to English; dashboard and products pages read cookie locale for SSR copy.
+- Approved English POS/business terms preserved in Lao runtime translation allowlist.
+
+**Verification:** `scripts/phase-owner-uat-4-language-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

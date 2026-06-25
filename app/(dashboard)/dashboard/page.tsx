@@ -1,11 +1,14 @@
 import { t } from "@/lib/i18n/ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { AlertTriangle, Banknote, Boxes, CalendarDays, CalendarClock, CheckCircle2, ClipboardCheck, CreditCard, DollarSign, Package, PackagePlus, PackageX, Plus, ReceiptText, ShoppingBag, TrendingDown, TrendingUp, Truck, WalletCards, } from "lucide-react";
 import { CloseDayPanel } from "@/features/dashboard/components/close-day-panel";
 import { DashboardDateRangeControls } from "@/features/dashboard/components/dashboard-date-range-controls";
 import { getMiniMartDashboardSnapshot, shouldRouteToPos, type DashboardAlert, type DashboardDateRange, type DashboardRangeKey, } from "@/features/dashboard/dashboard-service";
 import { requireSession } from "@/lib/auth/session";
+import { getDashboardCopy } from "@/lib/i18n/dashboard-copy";
+import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 export const dynamic = "force-dynamic";
 const rangeKeys = new Set<DashboardRangeKey>(["custom", "month", "today", "week", "year"]);
 function formatLak(value: number) {
@@ -41,6 +44,9 @@ export default async function DashboardPage({ searchParams, }: {
     if (shouldRouteToPos(session.user.roles ?? [])) {
         redirect("/pos");
     }
+    const cookieStore = await cookies();
+    const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value, session.user.locale);
+    const copy = getDashboardCopy(locale);
     const params = await searchParams;
     const dateRange = parseDateRange(params);
     const snapshot = await getMiniMartDashboardSnapshot(dateRange);
@@ -52,42 +58,42 @@ export default async function DashboardPage({ searchParams, }: {
     const customEnd = dateRange.end ? dateInputValue(dateRange.end) : dateInputValue(new Date(periodEnd.getTime() - 1));
     const hasSalesData = snapshot.hourlySales.some((point) => point.salesLak > 0);
     const dayStatusLabel = snapshot.shift.status === "open"
-        ? "OPEN"
+        ? copy.statusOpen
         : snapshot.shift.status === "closed"
-            ? "CLOSED"
-            : "NOT STARTED";
+            ? copy.statusClosed
+            : copy.statusNotStarted;
     const cards = [
-        { accent: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400", icon: WalletCards, label: "Sales", value: `${formatLak(snapshot.cards.salesTodayLak)} LAK` },
-        { accent: "border-blue-500/40 bg-blue-500/10 text-blue-400", icon: TrendingUp, label: "Profit", value: `${formatLak(snapshot.cards.profitTodayLak)} LAK` },
-        { accent: "border-slate-500/40 bg-slate-500/10 text-slate-300", icon: ReceiptText, label: "Total Bills", value: String(snapshot.cards.totalBillsToday) },
-        { accent: "border-teal-500/40 bg-teal-500/10 text-teal-400", icon: ShoppingBag, label: "Items Sold", value: formatLak(snapshot.cards.itemsSoldToday) },
-        { accent: "border-orange-500/40 bg-orange-500/10 text-orange-400", icon: Boxes, label: "Low Stock", value: String(snapshot.cards.lowStockProducts) },
-        { accent: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400", icon: CalendarClock, label: "Near Expiry", value: String(snapshot.cards.nearExpiryProducts) },
-        { accent: "border-red-500/40 bg-red-500/10 text-red-400", icon: PackageX, label: "Expired", value: String(snapshot.cards.expiredProducts) },
-        { accent: "border-purple-500/40 bg-purple-500/10 text-purple-400", icon: CreditCard, label: "Customer Credit Due", value: `${formatLak(snapshot.cards.customerCreditDueLak)} LAK` },
-        { accent: "border-red-500/40 bg-red-500/10 text-red-400", icon: Truck, label: "Supplier Payables Due", value: `${formatLak(snapshot.cards.supplierPayablesDueLak)} LAK` },
-        { accent: "border-cyan-500/40 bg-cyan-500/10 text-cyan-400", icon: Banknote, label: "Cash Drawer Expected", value: `${formatLak(snapshot.cards.cashDrawerExpectedLak)} LAK` },
+        { accent: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400", icon: WalletCards, label: copy.sales, value: `${formatLak(snapshot.cards.salesTodayLak)} LAK` },
+        { accent: "border-blue-500/40 bg-blue-500/10 text-blue-400", icon: TrendingUp, label: copy.profit, value: `${formatLak(snapshot.cards.profitTodayLak)} LAK` },
+        { accent: "border-slate-500/40 bg-slate-500/10 text-slate-300", icon: ReceiptText, label: copy.totalBills, value: String(snapshot.cards.totalBillsToday) },
+        { accent: "border-teal-500/40 bg-teal-500/10 text-teal-400", icon: ShoppingBag, label: copy.itemsSold, value: formatLak(snapshot.cards.itemsSoldToday) },
+        { accent: "border-orange-500/40 bg-orange-500/10 text-orange-400", icon: Boxes, label: copy.lowStock, value: String(snapshot.cards.lowStockProducts) },
+        { accent: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400", icon: CalendarClock, label: copy.nearExpiry, value: String(snapshot.cards.nearExpiryProducts) },
+        { accent: "border-red-500/40 bg-red-500/10 text-red-400", icon: PackageX, label: copy.expired, value: String(snapshot.cards.expiredProducts) },
+        { accent: "border-purple-500/40 bg-purple-500/10 text-purple-400", icon: CreditCard, label: copy.customerCreditDue, value: `${formatLak(snapshot.cards.customerCreditDueLak)} LAK` },
+        { accent: "border-red-500/40 bg-red-500/10 text-red-400", icon: Truck, label: copy.supplierPayablesDue, value: `${formatLak(snapshot.cards.supplierPayablesDueLak)} LAK` },
+        { accent: "border-cyan-500/40 bg-cyan-500/10 text-cyan-400", icon: Banknote, label: copy.cashDrawerExpected, value: `${formatLak(snapshot.cards.cashDrawerExpectedLak)} LAK` },
     ];
     const quickActions = [
-        { href: "/pos", icon: Plus, label: "New Sale" },
-        { href: "/products/new", icon: PackagePlus, label: "New Product" },
-        { href: "/purchasing/new", icon: Truck, label: "Purchase Order" },
-        { href: "/inventory/count", icon: ClipboardCheck, label: "Stock Count" },
-        { href: "#close-day", icon: CalendarDays, label: "Close Day" },
+        { href: "/pos", icon: Plus, label: copy.newSale },
+        { href: "/products/new", icon: PackagePlus, label: copy.newProduct },
+        { href: "/purchasing/new", icon: Truck, label: copy.purchaseOrder },
+        { href: "/inventory/count", icon: ClipboardCheck, label: copy.stockCount },
+        { href: "#close-day", icon: CalendarDays, label: copy.closeDay },
     ];
     return (<div className="flex min-w-0 flex-col gap-5">
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium text-primary">{storeName}</p>
-            <h1 className="mt-1 text-2xl font-semibold">Store Dashboard</h1>
+            <h1 className="mt-1 text-2xl font-semibold">{copy.storeDashboard}</h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("ui.sales.inventory.alerts.credit.reminders.and.")}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[520px]">
-            <DayStatusMetric label="Business Date" value={formatBusinessDate(periodStart)}/>
-            <DayStatusMetric label="Status" value={dayStatusLabel} tone={snapshot.shift.status === "open" ? "success" : "default"}/>
+            <DayStatusMetric label={copy.businessDate} value={formatBusinessDate(periodStart)}/>
+            <DayStatusMetric label={copy.status} value={dayStatusLabel} tone={snapshot.shift.status === "open" ? "success" : "default"}/>
             <Link className="inline-flex h-full min-h-14 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" href="#close-day">
-              Close Day
+              {copy.closeDay}
             </Link>
           </div>
         </div>
@@ -96,7 +102,7 @@ export default async function DashboardPage({ searchParams, }: {
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         <DashboardDateRangeControls activeRange={snapshot.period.key} endDate={customEnd} startDate={customStart}/>
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="text-sm font-semibold">Quick Actions</div>
+          <div className="text-sm font-semibold">{copy.quickActions}</div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             {quickActions.map((action) => {
             const Icon = action.icon;
@@ -129,7 +135,7 @@ export default async function DashboardPage({ searchParams, }: {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-primary">{snapshot.period.label}</p>
-              <h2 className="mt-1 text-xl font-semibold">Sales by Hour</h2>
+              <h2 className="mt-1 text-xl font-semibold">{copy.salesByHour}</h2>
             </div>
             <span className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground">
               LAK
@@ -145,15 +151,15 @@ export default async function DashboardPage({ searchParams, }: {
             </div>) : (<div className="mt-5 grid h-72 place-items-center rounded-md border border-dashed border-border bg-background text-center">
               <div>
                 <DollarSign className="mx-auto size-10 text-muted-foreground" aria-hidden="true"/>
-                <p className="mt-3 text-sm font-semibold">No sales data for selected period</p>
+                <p className="mt-3 text-sm font-semibold">{copy.noSalesData}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{t("ui.sales.by.hour.will.appear.after.transactions")}</p>
               </div>
             </div>)}
         </article>
 
         <article className="min-w-0 rounded-lg border border-border bg-card p-5">
-          <p className="text-sm font-medium text-primary">Top 10 Selling Products</p>
-          <h2 className="mt-1 text-xl font-semibold">Best sellers</h2>
+          <p className="text-sm font-medium text-primary">{copy.topProducts}</p>
+          <h2 className="mt-1 text-xl font-semibold">{copy.bestSellers}</h2>
           <div className="mt-5 flex max-h-72 flex-col gap-3 overflow-y-auto">
             {snapshot.topProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">{t("ui.no.products.sold.in.this.period")}</div>) : (snapshot.topProducts.map((product, index) => (<div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3" key={product.name}>
                   <div className="min-w-0">
@@ -170,14 +176,14 @@ export default async function DashboardPage({ searchParams, }: {
 
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-primary">Dashboard Alerts</p>
-          <h2 className="text-xl font-semibold">Needs attention</h2>
+          <p className="text-sm font-medium text-primary">{copy.dashboardAlerts}</p>
+          <h2 className="text-xl font-semibold">{copy.needsAttention}</h2>
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {snapshot.alerts.length === 0 ? (<div className="col-span-full grid min-h-32 place-items-center rounded-md border border-dashed border-border bg-background p-5 text-center">
               <div>
                 <CheckCircle2 className="mx-auto size-9 text-success" aria-hidden="true"/>
-                <div className="mt-3 font-semibold">All Systems Normal</div>
+                <div className="mt-3 font-semibold">{copy.allSystemsNormal}</div>
                 <p className="mt-1 text-sm text-muted-foreground">{t("ui.no.business.alerts.today")}</p>
               </div>
             </div>) : (snapshot.alerts.map((alert) => (<AlertCard alert={alert} key={`${alert.type}-${alert.title}`}/>)))}

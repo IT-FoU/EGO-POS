@@ -25,7 +25,9 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { FullScreenToggle } from "@/components/layout/full-screen-toggle";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { LogoContainer } from "@/components/brand/logo-container";
-import { APP_NAME, SLOGAN } from "@/lib/constants";
+import { APP_NAME, DEFAULT_LOCALE, SLOGAN } from "@/lib/constants";
+import type { SupportedLocale } from "@/lib/constants";
+import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -73,14 +75,14 @@ const shellCopy: Record<"lo" | "en", {
     lockedFeature: "ຟີເຈີແຜນຈ່າຍເງິນຖືກລັອກ",
     nav: {
       customers: "ລູກຄ້າ",
-      dashboard: "ໜ້າຫຼັກ",
+      dashboard: "Dashboard",
       inventory: "ສາງສິນຄ້າ",
-      membership: "ສະມາຊິກ",
+      membership: "Membership",
       pos: "POS",
       products: "ສິນຄ້າ",
-      promotions: "ໂປຣໂມຊັນ",
+      promotions: "Promotion",
       purchasing: "ຈັດຊື້",
-      reports: "ລາຍງານ",
+      reports: "Report",
       settings: "ຕັ້ງຄ່າ",
       suppliers: "ຜູ້ສະໜອງ",
     },
@@ -103,7 +105,23 @@ export function DashboardShell({
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [planName, setPlanName] = useState("Free Plan");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
-  const [locale, setLocale] = useState<"lo" | "en">(session.user.locale === "en" ? "en" : "lo");
+  const [locale, setLocale] = useState<SupportedLocale>(DEFAULT_LOCALE);
+
+  useEffect(() => {
+    setLocale(readClientLocale(session.user.locale));
+  }, [session.user.locale]);
+
+  useEffect(() => {
+    function handleLocaleChange(event: Event) {
+      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+      if (detail?.locale === "en" || detail?.locale === "lo") {
+        setLocale(detail.locale);
+      }
+    }
+
+    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+  }, []);
 
   useEffect(() => {
     if (session.user.activeCompanyName) {

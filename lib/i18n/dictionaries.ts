@@ -22,7 +22,7 @@ export const dictionaries = {
     createNewBusiness: "ສ້າງທຸລະກິດໃໝ່",
     currency: "ສະກຸນເງິນ",
     customers: "ລູກຄ້າ",
-    dashboard: "ໜ້າຫຼັກ",
+    dashboard: "Dashboard",
     databaseUnavailable: "ບໍ່ສາມາດເຊື່ອມຖານຂໍ້ມູນໄດ້.",
     email: "ອີເມວ",
     fastSetupDescription: "ຕັ້ງຄ່າຂໍ້ມູນຮ້ານພື້ນຖານ ແລະ ເຂົ້າໃຊ້ POS ໄດ້ທັນທີ.",
@@ -46,9 +46,9 @@ export const dictionaries = {
     pos: "POS",
     posPin: "POS PIN",
     products: "ສິນຄ້າ",
-    promotions: "ໂປຣໂມຊັນ",
+    promotions: "Promotion",
     registerNewAccount: "ສະໝັກບັນຊີໃໝ່",
-    reports: "ລາຍງານ",
+    reports: "Report",
     saveAndContinue: "ບັນທຶກ ແລະ ດຳເນີນຕໍ່",
     saving: "ກຳລັງບັນທຶກ...",
     select: "ເລືອກ",
@@ -134,5 +134,5 @@ export const dictionaries = {
 } satisfies Record<SupportedLocale, Record<string, string>>;
 
 export function getDictionary(locale: string | undefined) {
-  return dictionaries[locale === "en" ? "en" : "lo"];
+  return dictionaries[locale === "lo" ? "lo" : "en"];
 }

@@ -1,0 +1,23 @@
+"use client";
+
+import { useEffect } from "react";
+import { DemoStorageKeys } from "@/lib/demo/storage-keys";
+import { readStringFromStorage, runDemoStorageMigrations, writeStringToStorage } from "@/lib/demo/storage";
+import { applyDocumentLocale, LOCALE_COOKIE_NAME, readClientLocale } from "@/lib/i18n/locale";
+
+export function LocaleBootstrap({ initialLocale }: { initialLocale?: string }) {
+  useEffect(() => {
+    runDemoStorageMigrations();
+    const locale = readClientLocale(initialLocale);
+    applyDocumentLocale(locale);
+
+    const stored = readStringFromStorage(DemoStorageKeys.locale);
+    if (stored !== locale) {
+      writeStringToStorage(DemoStorageKeys.locale, locale);
+    }
+
+    document.cookie = `${LOCALE_COOKIE_NAME}=${locale};path=/;max-age=31536000;SameSite=Lax`;
+  }, [initialLocale]);
+
+  return null;
+}

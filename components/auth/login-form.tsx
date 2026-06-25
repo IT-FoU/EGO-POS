@@ -9,7 +9,9 @@ import { getStoredEntryPath } from "@/features/platform/onboarding-context";
 type LoginDictionary = {
   authNotReady: string;
   databaseUnavailable: string;
+  hidePassword: string;
   invalidCredentials: string;
+  showPassword: string;
   username: string;
   password: string;
   signIn: string;
@@ -30,7 +32,13 @@ function credentialsSignInFailed(response: Response, payload: AuthCallbackPayloa
   return url.includes("error=") || url.includes("/api/auth/error");
 }
 
-export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
+export function LoginForm({
+  dictionary,
+  locale: _locale,
+}: {
+  dictionary: LoginDictionary;
+  locale?: "en" | "lo";
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
@@ -153,7 +161,7 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
           <button
             id="merchant-login-password-toggle"
             aria-controls="merchant-login-password"
-            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            aria-label={isPasswordVisible ? dictionary.hidePassword : dictionary.showPassword}
             aria-pressed={isPasswordVisible}
             className="absolute inset-y-0 right-0 grid w-12 place-items-center text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-card"
             onClick={(event) => {
