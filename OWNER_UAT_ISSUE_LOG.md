@@ -44,6 +44,41 @@
 
 ---
 
+### UAT-3: Dashboard blocked by tenant scope (active company assignment)
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-002 |
+| **Page** | `/dashboard` |
+| **Role used** | Owner (`igo-admin`) |
+| **Reported error** | `User is not assigned to the active company.` at `resolveTenantScope` |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Steps to reproduce (before fix):**
+
+1. Log in with a session that still carries a synthetic demo user ID (`demo-owner-login`) or demo fallback path.
+2. Open `http://localhost:3000/dashboard`.
+
+**Expected:** Dashboard loads and report snapshot resolves tenant scope.
+
+**Actual:** Dashboard permission passed (post UAT-2) but `getPrismaReportsSnapshot` failed in `resolveTenantScope`.
+
+**Root cause:**
+
+- UAT-2 fixed permission lookup for synthetic demo user IDs, but `resolveTenantScope` still queried `company_users` using the raw session `userId`.
+- Synthetic IDs such as `demo-owner-login` have no `company_users` row, so tenant scope resolution failed even when the seeded owner user (`igo-admin`) is valid for `gobox-company`.
+
+**Fix:**
+
+- Added shared tenant membership resolver that maps legacy demo session user IDs to seeded DB users before company membership checks (`lib/db/resolve-tenant-user.ts`).
+- `resolveTenantScope` now uses resolved effective user ID for membership, branch, and warehouse scope (`lib/db/tenant-scope.ts`).
+- Permission lookup reuses the same resolver (`features/access-control/prisma-repository.ts`).
+
+**Verification:** `scripts/phase-owner-uat-3-tenant-scope-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

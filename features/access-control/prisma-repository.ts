@@ -2,6 +2,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
+import { resolveTenantMembership, type TenantMembership } from "@/lib/db/resolve-tenant-user";
 import { decideApprovalRequest } from "@/features/approvals/approval-engine";
 import {
   APPROVAL_RULE_KEYS,
@@ -516,54 +517,13 @@ export async function decideApproval(input: DecideApprovalInput, tenant: TenantC
 }
 
 export async function getUserPermissionKeys(tenant: TenantContext) {
-  const DEMO_LOGIN_USER_IDS: Record<string, string> = {
-    "demo-cashier-login": "cashier",
-    "demo-manager-login": "manager",
-    "demo-owner": "igo-admin",
-    "demo-owner-login": "igo-admin",
-  };
-
-  let effectiveUserId = tenant.userId;
-  let membership = await db.companyUser.findFirst({
-    select: { isOwner: true },
-    where: {
-      companyId: tenant.companyId,
-      status: "active",
-      userId: effectiveUserId,
-    },
-  });
-
-  if (!membership) {
-    const demoUsername = DEMO_LOGIN_USER_IDS[effectiveUserId];
-    if (demoUsername) {
-      const user = await db.user.findFirst({
-        select: { id: true },
-        where: { username: demoUsername },
-      });
-      if (user) {
-        effectiveUserId = user.id;
-        membership = await db.companyUser.findFirst({
-          select: { isOwner: true },
-          where: {
-            companyId: tenant.companyId,
-            status: "active",
-            userId: effectiveUserId,
-          },
-        });
-      }
-    }
-  }
-
-  if (!membership) {
-    const company = await db.company.findFirst({
-      select: { ownerUserId: true },
-      where: { id: tenant.companyId },
-    });
-    if (company?.ownerUserId === effectiveUserId) {
-      return ["*"];
-    }
+  let membership: TenantMembership;
+  try {
+    membership = await resolveTenantMembership(tenant, db);
+  } catch {
     return [] as string[];
   }
+
   if (membership.isOwner) {
     return ["*"];
   }
@@ -582,7 +542,7 @@ export async function getUserPermissionKeys(tenant: TenantContext) {
     },
     where: {
       companyId: tenant.companyId,
-      userId: effectiveUserId,
+      userId: membership.effectiveUserId,
     },
   });
 

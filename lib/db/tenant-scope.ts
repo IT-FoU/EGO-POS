@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
+import { resolveTenantMembership } from "@/lib/db/resolve-tenant-user";
 
 const db = prisma as any;
 
@@ -13,55 +14,46 @@ export type BranchScope = TenantContext & {
 };
 
 export async function resolveTenantScope(tenant: TenantContext, client: any = db): Promise<BranchScope> {
-  const membership = await client.companyUser.findFirst({
-    where: {
-      companyId: tenant.companyId,
-      status: "active",
-      userId: tenant.userId,
-    },
-  });
+  const { effectiveUserId, isOwner } = await resolveTenantMembership(tenant, client);
+  const scopedTenant: TenantContext = { ...tenant, userId: effectiveUserId };
 
-  if (!membership) {
-    throw new Error("User is not assigned to the active company.");
-  }
-
-  const branch = tenant.branchId
+  const branch = scopedTenant.branchId
     ? await client.branch.findFirst({
-        where: { companyId: tenant.companyId, id: tenant.branchId },
+        where: { companyId: scopedTenant.companyId, id: scopedTenant.branchId },
       })
     : await client.branch.findFirst({
         orderBy: [{ isMainBranch: "desc" }, { createdAt: "asc" }],
-        where: { companyId: tenant.companyId },
+        where: { companyId: scopedTenant.companyId },
       });
 
   if (!branch) {
     throw new Error("Active branch was not found for this user.");
   }
 
-  const branchIds = membership.isOwner
+  const branchIds = isOwner
     ? (await client.branch.findMany({
         select: { id: true },
-        where: { companyId: tenant.companyId },
+        where: { companyId: scopedTenant.companyId },
       })).map((row: Record<string, any>) => row.id)
     : [branch.id];
 
   const warehouses = await client.warehouse.findMany({
     orderBy: { createdAt: "asc" },
-    where: { branchId: { in: branchIds }, companyId: tenant.companyId },
+    where: { branchId: { in: branchIds }, companyId: scopedTenant.companyId },
   });
   const warehouseIds = warehouses.map((warehouse: Record<string, any>) => warehouse.id);
 
-  if (tenant.warehouseId && !warehouseIds.includes(tenant.warehouseId)) {
+  if (scopedTenant.warehouseId && !warehouseIds.includes(scopedTenant.warehouseId)) {
     throw new Error("Active warehouse is outside the assigned branch.");
   }
 
   return {
-    ...tenant,
+    ...scopedTenant,
     branchId: branch.id,
     branchIds,
     branchName: branch.name,
-    isOwner: Boolean(membership.isOwner),
-    warehouseId: tenant.warehouseId ?? warehouseIds[0],
+    isOwner,
+    warehouseId: scopedTenant.warehouseId ?? warehouseIds[0],
     warehouseIds,
   };
 }
