@@ -45,6 +45,8 @@
 
 > **Updated 2026-06-25 (B8-8):** Promotion hardening blocker (G6) is closed by commit `c07a41f` with server-side promotion calculation, client-promotion tamper rejection, member/loyalty interaction coverage, and refund/void promotion reversal coverage. Remaining promotion-related medium/low risks are documented (POS preview parity for DB promotions, advanced promo analytics/UI polish, and cost-missing below-cost edge cases).
 
+> **Updated 2026-06-25 (B8-9):** Dashboard/analytics hardening closes KPI-accuracy blocker scope by reconciling dashboard sales/profit/inventory/supplier-payable totals with Prisma report aggregates, enforcing `dashboard.view`/`reports.view` server-side checks, and validating refund/void, loyalty, and promotion impacts in dashboard metrics. Remaining risk is mainly non-critical drilldown modal narrative content and heuristic health-score interpretation.
+
 ---
 
 ## B) TOP 20 BLOCKERS — Future multi-tenant SaaS usage

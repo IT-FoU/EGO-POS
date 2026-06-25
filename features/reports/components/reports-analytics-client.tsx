@@ -36,16 +36,20 @@ type DataSourceStatus = {
 function buildDataSourceStatuses(hub: ReportsAnalyticsHub): DataSourceStatus[] {
     const transactions = hub.kpis.find((kpi) => kpi.key === "transactions")?.value ?? 0;
     const customers = hub.kpis.find((kpi) => kpi.key === "customers")?.value ?? 0;
-    const inventoryCount = hub.inventoryAlerts.reduce((total, alert) => total + alert.count, 0);
+    const inventoryAlertCount = hub.inventoryAlerts.reduce((total, alert) => total + alert.count, 0);
+    const lowStockCount = hub.inventoryAlerts.find((alert) => alert.key === "low_stock")?.count ?? 0;
+    const deadStockCount = hub.deadStockProducts.length;
+    const promotionImpactCount = hub.categoryBreakdown.length;
+    const paymentChannelCount = hub.paymentBreakdown.length;
     return [
         { count: transactions, name: "Sales", reports: ["Sales Summary", "Sales by Hour"], status: "Synced" },
-        { count: inventoryCount, name: "Inventory", reports: ["Current Stock", "Low Stock"], status: "Synced" },
-        { count: hub.paymentBreakdown.length, name: "Purchasing", reports: ["Purchase Orders", "Supplier Payables"], status: "Synced" },
-        { count: hub.categoryBreakdown.length, name: "Promotions", reports: ["Promotion Performance", "Coupon Usage"], status: "Synced" },
+        { count: inventoryAlertCount, name: "Inventory", reports: ["Current Stock", "Low Stock", "Dead Stock"], status: "Synced" },
+        { count: lowStockCount, name: "Purchasing", reports: ["Purchase Orders", "Supplier Payables"], status: "Synced" },
+        { count: promotionImpactCount, name: "Promotions", reports: ["Promotion Performance"], status: "Synced" },
         { count: customers, name: "Customers", reports: ["Customer List", "Top Customers"], status: "Synced" },
-        { count: hub.topSellers.length, name: "Membership", reports: ["Tier Analysis", "Points Earned"], status: "Synced" },
-        { count: hub.paymentBreakdown.length, name: "Finance", reports: ["Payment Breakdown", "Cash Drawer"], status: "Synced" },
-        { count: hub.deadStockProducts.length, name: "Audit", reports: ["User Activity", "Login History"], status: "Synced" },
+        { count: customers, name: "Membership", reports: ["Tier Analysis", "Points Activity"], status: "Synced" },
+        { count: paymentChannelCount, name: "Finance", reports: ["Payment Breakdown", "Cash Drawer"], status: "Synced" },
+        { count: deadStockCount, name: "Audit", reports: ["Inventory Movements", "Adjustment History"], status: "Synced" },
     ];
 }
 function peakHourLabel(hourlySales: ReportsAnalyticsHub["hourlySales"]) {
@@ -266,9 +270,9 @@ export function ReportsAnalyticsClient({
             {kpis.map((kpi) => (<KpiCard key={kpi.key} label={kpi.label} value={valueText(kpi.value, kpi.valueType)} onClick={() => openKpi(kpi.key, kpi.label)}/>))}
           </section>
 
-          <BusinessHealthScore locale={locale} score={healthScore} statusKey={healthStatusKey} onOpen={() => setModal("health")}/>
+          <BusinessHealthScore hub={hub} locale={locale} score={healthScore} statusKey={healthStatusKey} onOpen={() => setModal("health")}/>
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <AIInsightsPanel locale={locale} onOpenReport={openReport}/>
+            <AIInsightsPanel hub={hub} locale={locale} onOpenReport={openReport}/>
             <DataSourceStatusPanel dataSourceStatuses={dataSourceStatuses} locale={locale} onOpen={(source) => { setActiveSource(source); setModal("dataSource"); }}/>
           </section>
 
@@ -358,7 +362,8 @@ function KpiCard({ label, onClick, value }: {
       </div>
     </button>);
 }
-function BusinessHealthScore({ locale, onOpen, score, statusKey }: {
+function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
+    hub: ReportsAnalyticsHub;
     locale: "en" | "lo";
     onOpen: () => void;
     score: number;
@@ -367,9 +372,16 @@ function BusinessHealthScore({ locale, onOpen, score, statusKey }: {
     const copy = reportCopy[locale];
     const status = statusKey === "excellent" ? copy.excellent : statusKey === "good" ? copy.good : statusKey === "warning" ? copy.statusWarning : copy.statusCritical;
     const tone = statusKey === "excellent" ? "text-success" : statusKey === "good" ? "text-primary" : statusKey === "warning" ? "text-warning" : "text-danger";
+    const transactions = hub.kpis.find((entry) => entry.key === "transactions")?.value ?? 0;
+    const lowStock = hub.inventoryAlerts.find((entry) => entry.key === "low_stock")?.count ?? 0;
+    const outOfStock = hub.inventoryAlerts.find((entry) => entry.key === "out_of_stock")?.count ?? 0;
+    const deadStock = hub.inventoryAlerts.find((entry) => entry.key === "dead_stock")?.count ?? 0;
+    const stockHealth = Math.max(0, Math.min(100, Math.round(100 - (lowStock * 2 + outOfStock * 4 + deadStock * 3))));
+    const customerHealth = Math.max(0, Math.min(100, Math.round(transactions > 0 ? Math.min(100, (hub.itemsSold / transactions) * 10) : 0)));
+    const promotionHealth = Math.max(0, Math.min(100, Math.round(100 - Math.min(deadStock * 4, 60))));
     const breakdown = locale === "lo"
-        ? [["ການເຕີບໂຕຍອດຂາຍ", 88], ["ອັດຕາກຳໄລ", 82], ["ສຸຂະພາບສະຕັອກ", 71], ["ການກັບມາຊື້ຂອງລູກຄ້າ", 76], ["ຜົນກະທົບໂປຣໂມຊັນ", 69]]
-        : [["Sales Growth", 88], ["Profit Margin", 82], ["Stock Health", 71], ["Customer Retention", 76], ["Promotion Impact", 69]];
+        ? [["ການເຕີບໂຕຍອດຂາຍ", score], ["ອັດຕາກຳໄລ", Math.round(hub.profitMarginPercent)], ["ສຸຂະພາບສະຕັອກ", stockHealth], ["ກິດຈະກຳລູກຄ້າ", customerHealth], ["ຜົນກະທົບໂປຣໂມຊັນ", promotionHealth]]
+        : [["Sales Score", score], ["Profit Margin", Math.round(hub.profitMarginPercent)], ["Stock Health", stockHealth], ["Customer Activity", customerHealth], ["Promotion Impact", promotionHealth]];
     return (<section className="rounded-lg border border-border bg-card p-6">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
@@ -397,25 +409,30 @@ function BusinessHealthScore({ locale, onOpen, score, statusKey }: {
       </div>
     </section>);
 }
-function AIInsightsPanel({ locale, onOpenReport }: {
+function AIInsightsPanel({ hub, locale, onOpenReport }: {
+    hub: ReportsAnalyticsHub;
     locale: "en" | "lo";
     onOpenReport: (title: string) => void;
 }) {
     const copy = reportCopy[locale];
+    const topCategory = hub.categoryBreakdown[0]?.category ?? "N/A";
+    const deadStockCount = hub.deadStockProducts.length;
+    const lowStockCount = hub.inventoryAlerts.find((entry) => entry.key === "low_stock")?.count ?? 0;
+    const peakHour = peakHourLabel(hub.hourlySales);
     const insights = locale === "lo"
         ? [
-            ["ໝວດເຄື່ອງດື່ມຂາຍດີທີ່ສຸດໃນອາທິດນີ້.", copy.viewProduct, "Sales by Category"],
-            ["ສິນຄ້າຄ້າງສະຕັອກເພີ່ມຂຶ້ນ ຄວນສ້າງໂປຣໂມຊັນລ້າງສະຕັອກ.", copy.createPromotion, "Dead Stock"],
-            ["ພົບຄວາມສ່ຽງສິນຄ້າຂາດສະຕັອກສຳລັບສິນຄ້າຂາຍໄວ.", copy.createPo, "Low Stock"],
-            ["ເວລາຂາຍດີສຸດແມ່ນ 17:00 - 19:00.", copy.viewSales, "Sales by Hour"],
-            ["ກຳໄລຍັງຄົງທີ່ ແຕ່ຄວນຕິດຕາມຕົ້ນທຶນການຊື້.", copy.viewInventory, t("ui.profit.loss")],
+            [`ໝວດສິນຄ້າລາຍຮັບສູງສຸດ: ${topCategory}`, copy.viewProduct, "Sales by Category"],
+            [`ພົບສິນຄ້າຄ້າງສະຕັອກ ${deadStockCount} ລາຍການ`, copy.createPromotion, "Dead Stock"],
+            [`ພົບສິນຄ້າໃກ້ຂາດ ${lowStockCount} ລາຍການ`, copy.createPo, "Low Stock"],
+            [`${peakHour}`, copy.viewSales, "Sales by Hour"],
+            [`ອັດຕາກຳໄລປັດຈຸບັນ ${hub.profitMarginPercent.toFixed(1)}%`, copy.viewInventory, t("ui.profit.loss")],
         ]
         : [
-            [t("ui.drinks.are.the.best.performing.category.this"), "View Product Report", "Sales by Category"],
-            [t("ui.dead.stock.increased.create.clearance.promot"), "Create Promotion", "Dead Stock"],
-            [t("ui.low.stock.risk.detected.for.fast.moving.item"), "Create Purchase Order", "Low Stock"],
-            ["Peak sales hours are 17:00 - 19:00.", "View Sales Report", "Sales by Hour"],
-            [t("ui.profit.margin.is.stable.but.purchasing.cost."), "View Inventory Report", t("ui.profit.loss")],
+            [`Top revenue category: ${topCategory}`, "View Product Report", "Sales by Category"],
+            [`Dead stock detected: ${deadStockCount} items`, "Create Promotion", "Dead Stock"],
+            [`Low stock risk: ${lowStockCount} items`, "Create Purchase Order", "Low Stock"],
+            [peakHour, "View Sales Report", "Sales by Hour"],
+            [`Current profit margin: ${hub.profitMarginPercent.toFixed(1)}%`, "View Inventory Report", t("ui.profit.loss")],
         ];
     return (<section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold">{copy.aiInsights}</h2>
@@ -435,9 +452,13 @@ function DataSourceStatusPanel({ dataSourceStatuses, locale, onOpen }: {
     onOpen: (source: string) => void;
 }) {
     const copy = reportCopy[locale];
+    const lastUpdated = new Intl.DateTimeFormat(locale === "lo" ? "lo-LA" : "en-GB", {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(new Date());
     return (<section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold">{copy.dataSourceStatus}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{copy.lastUpdated}{t("ui.20.jun.2026.09.42")}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{copy.lastUpdated}: {lastUpdated}</p>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {dataSourceStatuses.map((source) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary" key={source.name} type="button" onClick={() => onOpen(source.name)}>
             <span className="font-semibold">{source.name}</span>

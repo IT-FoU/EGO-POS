@@ -51,6 +51,11 @@ export default async function DashboardPage({ searchParams, }: {
     const customStart = dateRange.start ? dateInputValue(dateRange.start) : dateInputValue(periodStart);
     const customEnd = dateRange.end ? dateInputValue(dateRange.end) : dateInputValue(new Date(periodEnd.getTime() - 1));
     const hasSalesData = snapshot.hourlySales.some((point) => point.salesLak > 0);
+    const dayStatusLabel = snapshot.shift.status === "open"
+        ? "OPEN"
+        : snapshot.shift.status === "closed"
+            ? "CLOSED"
+            : "NOT STARTED";
     const cards = [
         { accent: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400", icon: WalletCards, label: "Sales", value: `${formatLak(snapshot.cards.salesTodayLak)} LAK` },
         { accent: "border-blue-500/40 bg-blue-500/10 text-blue-400", icon: TrendingUp, label: "Profit", value: `${formatLak(snapshot.cards.profitTodayLak)} LAK` },
@@ -80,7 +85,7 @@ export default async function DashboardPage({ searchParams, }: {
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[520px]">
             <DayStatusMetric label="Business Date" value={formatBusinessDate(periodStart)}/>
-            <DayStatusMetric label="Status" value="OPEN" tone="success"/>
+            <DayStatusMetric label="Status" value={dayStatusLabel} tone={snapshot.shift.status === "open" ? "success" : "default"}/>
             <Link className="inline-flex h-full min-h-14 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" href="#close-day">
               Close Day
             </Link>

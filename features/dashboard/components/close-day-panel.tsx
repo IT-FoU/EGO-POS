@@ -12,11 +12,12 @@ export function CloseDayPanel({ closeDay }: {
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const currentShift = closeDay.shiftSummaries.find((shift) => shift.status === "open");
+    const shiftStatusLabel = currentShift ? "OPEN" : closeDay.shiftSummaries.length > 0 ? "CLOSED" : "NOT STARTED";
     return (<section className="rounded-lg border border-border bg-card p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="grid min-w-0 gap-3 sm:grid-cols-3">
-          <CompactMetric label="Status" value="OPEN" tone="success"/>
-          <CompactMetric label="Current Shift" value={currentShift ? "1" : "-"}/>
+          <CompactMetric label="Status" value={shiftStatusLabel} tone={currentShift ? "success" : "default"}/>
+          <CompactMetric label="Current Shift" value={currentShift ? "OPEN" : "-"}/>
           <CompactMetric label="Current Cashier" value={currentShift?.cashierId ?? "-"}/>
         </div>
         <button className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={() => setIsOpen((current) => !current)}>

@@ -1,5 +1,6 @@
 import { computeCashSessionTotalsForShift } from "@/features/cash-sessions/prisma-repository";
-import { requireSession } from "@/lib/auth/session";
+import { getPrismaReportsSnapshot } from "@/features/reports/prisma-repository";
+import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 
@@ -48,15 +49,24 @@ export type DashboardSnapshot = {
   alerts: DashboardAlert[];
   cards: {
     cashDrawerExpectedLak: number;
+    cogsLak: number;
     customerCreditDueLak: number;
+    discountLak: number;
     expiredProducts: number;
+    grossSalesLak: number;
+    inventoryValueLak: number;
     itemsSoldToday: number;
     lowStockProducts: number;
+    loyaltyRedeemedLak: number;
+    netSalesLak: number;
     nearExpiryProducts: number;
     profitTodayLak: number;
+    promotionDiscountLak: number;
+    refundLak: number;
     salesTodayLak: number;
     supplierPayablesDueLak: number;
     totalBillsToday: number;
+    voidCount: number;
   };
   closeDay: {
     cashCountedLak: number;
@@ -65,9 +75,11 @@ export type DashboardSnapshot = {
     expectedCashLak: number;
     profitLak: number;
     qrTransferSalesLak: number;
+    refundLak: number;
     shiftSummaries: ShiftSummary[];
     totalBills: number;
     totalSalesLak: number;
+    voidCount: number;
   };
   hourlySales: TodaySalesPoint[];
   period: {
@@ -85,6 +97,18 @@ export type DashboardSnapshot = {
     qrTransferSalesLak: number;
     status: "not_started" | "open" | "closed";
   };
+  summary: {
+    cogsLak: number;
+    discountLak: number;
+    grossSalesLak: number;
+    inventoryValueLak: number;
+    loyaltyRedeemedLak: number;
+    netSalesLak: number;
+    promotionDiscountLak: number;
+    refundLak: number;
+    voidCount: number;
+  };
+  paymentBreakdown: Array<{ method: string; totalLak: number }>;
   topProducts: TopSellingProduct[];
 };
 
@@ -95,15 +119,24 @@ function emptySnapshot(): DashboardSnapshot {
     alerts: [],
     cards: {
       cashDrawerExpectedLak: 0,
+      cogsLak: 0,
       customerCreditDueLak: 0,
+      discountLak: 0,
       expiredProducts: 0,
+      grossSalesLak: 0,
+      inventoryValueLak: 0,
       itemsSoldToday: 0,
       lowStockProducts: 0,
+      loyaltyRedeemedLak: 0,
+      netSalesLak: 0,
       nearExpiryProducts: 0,
       profitTodayLak: 0,
+      promotionDiscountLak: 0,
+      refundLak: 0,
       salesTodayLak: 0,
       supplierPayablesDueLak: 0,
       totalBillsToday: 0,
+      voidCount: 0,
     },
     closeDay: {
       cashCountedLak: 0,
@@ -112,9 +145,11 @@ function emptySnapshot(): DashboardSnapshot {
       expectedCashLak: 0,
       profitLak: 0,
       qrTransferSalesLak: 0,
+      refundLak: 0,
       shiftSummaries: [],
       totalBills: 0,
       totalSalesLak: 0,
+      voidCount: 0,
     },
     hourlySales: Array.from({ length: 24 }, (_, hour) => ({
       hour: `${String(hour).padStart(2, "0")}:00`,
@@ -135,6 +170,18 @@ function emptySnapshot(): DashboardSnapshot {
       qrTransferSalesLak: 0,
       status: "not_started",
     },
+    summary: {
+      cogsLak: 0,
+      discountLak: 0,
+      grossSalesLak: 0,
+      inventoryValueLak: 0,
+      loyaltyRedeemedLak: 0,
+      netSalesLak: 0,
+      promotionDiscountLak: 0,
+      refundLak: 0,
+      voidCount: 0,
+    },
+    paymentBreakdown: [],
     topProducts: [],
   };
 }
@@ -234,14 +281,18 @@ export function shouldRouteToPos(roles: string[] = []) {
 export async function getMiniMartDashboardSnapshot(
   range: DashboardDateRange = { key: "today" },
 ): Promise<DashboardSnapshot> {
+  const { requireSession } = await import("@/lib/auth/session");
   const session = await requireSession();
-  return getPrismaDashboardSnapshot(tenantFromSession(session), range);
+  const tenant = tenantFromSession(session);
+  await assertPermission(tenant, READ_PERMISSIONS.dashboardView);
+  return getPrismaDashboardSnapshot(tenant, range);
 }
 
-async function getPrismaDashboardSnapshot(
+export async function getPrismaDashboardSnapshot(
   tenant: TenantContext,
   range: DashboardDateRange,
 ): Promise<DashboardSnapshot> {
+  await assertPermission(tenant, READ_PERMISSIONS.dashboardView);
   const { end, label, start } = resolveDateRange(range);
   const nearExpiryEnd = plusDays(start, 30);
   const deadStockCutoff = plusDays(new Date(), -30);
@@ -249,20 +300,24 @@ async function getPrismaDashboardSnapshot(
   const branchWhere = tenant.branchId ? { branchId: tenant.branchId } : {};
   const warehouseWhere = tenant.warehouseId ? { warehouseId: tenant.warehouseId } : {};
 
-  try {
-    const [
-      sales,
-      salePayments,
-      inventoryBalances,
-      nearExpiryLots,
-      expiredLots,
-      customerCredit,
-      supplierPayables,
-      currentShift,
-      todayShifts,
-      deadStockProducts,
-      historicalSales,
-    ] = await Promise.all([
+  const [
+    sales,
+    salePayments,
+    inventoryBalances,
+    nearExpiryLots,
+    expiredLots,
+    customerCredit,
+    supplierPayables,
+    currentShift,
+    todayShifts,
+    deadStockProducts,
+    historicalSales,
+    saleItemPromotionRows,
+    loyaltyRedeemLedger,
+    refunds,
+    voidCount,
+    reportsSnapshot,
+  ] = await Promise.all([
       prisma.sale.findMany({
         include: {
           items: {
@@ -352,8 +407,6 @@ async function getPrismaDashboardSnapshot(
         _sum: { balanceAmount: true },
         where: {
           companyId: tenant.companyId,
-          dueDate: { lte: end },
-          status: { in: ["unpaid", "partial"] },
         },
       }),
       prisma.cashSession.findFirst({
@@ -399,10 +452,60 @@ async function getPrismaDashboardSnapshot(
           saleStatus: "completed",
         },
       }),
+      prisma.saleItem.findMany({
+        select: { promotionDiscount: true },
+        where: {
+          sale: {
+            ...branchWhere,
+            companyId: tenant.companyId,
+            createdAt: { gte: start, lt: end },
+            saleStatus: "completed",
+          },
+        },
+      }),
+      prisma.loyaltyPointLedger.findMany({
+        select: { amountLak: true },
+        where: {
+          companyId: tenant.companyId,
+          createdAt: { gte: start, lt: end },
+          pointType: "redeem",
+        },
+      }),
+      prisma.refund.findMany({
+        select: { totalAmount: true },
+        where: {
+          companyId: tenant.companyId,
+          createdAt: { gte: start, lt: end },
+          sale: branchWhere,
+        },
+      }),
+      prisma.sale.count({
+        where: {
+          ...branchWhere,
+          companyId: tenant.companyId,
+          createdAt: { gte: start, lt: end },
+          saleStatus: "cancelled",
+        },
+      }),
+      getPrismaReportsSnapshot(tenant, {
+        branchId: tenant.branchId || undefined,
+        dateFrom: start,
+        datePreset: "custom",
+        dateTo: new Date(end.getTime() - 1),
+        warehouseId: tenant.warehouseId || undefined,
+      }),
     ]);
 
-    const salesTodayLak = sales.reduce((total, sale) => total + amount(sale.totalAmount), 0);
-    const profitTodayLak = sales.reduce((total, sale) => total + amount(sale.profitAmount), 0);
+    const grossSalesLak = sales.reduce((total, sale) => total + amount(sale.subtotal), 0);
+    const discountLak = sales.reduce((total, sale) => total + amount(sale.discountAmount), 0);
+    const promotionDiscountLak = saleItemPromotionRows.reduce((total, row) => total + amount(row.promotionDiscount), 0);
+    const loyaltyRedeemedLak = loyaltyRedeemLedger.reduce((total, row) => total + amount(row.amountLak), 0);
+    const salesTodayLak = amount(reportsSnapshot.analytics.totalRevenue);
+    const profitTodayLak = amount(reportsSnapshot.analytics.totalProfit);
+    const cogsLak = amount(reportsSnapshot.cogsLak);
+    const refundLak = refunds.reduce((total, row) => total + amount(row.totalAmount), 0);
+    const netSalesLak = Math.max(salesTodayLak - refundLak, 0);
+    const inventoryValueLak = amount(reportsSnapshot.hub.inventoryValueLak);
     const itemsSoldToday = sales.reduce(
       (total, sale) => total + sale.items.reduce((sum, item) => sum + amount(item.quantity), 0),
       0,
@@ -452,6 +555,12 @@ async function getPrismaDashboardSnapshot(
     const topProducts = Array.from(topProductMap.values())
       .sort((left, right) => right.quantity - left.quantity)
       .slice(0, 10);
+    const paymentBreakdown = salePayments
+      .reduce<Map<string, number>>((totals, payment) => {
+        const method = String(payment.paymentMethod ?? "cash");
+        totals.set(method, (totals.get(method) ?? 0) + amount(payment.amount));
+        return totals;
+      }, new Map());
     const shiftSummaries = await Promise.all(
       todayShifts.map(async (shift) => {
         const shiftEnd = shift.closedAt ?? new Date();
@@ -470,6 +579,9 @@ async function getPrismaDashboardSnapshot(
         } satisfies ShiftSummary;
       }),
     );
+    const closeDayExpectedCashLak = shiftSummaries.length > 0
+      ? shiftSummaries.reduce((total, shift) => total + shift.expectedCashLak, 0)
+      : expectedCashLak;
     const alerts: DashboardAlert[] = [
       deadStockProducts > 0
         ? {
@@ -557,28 +669,40 @@ async function getPrismaDashboardSnapshot(
       alerts,
       cards: {
         cashDrawerExpectedLak: expectedCashLak,
+        cogsLak,
         customerCreditDueLak: amount(customerCredit._sum.outstandingBalance),
+        discountLak,
         expiredProducts: expiredLots.length,
+        grossSalesLak,
+        inventoryValueLak,
         itemsSoldToday,
         lowStockProducts: lowStockProducts.length,
+        loyaltyRedeemedLak,
+        netSalesLak,
         nearExpiryProducts: nearExpiryLots.length,
         profitTodayLak,
+        promotionDiscountLak,
+        refundLak,
         salesTodayLak,
         supplierPayablesDueLak: amount(supplierPayables._sum.balanceAmount),
         totalBillsToday: sales.length,
+        voidCount,
       },
       closeDay: {
         cashCountedLak: shiftSummaries.reduce((total, shift) => total + shift.countedCashLak, 0),
         cashSalesLak,
         differenceLak: shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0),
-        expectedCashLak,
+        expectedCashLak: closeDayExpectedCashLak,
         profitLak: profitTodayLak,
         qrTransferSalesLak,
+        refundLak,
         shiftSummaries,
         totalBills: sales.length,
         totalSalesLak: salesTodayLak,
+        voidCount,
       },
       hourlySales,
+      paymentBreakdown: Array.from(paymentBreakdown.entries()).map(([method, totalLak]) => ({ method, totalLak })),
       period: {
         end: end.toISOString(),
         key: range.key,
@@ -594,18 +718,17 @@ async function getPrismaDashboardSnapshot(
         qrTransferSalesLak,
         status: currentShift ? "open" : "not_started",
       },
+      summary: {
+        cogsLak,
+        discountLak,
+        grossSalesLak,
+        inventoryValueLak,
+        loyaltyRedeemedLak,
+        netSalesLak,
+        promotionDiscountLak,
+        refundLak,
+        voidCount,
+      },
       topProducts,
     };
-  } catch {
-    const snapshot = emptySnapshot();
-    return {
-      ...snapshot,
-      period: {
-        end: end.toISOString(),
-        key: range.key,
-        label,
-        start: start.toISOString(),
-      },
-    };
-  }
 }

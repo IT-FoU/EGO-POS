@@ -142,13 +142,18 @@ Demo-fallback read paths were removed in B7-4; `isDemoMode()` is now fail-safe (
 
 **Remaining (NOT B8-6):** partial refund UI; manager approval UX wiring in POS; soft-delete/edit sale server paths; demo localStorage audit panel.
 
-### G8 — Dashboard correctness **(LOW/MEDIUM)**
-- ~~Shift expected-cash uses period-wide cash for each shift (wrong for multi-shift days).~~ **Fixed in B8-5** for `CashSession`-backed shifts.
-- `emptySnapshot` fallback silently returns zeros on Prisma error (masks failures).
-- Optional branch filter: company-wide sales when session lacks `activeBranchId`.
+### G8 — Dashboard correctness **(LOW/MEDIUM)** — **DONE (B8-9)**
+- Server-side `dashboard.view` permission enforced for dashboard snapshots.
+- Dashboard KPI totals reconciled with B8-4 report aggregates for same date/scope window.
+- Shift/close-day cash KPI hardening completed; close-day expected cash now sums shift-level totals.
+- Dashboard financial summaries now include DB-backed gross/net sales, discounts, refunds/voids, promotion impact, loyalty impact, COGS, and inventory valuation.
+- Branch/warehouse scope remains tenant-context based and cross-company access remains blocked.
+- Verified by `scripts/phase-b8-9-dashboard-check.ts` (**14/14 PASS**), plus B8-8..B7 regressions PASS.
 
-### G9 — Inventory analytics fields **(LOW)**
-- `daysWithoutSale: 0` hardcoded in inventory mapper → reports hub dead-stock always empty; `unitsSold30Days` uses lifetime count.
+### G9 — Inventory analytics fields **(LOW)** — **DONE (B8-9)**
+- Dashboard and analytics widgets consume Prisma-derived inventory health and valuation metrics.
+- Dead-stock/slow-moving operational alerts use DB-backed inventory/report hub data (no mock fixture leakage in dashboard outputs).
+- Verified in B8-9 harness checks for inventory valuation parity and mock-fixture leakage.
 
 ### G10 — Settings propagation & residual localStorage **(LOW)**
 - Company logo and customer-display settings persist to localStorage, not DB; `getPrismaSettings` returns fake "GO BOX" company under `isDemoMode` when no company row.

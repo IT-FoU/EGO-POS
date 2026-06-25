@@ -7,6 +7,7 @@ import type { ReportFilterOptions, ReportFilters } from "@/features/reports/repo
 import { parseReportFilters } from "@/features/reports/report-filters";
 import type { ProductReportRow, PurchaseTrendPoint, SalesMetric, SupplierPayableSummary, TrendPoint } from "@/features/reports/types";
 import { requireSession } from "@/lib/auth/session";
+import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { getPrismaReportsSnapshot, getReportFilterOptions } from "@/features/reports/prisma-repository";
 
@@ -40,7 +41,9 @@ export type ReportsPageData = ReportsSnapshot & {
 };
 
 export async function getReportsSnapshot(filters?: ReportFilters): Promise<ReportsSnapshot> {
-  return getPrismaReportsSnapshot(tenantFromSession(await requireSession()), filters);
+  const tenant = tenantFromSession(await requireSession());
+  await assertPermission(tenant, READ_PERMISSIONS.reportsView);
+  return getPrismaReportsSnapshot(tenant, filters);
 }
 
 export async function getReportsPageData(
@@ -48,6 +51,7 @@ export async function getReportsPageData(
 ): Promise<ReportsPageData> {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
+  await assertPermission(tenant, READ_PERMISSIONS.reportsView);
   const normalizedParams = Object.fromEntries(
     Object.entries(searchParams ?? {}).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]),
   );
