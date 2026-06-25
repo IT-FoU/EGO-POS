@@ -44,6 +44,72 @@ const demoLoginUsers = [
   },
 ] as const;
 
+const DEMO_LOGIN_USER_IDS: Record<string, string> = {
+  "demo-cashier-login": "cashier",
+  "demo-manager-login": "manager",
+  "demo-owner-login": "igo-admin",
+};
+
+async function buildSessionUserFromDatabase(user: {
+  companies: Array<{
+    allowBackOfficeAccess: boolean;
+    allowPosAccess: boolean;
+    assignedTerminal: string | null;
+    branchId: string | null;
+    company: { id: string; name: string };
+    isOwner: boolean;
+  }>;
+  email: string | null;
+  fullName: string;
+  id: string;
+  preferredLocale: string;
+  roles: Array<{ companyId: string | null; role: { name: string } }>;
+  username: string;
+}) {
+  const membership = user.companies[0];
+  const activeCompany = membership?.company;
+  if (!membership || !activeCompany) {
+    return null;
+  }
+
+  if (!membership.allowPosAccess && !membership.allowBackOfficeAccess) {
+    throw new Error("UserDisabled");
+  }
+
+  const activeBranch = membership.branchId
+    ? await prisma.branch.findFirst({
+        where: { companyId: activeCompany.id, id: membership.branchId },
+      })
+    : await prisma.branch.findFirst({
+        orderBy: [{ isMainBranch: "desc" }, { createdAt: "asc" }],
+        where: { companyId: activeCompany.id },
+      });
+  const activeWarehouse = activeBranch
+    ? await prisma.warehouse.findFirst({
+        orderBy: { createdAt: "asc" },
+        where: { branchId: activeBranch.id, companyId: activeCompany.id },
+      })
+    : null;
+
+  const companyRoles = user.roles.filter((entry) => entry.companyId === activeCompany.id);
+
+  return {
+    id: user.id,
+    name: user.fullName,
+    email: user.email ?? `${user.username}@local`,
+    username: user.username,
+    activeBranchId: activeBranch?.id,
+    activeWarehouseId: activeWarehouse?.id,
+    activeCompanyId: activeCompany.id,
+    activeCompanyName: activeCompany.name,
+    locale: user.preferredLocale,
+    roles: membership.isOwner ? ["Owner"] : companyRoles.map((entry) => entry.role.name),
+    allowPOSAccess: membership.allowPosAccess,
+    allowBackOfficeAccess: membership.allowBackOfficeAccess,
+    assignedTerminal: membership.assignedTerminal ?? "POS-01",
+  };
+}
+
 async function authorizeDemoUser(username: string, password: string, cookieHeader?: string | null) {
   if (!isDemoMode()) {
     return null;
@@ -85,6 +151,23 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
   }
   if (demoUser.password !== password) {
     return false;
+  }
+
+  const storedUser = await prisma.user.findFirst({
+    where: { username: demoUser.username },
+    include: {
+      companies: {
+        include: { company: true },
+        where: { status: "active" },
+      },
+      roles: {
+        include: { role: true },
+      },
+    },
+  });
+
+  if (storedUser) {
+    return buildSessionUserFromDatabase(storedUser);
   }
 
   return {
@@ -173,48 +256,7 @@ export const authOptions: NextAuthOptions = {
           },
         });
 
-        const membership = user.companies[0];
-        const activeCompany = membership?.company;
-        if (!membership || !activeCompany) {
-          return null;
-        }
-
-        if (!membership.allowPosAccess && !membership.allowBackOfficeAccess) {
-          throw new Error("UserDisabled");
-        }
-
-        const activeBranch = membership.branchId
-          ? await prisma.branch.findFirst({
-              where: { companyId: activeCompany.id, id: membership.branchId },
-            })
-          : await prisma.branch.findFirst({
-              orderBy: [{ isMainBranch: "desc" }, { createdAt: "asc" }],
-              where: { companyId: activeCompany.id },
-            });
-        const activeWarehouse = activeBranch
-          ? await prisma.warehouse.findFirst({
-              orderBy: { createdAt: "asc" },
-              where: { branchId: activeBranch.id, companyId: activeCompany.id },
-            })
-          : null;
-
-        const companyRoles = user.roles.filter((entry) => entry.companyId === activeCompany.id);
-
-        return {
-          id: user.id,
-          name: user.fullName,
-          email: user.email,
-          username: user.username,
-          activeBranchId: activeBranch?.id,
-          activeWarehouseId: activeWarehouse?.id,
-          activeCompanyId: activeCompany.id,
-          activeCompanyName: activeCompany.name,
-          locale: user.preferredLocale,
-          roles: membership.isOwner ? ["Owner"] : companyRoles.map((entry) => entry.role.name),
-          allowPOSAccess: membership.allowPosAccess,
-          allowBackOfficeAccess: membership.allowBackOfficeAccess,
-          assignedTerminal: membership.assignedTerminal ?? "POS-01",
-        };
+        return buildSessionUserFromDatabase(user);
       },
     }),
   ],

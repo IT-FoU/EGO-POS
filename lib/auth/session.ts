@@ -20,11 +20,44 @@ function demoSession(): Session {
       activeCompanyName: "GO BOX",
       activeWarehouseId: "gobox-default-warehouse",
       email: "owner@igopos.local",
-      id: "demo-owner",
+      id: "demo-owner-login",
       locale: "lo",
       name: "EGO Store Owner",
       roles: ["Owner"],
-      username: "owner",
+      username: "igo-admin",
+    },
+  };
+}
+
+async function demoSessionFromDatabase(): Promise<Session | null> {
+  const { prisma } = await import("@/lib/db/prisma");
+  const owner = await prisma.user.findFirst({
+    include: {
+      companies: {
+        include: { company: true },
+        where: { companyId: "gobox-company", status: "active" },
+      },
+    },
+    where: { username: "igo-admin" },
+  });
+  const membership = owner?.companies[0];
+  if (!owner || !membership?.company) {
+    return null;
+  }
+
+  return {
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    user: {
+      activeBranchId: membership.branchId ?? "gobox-main-branch",
+      activeCompanyId: membership.company.id,
+      activeCompanyName: membership.company.name,
+      activeWarehouseId: "gobox-default-warehouse",
+      email: owner.email,
+      id: owner.id,
+      locale: owner.preferredLocale,
+      name: owner.fullName,
+      roles: ["Owner"],
+      username: owner.username,
     },
   };
 }
@@ -38,7 +71,7 @@ export async function requireApiSession() {
   const session = await getCurrentSession();
   if (!session?.user) {
     if (isDemoFallbackEnabled()) {
-      return demoSession();
+      return (await demoSessionFromDatabase()) ?? demoSession();
     }
     throw new ApiUnauthorizedError();
   }
@@ -50,7 +83,7 @@ export async function requireSession() {
 
   if (!session?.user) {
     if (isDemoFallbackEnabled()) {
-      return demoSession();
+      return (await demoSessionFromDatabase()) ?? demoSession();
     }
 
     redirect("/login");

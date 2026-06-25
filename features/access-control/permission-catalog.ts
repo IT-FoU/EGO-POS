@@ -197,6 +197,7 @@ export const PERMISSION_ALIAS_GROUPS: Record<string, string[]> = {
   "staff.view": ["staff.view"],
   "approvals.view": ["approvals.view"],
   "dashboard.view": ["dashboard.view"],
+  "dashboards.view": ["dashboard.view"],
   "pos.view": ["pos.view", "pos.create"],
 };
 
