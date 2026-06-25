@@ -255,6 +255,33 @@
 
 ---
 
+### UAT-3B: Login Sign in button disabled during manual testing
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-010 |
+| **Page** | `/login?locale=en` |
+| **Role used** | Owner |
+| **Reported error** | Sign in button appeared disabled/blocked even after entering credentials |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Submit button `disabled` state relied only on React controlled state (`username` / `password`).
+- Browser/password-manager autofill can populate visible inputs without firing `onChange`, leaving React state empty and `canSubmit` false.
+
+**Fix:**
+
+- Extracted shared submit eligibility helper (`lib/auth/login-form-state.ts`).
+- Login submit now reads credentials from `FormData` as the source of truth, with state fallback.
+- Added `onInput` handlers and autofill sync so controlled state matches filled fields.
+- Preserved OWNER-UAT-3 credentials callback flow and generic error messaging.
+
+**Verification:** `scripts/phase-owner-uat-3b-login-button-check.ts`, `scripts/phase-owner-uat-3-login-session-check.ts`
+
+---
+
 ## Planned — not implemented during UAT
 
 ### UAT-5: Register / email verification

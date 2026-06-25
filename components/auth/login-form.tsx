@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { getStoredEntryPath } from "@/features/platform/onboarding-context";
+import {
+  canSubmitLoginCredentials,
+  readLoginCredentialsFromForm,
+} from "@/lib/auth/login-form-state";
 
 type LoginDictionary = {
   authNotReady: string;
@@ -32,6 +36,16 @@ function credentialsSignInFailed(response: Response, payload: AuthCallbackPayloa
   return url.includes("error=") || url.includes("/api/auth/error");
 }
 
+function readCredentialInputs() {
+  const usernameInput = document.querySelector<HTMLInputElement>('input[name="username"]');
+  const passwordInput = document.getElementById("merchant-login-password");
+
+  return {
+    secret: passwordInput instanceof HTMLInputElement ? passwordInput.value : "",
+    username: usernameInput?.value ?? "",
+  };
+}
+
 export function LoginForm({
   dictionary,
   locale: _locale,
@@ -45,7 +59,7 @@ export function LoginForm({
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const canSubmit = Boolean(username.trim() && password);
+  const canSubmit = canSubmitLoginCredentials(username, password);
 
   useEffect(() => {
     const input = document.getElementById("merchant-login-password");
@@ -53,6 +67,29 @@ export function LoginForm({
       input.type = isPasswordVisible ? "text" : "password";
     }
   }, [isPasswordVisible]);
+
+  useEffect(() => {
+    function syncAutofillValues() {
+      const next = readCredentialInputs();
+      if (next.username && next.username !== username) {
+        setUsername(next.username);
+      }
+      if (next.secret && next.secret !== password) {
+        setPassword(next.secret);
+      }
+    }
+
+    syncAutofillValues();
+    const timers = [100, 300, 800].map((delay) => window.setTimeout(syncAutofillValues, delay));
+    window.addEventListener("focus", syncAutofillValues);
+
+    return () => {
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
+      window.removeEventListener("focus", syncAutofillValues);
+    };
+  }, [password, username]);
 
   async function submitCredentials(trimmedUsername: string, rawPassword: string) {
     const csrfResponse = await fetch("/api/auth/csrf", {
@@ -91,9 +128,11 @@ export function LoginForm({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedUsername = username.trim();
+    const fromForm = readLoginCredentialsFromForm(event.currentTarget);
+    const trimmedUsername = fromForm.username || username.trim();
+    const rawPassword = fromForm.secret || password;
 
-    if (!trimmedUsername || !password) {
+    if (!canSubmitLoginCredentials(trimmedUsername, rawPassword)) {
       setError(dictionary.invalidCredentials);
       return;
     }
@@ -105,7 +144,7 @@ export function LoginForm({
       }
 
       try {
-        const { payload, response } = await submitCredentials(trimmedUsername, password);
+        const { payload, response } = await submitCredentials(trimmedUsername, rawPassword);
         if (credentialsSignInFailed(response, payload)) {
           if (process.env.NODE_ENV === "development") {
             console.info("[login] failed", { status: response.status, username: trimmedUsername });
@@ -132,7 +171,7 @@ export function LoginForm({
   }
 
   return (
-    <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+    <form className="flex flex-col gap-5" id="merchant-login-form" onSubmit={handleSubmit}>
       <label className="flex flex-col gap-2 text-sm font-medium">
         {dictionary.username}
         <input
@@ -142,6 +181,7 @@ export function LoginForm({
           autoComplete="username"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
+          onInput={(event) => setUsername(event.currentTarget.value)}
           required
         />
       </label>
@@ -156,6 +196,7 @@ export function LoginForm({
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            onInput={(event) => setPassword(event.currentTarget.value)}
             required
           />
           <button
