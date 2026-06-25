@@ -1,6 +1,6 @@
 # EGO POS — Production Blocker Report
 
-> Code-verified at commit `29af75d` (+ audit-doc phase). Prioritized blockers for (A) single-store **GO BOX** usage and (B) future **multi-tenant SaaS** usage.
+> Code-verified at commit `38333a2` (+ B8-11 final audit). Prioritized blockers for (A) single-store **GO BOX** usage and (B) future **multi-tenant SaaS** usage.
 > Super Admin is intentionally **out of scope** this phase (its blockers are listed under SaaS for visibility only, not to be built now).
 
 ### Severity legend
@@ -26,9 +26,9 @@
 | 6 | ~~**No end-of-day close / cash reconciliation**~~ — **RESOLVED (B8-5):** `CashSession` open/close/cash-in/out persisted. | ~~**Critical**~~ **Closed** | CASH | — |
 | 7 | ~~**No cash-in / cash-out persistence**~~ — **RESOLVED (B8-5).** | ~~High~~ **Closed** | CASH | — |
 | 8 | **Hold/Resume bill is client state only** — `HoldBill*` models unused; bills lost on refresh. | High | POS | 6 |
-| 9 | **Reports "Report Center" tab shows mock data** (`mock-full-data.ts`) — risk of decisions on fake figures. | High | RPT | 7 |
-| 10 | **Report date-range filters are UI-only / all-time aggregates** — cannot trust filtered totals. | High | RPT | 7 |
-| 11 | **Settings logo + receipt print mode read from localStorage in POS** — diverges from saved DB settings per device. | High | POS, DEPLOY | 8 |
+| 9 | ~~**Reports "Report Center" tab shows mock data**~~ — analytics hub is DB-backed (`build-analytics-hub`); legacy `mock-full-data.ts` is unused dead artifact. | ~~High~~ **Closed (runtime)** / **P2 cleanup** | RPT | 7 |
+| 10 | ~~**Report date-range filters are UI-only**~~ — **RESOLVED (B8-4/B8-9):** Prisma date filters via `report-filters.ts` / `buildSaleWhere`. | ~~High~~ **Closed** | RPT | — |
+| 11 | ~~**Settings logo + receipt print mode read from localStorage in POS**~~ — **RESOLVED (B8-10):** production settings DB-backed; print mode is explicit device-local preference. Logo remains preview-only (P1). | ~~High~~ **Closed (settings SOT)** / **P1 logo** | POS, DEPLOY | 8 |
 | 12 | **No hardware/receipt-printer integration** — browser print only; print mode device-local. | High | POS | 8 |
 | 13 | **`IGO_DEMO_MODE` fail-open risk if mis-set** — demo login, fake session, demo checkout activate when `"true"`. | High | SEC, DEPLOY | 1 (verify) |
 | 14 | **Product images are a stub** (`getPrismaProductImages()` → `[]`) — no storage backend. | Medium | — | 9 |
@@ -36,10 +36,10 @@
 | 16 | **Promotion analytics placeholders** (ratios/charts, stack-rules, integration-map static). | Medium | RPT | 10 |
 | 17 | **Supplier detail placeholders** (documents, linked products, AP invoices, record-payment, activate/deactivate). | Medium | — | 10 |
 | 18 | **Customer & product import/export are placeholders.** | Medium | CUST | 10 |
-| 19 | **Dashboard "Status: OPEN" hardcoded** — not tied to a real shift/session state. | Medium | CASH | 5 |
+| 19 | ~~**Dashboard "Status: OPEN" hardcoded**~~ — **RESOLVED (B8-9):** shift status from `CashSession` (OPEN/CLOSED/NOT STARTED). | ~~Medium~~ **Closed** | CASH | — |
 | 20 | **Repo hygiene / legacy naming** — IGO→EGO rename incomplete (`IGO_DEMO_MODE`, `igo-admin`); artifact bloat (now cleaned). | Low | DEPLOY | 11 |
 
-**Single-store critical path (fix order):** ~~1 → 2/3 → 4 → 5 → 6~~ **B8-5/B8-6 closed items 1–4, 6–7.** Remaining: POS approval UI wiring (#5), hold bills (#8), reports polish (#9–10), settings/print (#11–12).
+**Single-store critical path (fix order):** ~~1 → 2/3 → 4 → 5 → 6~~ **B8-5/B8-6 closed items 1–4, 6–7.** B8-9/B8-10 closed dashboard shift (#19), report filters (#10), settings SOT (#11). **B8-11: no P0 remaining.** Pilot P1: POS approval UI wiring (#5), hold bills (#8), printer (#12), logo (#11-P1).
 
 > **Updated 2026-06-22:** B8-5 (cash session), B8-6 (post-sale), and B8-7 (loyalty/membership) resolve production blockers #1–4, #6–7 for single-store GO BOX usage. Loyalty earn/redeem/tier/reversal is now DB-backed with ledger integrity.
 
@@ -48,6 +48,8 @@
 > **Updated 2026-06-25 (B8-9):** Dashboard/analytics hardening closes KPI-accuracy blocker scope by reconciling dashboard sales/profit/inventory/supplier-payable totals with Prisma report aggregates, enforcing `dashboard.view`/`reports.view` server-side checks, and validating refund/void, loyalty, and promotion impacts in dashboard metrics. Remaining risk is mainly non-critical drilldown modal narrative content and heuristic health-score interpretation.
 
 > **Updated 2026-06-25 (B8-10):** Settings/localStorage hardening closes production source-of-truth ambiguity for critical settings. Tax/loyalty/currency/profile and QR bank/account settings are DB-backed, runtime synthetic settings fallback was removed, and receipt print mode is explicitly isolated as a device-local preference (not financial source-of-truth). LocalStorage is retained only for safe UI/device preferences (theme/locale/customer-display runtime/setup draft), with demo fallback paths explicitly gated.
+
+> **Updated 2026-06-25 (B8-11):** Final production readiness audit PASS. All B8/B7 harness regressions PASS. **P0 blockers for single-store owner testing: none.** Remaining single-store risks are P1 pilot items (POS approval UI localStorage, hold bill client-only, printer integration, logo DB persistence, deploy env flag verification). See `B8_11_FINAL_PRODUCTION_READINESS_REPORT.md`, `OWNER_TESTING_CHECKLIST.md`, and `PILOT_BLOCKER_REPORT.md`.
 
 ---
 
