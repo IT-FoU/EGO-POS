@@ -1,9 +1,9 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo-mode";
 import { readDemoStaffFromCookieHeader, verifyDemoStaffPassword } from "@/lib/auth/demo-staff-access";
+import { authenticateMerchantUser, verifyMerchantSecret } from "@/lib/auth/merchant-login";
 
 const demoLoginUsers = [
   {
@@ -145,12 +145,14 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
     };
   }
 
-  const demoUser = demoLoginUsers.find((user) => user.username === username || user.email === username);
+  const demoUser = demoLoginUsers.find((user) => {
+    if (username.includes("@")) {
+      return user.email === username && user.roles[0] === "Owner";
+    }
+    return user.username.toLowerCase() === username.toLowerCase();
+  });
   if (!demoUser) {
     return null;
-  }
-  if (demoUser.password !== password) {
-    return false;
   }
 
   const storedUser = await prisma.user.findFirst({
@@ -167,7 +169,15 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
   });
 
   if (storedUser) {
+    const valid = await verifyMerchantSecret(storedUser, password);
+    if (!valid) {
+      return false;
+    }
     return buildSessionUserFromDatabase(storedUser);
+  }
+
+  if (demoUser.password !== password) {
+    return false;
   }
 
   return {
@@ -214,47 +224,19 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findFirst({
-          where: {
-            OR: [{ username }, { email: username }],
-          },
-          include: {
-            companies: {
-              include: { company: true },
-              where: { status: "active" },
-            },
-            roles: {
-              include: { role: true },
-            },
-          },
-        });
+        let user;
+        try {
+          user = await authenticateMerchantUser(username, password);
+        } catch (error) {
+          if (error instanceof Error && error.message === "UserDisabled") {
+            throw error;
+          }
+          return null;
+        }
 
         if (!user) {
           return null;
         }
-
-        if (user.status !== "active") {
-          throw new Error("UserDisabled");
-        }
-
-        const isValidPassword = await compare(password, user.passwordHash);
-
-        if (!isValidPassword) {
-          await prisma.loginHistory.create({
-            data: {
-              userId: user.id,
-              status: "failed",
-            },
-          });
-          return null;
-        }
-
-        await prisma.loginHistory.create({
-          data: {
-            userId: user.id,
-            status: "success",
-          },
-        });
 
         return buildSessionUserFromDatabase(user);
       },

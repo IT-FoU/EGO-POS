@@ -74,6 +74,9 @@ const companyId = "gobox-company";
 const branchId = "gobox-main-branch";
 const defaultWarehouseId = "gobox-default-warehouse";
 const ownerId = "gobox-owner";
+const ownerPin = "123456";
+const managerPin = "234567";
+const cashierPin = "345678";
 
 function resolveWarehouseId(warehouseId: string) {
   return warehouseId === "wh-main" ? defaultWarehouseId : warehouseId;
@@ -118,6 +121,7 @@ async function seedFoundation(db: any) {
       fullName: "EGO Store Owner",
       id: ownerId,
       passwordHash: await hash("AdminChangeMe123!", 12),
+      pinHash: await hash(ownerPin, 12),
       preferredLocale: "lo",
       status: "active",
       username: "igo-admin",
@@ -125,6 +129,7 @@ async function seedFoundation(db: any) {
     update: {
       fullName: "EGO Store Owner",
       passwordHash: await hash("AdminChangeMe123!", 12),
+      pinHash: await hash(ownerPin, 12),
       status: "active",
     },
     where: { username: "igo-admin" },
@@ -217,8 +222,8 @@ async function seedFoundation(db: any) {
   });
 
   const staffUsers = [
-    { allowBackOfficeAccess: true, assignedTerminal: "Back Office", email: "manager@igopos.local", fullName: "EGO Store Manager", password: "Manager123!", role: managerRole, username: "manager" },
-    { allowBackOfficeAccess: false, assignedTerminal: "POS-01", email: "cashier@igopos.local", fullName: "EGO Store Cashier", password: "Cashier123!", role: cashierRole, username: "cashier" },
+    { allowBackOfficeAccess: true, assignedTerminal: "Back Office", email: "manager@igopos.local", fullName: "EGO Store Manager", password: "Manager123!", pin: managerPin, role: managerRole, username: "manager" },
+    { allowBackOfficeAccess: false, assignedTerminal: "POS-01", email: "cashier@igopos.local", fullName: "EGO Store Cashier", password: "Cashier123!", pin: cashierPin, role: cashierRole, username: "cashier" },
   ];
 
   for (const staff of staffUsers) {
@@ -227,6 +232,7 @@ async function seedFoundation(db: any) {
         email: staff.email,
         fullName: staff.fullName,
         passwordHash: await hash(staff.password, 12),
+        pinHash: await hash(staff.pin, 12),
         preferredLocale: "lo",
         status: "active",
         username: staff.username,
@@ -234,6 +240,7 @@ async function seedFoundation(db: any) {
       update: {
         fullName: staff.fullName,
         passwordHash: await hash(staff.password, 12),
+        pinHash: await hash(staff.pin, 12),
         status: "active",
       },
       where: { username: staff.username },

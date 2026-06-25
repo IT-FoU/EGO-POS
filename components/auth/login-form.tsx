@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -17,6 +17,19 @@ type LoginDictionary = {
   registerNewAccount: string;
 };
 
+type AuthCallbackPayload = {
+  url?: string;
+};
+
+function credentialsSignInFailed(response: Response, payload: AuthCallbackPayload | null) {
+  if (!response.ok) {
+    return true;
+  }
+
+  const url = payload?.url ?? "";
+  return url.includes("error=") || url.includes("/api/auth/error");
+}
+
 export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +37,14 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const canSubmit = Boolean(username.trim() && password);
+
+  useEffect(() => {
+    const input = document.getElementById("merchant-login-password");
+    if (input instanceof HTMLInputElement) {
+      input.type = isPasswordVisible ? "text" : "password";
+    }
+  }, [isPasswordVisible]);
 
   async function submitCredentials(trimmedUsername: string, rawPassword: string) {
     const csrfResponse = await fetch("/api/auth/csrf", {
@@ -46,7 +67,7 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
       username: trimmedUsername,
     });
 
-    return fetch("/api/auth/callback/credentials", {
+    const response = await fetch("/api/auth/callback/credentials", {
       body,
       cache: "no-store",
       credentials: "same-origin",
@@ -55,6 +76,9 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
       },
       method: "POST",
     });
+
+    const payload = await response.json().catch(() => null) as AuthCallbackPayload | null;
+    return { payload, response };
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -72,9 +96,21 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
         console.info("[login] submit", { username: trimmedUsername });
       }
 
-      let response: Response;
       try {
-        response = await submitCredentials(trimmedUsername, password);
+        const { payload, response } = await submitCredentials(trimmedUsername, password);
+        if (credentialsSignInFailed(response, payload)) {
+          if (process.env.NODE_ENV === "development") {
+            console.info("[login] failed", { status: response.status, username: trimmedUsername });
+          }
+          setError(dictionary.invalidCredentials);
+          return;
+        }
+
+        if (process.env.NODE_ENV === "development") {
+          console.info("[login] success", { username: trimmedUsername });
+        }
+        router.push(getStoredEntryPath());
+        router.refresh();
       } catch (submitError) {
         if (process.env.NODE_ENV === "development") {
           console.info("[login] failed", {
@@ -83,31 +119,12 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
           });
         }
         setError(dictionary.authNotReady);
-        return;
       }
-
-      if (!response.ok) {
-        if (process.env.NODE_ENV === "development") {
-          console.info("[login] failed", { status: response.status, username: trimmedUsername });
-        }
-        setError(
-          response.status === 401
-            ? dictionary.invalidCredentials
-            : dictionary.authNotReady
-        );
-        return;
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        console.info("[login] success", { username: trimmedUsername });
-      }
-      router.push(getStoredEntryPath());
-      router.refresh();
     });
   }
 
   return (
-    <form action="/login" className="flex flex-col gap-5" method="post" onSubmit={handleSubmit}>
+    <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
       <label className="flex flex-col gap-2 text-sm font-medium">
         {dictionary.username}
         <input
@@ -135,9 +152,15 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
           />
           <button
             id="merchant-login-password-toggle"
+            aria-controls="merchant-login-password"
             aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            aria-pressed={isPasswordVisible}
             className="absolute inset-y-0 right-0 grid w-12 place-items-center text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-card"
-            onClick={() => setIsPasswordVisible((value) => !value)}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsPasswordVisible((value) => !value);
+            }}
             type="button"
           >
             {isPasswordVisible ? (
@@ -152,7 +175,7 @@ export function LoginForm({ dictionary }: { dictionary: LoginDictionary }) {
       <button
         className="h-12 rounded-md bg-primary px-5 text-base font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         type="submit"
-        disabled={isPending}
+        disabled={isPending || !canSubmit}
       >
         {isPending ? dictionary.signingIn : dictionary.signIn}
       </button>

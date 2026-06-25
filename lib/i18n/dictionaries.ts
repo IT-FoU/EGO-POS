@@ -95,7 +95,7 @@ export const dictionaries = {
     freePlanIncludes: "Free plan includes",
     hidePassword: "Hide password",
     inventory: "Inventory",
-    invalidCredentials: "Invalid username or password.",
+    invalidCredentials: "Username or password is incorrect.",
     language: "Language",
     loginTitle: "Sign in to EGO POS",
     logoFutureUse: "Saved for future use in the POS header, receipt printing, reports, and exports.",

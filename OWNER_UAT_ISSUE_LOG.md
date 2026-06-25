@@ -79,6 +79,84 @@
 
 ---
 
+### UAT-3: Login button not submitting correctly
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-003 |
+| **Page** | `/login` |
+| **Role used** | Owner / Manager / Cashier |
+| **Reported error** | Login button appeared inactive or submitted without authenticating; Enter key did not reliably submit |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Login form used native `action="/login" method="post"` alongside a client `preventDefault` handler, so some interactions fell back to a non-auth POST instead of the credentials callback.
+- Successful/failed auth was inferred from `response.ok` only; NextAuth `json=true` responses can return HTTP 200 with an error URL, so wrong credentials did not always surface the safe generic message.
+
+**Fix:**
+
+- Removed native form action/method; submit always goes through the credentials callback fetch path (`components/auth/login-form.tsx`).
+- Parse callback JSON and treat `error=` URLs as failed login; show generic `"Username or password is incorrect."`.
+- Enable submit when required fields are present; Enter submits via standard form submit.
+
+**Verification:** `scripts/phase-owner-uat-3-login-session-check.ts`
+
+---
+
+### UAT-3: Password show/hide button not working
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-004 |
+| **Page** | `/login` |
+| **Role used** | All merchant roles |
+| **Reported error** | Eye icon did not toggle password visibility or cleared the entered value |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Password field type toggle relied only on initial React hydration; the button did not consistently sync the DOM input `type` after interaction.
+
+**Fix:**
+
+- Keep password as controlled state (`value={password}`) so toggling never clears input.
+- Toggle button is `type="button"` with `preventDefault`/`stopPropagation`, `aria-pressed`, and `aria-controls`.
+- Sync input `type` on visibility state changes via `useEffect` (`components/auth/login-form.tsx`).
+
+**Verification:** `scripts/phase-owner-uat-3-login-session-check.ts`
+
+---
+
+### UAT-3: Owner/Manager/Cashier credential rules and session hardening
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-005 |
+| **Page** | `/login`, `/dashboard` |
+| **Role used** | Owner, Manager, Cashier |
+| **Reported error** | PIN login unsupported; manager/cashier could authenticate by email; generic credential errors inconsistent |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- Production auth only compared `passwordHash` and allowed email lookup for all roles.
+- Demo seed users had no `pinHash`, so username + PIN flows could not be tested or used.
+
+**Fix:**
+
+- Added merchant credential resolver (`lib/auth/merchant-login.ts`): owner email or username + password or PIN; manager/cashier username + PIN (password fallback only when PIN not seeded).
+- Wired production authorize path through the resolver (`lib/auth/options.ts`).
+- Seeded demo PIN hashes for owner/manager/cashier (`prisma/seed-demo.ts`).
+- Standardized English invalid-credentials copy (`lib/i18n/dictionaries.ts`).
+
+**Verification:** `scripts/phase-owner-uat-3-login-session-check.ts`, `scripts/phase-owner-uat-3-tenant-scope-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_
