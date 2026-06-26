@@ -168,3 +168,9 @@ npx tsx scripts/phase-b8-3-pos-permission-check.ts
 - `OWNER_UAT_ISSUE_LOG.md` (UAT-8 entry)
 - `lib/auth/super-admin-login.ts`, `lib/auth/setup-admin-login.ts`, `lib/auth/portal-guards.ts`
 - `app/(auth)/login/page.tsx`, `app/(super-admin)/`, `app/(ego-admin)/`
+
+---
+
+## 10. Sign-off
+
+OWNER-UAT-8A verification completed on 2026-06-25. No application code changes. LP-2 not started.
