@@ -51,7 +51,7 @@
 
 > **Updated 2026-06-25 (B8-11):** Final production readiness audit PASS. All B8/B7 harness regressions PASS. **P0 blockers for single-store owner testing: none.** Remaining single-store risks are P1 pilot items (POS approval UI localStorage, hold bill client-only, printer integration, logo DB persistence, deploy env flag verification). See `B8_11_FINAL_PRODUCTION_READINESS_REPORT.md`, `OWNER_TESTING_CHECKLIST.md`, and `PILOT_BLOCKER_REPORT.md`.
 
-> **Updated 2026-06-25 (LP-6A):** Production env guard blocks `IGO_DEMO_MODE=true` at build/startup; `isDemoMode()` is always false in production; health endpoint `/api/health/config` reports demo safety.
+> **Updated 2026-06-25 (LP-7A):** Self-registration and email verification planning spec completed. Public registration and live email remain disabled. Store creation stays EGO Admin / future Super Admin approval controlled.
 
 ---
 
@@ -62,7 +62,7 @@
 | # | Blocker | Severity | Impact | Fix order |
 | --- | --- | --- | --- | --- |
 | 1 | ~~**No self-serve onboarding / company creation**~~ — **MITIGATED (LP-4/LP-6):** production store creation via `/ego-admin/stores/new` (DB); localStorage onboarding gated to `IGO_DEMO_MODE=true` only. Self-serve signup still absent. | **High** (was Critical) | SAAS, DEPLOY | 1 |
-| 2 | ~~**No owner registration endpoint**~~ — **MITIGATED (LP-6):** `/register` shows request-access message; no misleading setup bypass. Signup API still absent (OWNER-UAT-5). | **High** (was Critical) | SAAS, SEC | 1 |
+| 2 | ~~**No owner registration endpoint**~~ — **PLANNED (LP-7):** `/register` request-access only; LP-7 spec defines future request → verify → approve → `provisionStore()` flow. Signup API still absent. | **High** | SAAS, SEC | LP-7B+ |
 | 3 | **All single-store CASH/INV integrity blockers** (sales history, refund, void, receipts, close-day) — multiplied across tenants. | **Critical** | CASH, INV, RPT | 2 |
 | 4 | **POS approvals/audit not in DB** — per-tenant security & compliance unmet. | **Critical** | SEC | 2 |
 | 5 | **Super Admin lifecycle controls are disabled stubs** (suspend/activate/delete tenant, block user, plan changes). *(Out of scope now — listed for visibility.)* | **Critical** | SAAS | later |
@@ -72,7 +72,7 @@
 | 9 | **No per-tenant data export / backup** — `Backup`/`Notification` models unused. | High | SAAS, DEPLOY | 6 |
 | 10 | **Settings/logo/print localStorage coupling** breaks multi-device, multi-tenant consistency. | High | DEPLOY | 4 |
 | 11 | **Reports Report Center mock + no date filtering** — unacceptable for paying tenants. | High | RPT | 5 |
-| 12 | **No email/notification delivery** — onboarding, password reset, alerts absent. | High | SAAS | 6 |
+| 12 | **No email/notification delivery** — onboarding, password reset, alerts absent. LP-7 plans Resend adapter (LP-7D); not implemented. | High | SAAS | LP-7D |
 | 13 | **Product image / file storage backend missing** — needed per-tenant (S3/Supabase). | Medium | SAAS, DEPLOY | 5 |
 | 14 | **No rate limiting / abuse protection on public endpoints** (login, register). | High | SEC | 3 |
 | 15 | **~20 unused Prisma models** (`StockTransfer*`, `PromotionRule/Action`, `CustomerGroup*`, `CustomerSubscription`, `PosDevice`, `FavoriteProduct`, etc.) — schema/feature drift across tenants. | Medium | DEPLOY | 7 |

@@ -482,6 +482,27 @@
 
 ---
 
+### LP-7: Self-registration and email verification (planning)
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-PLAN-002 |
+| **Scope** | `/register`, email verification, Super Admin approval queue, future tenant provisioning |
+| **Status** | **PLANNED** (LP-7A documentation only) |
+
+**Current state:**
+
+- `/register` shows request-access message (LP-6); no public signup API.
+- Store creation remains **EGO Admin** (`/ego-admin/stores/new`) and future **Super Admin approval** path only.
+- Email verification and live email sending **not implemented**.
+- `provisionStore()` (LP-4) documented as reuse target after Super Admin approval (LP-7F).
+
+**Planning artifact:** `LP_7_SELF_REGISTRATION_EMAIL_VERIFICATION_SPEC.md`
+
+**Do not start LP-7B until explicitly confirmed.**
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

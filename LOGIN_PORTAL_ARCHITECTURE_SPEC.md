@@ -27,7 +27,7 @@ Preserve current Store Login behavior from OWNER-UAT-3 / OWNER-UAT-3B, language 
 | Route | Exists today | Current behavior |
 | --- | --- | --- |
 | `/login` | Yes | Store merchant login via NextAuth credentials |
-| `/register` | Yes | Request-access message only (LP-6); no signup API — see OWNER-UAT-5 |
+| `/register` | Yes | Request-access message only (LP-6/LP-7) — self-registration planned, not active |
 | `/businesses` | Yes | Production: DB membership redirect/picker (LP-5/LP-6); demo: template picker when `IGO_DEMO_MODE=true` |
 | `/dashboard`, `/pos` | Yes | Store workspace; tenant-scoped |
 | `/super-admin/login` | Yes | **Canonical** Super Admin login (email + password) |
@@ -386,7 +386,9 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 | **LP-4** | EGO Admin store provisioning API (DB transaction) | LP-3 | **COMPLETED** |
 | **LP-5** | Template-aware store post-login redirect from DB | LP-4, UAT-3 | **COMPLETED** |
 | **LP-6** | Deprecate localStorage onboarding; `/businesses` = multi-company picker only | LP-5 | **COMPLETED** |
-| **LP-7** | Self-registration + Super Admin approval (UAT-5) | LP-6 |
+| **LP-6A** | Production demo mode env guard (`IGO_DEMO_MODE` blocked in production) | LP-6 | **COMPLETED** |
+| **LP-7** | Self-registration + email verification + Super Admin approval — **planning only (LP-7A)** | LP-6A | **PLANNING COMPLETE** |
+| **LP-7B–7G** | Schema → APIs → email → approval queue → provisioning → UAT | LP-7A | Not started |
 | **LP-8** | 2FA for Super Admin; rate limits on all login endpoints | LP-2, LP-3 |
 
 **UAT-7 does not implement LP-2+.**
@@ -414,5 +416,7 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 - `lib/admin/session.ts` (Super Admin cookie)
 - `features/platform/onboarding-context.ts` (demo-only localStorage onboarding — `isDemoOnboardingEnabled()`)
 - `lib/demo/onboarding-access.ts` (LP-6 production/demo gate)
-- `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`
+- `lib/env/demo-mode-guard.ts` (LP-6A production env guard)
+- `LP_7_SELF_REGISTRATION_EMAIL_VERIFICATION_SPEC.md` (LP-7 planning)
+- `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md` (superseded for phasing by LP-7)
 - `OWNER_UAT_ISSUE_LOG.md`

@@ -174,7 +174,9 @@ Do **not** treat failures in these areas as UAT blockers unless they break core 
 | --- | --- |
 | Super Admin (`/super-admin`, legacy `/igo-admin`) | Placeholder only — not full platform console |
 | Offline POS | Not implemented |
-| SaaS onboarding / `/register` self-signup | Closed for production (LP-6) — request-access message; see OWNER-UAT-5 for future design |
+| SaaS onboarding / `/register` self-signup | **Planned (LP-7)** — request-access only; email verification + Super Admin approval not active |
+| Self-registration API | **Not implemented** — see `LP_7_SELF_REGISTRATION_EMAIL_VERIFICATION_SPEC.md` |
+| Email verification | **Not implemented** — provider evaluation complete (Resend recommended for MVP) |
 | Hold/resume bill durability | Client-only; lost on refresh (known P1) |
 | ESC/POS hardware printer | Browser print only (known P1) |
 | Company logo persistence | Preview-only in settings (known P1) |
