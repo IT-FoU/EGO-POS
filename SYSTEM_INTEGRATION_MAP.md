@@ -28,7 +28,9 @@
 - **Source files:** `lib/auth/store-post-login-redirect.ts`, `lib/auth/store-membership.ts`, `app/api/auth/store-entry-path/route.ts`, `components/auth/login-form.tsx`, `app/(platform)/businesses/page.tsx`.
 - **DB models:** `Company.businessTemplateKey`, `CompanyUser`, `User`, `Role`.
 - **Flow:** After `/login`, store session resolves assigned company memberships from DB, reads `businessTemplateKey`, and redirects by role/template (owner/manager → dashboard or template shell; cashier → POS).
-- **Production `/businesses`:** DB company picker for multi-company users; no localStorage tenant creation when `IGO_DEMO_MODE=false`.
+- **Production `/businesses`:** DB company picker for multi-company users; single-company auto-redirect; no localStorage tenant creation when `IGO_DEMO_MODE=false` (LP-6).
+- **Production `/register`:** Request-access message only; no signup API; no redirect to `/businesses` setup (LP-6).
+- **Demo onboarding:** `/businesses` template picker + `/businesses/setup` localStorage flow gated to `IGO_DEMO_MODE=true` only (LP-6).
 - **Deferred:** Full removal of demo template picker (LP-6); rental template shell.
 
 ## 1. POS → Inventory — **Connected**

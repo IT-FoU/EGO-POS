@@ -47,9 +47,11 @@ function readCredentialInputs() {
 }
 
 export function LoginForm({
+  demoMode = false,
   dictionary,
   locale: _locale,
 }: {
+  demoMode?: boolean;
   dictionary: LoginDictionary;
   locale?: "en" | "lo";
 }) {
@@ -170,7 +172,7 @@ export function LoginForm({
           return;
         }
 
-        router.push(getStoredEntryPath());
+        router.push(demoMode ? getStoredEntryPath() : "/businesses");
         router.refresh();
       } catch (submitError) {
         if (process.env.NODE_ENV === "development") {

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { TemplatePlaceholderShell } from "@/features/platform/components/template-placeholder-shell";
 import { requireSession } from "@/lib/auth/session";
+import { isDemoMode } from "@/lib/demo-mode";
 import {
   getLocalizedBusinessTemplate,
   getPlatformMessages,
@@ -23,5 +24,13 @@ export default async function TemplateShellPage({
     redirect("/dashboard");
   }
 
-  return <TemplatePlaceholderShell messages={platform.templatePlaceholder} platform={platform} template={template} />;
+  return (
+    <TemplatePlaceholderShell
+      demoMode={isDemoMode()}
+      messages={platform.templatePlaceholder}
+      platform={platform}
+      storeName={session.user.activeCompanyName ?? "Your Business"}
+      template={template}
+    />
+  );
 }

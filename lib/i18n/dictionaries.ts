@@ -92,6 +92,12 @@ export const dictionaries = {
     products: "ສິນຄ້າ",
     promotions: "Promotion",
     registerNewAccount: "ສະໝັກບັນຊີໃໝ່",
+    registerClosedTitle: "ການສະໝັກບັນຊີຍັງບໍ່ເປີດ",
+    registerClosedDescription:
+      "ຮ້ານໃໝ່ຖືກສ້າງໂດຍ EGO Admin ເທົ່ານັ້ນ. ຕິດຕໍ່ Setup Admin ຫຼື ເຈົ້າຂອງແພລດຟອມເພື່ອຂໍເຂົ້າໃຊ້ງານ.",
+    registerClosedUat5Note:
+      "ການສະໝັກດ້ວຍຕົນເອງ ແລະ ການຢືນຢັນອີເມວຈະມາໃນອະນາຄົດ (OWNER-UAT-5).",
+    registerClosedBackToLogin: "ກັບໄປ Login",
     reports: "Report",
     saveAndContinue: "ບັນທຶກ ແລະ ດຳເນີນຕໍ່",
     saving: "ກຳລັງບັນທຶກ...",
@@ -202,6 +208,12 @@ export const dictionaries = {
     products: "Products",
     promotions: "Promotions",
     registerNewAccount: "Register New Account",
+    registerClosedTitle: "Registration is not open",
+    registerClosedDescription:
+      "New stores are created by EGO Admin only. Contact your setup admin or platform owner to request access.",
+    registerClosedUat5Note:
+      "Self-registration and email verification are planned for a future release (OWNER-UAT-5).",
+    registerClosedBackToLogin: "Back to login",
     reports: "Reports",
     saveAndContinue: "Save and continue",
     saving: "Saving...",

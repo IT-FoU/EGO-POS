@@ -26,7 +26,7 @@
 | Language UI locale | browser localStorage | Safe local preference |
 | Customer display template/media/messages | browser localStorage | Safe local preference (device/display runtime) |
 | POS secondary display transient state | browser localStorage (`customerDisplayState`) | Safe local preference/runtime view state |
-| Onboarding draft context | browser localStorage | Demo-only when `IGO_DEMO_MODE=true` (not production tenant source) |
+| Onboarding draft context | browser localStorage | Demo-only when `IGO_DEMO_MODE=true` via `isDemoOnboardingEnabled()` (LP-6; not production tenant source) |
 
 ---
 
@@ -37,9 +37,9 @@
 - Theme preference.
 - Language/locale preference.
 - Customer display media/template/messages and runtime display state.
-- Onboarding draft/context used for setup/demo flow **only when `IGO_DEMO_MODE=true`**.
+- Onboarding draft/context used for setup/demo flow **only when `IGO_DEMO_MODE=true`** (`lib/demo/onboarding-access.ts`).
 
-Production store login redirect uses `Company.businessTemplateKey` from PostgreSQL via `GET /api/auth/store-entry-path` (LP-5). localStorage onboarding must not override DB template in production.
+Production store login redirect uses `Company.businessTemplateKey` from PostgreSQL via `GET /api/auth/store-entry-path` (LP-5). localStorage onboarding must not override DB template in production (LP-6 hardening).
 
 ### Disallowed for production source-of-truth
 

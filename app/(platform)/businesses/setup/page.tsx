@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Store } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -16,6 +17,10 @@ export default async function BusinessSetupPage({
   searchParams?: Promise<{ template?: string }>;
 }) {
   const [params, session] = await Promise.all([searchParams, requireSession()]);
+  if (!isDemoMode()) {
+    redirect("/businesses");
+  }
+
   const dictionary = getDictionary(session.user.locale);
   const platform = getPlatformMessages(session.user.locale);
   const template = getLocalizedBusinessTemplate(params?.template, session.user.locale);

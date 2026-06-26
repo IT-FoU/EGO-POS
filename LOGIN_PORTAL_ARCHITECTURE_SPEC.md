@@ -27,8 +27,8 @@ Preserve current Store Login behavior from OWNER-UAT-3 / OWNER-UAT-3B, language 
 | Route | Exists today | Current behavior |
 | --- | --- | --- |
 | `/login` | Yes | Store merchant login via NextAuth credentials |
-| `/register` | Yes | Static shell; no signup API |
-| `/businesses` | Yes | Post-login template picker; merchant session |
+| `/register` | Yes | Request-access message only (LP-6); no signup API — see OWNER-UAT-5 |
+| `/businesses` | Yes | Production: DB membership redirect/picker (LP-5/LP-6); demo: template picker when `IGO_DEMO_MODE=true` |
 | `/dashboard`, `/pos` | Yes | Store workspace; tenant-scoped |
 | `/super-admin/login` | Yes | **Canonical** Super Admin login (email + password) |
 | `/super-admin` | Yes | Super Admin placeholder home + read-only sub-pages under `/super-admin/*` |
@@ -62,9 +62,9 @@ Post-login: real DB `userId`, `company_users` membership, tenant scope (`lib/db/
 | Target | Gap |
 | --- | --- |
 | `/super-admin/login` | Today Super Admin uses `/igo-admin/login` |
-| `/ego-admin/login` | No Setup Admin portal; `/businesses` onboarding is merchant-session + localStorage, not staff-provisioned |
-| Independent sessions | Super Admin cookie can coexist path-wise with merchant NextAuth but portals are not formally separated by URL namespace |
-| Template-aware redirect | `getStoredEntryPath()` uses localStorage onboarding; DB company template not yet authoritative for redirect |
+| `/ego-admin/login` | **COMPLETED (LP-3/LP-4)** — Setup Admin portal + DB store provisioning |
+| Independent sessions | Three portals use separate cookies/sessions (LP-2/LP-3) |
+| Template-aware redirect | **COMPLETED (LP-5/LP-6)** — DB `businessTemplateKey`; localStorage onboarding demo-only |
 
 ---
 
@@ -385,8 +385,8 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 | **LP-3** | `SetupAdmin` model + `/ego-admin/login` + session hardening | LP-2 | **COMPLETED** |
 | **LP-4** | EGO Admin store provisioning API (DB transaction) | LP-3 | **COMPLETED** |
 | **LP-5** | Template-aware store post-login redirect from DB | LP-4, UAT-3 | **COMPLETED** |
-| **LP-6** | Deprecate localStorage onboarding; `/businesses` = multi-company picker only | LP-5 |
-| **LP-7** | Self-registration + Super Admin approval (UAT-5) | LP-2 |
+| **LP-6** | Deprecate localStorage onboarding; `/businesses` = multi-company picker only | LP-5 | **COMPLETED** |
+| **LP-7** | Self-registration + Super Admin approval (UAT-5) | LP-6 |
 | **LP-8** | 2FA for Super Admin; rate limits on all login endpoints | LP-2, LP-3 |
 
 **UAT-7 does not implement LP-2+.**
@@ -412,6 +412,7 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 - `lib/auth/merchant-login.ts`, `lib/auth/options.ts`, `lib/auth/session.ts`
 - `app/(igo-admin)/igo-admin/login/page.tsx`, `app/api/igo-admin/login/route.ts`
 - `lib/admin/session.ts` (Super Admin cookie)
-- `features/platform/onboarding-context.ts` (localStorage onboarding)
+- `features/platform/onboarding-context.ts` (demo-only localStorage onboarding — `isDemoOnboardingEnabled()`)
+- `lib/demo/onboarding-access.ts` (LP-6 production/demo gate)
 - `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`
 - `OWNER_UAT_ISSUE_LOG.md`

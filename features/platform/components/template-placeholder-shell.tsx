@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Store } from "lucide-react";
-import { getStoredBusinessContext } from "@/features/platform/onboarding-context";
 import {
   formatPlatformMessage,
   type LocalizedBusinessTemplate,
@@ -14,21 +12,18 @@ type TemplatePlaceholderMessages = typeof platformEn.templatePlaceholder;
 type PlatformMessages = Pick<typeof platformEn, "appName" | "slogan">;
 
 export function TemplatePlaceholderShell({
+  demoMode = false,
   messages,
   platform,
+  storeName,
   template,
 }: {
+  demoMode?: boolean;
   messages: TemplatePlaceholderMessages;
   platform: PlatformMessages;
+  storeName: string;
   template: LocalizedBusinessTemplate;
 }) {
-  const [storeName, setStoreName] = useState("Your Business");
-
-  useEffect(() => {
-    const business = getStoredBusinessContext();
-    setStoreName(business?.storeName || "Your Business");
-  }, []);
-
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground md:px-8">
       <div className="mx-auto grid w-full max-w-5xl gap-6">
@@ -77,13 +72,15 @@ export function TemplatePlaceholderShell({
             ),
           )}
         </section>
-        <Link
-          className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-          href="/businesses/setup"
-        >
-          {messages.reviewSetup}
-          <ArrowRight className="size-4" />
-        </Link>
+        {demoMode ? (
+          <Link
+            className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            href="/businesses/setup"
+          >
+            {messages.reviewSetup}
+            <ArrowRight className="size-4" />
+          </Link>
+        ) : null}
       </div>
     </main>
   );

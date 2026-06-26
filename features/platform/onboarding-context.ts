@@ -1,4 +1,5 @@
 import type { BusinessTemplateType } from "@/features/platform/platform-data";
+import { isDemoOnboardingEnabled } from "@/lib/demo/onboarding-access";
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readJsonFromStorage, readStringFromStorage, runDemoStorageMigrations, writeJsonToStorage, writeStringToStorage } from "@/lib/demo/storage";
 
@@ -44,7 +45,7 @@ export function getTemplateEntryPath(template: BusinessTemplateType) {
 }
 
 export function getStoredBusinessContext() {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !isDemoOnboardingEnabled()) {
     return null;
   }
 
@@ -60,12 +61,16 @@ export function getStoredBusinessContext() {
 }
 
 export function getStoredEntryPath() {
+  if (!isDemoOnboardingEnabled()) {
+    return "/businesses";
+  }
+
   const business = getStoredBusinessContext();
   return business ? getTemplateEntryPath(business.template) : "/businesses";
 }
 
 export function getStoredSetupDraft() {
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" || !isDemoOnboardingEnabled()) {
     return null;
   }
 
@@ -74,11 +79,19 @@ export function getStoredSetupDraft() {
 }
 
 export function saveSelectedTemplateDraft(draft: OnboardingSetupDraft) {
+  if (!isDemoOnboardingEnabled()) {
+    return;
+  }
+
   writeStringToStorage(TEMPLATE_KEY, draft.businessTemplateId);
   writeJsonToStorage(DRAFT_KEY, draft);
 }
 
 export function completeOnboarding(business: OnboardingBusinessContext) {
+  if (!isDemoOnboardingEnabled()) {
+    return;
+  }
+
   writeJsonToStorage(BUSINESS_KEY, business);
   writeStringToStorage(COMPLETE_KEY, "true");
 }

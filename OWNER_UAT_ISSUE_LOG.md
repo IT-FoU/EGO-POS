@@ -294,11 +294,11 @@
 
 **Note:** Register/email verification is planned but not implemented during UAT.
 
-**Current state:**
+**Current state (post LP-6):**
 
-- `/register` is a static UI shell; "Continue" links to `/businesses` without creating users or sending email.
+- `/register` shows a request-access message; no form submission, no link to `/businesses` setup.
 - No `POST /api/auth/register`, no email verification tokens, no approval queue.
-- Onboarding after login uses `localStorage` only — not production tenant provisioning.
+- Production onboarding uses EGO Admin provisioning (`/ego-admin/stores/new`) + DB `Company.businessTemplateKey`; localStorage onboarding is demo-only (`IGO_DEMO_MODE=true`).
 - Super Admin business controls are read-only placeholders.
 
 **Planning artifact:** `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`
@@ -458,6 +458,27 @@
 - localStorage onboarding redirect gated to `IGO_DEMO_MODE=true` only.
 
 **Verification:** `scripts/phase-lp-5-template-aware-login-redirect-check.ts`
+
+---
+
+### LP-6: Demo localStorage onboarding cleanup
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-017 |
+| **Scope** | `/businesses`, `/register`, `/businesses/setup`, onboarding localStorage, login fallback |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- Production `/businesses`: DB membership redirect/picker only; no localStorage tenant creation.
+- Production `/register`: request-access message; references OWNER-UAT-5; no `/businesses` setup bypass.
+- `/businesses/setup` redirects to `/businesses` when `IGO_DEMO_MODE=false`.
+- `isDemoOnboardingEnabled()` gates all onboarding localStorage reads/writes.
+- Login form uses DB `store-entry-path` first; production API failure falls back to `/businesses` (not localStorage).
+- Template shell uses session company name; review-setup link demo-only.
+
+**Verification:** `scripts/phase-lp-6-demo-onboarding-cleanup-check.ts`
 
 ---
 

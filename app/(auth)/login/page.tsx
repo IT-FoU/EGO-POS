@@ -47,7 +47,7 @@ export default async function LoginPage({
         <div className="mb-6 flex justify-center">
           <LoginLocaleSwitcher locale={locale} />
         </div>
-        <LoginForm dictionary={dictionary} locale={locale} />
+        <LoginForm demoMode={process.env.IGO_DEMO_MODE === "true"} dictionary={dictionary} locale={locale} />
       </section>
     </main>
   );
