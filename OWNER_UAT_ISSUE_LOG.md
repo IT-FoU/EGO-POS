@@ -329,6 +329,22 @@
 
 ---
 
+### UAT-7: Login portal architecture
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-PLAN-002 |
+| **Scope** | Super Admin, EGO Admin, Store Login portals |
+| **Status** | **PLANNED** (documentation only) |
+
+**Note:** Login portal architecture clarified: Super Admin, EGO Admin, and Store Login must be independent portals.
+
+**Current gap:** `/igo-admin/login` today authenticates `SuperAdmin` (platform owner). There is no separate Setup Admin portal or `/super-admin/login` route yet. Store login at `/login` remains the only path for Owner/Manager/Cashier.
+
+**Planning artifact:** `LOGIN_PORTAL_ARCHITECTURE_SPEC.md`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_
