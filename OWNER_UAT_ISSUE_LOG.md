@@ -523,6 +523,43 @@
 
 ---
 
+### OWNER-UAT-9: Login page locale render loop
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-019 |
+| **Page** | `/login`, `/super-admin/login`, `/ego-admin/login` |
+| **Reported error** | Repeated `GET /login?locale=en 200` without user action; page keeps compiling/rendering |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Steps to reproduce (before fix):**
+
+1. Start dev server.
+2. Open `/login?locale=en` (or `/login` with stored locale).
+3. Observe continuous GET requests and visible re-renders without clicking ENG/LAO.
+
+**Expected:** Page loads once and settles; locale toggle updates only on user click.
+
+**Actual:** `LanguageToggle` called `onLocaleChange` on mount; login switchers ran `router.replace` + `router.refresh` every time, causing an infinite navigation loop.
+
+**Root cause:**
+
+- `LanguageToggle` sync `useEffect` invoked `onLocaleChange` on every mount/locale prop change.
+- `LoginLocaleSwitcher` / `PortalLocaleSwitcher` wired `onLocaleChange` to `router.replace` + `router.refresh` unconditionally.
+- Locale bootstrap and `persistClientLocale` wrote cookie/storage on every pass without idempotency checks.
+
+**Fix:**
+
+- `LanguageToggle` sync effect updates local state only; parent notified on user click via `updateLocale`.
+- Login/portal switchers guard with `if (nextLocale === locale) return` and stable `useCallback`.
+- `persistClientLocale` and `LocaleBootstrap` skip writes when `isClientLocaleSynced()` is true.
+- Added `readCookieLocale()` and `isClientLocaleSynced()` helpers in `lib/i18n/locale.ts`.
+
+**Verification:** `scripts/phase-owner-uat-9-login-locale-loop-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

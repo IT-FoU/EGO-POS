@@ -29,6 +29,11 @@ export function readClientLocale(fallback?: string | null): SupportedLocale {
     return stored;
   }
 
+  const cookieLocale = readCookieLocale();
+  if (cookieLocale) {
+    return cookieLocale;
+  }
+
   const datasetLocale = document.documentElement.dataset.locale;
   if (datasetLocale === "lo" || datasetLocale === "en") {
     return datasetLocale;
@@ -37,7 +42,38 @@ export function readClientLocale(fallback?: string | null): SupportedLocale {
   return getServerLocale(fallback);
 }
 
+export function readCookieLocale(): SupportedLocale | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE_NAME}=([^;]*)`));
+  const value = match?.[1];
+  return value === "lo" || value === "en" ? value : null;
+}
+
+export function isClientLocaleSynced(locale: SupportedLocale) {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const stored = readStringFromStorage(DemoStorageKeys.locale);
+  const cookieLocale = readCookieLocale();
+  const datasetLocale = document.documentElement.dataset.locale;
+
+  return (
+    stored === locale &&
+    cookieLocale === locale &&
+    document.documentElement.lang === locale &&
+    datasetLocale === locale
+  );
+}
+
 export function persistClientLocale(locale: SupportedLocale) {
+  if (typeof window !== "undefined" && isClientLocaleSynced(locale)) {
+    return;
+  }
+
   writeStringToStorage(DemoStorageKeys.locale, locale);
   document.documentElement.lang = locale;
   document.documentElement.dataset.locale = locale;

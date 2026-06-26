@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import type { SupportedLocale } from "@/lib/constants";
@@ -13,13 +14,17 @@ export function PortalLocaleSwitcher({
 }) {
   const router = useRouter();
 
-  return (
-    <LanguageToggle
-      locale={locale}
-      onLocaleChange={(nextLocale) => {
-        router.replace(`${loginPath}?locale=${nextLocale}`);
-        router.refresh();
-      }}
-    />
+  const handleLocaleChange = useCallback(
+    (nextLocale: SupportedLocale) => {
+      if (nextLocale === locale) {
+        return;
+      }
+
+      router.replace(`${loginPath}?locale=${nextLocale}`);
+      router.refresh();
+    },
+    [locale, loginPath, router],
   );
+
+  return <LanguageToggle locale={locale} onLocaleChange={handleLocaleChange} />;
 }

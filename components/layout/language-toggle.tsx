@@ -22,21 +22,19 @@ export function LanguageToggle({
     runDemoStorageMigrations();
     const nextLocale = readClientLocale(locale);
     setCurrentLocale(nextLocale);
-    onLocaleChange?.(nextLocale);
-  }, [locale, onLocaleChange]);
+  }, [locale]);
 
   useEffect(() => {
     function handleLocaleChange(event: Event) {
       const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
       if (detail?.locale === "en" || detail?.locale === "lo") {
         setCurrentLocale(detail.locale);
-        onLocaleChange?.(detail.locale);
       }
     }
 
     window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
     return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, [onLocaleChange]);
+  }, []);
 
   function updateLocale(nextLocale: SupportedLocale) {
     persistClientLocale(nextLocale);

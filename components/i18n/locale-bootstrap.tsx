@@ -3,13 +3,22 @@
 import { useEffect } from "react";
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readStringFromStorage, runDemoStorageMigrations, writeStringToStorage } from "@/lib/demo/storage";
-import { applyDocumentLocale, LOCALE_COOKIE_NAME, readClientLocale } from "@/lib/i18n/locale";
+import {
+  applyDocumentLocale,
+  isClientLocaleSynced,
+  LOCALE_COOKIE_NAME,
+  readClientLocale,
+} from "@/lib/i18n/locale";
 
 export function LocaleBootstrap({ initialLocale }: { initialLocale?: string }) {
   useEffect(() => {
     runDemoStorageMigrations();
     const locale = readClientLocale(initialLocale);
     applyDocumentLocale(locale);
+
+    if (isClientLocaleSynced(locale)) {
+      return;
+    }
 
     const stored = readStringFromStorage(DemoStorageKeys.locale);
     if (stored !== locale) {
