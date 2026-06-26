@@ -6,6 +6,7 @@ import { PortalLoginForm } from "@/components/auth/portal-login-form";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 import { getSetupAdminSession } from "@/lib/setup-admin/session";
+import { getSetupAdminMigrationStatus } from "@/lib/setup-admin/migration-status";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function EgoAdminLoginPage({
     redirect("/ego-admin");
   }
 
+  const migrationStatus = await getSetupAdminMigrationStatus();
   const params = await searchParams;
   const cookieStore = await cookies();
   const locale = getServerLocale(params?.locale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
@@ -33,6 +35,11 @@ export default async function EgoAdminLoginPage({
           <h1 className="mt-5 text-3xl font-semibold">{dictionary.egoAdminPortal}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{dictionary.egoAdminLoginSubtitle}</p>
         </div>
+        {!migrationStatus.ready ? (
+          <p className="mb-6 rounded-md border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+            {dictionary.egoAdminMigrationRequired}
+          </p>
+        ) : null}
         <div className="mb-6 flex justify-center">
           <PortalLocaleSwitcher locale={locale} loginPath="/ego-admin/login" />
         </div>

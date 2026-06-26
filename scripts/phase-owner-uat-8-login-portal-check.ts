@@ -51,6 +51,7 @@ const superAdminLoginPage = readSource("app/(super-admin)/super-admin/login/page
 const egoAdminLoginPage = readSource("app/(ego-admin)/ego-admin/login/page.tsx");
 const superAdminHomePage = readSource("app/(super-admin)/super-admin/page.tsx");
 const egoAdminHomePage = readSource("app/(ego-admin)/ego-admin/page.tsx");
+const egoAdminReadinessPanel = readSource("components/ego-admin/setup-portal-readiness.tsx");
 const portalGuards = readSource("lib/auth/portal-guards.ts");
 const superAdminLoginLib = readSource("lib/auth/super-admin-login.ts");
 const setupAdminLoginLib = readSource("lib/auth/setup-admin-login.ts");
@@ -73,9 +74,9 @@ check(
 );
 check(
   "E. EGO Admin placeholder requires portal guard",
-  egoAdminHomePage.includes("rejectMerchantSessionForAdminPortal") &&
-    egoAdminHomePage.includes("requireSetupAdminSession") &&
-    egoAdminHomePage.includes("egoAdminPlaceholder"),
+  egoAdminHomePage.includes("requireEgoAdminPortalAccess") &&
+    egoAdminHomePage.includes("SetupPortalReadiness") &&
+    egoAdminReadinessPanel.includes("egoAdminPlaceholder"),
 );
 check(
   "F. Legacy /igo-admin/login redirects to /super-admin/login",
@@ -109,6 +110,12 @@ check(
     portalGuards.includes('redirect("/dashboard")') &&
     portalGuards.includes("rejectSetupAdminSessionForSuperAdminPortal") &&
     portalGuards.includes('redirect("/ego-admin")'),
+);
+check(
+  "L2. Portal guard blocks store and super admin sessions from EGO Admin",
+  portalGuards.includes("rejectSuperAdminSessionForEgoAdminPortal") &&
+    portalGuards.includes("requireEgoAdminPortalAccess") &&
+    portalGuards.includes('redirect("/super-admin")'),
 );
 check(
   "M. Shared portal login form reuses login submit helpers",

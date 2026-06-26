@@ -397,6 +397,28 @@
 
 ---
 
+### LP-3: EGO Admin setup portal hardening
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-014 |
+| **Scope** | `/ego-admin/login`, `/ego-admin` setup shell, session isolation |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- Setup admin login hardened: username/email + password; PIN rejected; store and Super Admin credentials rejected unless explicit setup admin record.
+- Separate `ego_setup_admin_session` cookie; logout clears setup admin session only.
+- `requireEgoAdminPortalAccess()` blocks merchant (`/dashboard`) and Super Admin (`/super-admin`) sessions.
+- `/ego-admin` readiness panel shows signed-in setup admin and LP-4 coming-soon actions.
+- Missing `setup_admins` table returns ops guidance instead of raw stack trace.
+
+**Prerequisite:** `npx prisma migrate deploy && npm run db:seed:demo`
+
+**Verification:** `scripts/phase-lp-3-ego-admin-setup-portal-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

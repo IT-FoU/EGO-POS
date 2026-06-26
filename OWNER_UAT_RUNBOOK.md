@@ -128,6 +128,10 @@ After `npm run db:seed:demo`:
 | Super Admin | `admin@igopos.local` | `AdminChangeMe123!` |
 | EGO Admin | `ego-setup` | `SetupChangeMe123!` |
 
+**EGO Admin prerequisite:** run `npx prisma migrate deploy && npm run db:seed:demo` before first setup admin login on a new environment.
+
+After EGO Admin login, `/ego-admin` shows a setup readiness shell. Store provisioning actions are **LP-4 / coming soon**.
+
 ---
 
 ## 7. Recommended test order (what to test first)

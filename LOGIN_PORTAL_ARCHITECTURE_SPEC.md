@@ -382,7 +382,7 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 | --- | --- | --- |
 | **LP-1** | This spec + issue log (UAT-7) | — |
 | **LP-2** | Rename route aliases: `/super-admin/login` ← `/igo-admin/login`; move Super Admin UI under `/super-admin` | LP-1 | **COMPLETED** |
-| **LP-3** | `SetupAdmin` model + `/ego-admin/login` + session | LP-2 |
+| **LP-3** | `SetupAdmin` model + `/ego-admin/login` + session hardening | LP-2 | **COMPLETED** |
 | **LP-4** | EGO Admin store provisioning API (DB transaction) | LP-3 |
 | **LP-5** | `Company.businessTemplateKey` + store post-login redirect from DB | LP-4, UAT-3 |
 | **LP-6** | Deprecate localStorage onboarding; `/businesses` = multi-company picker only | LP-5 |
