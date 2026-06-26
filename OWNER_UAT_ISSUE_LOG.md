@@ -305,6 +305,30 @@
 
 ---
 
+### UAT-6: Reports page crashed on Customer field mismatch
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-011 |
+| **Page** | `/reports` |
+| **Role used** | Owner |
+| **Reported error** | `PrismaClientValidationError: Unknown argument 'name'` in `db.customer.findMany()` |
+| **Severity** | P0 |
+| **Status** | **FIXED** |
+
+**Root cause:**
+
+- `getReportFilterOptions` queried `Customer.name`, but the Prisma `Customer` model uses `fullName` (not `name`).
+
+**Fix:**
+
+- Updated reports filter query to `orderBy: { fullName: "asc" }` and `select` `fullName` (+ optional `customerCode` / `phone` for labels).
+- Preserved `companyId` tenant scope and existing `{ id, label }` filter option shape for the Reports UI.
+
+**Verification:** `scripts/phase-owner-uat-6-reports-customer-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

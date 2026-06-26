@@ -147,6 +147,20 @@ function filterPurchaseOrders(orders: SupplierPurchaseOrder[], filters: ReportFi
   });
 }
 
+function formatCustomerFilterLabel(row: {
+  customerCode?: string | null;
+  fullName: string;
+  phone?: string | null;
+}) {
+  if (row.customerCode) {
+    return `${row.fullName} (${row.customerCode})`;
+  }
+  if (row.phone) {
+    return `${row.fullName} (${row.phone})`;
+  }
+  return row.fullName;
+}
+
 export async function getReportFilterOptions(tenant: TenantContext): Promise<ReportFilterOptions> {
   const scope = await resolveTenantScope(tenant);
   const [branches, warehouses, categories, suppliers, customers, cashiers] = await Promise.all([
@@ -171,8 +185,8 @@ export async function getReportFilterOptions(tenant: TenantContext): Promise<Rep
       where: { companyId: scope.companyId },
     }),
     db.customer.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      orderBy: { fullName: "asc" },
+      select: { customerCode: true, fullName: true, id: true, phone: true },
       take: 200,
       where: { companyId: scope.companyId },
     }),
@@ -193,7 +207,15 @@ export async function getReportFilterOptions(tenant: TenantContext): Promise<Rep
       id: row.id,
       label: row.nameEn || row.nameLo || row.id,
     })),
-    customers: customers.map((row: Record<string, string>) => ({ id: row.id, label: row.name })),
+    customers: customers.map((row: {
+      customerCode: string | null;
+      fullName: string;
+      id: string;
+      phone: string | null;
+    }) => ({
+      id: row.id,
+      label: formatCustomerFilterLabel(row),
+    })),
     suppliers: suppliers.map((row: Record<string, string>) => ({
       id: row.id,
       label: row.companyName || row.name,
