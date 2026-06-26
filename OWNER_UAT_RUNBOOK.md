@@ -130,7 +130,7 @@ After `npm run db:seed:demo`:
 
 **EGO Admin prerequisite:** run `npx prisma migrate deploy && npm run db:seed:demo` before first setup admin login on a new environment.
 
-After EGO Admin login, `/ego-admin` shows a setup readiness shell. Store provisioning actions are **LP-4 / coming soon**.
+After EGO Admin login, `/ego-admin` links to **Create store** at `/ego-admin/stores/new`. Provisioning creates company, branch, warehouse, owner account, and settings in one transaction. Hand off store owner credentials manually — owner logs in at `/login` only.
 
 ---
 

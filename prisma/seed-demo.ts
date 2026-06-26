@@ -155,18 +155,22 @@ async function seedFoundation(db: any) {
   const company = await db.company.upsert({
     create: {
       baseCurrency: "LAK",
+      businessTemplateKey: "mini_mart",
       defaultLocale: "lo",
       id: companyId,
       name: "Go BOX",
       ownerUserId: owner.id,
       planId: plan.id,
+      storeCode: "gobox",
     },
     update: {
       baseCurrency: "LAK",
+      businessTemplateKey: "mini_mart",
       defaultLocale: "lo",
       name: "Go BOX",
       ownerUserId: owner.id,
       planId: plan.id,
+      storeCode: "gobox",
     },
     where: { id: companyId },
   });

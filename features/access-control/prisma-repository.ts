@@ -598,8 +598,11 @@ export async function seedRoleTemplatePermissions(
   companyId: string,
   roles: Partial<Record<RoleTemplateLabel, { id: string }>>,
   dbClient: any = db,
+  options?: { skipCatalogEnsure?: boolean },
 ) {
-  await ensureAccessControlCatalog(dbClient);
+  if (!options?.skipCatalogEnsure) {
+    await ensureAccessControlCatalog(dbClient);
+  }
 
   const permissions = await dbClient.permission.findMany();
   const permissionByKey = new Map<string, { id: string }>(

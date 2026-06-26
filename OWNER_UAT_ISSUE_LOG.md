@@ -419,6 +419,28 @@
 
 ---
 
+### LP-4: EGO Admin store provisioning foundation
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-015 |
+| **Scope** | `/ego-admin/stores/new`, `POST /api/ego-admin/stores`, `Company.storeCode`, `Company.businessTemplateKey` |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- EGO Admin can provision stores at `/ego-admin/stores/new` (setup admin session only).
+- Transaction creates company, branch, warehouse, settings, owner user, membership, roles, permissions, subscription.
+- Duplicate store code and owner username/email rejected safely; owner password hashed; no auto-login or email.
+- Success screen shows store, template, owner credentials, and `/login` handoff URL.
+- Templates: Mini Mart, Restaurant, Pharmacy, Clothes Shop, Wholesale, Online Seller; Rental marked LP-5.
+
+**Prerequisite:** `npx prisma migrate deploy && npm run db:seed:demo` (includes LP-4 migration `20260626_lp4_store_provisioning_foundation`)
+
+**Verification:** `scripts/phase-lp-4-store-provisioning-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

@@ -197,9 +197,11 @@ enum LoyaltyPointType {
 }
 
 model Company {
-  id             String         @id @default(cuid())
-  name           String
-  ownerUserId    String?        @map("owner_user_id")
+  id                  String         @id @default(cuid())
+  name                String
+  storeCode           String         @unique @map("store_code")
+  businessTemplateKey String         @map("business_template_key")
+  ownerUserId         String?        @map("owner_user_id")
   planId         String?        @map("plan_id")
   status         CompanyStatus  @default(active)
   defaultLocale  String         @default("lo") @map("default_locale")

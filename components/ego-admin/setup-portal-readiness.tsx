@@ -1,20 +1,16 @@
+import Link from "next/link";
+
 type SetupPortalDictionary = {
-  egoAdminComingSoonLabel: string;
-  egoAdminLp4Notice: string;
-  egoAdminPlaceholder: string;
-  egoAdminSignedInAs: string;
-  egoAdminActionCreateStore: string;
+  createStore: string;
   egoAdminActionChooseTemplate: string;
   egoAdminActionCreateOwner: string;
+  egoAdminActionCreateStore: string;
   egoAdminActionInitialSettings: string;
+  egoAdminLp4Notice: string;
+  egoAdminPlaceholder: string;
+  egoAdminProvisioningActions: string;
+  egoAdminSignedInAs: string;
 };
-
-const comingSoonActions: Array<{ labelKey: keyof SetupPortalDictionary }> = [
-  { labelKey: "egoAdminActionCreateStore" },
-  { labelKey: "egoAdminActionChooseTemplate" },
-  { labelKey: "egoAdminActionCreateOwner" },
-  { labelKey: "egoAdminActionInitialSettings" },
-];
 
 export function SetupPortalReadiness({
   dictionary,
@@ -39,20 +35,29 @@ export function SetupPortalReadiness({
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">
-        <h3 className="text-base font-semibold">{dictionary.egoAdminComingSoonLabel}</h3>
+        <h3 className="text-base font-semibold">{dictionary.egoAdminProvisioningActions}</h3>
         <ul className="mt-4 grid gap-3">
-          {comingSoonActions.map((action) => (
-            <li className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3" key={action.labelKey}>
-              <span className="text-sm">{dictionary[action.labelKey]}</span>
-              <button
-                className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-muted-foreground"
-                disabled
-                type="button"
-              >
-                LP-4
-              </button>
-            </li>
-          ))}
+          <li className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3">
+            <span className="text-sm">{dictionary.egoAdminActionCreateStore}</span>
+            <Link
+              className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
+              href="/ego-admin/stores/new"
+            >
+              {dictionary.createStore}
+            </Link>
+          </li>
+          <li className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3 text-muted-foreground">
+            <span className="text-sm">{dictionary.egoAdminActionChooseTemplate}</span>
+            <span className="text-xs font-semibold">LP-5</span>
+          </li>
+          <li className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3 text-muted-foreground">
+            <span className="text-sm">{dictionary.egoAdminActionCreateOwner}</span>
+            <span className="text-xs font-semibold">LP-5</span>
+          </li>
+          <li className="flex items-center justify-between gap-4 rounded-md border border-border px-4 py-3 text-muted-foreground">
+            <span className="text-sm">{dictionary.egoAdminActionInitialSettings}</span>
+            <span className="text-xs font-semibold">LP-5</span>
+          </li>
         </ul>
       </section>
     </div>

@@ -91,6 +91,8 @@ async function main() {
     update: {
       ownerUserId: owner.id,
       planId: plan.id,
+      businessTemplateKey: "mini_mart",
+      storeCode: "gobox",
     },
     create: {
       id: "gobox-company",
@@ -99,6 +101,8 @@ async function main() {
       planId: plan.id,
       defaultLocale: "lo",
       baseCurrency: "LAK",
+      businessTemplateKey: "mini_mart",
+      storeCode: "gobox",
     },
   });
 

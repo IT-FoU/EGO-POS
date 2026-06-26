@@ -80,8 +80,8 @@ check(
     egoAdminHomePage.includes("SetupPortalReadiness"),
 );
 check(
-  "F. Setup portal readiness panel marks LP-4 actions coming soon",
-  readSource("components/ego-admin/setup-portal-readiness.tsx").includes("LP-4") &&
+  "F. Setup portal readiness panel links to store provisioning",
+  readSource("components/ego-admin/setup-portal-readiness.tsx").includes('href="/ego-admin/stores/new"') &&
     readSource("components/ego-admin/setup-portal-readiness.tsx").includes("egoAdminActionCreateStore"),
 );
 check(
