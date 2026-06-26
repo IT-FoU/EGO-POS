@@ -20,8 +20,16 @@
 | 8 | Recent Sales → Receipt View / Reprint | **Client-only / Mock** | **Critical** |
 | 9 | POS → Receipt Print Workflow | **Client-only** | High |
 | 10 | POS → Permissions / Approval Rules | **Partial** (checkout enforced; rest client-only) | **Critical** |
+| 11 | Store login → template workspace redirect | **Connected** (LP-5 DB `businessTemplateKey`) | Low |
 
 ---
+
+## 11. Store login → template workspace redirect — **Connected** (LP-5)
+- **Source files:** `lib/auth/store-post-login-redirect.ts`, `lib/auth/store-membership.ts`, `app/api/auth/store-entry-path/route.ts`, `components/auth/login-form.tsx`, `app/(platform)/businesses/page.tsx`.
+- **DB models:** `Company.businessTemplateKey`, `CompanyUser`, `User`, `Role`.
+- **Flow:** After `/login`, store session resolves assigned company memberships from DB, reads `businessTemplateKey`, and redirects by role/template (owner/manager → dashboard or template shell; cashier → POS).
+- **Production `/businesses`:** DB company picker for multi-company users; no localStorage tenant creation when `IGO_DEMO_MODE=false`.
+- **Deferred:** Full removal of demo template picker (LP-6); rental template shell.
 
 ## 1. POS → Inventory — **Connected**
 - **Source files:** `features/pos/prisma-repository.ts` (`completePrismaSale`), `features/inventory/stock-concurrency.ts` (`applyAtomicStockDelta`), `features/pos/components/pos-page-client.tsx` (checkout call), `features/pos/actions.ts`.

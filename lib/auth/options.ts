@@ -56,7 +56,7 @@ async function buildSessionUserFromDatabase(user: {
     allowPosAccess: boolean;
     assignedTerminal: string | null;
     branchId: string | null;
-    company: { id: string; name: string };
+    company: { businessTemplateKey: string; id: string; name: string };
     isOwner: boolean;
   }>;
   email: string | null;
@@ -102,6 +102,7 @@ async function buildSessionUserFromDatabase(user: {
     activeWarehouseId: activeWarehouse?.id,
     activeCompanyId: activeCompany.id,
     activeCompanyName: activeCompany.name,
+    businessTemplateKey: activeCompany.businessTemplateKey,
     locale: user.preferredLocale,
     roles: membership.isOwner ? ["Owner"] : companyRoles.map((entry) => entry.role.name),
     allowPOSAccess: membership.allowPosAccess,
@@ -161,6 +162,7 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
       companies: {
         include: { company: true },
         where: { status: "active" },
+        orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
       },
       roles: {
         include: { role: true },
@@ -250,6 +252,7 @@ export const authOptions: NextAuthOptions = {
         token.activeWarehouseId = user.activeWarehouseId;
         token.activeCompanyId = user.activeCompanyId;
         token.activeCompanyName = user.activeCompanyName;
+        token.businessTemplateKey = user.businessTemplateKey;
         token.locale = user.locale;
         token.roles = user.roles;
         token.allowPOSAccess = user.allowPOSAccess ?? true;
@@ -267,6 +270,7 @@ export const authOptions: NextAuthOptions = {
         session.user.activeWarehouseId = token.activeWarehouseId;
         session.user.activeCompanyId = token.activeCompanyId;
         session.user.activeCompanyName = token.activeCompanyName;
+        session.user.businessTemplateKey = token.businessTemplateKey;
         session.user.locale = token.locale;
         session.user.roles = token.roles;
         session.user.allowPOSAccess = token.allowPOSAccess;

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentSession } from "@/lib/auth/session";
+import { resolveStorePostLoginRedirectForUser } from "@/lib/auth/store-membership";
 import { LoginForm } from "@/components/auth/login-form";
 import { LoginLocaleSwitcher } from "@/components/auth/login-locale-switcher";
 import { LogoContainer } from "@/components/brand/logo-container";
@@ -15,8 +16,12 @@ export default async function LoginPage({
 }) {
   const session = await getCurrentSession();
 
-  if (session?.user) {
-    redirect("/businesses");
+  if (session?.user?.id) {
+    const resolved = await resolveStorePostLoginRedirectForUser(
+      session.user.id,
+      session.user.activeCompanyId,
+    );
+    redirect(resolved.redirectTo);
   }
 
   const params = await searchParams;

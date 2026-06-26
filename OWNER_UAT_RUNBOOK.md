@@ -132,6 +132,8 @@ After `npm run db:seed:demo`:
 
 After EGO Admin login, `/ego-admin` links to **Create store** at `/ego-admin/stores/new`. Provisioning creates company, branch, warehouse, owner account, and settings in one transaction. Hand off store owner credentials manually — owner logs in at `/login` only.
 
+**Store post-login (LP-5):** Production redirect uses `Company.businessTemplateKey` from DB via `/api/auth/store-entry-path`. Mini Mart owner → `/dashboard`; cashier → `/pos`; other templates → `/template-shell/[template]` or `/dashboard?template=...`. Multi-company users pick assigned stores at `/businesses`.
+
 ---
 
 ## 7. Recommended test order (what to test first)

@@ -156,6 +156,20 @@ export function LoginForm({
         if (process.env.NODE_ENV === "development") {
           console.info("[login] success", { username: trimmedUsername });
         }
+        const entryResponse = await fetch("/api/auth/store-entry-path", {
+          credentials: "same-origin",
+          method: "GET",
+        });
+        const entryPayload = (await entryResponse.json().catch(() => null)) as {
+          redirectTo?: string;
+        } | null;
+
+        if (entryResponse.ok && entryPayload?.redirectTo) {
+          router.push(entryPayload.redirectTo);
+          router.refresh();
+          return;
+        }
+
         router.push(getStoredEntryPath());
         router.refresh();
       } catch (submitError) {

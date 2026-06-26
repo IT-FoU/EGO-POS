@@ -4,16 +4,19 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredEntryPath } from "@/features/platform/onboarding-context";
 
-export function OnboardingEntryRedirect() {
+export function OnboardingEntryRedirect({ enabled = false }: { enabled?: boolean }) {
   const router = useRouter();
 
   useEffect(() => {
-    const entryPath = getStoredEntryPath();
+    if (!enabled) {
+      return;
+    }
 
+    const entryPath = getStoredEntryPath();
     if (entryPath !== "/businesses") {
       router.replace(entryPath);
     }
-  }, [router]);
+  }, [enabled, router]);
 
   return null;
 }

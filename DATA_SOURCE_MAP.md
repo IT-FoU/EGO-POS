@@ -18,6 +18,7 @@
 | Loyalty + points ledger | Prisma (`features/loyalty/*`) | Production DB |
 | Supplier payable | Prisma (`features/suppliers/*`, `SupplierPayable`) | Production DB |
 | Company settings (profile/receipt/tax/loyalty/currency) | Prisma (`CompanySetting`) | Production DB |
+| Store business template (`Company.businessTemplateKey`) | Prisma (`Company`) | Production DB (LP-5 post-login redirect) |
 | QR banks/accounts | Prisma (`QrPaymentBank`, `QrPaymentAccount`) | Production DB |
 | Receipt print mode (auto/ask/no-auto) | browser localStorage (`ego-pos:receipt-print-mode`) | Safe local preference (device-specific) |
 | Staff/roles/permissions | Prisma (`features/access-control/*`) | Production DB |
@@ -25,7 +26,7 @@
 | Language UI locale | browser localStorage | Safe local preference |
 | Customer display template/media/messages | browser localStorage | Safe local preference (device/display runtime) |
 | POS secondary display transient state | browser localStorage (`customerDisplayState`) | Safe local preference/runtime view state |
-| Onboarding draft context | browser localStorage | Demo/setup local state (documented) |
+| Onboarding draft context | browser localStorage | Demo-only when `IGO_DEMO_MODE=true` (not production tenant source) |
 
 ---
 
@@ -36,7 +37,9 @@
 - Theme preference.
 - Language/locale preference.
 - Customer display media/template/messages and runtime display state.
-- Onboarding draft/context used for setup/demo flow.
+- Onboarding draft/context used for setup/demo flow **only when `IGO_DEMO_MODE=true`**.
+
+Production store login redirect uses `Company.businessTemplateKey` from PostgreSQL via `GET /api/auth/store-entry-path` (LP-5). localStorage onboarding must not override DB template in production.
 
 ### Disallowed for production source-of-truth
 

@@ -8,6 +8,7 @@ declare module "next-auth" {
     activeWarehouseId?: string;
     activeCompanyId?: string;
     activeCompanyName?: string;
+    businessTemplateKey?: string;
     allowBackOfficeAccess?: boolean;
     allowPOSAccess?: boolean;
     assignedTerminal?: string;
@@ -23,6 +24,7 @@ declare module "next-auth" {
       activeWarehouseId?: string;
       activeCompanyId?: string;
       activeCompanyName?: string;
+      businessTemplateKey?: string;
       allowBackOfficeAccess?: boolean;
       allowPOSAccess?: boolean;
       assignedTerminal?: string;
@@ -42,6 +44,7 @@ declare module "next-auth/jwt" {
     activeWarehouseId?: string;
     activeCompanyId?: string;
     activeCompanyName?: string;
+    businessTemplateKey?: string;
     allowBackOfficeAccess?: boolean;
     allowPOSAccess?: boolean;
     assignedTerminal?: string;

@@ -441,6 +441,26 @@
 
 ---
 
+### LP-5: Template-aware post-login redirect
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-016 |
+| **Scope** | `/login` redirect, `/api/auth/store-entry-path`, `/businesses`, `Company.businessTemplateKey` |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- Production post-login redirect reads `Company.businessTemplateKey` from DB (not localStorage).
+- `GET /api/auth/store-entry-path` and `POST /api/auth/select-company` for store sessions.
+- Owner/manager/cashier redirect by role + template; LP-4 provisioned stores route correctly.
+- `/businesses` in production: single company auto-redirect, multi-company DB picker, no-assignment safe message.
+- localStorage onboarding redirect gated to `IGO_DEMO_MODE=true` only.
+
+**Verification:** `scripts/phase-lp-5-template-aware-login-redirect-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

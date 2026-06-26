@@ -26,6 +26,7 @@ type MerchantUserRecord = {
 const userInclude = {
   companies: {
     include: { company: true },
+    orderBy: [{ isOwner: "desc" as const }, { createdAt: "asc" as const }],
     where: { status: "active" as const },
   },
   roles: {

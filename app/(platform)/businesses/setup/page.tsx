@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Store } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { isDemoMode } from "@/lib/demo-mode";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { BusinessSetupForm } from "@/features/platform/components/business-setup-form";
 import { OnboardingEntryRedirect } from "@/features/platform/components/onboarding-entry-redirect";
@@ -21,7 +22,7 @@ export default async function BusinessSetupPage({
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground md:px-8">
-      <OnboardingEntryRedirect />
+      <OnboardingEntryRedirect enabled={isDemoMode()} />
       <div className="mx-auto grid w-full max-w-4xl gap-6">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
