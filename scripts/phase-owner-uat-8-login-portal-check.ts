@@ -68,8 +68,7 @@ check(
 );
 check(
   "D. Super Admin placeholder requires portal guard",
-  superAdminHomePage.includes("rejectMerchantSessionForAdminPortal") &&
-    superAdminHomePage.includes("requireAdminSession") &&
+  superAdminHomePage.includes("requireSuperAdminPortalAccess") &&
     superAdminHomePage.includes("superAdminPlaceholder"),
 );
 check(
@@ -105,8 +104,11 @@ check(
   superAdminLoginLib.includes("isEmailIdentifier"),
 );
 check(
-  "L. Portal guard blocks merchant session from admin portals",
-  portalGuards.includes("getCurrentSession") && portalGuards.includes('redirect("/dashboard")'),
+  "L. Portal guard blocks merchant and setup admin sessions from Super Admin",
+  portalGuards.includes("getCurrentSession") &&
+    portalGuards.includes('redirect("/dashboard")') &&
+    portalGuards.includes("rejectSetupAdminSessionForSuperAdminPortal") &&
+    portalGuards.includes('redirect("/ego-admin")'),
 );
 check(
   "M. Shared portal login form reuses login submit helpers",

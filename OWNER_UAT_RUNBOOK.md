@@ -119,7 +119,7 @@ Login page: **http://localhost:3000/login**
 | **Super Admin** | `/super-admin/login` | Platform owner only | Email + password (no PIN) |
 | **EGO Admin** | `/ego-admin/login` | Setup/onboarding staff | Username or email + password (no PIN) |
 
-Legacy `/igo-admin/login` redirects to `/super-admin/login`. Full Super Admin and EGO Admin dashboards are **placeholder only** after login.
+Legacy `/igo-admin/login` redirects to `/super-admin/login`. Legacy `/igo-admin/*` redirects to matching `/super-admin/*`. Full Super Admin dashboard home is **placeholder only**; read-only sub-pages live under `/super-admin/businesses`, `/users`, `/subscriptions`, `/audit-logs`.
 
 After `npm run db:seed:demo`:
 

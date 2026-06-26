@@ -375,6 +375,28 @@
 
 ---
 
+### LP-2: Super Admin namespace cleanup
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-013 |
+| **Scope** | Canonical `/super-admin/*` namespace; legacy `/igo-admin/*` redirect aliases |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- Canonical routes: `/super-admin/login`, `/super-admin/*`, `/api/super-admin/login`, `/api/super-admin/logout`
+- Legacy `/igo-admin/login` and `/igo-admin/*` redirect to matching `/super-admin/*` paths
+- Legacy `/api/igo-admin/*` delegates with `X-Deprecated-Api` header
+- Super Admin shell copy updated to “Super Admin” (EGO Admin naming preserved for Setup Admin portal)
+- `requireSuperAdminPortalAccess()` blocks merchant and EGO Admin sessions from Super Admin pages
+
+**Placeholder only:** `/super-admin` home remains a placeholder; read-only sub-pages moved under canonical namespace.
+
+**Verification:** `scripts/phase-lp-2-super-admin-namespace-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

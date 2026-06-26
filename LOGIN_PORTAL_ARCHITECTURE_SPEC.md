@@ -1,8 +1,8 @@
 # LOGIN PORTAL ARCHITECTURE SPEC — EGO POS
 
-> **Phase:** OWNER-UAT-7 (planning only)  
-> **Baseline:** GitHub `main` @ `71aa5f8` (OWNER-UAT-6 reports customer field fix)  
-> **Status:** Architecture specification — **no route implementation, no auth changes in this phase**
+> **Phase:** OWNER-UAT-7 (planning) + LP-2 (namespace cleanup completed)  
+> **Baseline:** GitHub `main` @ `ce2ad49` (OWNER-UAT-8 login portal route foundation)  
+> **Status:** Architecture specification — LP-2 canonical Super Admin namespace active; legacy `/igo-admin/*` redirects remain
 
 ---
 
@@ -20,22 +20,23 @@ Preserve current Store Login behavior from OWNER-UAT-3 / OWNER-UAT-3B, language 
 
 ---
 
-## 2. Current state audit (as of UAT-7)
+## 2. Current state audit (as of LP-2)
 
 ### 2.1 Routes
 
 | Route | Exists today | Current behavior |
 | --- | --- | --- |
-| `/login` | Yes | Store merchant login via NextAuth credentials (`components/auth/login-form.tsx`, `lib/auth/merchant-login.ts`) |
-| `/register` | Yes | Static shell; no signup API (see `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`) |
-| `/businesses` | Yes | Post-login template picker; requires merchant session; onboarding draft in `localStorage` only |
-| `/businesses/setup` | Yes | Business setup form; client-only onboarding completion |
-| `/dashboard` | Yes | Store dashboard; tenant-scoped |
-| `/pos` | Yes | Store POS; tenant-scoped |
-| `/igo-admin/login` | Yes | **Currently Super Admin login** (`SuperAdmin` table, cookie `igo_super_admin_session`) |
-| `/igo-admin` | Yes | Super Admin console (businesses, users, subscriptions, audit logs — mostly read-only) |
-| `/super-admin/login` | **No** | Not implemented |
-| `/ego-admin/login` | **No** | Not implemented (name collision: `/igo-admin` is legacy Super Admin path) |
+| `/login` | Yes | Store merchant login via NextAuth credentials |
+| `/register` | Yes | Static shell; no signup API |
+| `/businesses` | Yes | Post-login template picker; merchant session |
+| `/dashboard`, `/pos` | Yes | Store workspace; tenant-scoped |
+| `/super-admin/login` | Yes | **Canonical** Super Admin login (email + password) |
+| `/super-admin` | Yes | Super Admin placeholder home + read-only sub-pages under `/super-admin/*` |
+| `/ego-admin/login` | Yes | EGO Admin / Setup Admin login (separate session) |
+| `/igo-admin/login` | Yes (legacy) | Redirect alias → `/super-admin/login` |
+| `/igo-admin/*` | Yes (legacy) | Redirect aliases → matching `/super-admin/*` |
+| `/api/super-admin/login` | Yes | **Canonical** Super Admin auth API |
+| `/api/igo-admin/login` | Yes (legacy) | Delegates to Super Admin auth; returns `redirectTo: /super-admin` with deprecation header |
 
 ### 2.2 Auth / session roles today
 
@@ -44,7 +45,7 @@ Preserve current Store Login behavior from OWNER-UAT-3 / OWNER-UAT-3B, language 
 | **Super Admin** | `SuperAdmin` model + `lib/admin/session.ts` | HTTP-only cookie `igo_super_admin_session` |
 | **Store Owner** | `User` + `company_users.isOwner` + NextAuth JWT | NextAuth session (`session.user.id`, `activeCompanyId`, roles) |
 | **Manager / Cashier** | `User` + `UserRole` + `company_users` | Same NextAuth session |
-| **Setup Admin / EGO Admin** | **Not implemented** | No separate model or session |
+| **Setup Admin / EGO Admin** | `SetupAdmin` model + `lib/setup-admin/session.ts` | Cookie `ego_setup_admin_session` |
 
 ### 2.3 Store login rules (implemented — do not change in UAT-7)
 
@@ -249,9 +250,9 @@ If a user owns multiple companies, show **Choose Business** (`/businesses`) afte
 
 | Current | Target | Migration note |
 | --- | --- | --- |
-| `/igo-admin/login` | `/super-admin/login` | 307 redirect during transition; update copy from "EGO Super Admin" |
-| `/igo-admin/*` | `/super-admin/*` | Alias redirects until UI moved |
-| `/api/igo-admin/login` | `/api/super-admin/login` | Deprecate old endpoint |
+| `/igo-admin/login` | `/super-admin/login` | **LP-2:** server redirect alias |
+| `/igo-admin/*` | `/super-admin/*` | **LP-2:** server redirect aliases via `mapLegacyIgoAdminPath()` |
+| `/api/igo-admin/login` | `/api/super-admin/login` | **LP-2:** delegates with `X-Deprecated-Api` header |
 | `/businesses` (onboarding) | `/ego-admin/stores/new` | Move provisioning to Setup Admin; keep `/businesses` only for multi-company picker |
 
 ---
@@ -380,7 +381,7 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 | Phase | Scope | Depends on |
 | --- | --- | --- |
 | **LP-1** | This spec + issue log (UAT-7) | — |
-| **LP-2** | Rename route aliases: `/super-admin/login` ← `/igo-admin/login`; move Super Admin UI under `/super-admin` | LP-1 |
+| **LP-2** | Rename route aliases: `/super-admin/login` ← `/igo-admin/login`; move Super Admin UI under `/super-admin` | LP-1 | **COMPLETED** |
 | **LP-3** | `SetupAdmin` model + `/ego-admin/login` + session | LP-2 |
 | **LP-4** | EGO Admin store provisioning API (DB transaction) | LP-3 |
 | **LP-5** | `Company.businessTemplateKey` + store post-login redirect from DB | LP-4, UAT-3 |

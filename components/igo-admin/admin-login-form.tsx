@@ -16,7 +16,7 @@ export function AdminLoginForm() {
         const formData = new FormData(event.currentTarget);
         startTransition(async () => {
             setError(null);
-            const response = await fetch("/api/igo-admin/login", {
+            const response = await fetch("/api/super-admin/login", {
                 body: JSON.stringify({
                     identifier: formData.get("username"),
                     password: formData.get("password"),
@@ -35,7 +35,7 @@ export function AdminLoginForm() {
             const payload = (await response.json().catch(() => null)) as {
                 redirectTo?: string;
             } | null;
-            router.push(payload?.redirectTo ?? "/igo-admin");
+            router.push(payload?.redirectTo ?? "/super-admin");
             router.refresh();
         });
     }
