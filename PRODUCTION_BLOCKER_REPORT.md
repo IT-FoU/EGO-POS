@@ -51,7 +51,7 @@
 
 > **Updated 2026-06-25 (B8-11):** Final production readiness audit PASS. All B8/B7 harness regressions PASS. **P0 blockers for single-store owner testing: none.** Remaining single-store risks are P1 pilot items (POS approval UI localStorage, hold bill client-only, printer integration, logo DB persistence, deploy env flag verification). See `B8_11_FINAL_PRODUCTION_READINESS_REPORT.md`, `OWNER_TESTING_CHECKLIST.md`, and `PILOT_BLOCKER_REPORT.md`.
 
-> **Updated 2026-06-25 (LP-7A):** Self-registration and email verification planning spec completed. Public registration and live email remain disabled. Store creation stays EGO Admin / future Super Admin approval controlled.
+> **Updated 2026-06-25 (LP-8):** MVP login portals simplified — visible: Store Login + Super Admin only. EGO Admin deferred (code retained). Super Admin store creation at `/super-admin/stores/new`.
 
 ---
 
@@ -61,7 +61,7 @@
 
 | # | Blocker | Severity | Impact | Fix order |
 | --- | --- | --- | --- | --- |
-| 1 | ~~**No self-serve onboarding / company creation**~~ — **MITIGATED (LP-4/LP-6):** production store creation via `/ego-admin/stores/new` (DB); localStorage onboarding gated to `IGO_DEMO_MODE=true` only. Self-serve signup still absent. | **High** (was Critical) | SAAS, DEPLOY | 1 |
+| 1 | ~~**No self-serve onboarding / company creation**~~ — **MITIGATED (LP-4/LP-6/LP-8):** Super Admin creates stores at `/super-admin/stores/new` (MVP); EGO Admin deferred. Self-serve signup still absent. | **High** (was Critical) | SAAS, DEPLOY | LP-7B+ |
 | 2 | ~~**No owner registration endpoint**~~ — **PLANNED (LP-7):** `/register` request-access only; LP-7 spec defines future request → verify → approve → `provisionStore()` flow. Signup API still absent. | **High** | SAAS, SEC | LP-7B+ |
 | 3 | **All single-store CASH/INV integrity blockers** (sales history, refund, void, receipts, close-day) — multiplied across tenants. | **Critical** | CASH, INV, RPT | 2 |
 | 4 | **POS approvals/audit not in DB** — per-tenant security & compliance unmet. | **Critical** | SEC | 2 |

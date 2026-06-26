@@ -113,26 +113,33 @@ After `npm run db:seed:demo`:
 
 Login page: **http://localhost:3000/login**
 
-### Login portals (OWNER-UAT-8)
+### Login portals (OWNER-UAT-8 / LP-8 MVP)
+
+**MVP visible portals (only these are promoted in UX and docs):**
 
 | Portal | Route | Who | Auth |
 | --- | --- | --- | --- |
-| **Store Login** | `/login` | Owner, Manager, Cashier | Owner: email/username + password/PIN; Manager/Cashier: username + PIN |
-| **Super Admin** | `/super-admin/login` | Platform owner only | Email + password (no PIN) |
-| **EGO Admin** | `/ego-admin/login` | Setup/onboarding staff | Username or email + password (no PIN) |
+| **Store Login** | `/login` | Store Owner, Manager, Cashier | Owner: email/username + password/PIN; Manager/Cashier: username + PIN |
+| **Super Admin** | `/super-admin/login` | EGO POS platform owner | Email + password (no PIN) |
 
-Legacy `/igo-admin/login` redirects to `/super-admin/login`. Legacy `/igo-admin/*` redirects to matching `/super-admin/*`. Full Super Admin dashboard home is **placeholder only**; read-only sub-pages live under `/super-admin/businesses`, `/users`, `/subscriptions`, `/audit-logs`.
+**Deferred (retained, not promoted):**
+
+| Portal | Route | Status |
+| --- | --- | --- |
+| **EGO Admin / Setup Admin** | `/ego-admin/login` | Hidden for MVP — code and `setup_admins` table retained for future onboarding staff |
+
+Legacy `/igo-admin/login` redirects to `/super-admin/login`. Legacy `/igo-admin/*` redirects to matching `/super-admin/*`.
 
 After `npm run db:seed:demo`:
 
 | Portal | Identifier | Password |
 | --- | --- | --- |
 | Super Admin | `admin@igopos.local` | `AdminChangeMe123!` |
-| EGO Admin | `ego-setup` | `SetupChangeMe123!` |
+| Store Owner | `igo-admin` | `AdminChangeMe123!` |
 
-**EGO Admin prerequisite:** run `npx prisma migrate deploy && npm run db:seed:demo` before first setup admin login on a new environment.
+**MVP store creation:** Super Admin creates stores at `/super-admin/stores/new` after login. Provisioning uses the same `provisionStore()` transaction as LP-4. Hand off store owner credentials manually — owners log in at `/login` only.
 
-After EGO Admin login, `/ego-admin` links to **Create store** at `/ego-admin/stores/new`. Provisioning creates company, branch, warehouse, owner account, and settings in one transaction. Hand off store owner credentials manually — owner logs in at `/login` only.
+**EGO Admin (deferred):** `/ego-admin/login` remains available for developers/future staff but is not linked from Store Login or Super Admin login. Optional account: `ego-setup` / `SetupChangeMe123!` (requires migrate + seed).
 
 **Store post-login (LP-5):** Production redirect uses `Company.businessTemplateKey` from DB via `/api/auth/store-entry-path`. Mini Mart owner → `/dashboard`; cashier → `/pos`; other templates → `/template-shell/[template]` or `/dashboard?template=...`. Multi-company users pick assigned stores at `/businesses`.
 

@@ -17,6 +17,8 @@
 | L4 | Logout; cashier login succeeds → POS or dashboard | Cashier | ☐ |
 | L5 | Logged-out user cannot open `/dashboard` | None | ☐ |
 | L6 | Wrong password shows error (no crash) | Any | ☐ |
+| L7 | Super Admin login at `/super-admin/login` succeeds (MVP) | Super Admin | ☐ |
+| L8 | Super Admin can open `/super-admin/stores/new` (MVP store creation) | Super Admin | ☐ |
 
 ---
 

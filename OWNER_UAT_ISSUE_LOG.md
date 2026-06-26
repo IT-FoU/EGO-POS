@@ -503,6 +503,26 @@
 
 ---
 
+### LP-8: MVP login portal simplification
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-018 |
+| **Scope** | Visible login portals, EGO Admin deferred UX, Super Admin store creation |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- MVP visible portals: `/login` (Store) and `/super-admin/login` only.
+- EGO Admin `/ego-admin/login` retained but not linked from visible UI; deferred notice shown on direct access.
+- Super Admin home promotes store creation at `/super-admin/stores/new` via `POST /api/super-admin/stores`.
+- Store Login copy clarifies owner/manager/cashier audience; no Super Admin or EGO Admin links.
+- `setup_admins` table and EGO Admin code preserved.
+
+**Verification:** `scripts/phase-lp-8-mvp-login-portal-simplification-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_

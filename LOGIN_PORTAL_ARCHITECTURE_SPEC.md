@@ -8,10 +8,12 @@
 
 ## 1. Purpose
 
-Define three **independent** login portals for EGO POS:
+Define login portals for EGO POS. **LP-8 MVP:** only **Store Login** (`/login`) and **Super Admin Login** (`/super-admin/login`) are visible and promoted. **EGO Admin** (`/ego-admin/login`) is retained in code but deferred/hidden for future setup staff.
 
-1. **Super Admin Portal** — platform owner (EGO POS system operator)
-2. **EGO Admin / Setup Admin Portal** — onboarding staff who provision stores
+Three **independent** login portals exist in code:
+
+1. **Super Admin Portal** — platform owner (EGO POS system operator) — **MVP primary admin**
+2. **EGO Admin / Setup Admin Portal** — deferred for MVP; onboarding staff (future)
 3. **Store Portal** — store Owner, Manager, Cashier
 
 **Critical rule:** These portals must **not** be chained. Store users do **not** log in through Super Admin or Setup Admin. Each portal has its own route, session, and permission boundary.
@@ -389,7 +391,8 @@ See `OWNER_UAT_5_REGISTER_EMAIL_VERIFICATION_SPEC.md`:
 | **LP-6A** | Production demo mode env guard (`IGO_DEMO_MODE` blocked in production) | LP-6 | **COMPLETED** |
 | **LP-7** | Self-registration + email verification + Super Admin approval — **planning only (LP-7A)** | LP-6A | **PLANNING COMPLETE** |
 | **LP-7B–7G** | Schema → APIs → email → approval queue → provisioning → UAT | LP-7A | Not started |
-| **LP-8** | 2FA for Super Admin; rate limits on all login endpoints | LP-2, LP-3 |
+| **LP-8** | MVP login portal simplification — visible: Store + Super Admin only; EGO Admin deferred | LP-7A | **COMPLETED** |
+| **LP-9** | TBD | LP-8 |
 
 **UAT-7 does not implement LP-2+.**
 

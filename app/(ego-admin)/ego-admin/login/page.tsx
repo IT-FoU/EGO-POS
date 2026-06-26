@@ -35,6 +35,9 @@ export default async function EgoAdminLoginPage({
           <h1 className="mt-5 text-3xl font-semibold">{dictionary.egoAdminPortal}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{dictionary.egoAdminLoginSubtitle}</p>
         </div>
+        <p className="mb-6 rounded-md border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+          {dictionary.egoAdminDeferredNotice}
+        </p>
         {!migrationStatus.ready ? (
           <p className="mb-6 rounded-md border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
             {dictionary.egoAdminMigrationRequired}

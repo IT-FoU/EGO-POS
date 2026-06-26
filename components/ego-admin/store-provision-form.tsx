@@ -45,7 +45,18 @@ type SuccessPayload = {
   };
 };
 
-export function StoreProvisionForm({ dictionary }: { dictionary: ProvisionDictionary }) {
+export function StoreProvisionForm({
+  backHref = "/ego-admin",
+  backLabel,
+  dictionary,
+  provisionApiPath = "/api/ego-admin/stores",
+}: {
+  backHref?: string;
+  backLabel?: string;
+  dictionary: ProvisionDictionary;
+  provisionApiPath?: string;
+}) {
+  const resolvedBackLabel = backLabel ?? dictionary.backToEgoAdmin;
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<SuccessPayload | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -70,7 +81,7 @@ export function StoreProvisionForm({ dictionary }: { dictionary: ProvisionDictio
 
     setError(null);
     startTransition(async () => {
-      const response = await fetch("/api/ego-admin/stores", {
+      const response = await fetch(provisionApiPath, {
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -143,8 +154,8 @@ export function StoreProvisionForm({ dictionary }: { dictionary: ProvisionDictio
           >
             {dictionary.createAnotherStore}
           </button>
-          <Link className="rounded-md border border-border px-4 py-2 text-sm font-semibold" href="/ego-admin">
-            {dictionary.backToEgoAdmin}
+          <Link className="rounded-md border border-border px-4 py-2 text-sm font-semibold" href={backHref}>
+            {resolvedBackLabel}
           </Link>
         </div>
       </section>
@@ -243,8 +254,8 @@ export function StoreProvisionForm({ dictionary }: { dictionary: ProvisionDictio
         >
           {isPending ? dictionary.provisionSubmitting : dictionary.provisionSubmit}
         </button>
-        <Link className="rounded-md border border-border px-4 py-2 text-sm font-semibold" href="/ego-admin">
-          {dictionary.backToEgoAdmin}
+        <Link className="rounded-md border border-border px-4 py-2 text-sm font-semibold" href={backHref}>
+          {resolvedBackLabel}
         </Link>
       </div>
     </form>
