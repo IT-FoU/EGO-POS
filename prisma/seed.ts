@@ -38,6 +38,23 @@ async function main() {
     },
   });
 
+  const setupAdminPasswordHash = await hash("SetupChangeMe123!", 12);
+
+  await prisma.setupAdmin.upsert({
+    where: { username: "ego-setup" },
+    update: {
+      email: "setup@igopos.local",
+      passwordHash: setupAdminPasswordHash,
+      status: "active",
+    },
+    create: {
+      email: "setup@igopos.local",
+      passwordHash: setupAdminPasswordHash,
+      status: "active",
+      username: "ego-setup",
+    },
+  });
+
   const plan = await prisma.plan.upsert({
     where: { planName: "Free" },
     update: {},

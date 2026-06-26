@@ -2,11 +2,13 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useAdminLocale } from "@/components/igo-admin/admin-i18n";
 
-export function AdminLogoutButton() {
+export function SuperAdminLogoutButton({
+  dictionary,
+}: {
+  dictionary: { signOut: string; signingOut: string };
+}) {
   const router = useRouter();
-  const { copy } = useAdminLocale();
   const [isPending, startTransition] = useTransition();
 
   function handleLogout() {
@@ -24,7 +26,7 @@ export function AdminLogoutButton() {
       onClick={handleLogout}
       type="button"
     >
-      {isPending ? copy.signingOut : copy.signOut}
+      {isPending ? dictionary.signingOut : dictionary.signOut}
     </button>
   );
 }

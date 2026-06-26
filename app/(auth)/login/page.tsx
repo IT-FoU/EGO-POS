@@ -36,7 +36,8 @@ export default async function LoginPage({
         <div className="mb-8 flex flex-col items-center text-center">
           <LogoContainer className="shadow-lg" size={112} />
           <h1 className="mt-5 text-4xl font-bold tracking-normal">{APP_NAME}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{dictionary.loginTitle}</p>
+          <p className="mt-2 text-sm font-semibold text-primary">{dictionary.storeLoginPortal}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{dictionary.loginTitle}</p>
         </div>
         <div className="mb-6 flex justify-center">
           <LoginLocaleSwitcher locale={locale} />

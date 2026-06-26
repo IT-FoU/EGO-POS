@@ -1,4 +1,4 @@
-import { authenticateSuperAdminLogin } from "@/lib/auth/super-admin-login";
+import { authenticateSetupAdminLogin } from "@/lib/auth/setup-admin-login";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -14,11 +14,11 @@ export async function POST(request: Request) {
           : "";
   const password = typeof body?.password === "string" ? body.password : "";
 
-  const result = await authenticateSuperAdminLogin(identifier, password);
+  const result = await authenticateSetupAdminLogin(identifier, password);
 
   if (!result.ok) {
     return Response.json({ error: result.error, ok: false }, { status: result.status });
   }
 
-  return Response.json({ ok: true, redirectTo: "/igo-admin" });
+  return Response.json({ ok: true, redirectTo: result.redirectTo });
 }

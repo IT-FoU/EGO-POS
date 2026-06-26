@@ -71,7 +71,7 @@ export async function requireAdminSession() {
   const session = await getAdminSession();
 
   if (!session) {
-    redirect("/igo-admin/login");
+    redirect("/super-admin/login");
   }
 
   return session;

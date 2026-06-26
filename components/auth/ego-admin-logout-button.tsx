@@ -2,17 +2,19 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useAdminLocale } from "@/components/igo-admin/admin-i18n";
 
-export function AdminLogoutButton() {
+export function EgoAdminLogoutButton({
+  dictionary,
+}: {
+  dictionary: { signOut: string; signingOut: string };
+}) {
   const router = useRouter();
-  const { copy } = useAdminLocale();
   const [isPending, startTransition] = useTransition();
 
   function handleLogout() {
     startTransition(async () => {
-      await fetch("/api/super-admin/logout", { method: "POST" });
-      router.push("/super-admin/login");
+      await fetch("/api/ego-admin/logout", { method: "POST" });
+      router.push("/ego-admin/login");
       router.refresh();
     });
   }
@@ -24,7 +26,7 @@ export function AdminLogoutButton() {
       onClick={handleLogout}
       type="button"
     >
-      {isPending ? copy.signingOut : copy.signOut}
+      {isPending ? dictionary.signingOut : dictionary.signOut}
     </button>
   );
 }

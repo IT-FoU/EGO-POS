@@ -1476,6 +1476,17 @@ model SuperAdmin {
   @@map("super_admins")
 }
 
+model SetupAdmin {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@map("setup_admins")
+}
+
 model CompanyAccessLog {
   id            String     @id @default(cuid())
   superAdminId  String     @map("super_admin_id")

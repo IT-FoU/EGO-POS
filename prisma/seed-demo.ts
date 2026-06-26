@@ -100,6 +100,23 @@ async function seedFoundation(db: any) {
     where: { username: "igo-admin" },
   });
 
+  const setupAdminPasswordHash = await hash("SetupChangeMe123!", 12);
+
+  await db.setupAdmin.upsert({
+    create: {
+      email: "setup@igopos.local",
+      passwordHash: setupAdminPasswordHash,
+      status: "active",
+      username: "ego-setup",
+    },
+    update: {
+      email: "setup@igopos.local",
+      passwordHash: setupAdminPasswordHash,
+      status: "active",
+    },
+    where: { username: "ego-setup" },
+  });
+
   const plan = await db.plan.upsert({
     create: {
       customLogo: false,

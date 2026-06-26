@@ -111,6 +111,23 @@ After `npm run db:seed:demo`:
 
 Login page: **http://localhost:3000/login**
 
+### Login portals (OWNER-UAT-8)
+
+| Portal | Route | Who | Auth |
+| --- | --- | --- | --- |
+| **Store Login** | `/login` | Owner, Manager, Cashier | Owner: email/username + password/PIN; Manager/Cashier: username + PIN |
+| **Super Admin** | `/super-admin/login` | Platform owner only | Email + password (no PIN) |
+| **EGO Admin** | `/ego-admin/login` | Setup/onboarding staff | Username or email + password (no PIN) |
+
+Legacy `/igo-admin/login` redirects to `/super-admin/login`. Full Super Admin and EGO Admin dashboards are **placeholder only** after login.
+
+After `npm run db:seed:demo`:
+
+| Portal | Identifier | Password |
+| --- | --- | --- |
+| Super Admin | `admin@igopos.local` | `AdminChangeMe123!` |
+| EGO Admin | `ego-setup` | `SetupChangeMe123!` |
+
 ---
 
 ## 7. Recommended test order (what to test first)
@@ -147,7 +164,7 @@ Do **not** treat failures in these areas as UAT blockers unless they break core 
 
 | Area | Reason |
 | --- | --- |
-| Super Admin (`/igo-admin`) | Out of scope |
+| Super Admin (`/super-admin`, legacy `/igo-admin`) | Placeholder only — not full platform console |
 | Offline POS | Not implemented |
 | SaaS onboarding / `/register` self-signup | Not production-ready |
 | Hold/resume bill durability | Client-only; lost on refresh (known P1) |

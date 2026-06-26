@@ -345,6 +345,36 @@
 
 ---
 
+### UAT-8: Login portal route foundation
+
+| Field | Value |
+| --- | --- |
+| **Issue ID** | UAT-2026-06-25-P0-012 |
+| **Scope** | `/super-admin/login`, `/ego-admin/login`, `/login` portal separation |
+| **Status** | **FIXED** |
+
+**Implemented:**
+
+- **Store Login** — `/login` unchanged for Owner/Manager/Cashier (UAT-3/3B preserved).
+- **Super Admin Portal** — `/super-admin/login` (email + password only, no PIN); placeholder at `/super-admin`.
+- **EGO Admin Portal** — `/ego-admin/login` (username/email + password, no PIN); `SetupAdmin` model + placeholder at `/ego-admin`.
+- Legacy `/igo-admin/login` redirects to `/super-admin/login`.
+- Merchant sessions blocked from admin portal placeholders via `rejectMerchantSessionForAdminPortal()`.
+
+**Placeholder only:** Full Super Admin dashboard and EGO Admin store provisioning wizard remain future work (LP-4+).
+
+**Test accounts (after seed):**
+
+| Portal | Identifier | Password |
+| --- | --- | --- |
+| Super Admin | `admin@igopos.local` | `AdminChangeMe123!` |
+| EGO Admin | `ego-setup` | `SetupChangeMe123!` |
+| Store Owner | `igo-admin` | `AdminChangeMe123!` or PIN `123456` |
+
+**Verification:** `scripts/phase-owner-uat-8-login-portal-check.ts`
+
+---
+
 ## Open issues
 
 _(Log new UAT issues below using `OWNER_UAT_ISSUE_TEMPLATE.md`.)_
