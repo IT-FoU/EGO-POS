@@ -3,6 +3,7 @@ import { getPosSnapshot } from "@/features/pos/pos-service";
 import { createPosPermissionPolicyFromDatabase } from "@/features/access-control/pos-policy-loader";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
+import { isDemoMode } from "@/lib/demo-mode";
 
 export default async function PosPage() {
   const session = await requireSession();
@@ -42,7 +43,7 @@ export default async function PosPage() {
       taxRatePercent={snapshot.taxRatePercent}
       warehouseId={snapshot.warehouseId}
       posPermissionPolicy={posPermissionPolicy}
-      demoMode={process.env.IGO_DEMO_MODE === "true"}
+      demoMode={isDemoMode()}
       devDebug={process.env.NEXT_PUBLIC_DEV_DEBUG === "true"}
     />
   );

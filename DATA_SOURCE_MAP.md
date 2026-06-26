@@ -51,7 +51,9 @@ All disallowed items above are now DB-backed and read from server snapshots/acti
 
 ## Demo and Fallback Policy
 
-- `IGO_DEMO_MODE` remains explicit opt-in.
+- `IGO_DEMO_MODE` remains explicit opt-in for **non-production** environments only.
+- **LP-6A:** `NODE_ENV=production` + `IGO_DEMO_MODE=true` fails build/startup with a clear error; effective demo mode is always `false` in production (`lib/env/demo-mode-guard.ts`).
+- Health: `GET /api/health/config` reports requested vs effective demo mode.
 - Session/admin demo fallback behavior is additionally gated by `IGO_ENABLE_DEMO_FALLBACK`.
 - Runtime production reads do not fall back to local demo repositories for settings/checkout/reporting data.
 - Production writes remain server-side Prisma writes with permission checks and audit where applicable.

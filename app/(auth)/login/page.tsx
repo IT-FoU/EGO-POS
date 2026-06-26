@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { isDemoMode } from "@/lib/demo-mode";
 import { cookies } from "next/headers";
 import { getCurrentSession } from "@/lib/auth/session";
 import { resolveStorePostLoginRedirectForUser } from "@/lib/auth/store-membership";
@@ -47,7 +48,7 @@ export default async function LoginPage({
         <div className="mb-6 flex justify-center">
           <LoginLocaleSwitcher locale={locale} />
         </div>
-        <LoginForm demoMode={process.env.IGO_DEMO_MODE === "true"} dictionary={dictionary} locale={locale} />
+        <LoginForm demoMode={isDemoMode()} dictionary={dictionary} locale={locale} />
       </section>
     </main>
   );

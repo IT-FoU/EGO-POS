@@ -43,7 +43,7 @@ IGO_DEMO_MODE="false"
 
 | Variable | Required value | Why |
 | --- | --- | --- |
-| `IGO_DEMO_MODE` | `false` | Prevents demo checkout/session fallbacks |
+| `IGO_DEMO_MODE` | `false` | Prevents demo checkout/session fallbacks; **must be `false` for production builds** (`NODE_ENV=production` rejects `true` — LP-6A) |
 | `IGO_ENABLE_DEMO_FALLBACK` | unset or `false` | Prevents fail-open demo sessions |
 | `DATABASE_URL` | valid PostgreSQL URL | All production data lives in DB |
 | `NEXTAUTH_SECRET` | non-empty secret | Login/session security |
@@ -54,6 +54,8 @@ IGO_DEMO_MODE="false"
 Select-String -Path .env.local -Pattern "IGO_DEMO_MODE"
 # Expect: IGO_DEMO_MODE="false"
 ```
+
+**Production deploy guard (LP-6A):** `npm run build` fails if `IGO_DEMO_MODE=true` while `NODE_ENV=production`. Runtime startup (`instrumentation.ts`) re-checks. Monitor `GET /api/health/config` — `ok: false` means unsafe demo env in production.
 
 ---
 

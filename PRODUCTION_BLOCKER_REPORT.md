@@ -30,7 +30,7 @@
 | 10 | ~~**Report date-range filters are UI-only**~~ — **RESOLVED (B8-4/B8-9):** Prisma date filters via `report-filters.ts` / `buildSaleWhere`. | ~~High~~ **Closed** | RPT | — |
 | 11 | ~~**Settings logo + receipt print mode read from localStorage in POS**~~ — **RESOLVED (B8-10):** production settings DB-backed; print mode is explicit device-local preference. Logo remains preview-only (P1). | ~~High~~ **Closed (settings SOT)** / **P1 logo** | POS, DEPLOY | 8 |
 | 12 | **No hardware/receipt-printer integration** — browser print only; print mode device-local. | High | POS | 8 |
-| 13 | **`IGO_DEMO_MODE` fail-open risk if mis-set** — demo login, fake session, demo checkout activate when `"true"`. | High | SEC, DEPLOY | 1 (verify) |
+| 13 | ~~**`IGO_DEMO_MODE` fail-open risk if mis-set**~~ — **MITIGATED (LP-6A):** production build/startup rejects `IGO_DEMO_MODE=true`; effective demo mode forced off in `NODE_ENV=production`. | ~~High~~ **Closed (guard)** | SEC, DEPLOY | 1 (verify) |
 | 14 | **Product images are a stub** (`getPrismaProductImages()` → `[]`) — no storage backend. | Medium | — | 9 |
 | 15 | **Client cart does not preview DB promotions** — on-screen total can differ from server total (guard prevents underpay only). | Medium | POS, RPT | 9 |
 | 16 | **Promotion analytics placeholders** (ratios/charts, stack-rules, integration-map static). | Medium | RPT | 10 |
@@ -51,7 +51,7 @@
 
 > **Updated 2026-06-25 (B8-11):** Final production readiness audit PASS. All B8/B7 harness regressions PASS. **P0 blockers for single-store owner testing: none.** Remaining single-store risks are P1 pilot items (POS approval UI localStorage, hold bill client-only, printer integration, logo DB persistence, deploy env flag verification). See `B8_11_FINAL_PRODUCTION_READINESS_REPORT.md`, `OWNER_TESTING_CHECKLIST.md`, and `PILOT_BLOCKER_REPORT.md`.
 
-> **Updated 2026-06-25 (LP-6):** Demo localStorage onboarding paths isolated from production. `/businesses` is DB-backed (redirect/picker/no-assignment). `/register` is request-access only. `/businesses/setup` and onboarding localStorage gated to `IGO_DEMO_MODE=true`. Production store creation remains EGO Admin provisioning (LP-4).
+> **Updated 2026-06-25 (LP-6A):** Production env guard blocks `IGO_DEMO_MODE=true` at build/startup; `isDemoMode()` is always false in production; health endpoint `/api/health/config` reports demo safety.
 
 ---
 
