@@ -4,7 +4,7 @@ import { requireSuperAdminPortalAccess } from "@/lib/auth/portal-guards";
 
 export const dynamic = "force-dynamic";
 
-export default async function SuperAdminBusinessesPage() {
+export default async function SuperAdminPlansPage() {
   await requireSuperAdminPortalAccess();
-  return <EgoPosCenterSectionPage data={await getEgoPosCenterPageData()} section="businesses" />;
+  return <EgoPosCenterSectionPage data={await getEgoPosCenterPageData()} section="plans" />;
 }

@@ -628,6 +628,120 @@ Object.assign(copy.th, {
   userAgent: "User Agent",
 });
 
+Object.assign(copy.en, {
+  storesBusinesses: "Stores / Businesses",
+});
+
+Object.assign(copy.th, {
+  active: "ใช้งานอยู่",
+  activeBusinesses: "ธุรกิจที่ใช้งานอยู่",
+  activeStatus: "ใช้งานอยู่",
+  archiveDelete: "เก็บถาวร / ลบ",
+  auditDetails: "รายละเอียดบันทึก",
+  auditLogs: "บันทึกตรวจสอบ",
+  backToCenter: "กลับไป EGO POS Center",
+  business: "ธุรกิจ",
+  businessControl: "ควบคุมธุรกิจ",
+  businessDetails: "รายละเอียดธุรกิจ",
+  businessInformation: "ข้อมูลธุรกิจ",
+  businessTemplates: "POS Templates",
+  businesses: "ธุรกิจ",
+  cancel: "ยกเลิก",
+  changePlan: "เปลี่ยนแผน",
+  chooseBusinessTemplate: "เลือก POS Template",
+  close: "ปิด",
+  command: "คำสั่ง",
+  confirmCreateBusiness: "ตรวจสอบและสร้าง",
+  connected: "เชื่อมต่อแล้ว",
+  country: "ประเทศ",
+  createBusiness: "สร้างธุรกิจ",
+  createBusinessTemplate: "สร้าง POS Template",
+  currency: "สกุลเงิน",
+  currentStatus: "สถานะปัจจุบัน",
+  dashboard: "แดชบอร์ด",
+  defaultPlan: "แผนเริ่มต้น",
+  defaultPermissions: "สิทธิ์เริ่มต้น",
+  draft: "ฉบับร่าง",
+  edit: "แก้ไข",
+  emptyBusinesses: "ยังไม่มีธุรกิจ สร้างธุรกิจแรกจาก POS Template ได้เลย",
+  emptyLogs: "ยังไม่มีบันทึกตรวจสอบของแพลตฟอร์ม",
+  expiringSoon: "ทดลองใช้ / ใกล้หมดอายุ",
+  featureAccess: "สิทธิ์ฟีเจอร์",
+  featureMatrix: "ตารางฟีเจอร์",
+  features: "ฟีเจอร์",
+  free: "ฟรี",
+  freePlan: "แผนฟรี",
+  freePlanBusinesses: "ธุรกิจแผนฟรี",
+  fullscreen: "เต็มหน้าจอ",
+  lastActive: "ใช้งานล่าสุด",
+  manageBusinessesTemplatesPlansUsersAndPlatformControls: "จัดการธุรกิจ POS Templates แผน ผู้ใช้ และการควบคุมแพลตฟอร์ม",
+  manageFeatures: "จัดการฟีเจอร์",
+  manageOwner: "จัดการเจ้าของ",
+  managePlansFeatures: "จัดการแผนและฟีเจอร์",
+  manualControl: "ส่วนนี้พร้อมสำหรับการควบคุมแบบ Manual เชื่อมต่อ backend action เพื่อบันทึกถาวร",
+  monthlyRevenue: "รายได้รายเดือน",
+  monthlySubscriptionRevenue: "รายได้สมาชิกต่อเดือน",
+  needReview: "ต้องตรวจสอบ",
+  needSetup: "ต้องตั้งค่า",
+  next: "ถัดไป",
+  noImmediateFixes: "ยังไม่มีรายการที่ต้องแก้ทันที",
+  noPlatformNotifications: "ยังไม่มีการแจ้งเตือนของแพลตฟอร์ม",
+  noRecentActivity: "ยังไม่มีกิจกรรมล่าสุด",
+  noStoresUsingTemplate: "ยังไม่มีร้านที่ใช้ POS Template นี้",
+  notVerified: "ยังไม่ได้ตรวจสอบ",
+  notifications: "การแจ้งเตือน",
+  openMiniMartPos: "เปิด Mini Mart POS",
+  openPosDashboard: "เปิดแดชบอร์ด POS",
+  owner: "เจ้าของ",
+  ownerAccount: "บัญชีเจ้าของ",
+  partial: "บางส่วน",
+  pendingActions: "รายการที่ต้องจัดการ",
+  plan: "แผน",
+  planEngine: "ระบบแผน",
+  planLocks: "ล็อกตามแผน",
+  plansFeatures: "แผนและฟีเจอร์",
+  platformAdminUsers: "ผู้ดูแลแพลตฟอร์ม",
+  platformNotifications: "การแจ้งเตือนแพลตฟอร์ม",
+  platformSettings: "ตั้งค่าแพลตฟอร์ม",
+  posTemplateStatus: "สถานะ POS Template",
+  posTemplates: "POS Templates",
+  proPlan: "แผน Pro",
+  proPlanBusinesses: "ธุรกิจแผน Pro",
+  ready: "พร้อมใช้งาน",
+  recentActivity: "กิจกรรมล่าสุด",
+  recentAuditLogs: "บันทึกล่าสุด",
+  recentBusinesses: "ธุรกิจล่าสุด",
+  reports: "รายงาน",
+  role: "บทบาท",
+  roles: "บทบาท",
+  rolesAccessControl: "ควบคุมสิทธิ์",
+  rolesPermissions: "บทบาทและสิทธิ์",
+  save: "บันทึก",
+  saveSettings: "บันทึกการตั้งค่า",
+  sectionEmpty: "ส่วนนี้พร้อมใช้งานแล้ว แต่ยังไม่มีข้อมูล",
+  settingsDefaults: "ค่าเริ่มต้น",
+  setActiveDraft: "ตั้งค่าใช้งาน / ฉบับร่าง",
+  signOut: "ออกจากระบบ",
+  signingOut: "กำลังออกจากระบบ...",
+  status: "สถานะ",
+  stores: "ร้าน",
+  storesBusinesses: "ร้าน / ธุรกิจ",
+  storesUsingTemplate: "ร้านที่ใช้ Template นี้",
+  subscriptions: "สมาชิกและการชำระเงิน",
+  suspendedBusinesses: "ธุรกิจที่ถูกระงับ",
+  systemHealth: "สถานะระบบ",
+  systemVault: "ระบบกลาง",
+  template: "Template",
+  templateBuilderComingSoon: "ตัวสร้าง Template กำลังมา",
+  templateUsage: "การใช้งาน Template",
+  totalBusinesses: "ธุรกิจทั้งหมด",
+  totalStoreUsers: "ผู้ใช้ร้านทั้งหมด",
+  users: "ผู้ใช้",
+  view: "ดู",
+  viewAll: "ดูทั้งหมด",
+  viewRecentActivity: "ดูกิจกรรมล่าสุด",
+});
+
 type PosTemplateDefinition = {
   defaultPermissions: Record<string, string[]>;
   features: string[];
@@ -923,6 +1037,26 @@ function posTemplateName(template: PosTemplateDefinition, c: CenterCopy) {
   return map[template.key] ?? template.name;
 }
 
+function normalizePosTemplateKey(value?: string | null) {
+  const normalized = String(value ?? "mini-mart").trim().toLowerCase().replace(/_/g, "-");
+  const aliases: Record<string, string> = {
+    clothes: "clothes-sales",
+    clothing: "clothes-sales",
+    "clothes-sale": "clothes-sales",
+    "event-rentals": "event-rental",
+    minimart: "mini-mart",
+    "mini-marts": "mini-mart",
+    "online-sale": "online-sales",
+  };
+  return aliases[normalized] ?? normalized;
+}
+
+function posTemplateNameFromKey(value: string | null | undefined, c: CenterCopy) {
+  const key = normalizePosTemplateKey(value);
+  const template = templateDefinitions.find((item) => item.key === key);
+  return template ? posTemplateName(template, c) : value || c.posTemplateMiniMart;
+}
+
 function integrationStatusLabel(status: string, c: CenterCopy) {
   const normalized = status.toLowerCase();
   if (normalized.includes("connected")) return c.connected;
@@ -1034,7 +1168,7 @@ function BusinessTable({
                   <div>{business.owner?.fullName ?? "-"}</div>
                   <div className="text-xs text-[#94A3B8]">{business.owner?.email ?? business.owner?.username ?? "-"}</div>
                 </td>
-                <td className="px-4 py-3">{business.businessTemplateKey ?? "Mini Mart"}</td>
+                <td className="px-4 py-3">{posTemplateNameFromKey(business.businessTemplateKey, c)}</td>
                 <td className="px-4 py-3">{business.plan?.planName ?? c.free}</td>
                 <td className="px-4 py-3"><StatusBadge value={business.status} /></td>
                 <td className="px-4 py-3">{business._count?.members ?? 0}</td>
@@ -1400,7 +1534,7 @@ function TemplateList({ businesses, onAction }: { businesses: CenterBusiness[]; 
   const { c } = useCenterCopy();
   const usedByKey = new Map<string, number>();
   businesses.forEach((business) => {
-    const key = business.businessTemplateKey ?? "mini-mart";
+    const key = normalizePosTemplateKey(business.businessTemplateKey);
     usedByKey.set(key, (usedByKey.get(key) ?? 0) + 1);
   });
   return (
@@ -1445,7 +1579,7 @@ function getPosTemplate(selected: unknown): PosTemplateDefinition | null {
 }
 
 function storesForTemplate(businesses: CenterBusiness[], template: PosTemplateDefinition) {
-  return businesses.filter((business) => (business.businessTemplateKey ?? "mini-mart") === template.key);
+  return businesses.filter((business) => normalizePosTemplateKey(business.businessTemplateKey) === template.key);
 }
 
 function templateIntegration(template: PosTemplateDefinition) {
@@ -2585,7 +2719,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
   const parentDrawer = drawerParent(drawer, selected);
   const titleMap: Record<SectionKind, string> = {
     audit: c.auditLogs,
-    businesses: c.businesses,
+    businesses: c.storesBusinesses,
     plans: c.plansFeatures,
     roles: c.roles,
     settings: c.platformSettings,
