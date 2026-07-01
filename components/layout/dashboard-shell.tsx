@@ -3,7 +3,7 @@
 import type { Session } from "next-auth";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   BadgePercent,
@@ -28,6 +28,7 @@ import { LogoContainer } from "@/components/brand/logo-container";
 import { APP_NAME, DEFAULT_LOCALE, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -135,6 +136,10 @@ export function DashboardShell({
   const showDaysLeft = planName.toLowerCase() !== "free plan" && daysLeft !== null;
   const copy = shellCopy[locale];
   const displayPlanName = planName.toLowerCase() === "free plan" ? copy.freePlan : planName;
+  const visibleNavigation = useMemo(
+    () => navigation.filter((item) => canViewStoreNavigationItem(session.user.roles, item.key)),
+    [session.user.roles],
+  );
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -149,7 +154,7 @@ export function DashboardShell({
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const isActive =
               item.href === "/dashboard"
@@ -200,7 +205,7 @@ export function DashboardShell({
             </div>
           </div>
           <nav className="mt-4 flex gap-2 overflow-x-auto lg:hidden">
-            {navigation
+            {visibleNavigation
               .filter((item) => item.href !== "#")
               .map((item) => {
                 const Icon = item.icon;

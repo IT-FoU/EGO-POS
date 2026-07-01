@@ -43,6 +43,8 @@ import {
     type PosPermissionAction,
     type PosPermissionPolicy,
 } from "@/features/pos/permissions";
+import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
+import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
 const OPENING_CASH_DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500] as const;
 const HYDRATION_SAFE_TIME = "--:--";
 const HYDRATION_SAFE_BUSINESS_DATE = "--";
@@ -2036,6 +2038,10 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
     search: string;
     showDeleted: boolean;
 }) {
+    const canRefundSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_REFUND)
+      && canUseStoreAction(currentRole, STORE_ACTIONS.PAYMENT_REFUND);
+    const canVoidSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_VOID);
+    const canDeleteSale = canVoidSale;
     const filterOptions: Array<{ label: string; value: "today" | "yesterday" | "week" | "month" | "custom" }> = [
         { label: "Today", value: "today" },
         { label: "Yesterday", value: "yesterday" },
@@ -2107,9 +2113,15 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>Edit Note</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>Edit Customer</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>Edit Payment</button>
-                  <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>Refund</button>
-                  <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>Void</button>
-                  <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>
+                  {canRefundSale ? (
+                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>Refund</button>
+                  ) : null}
+                  {canVoidSale ? (
+                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>Void</button>
+                  ) : null}
+                  {canDeleteSale ? (
+                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>
+                  ) : null}
                 </div>
               </div>
             </div>))}
