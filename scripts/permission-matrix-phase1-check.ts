@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import {
   PLATFORM_ACTIONS,
-  STORE_ACTIONS,
   canPerformPlatformAction,
-  canPerformStoreAction,
-  canViewPlatformAuditAction,
   hasPlatformPermission,
+} from "../features/permissions/platform-permissions";
+import {
+  STORE_ACTIONS,
+  canPerformStoreAction,
   hasStorePermission,
-} from "../features/permissions";
+} from "../features/permissions/store-permissions";
+import {
+  canViewPlatformAuditAction,
+  canViewStoreActivityLogs,
+} from "../features/permissions/audit-permission-helpers";
 
 function check(name: string, value: boolean) {
   assert.equal(value, true, name);
@@ -33,3 +38,7 @@ check("billing_admin audit scope allows subscription action", canViewPlatformAud
 check("billing_admin audit scope rejects store activity action", !canViewPlatformAuditAction("billing_admin", "store_activity_logs.view_all"));
 check("template_manager audit scope allows pos_template action", canViewPlatformAuditAction("template_manager", "pos_template.update"));
 check("template_manager audit scope rejects business action", !canViewPlatformAuditAction("template_manager", "business.create"));
+check("support_admin denied business.delete", !canPerformPlatformAction({ role: "support_admin" }, PLATFORM_ACTIONS.BUSINESS_DELETE));
+check("super_admin allowed plan.change", canPerformPlatformAction({ role: "super_admin" }, PLATFORM_ACTIONS.PLAN_CHANGE));
+check("billing_admin denied store activity logs all", !canViewStoreActivityLogs("billing_admin", { businessId: "biz_1" }));
+check("template_manager denied store activity logs all", !canViewStoreActivityLogs("template_manager", { businessId: "biz_1" }));

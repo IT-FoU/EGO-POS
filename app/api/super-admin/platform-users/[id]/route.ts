@@ -1,12 +1,13 @@
 import { PLATFORM_AUDIT_ACTIONS, PLATFORM_TARGET_TYPES } from "@/features/audit/audit-log-service";
 import { writePlatformAuditForUser } from "@/features/audit/platform-route-audit";
-import { normalizePlatformRole, requireCurrentPlatformUser } from "@/lib/auth/platform-user";
+import { requirePlatformApiPermission } from "@/features/permissions/platform-api-guard";
+import { PLATFORM_ACTIONS } from "@/features/permissions/platform-permissions";
+import { normalizePlatformRole } from "@/lib/auth/platform-user";
 import { prisma } from "@/lib/db/prisma";
 
 const db = prisma as any;
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireCurrentPlatformUser();
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as { role?: unknown; status?: unknown } | null;
   const nextRole = typeof body?.role === "string" ? normalizePlatformRole(body.role) : null;
@@ -15,6 +16,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!nextRole && nextStatus !== "disabled") {
     return Response.json({ error: "Role or disabled status is required.", ok: false }, { status: 400 });
   }
+  const isRoleChange = Boolean(nextRole);
+  const permission = await requirePlatformApiPermission(
+    request,
+    isRoleChange ? PLATFORM_ACTIONS.USER_ROLE_CHANGE : PLATFORM_ACTIONS.USER_DISABLE,
+    {
+      isStoreUserAction: false,
+      targetId: id,
+      targetType: PLATFORM_TARGET_TYPES.USER,
+    },
+  );
+  if (!permission.ok) return permission.response;
 
   const existing = await db.superAdmin.findUnique({
     select: { email: true, id: true, role: true, status: true, username: true },
@@ -31,10 +43,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     where: { id },
   });
 
-  const isRoleChange = Boolean(nextRole);
   await writePlatformAuditForUser({
     action: isRoleChange ? PLATFORM_AUDIT_ACTIONS.USER_ROLE_CHANGE : PLATFORM_AUDIT_ACTIONS.USER_DISABLE,
-    actor,
+    actor: permission.user,
     afterValue: isRoleChange ? { role: updated.role } : { status: updated.status },
     beforeValue: isRoleChange ? { role: existing.role } : { status: existing.status },
     request,

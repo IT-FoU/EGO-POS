@@ -1,12 +1,12 @@
 import { PLATFORM_AUDIT_ACTIONS, PLATFORM_TARGET_TYPES } from "@/features/audit/audit-log-service";
 import { writePlatformAuditForUser } from "@/features/audit/platform-route-audit";
+import { requirePlatformApiPermission } from "@/features/permissions/platform-api-guard";
+import { PLATFORM_ACTIONS } from "@/features/permissions/platform-permissions";
 import { prisma } from "@/lib/db/prisma";
-import { requireCurrentPlatformUser } from "@/lib/auth/platform-user";
 
 const db = prisma as any;
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireCurrentPlatformUser();
   const { id } = await params;
   const body = (await request.json().catch(() => null)) as { planId?: unknown; reason?: unknown } | null;
   const planId = typeof body?.planId === "string" ? body.planId.trim() : "";
@@ -14,6 +14,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!planId) {
     return Response.json({ error: "Plan is required.", ok: false }, { status: 400 });
   }
+  const permission = await requirePlatformApiPermission(request, PLATFORM_ACTIONS.PLAN_CHANGE, {
+    businessId: id,
+    reason: typeof body?.reason === "string" ? body.reason : undefined,
+    targetId: id,
+    targetType: PLATFORM_TARGET_TYPES.PLAN,
+  });
+  if (!permission.ok) return permission.response;
 
   const [business, nextPlan] = await Promise.all([
     db.company.findUnique({
@@ -38,7 +45,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   await writePlatformAuditForUser({
     action: PLATFORM_AUDIT_ACTIONS.PLAN_CHANGE,
-    actor,
+    actor: permission.user,
     afterValue: { planId: updated.planId, planName: updated.plan?.planName ?? null },
     beforeValue: { planId: business.planId, planName: business.plan?.planName ?? null },
     businessId: business.id,

@@ -15,16 +15,17 @@ function serializable<T>(value: T): T {
 }
 
 export async function getEgoPosCenterPageData() {
-  const [businesses, users, auditLogs, platformAuditLogs, storeActivityLogs, plans, subscriptions, platformUsersCount, currentPlatformUser] = await Promise.all([
-    getAdminBusinesses(),
+  const currentPlatformUser = await getCurrentPlatformUser();
+  const role = currentPlatformUser?.role;
+  const [businesses, users, auditLogs, platformAuditLogs, storeActivityLogs, plans, subscriptions, platformUsersCount] = await Promise.all([
+    getAdminBusinesses(role),
     getAdminUsers(),
     getAdminAuditLogs(),
-    getAdminPlatformAuditLogs(),
-    getAdminStoreActivityLogs(),
+    getAdminPlatformAuditLogs(role),
+    getAdminStoreActivityLogs(role),
     getAdminPlans(),
     getAdminSubscriptions(),
     getAdminPlatformUsersCount(),
-    getCurrentPlatformUser(),
   ]);
 
   return serializable({ auditLogs, businesses, currentPlatformUser, platformAuditLogs, platformUsersCount, plans, storeActivityLogs, subscriptions, users });
