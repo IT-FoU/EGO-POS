@@ -1,12 +1,18 @@
+import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { getPrismaSettings } from "@/features/settings/prisma-repository";
 import { SettingsForm } from "@/features/settings/components/settings-form";
 import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
 import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
+import { canManageStoreSettings } from "@/features/permissions/store-ui-permissions";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 
 export default async function SettingsPage() {
   const session = await requireSession();
+  if (!canManageStoreSettings(session.user.roles)) {
+    return <StoreAccessDenied />;
+  }
+
   const tenant = tenantFromSession(session);
   const [settings, qrSnapshot, staffSnapshot] = await Promise.all([
     getPrismaSettings(tenant),

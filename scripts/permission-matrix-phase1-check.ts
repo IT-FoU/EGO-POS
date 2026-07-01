@@ -13,6 +13,11 @@ import {
   canViewPlatformAuditAction,
   canViewStoreActivityLogs,
 } from "../features/permissions/audit-permission-helpers";
+import {
+  canViewFullStoreReports,
+  canViewStoreNavigationItem,
+  resolveStoreUiRole,
+} from "../features/permissions/store-ui-permissions";
 
 function check(name: string, value: boolean) {
   assert.equal(value, true, name);
@@ -40,6 +45,11 @@ check("cashier cannot sale.refund", !hasStorePermission("cashier", STORE_ACTIONS
 check("cashier cannot inventory.adjust", !hasStorePermission("cashier", STORE_ACTIONS.INVENTORY_ADJUST));
 check("cashier cannot product.price_change", !hasStorePermission("cashier", STORE_ACTIONS.PRODUCT_PRICE_CHANGE));
 check("cashier cannot reports.view_full", !hasStorePermission("cashier", STORE_ACTIONS.REPORTS_VIEW_FULL));
+check("UI resolves mixed store roles to owner privilege", resolveStoreUiRole(["Cashier", "Owner"]) === "owner");
+check("cashier UI can see POS navigation", canViewStoreNavigationItem("cashier", "pos"));
+check("cashier UI cannot see Products navigation", !canViewStoreNavigationItem("cashier", "products"));
+check("cashier UI cannot see full Reports", !canViewFullStoreReports("cashier"));
+check("manager UI can see Inventory navigation", canViewStoreNavigationItem("manager", "inventory"));
 check("billing_admin audit scope allows subscription action", canViewPlatformAuditAction("billing_admin", "subscription.mark_paid"));
 check("billing_admin audit scope rejects store activity action", !canViewPlatformAuditAction("billing_admin", "store_activity_logs.view_all"));
 check("template_manager audit scope allows pos_template action", canViewPlatformAuditAction("template_manager", "pos_template.update"));
