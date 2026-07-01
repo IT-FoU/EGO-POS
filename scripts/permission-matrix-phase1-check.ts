@@ -30,10 +30,16 @@ check("support_admin user.disable requires store user context", !canPerformPlatf
 check("support_admin user.disable allowed for future store user context", canPerformPlatformAction({ role: "support_admin" }, PLATFORM_ACTIONS.USER_DISABLE, { isStoreUserAction: true }));
 
 check("owner can sale.refund", hasStorePermission("owner", STORE_ACTIONS.SALE_REFUND));
+check("manager can sale.refund", hasStorePermission("manager", STORE_ACTIONS.SALE_REFUND));
 check("manager can inventory.adjust", hasStorePermission("manager", STORE_ACTIONS.INVENTORY_ADJUST));
+check("manager can reports.view_full", hasStorePermission("manager", STORE_ACTIONS.REPORTS_VIEW_FULL));
 check("cashier can sale.complete", canPerformStoreAction({ role: "cashier" }, STORE_ACTIONS.SALE_COMPLETE));
+check("cashier can customer.create", canPerformStoreAction({ role: "cashier" }, STORE_ACTIONS.CUSTOMER_CREATE));
+check("cashier cannot sale.void", !hasStorePermission("cashier", STORE_ACTIONS.SALE_VOID));
 check("cashier cannot sale.refund", !hasStorePermission("cashier", STORE_ACTIONS.SALE_REFUND));
 check("cashier cannot inventory.adjust", !hasStorePermission("cashier", STORE_ACTIONS.INVENTORY_ADJUST));
+check("cashier cannot product.price_change", !hasStorePermission("cashier", STORE_ACTIONS.PRODUCT_PRICE_CHANGE));
+check("cashier cannot reports.view_full", !hasStorePermission("cashier", STORE_ACTIONS.REPORTS_VIEW_FULL));
 check("billing_admin audit scope allows subscription action", canViewPlatformAuditAction("billing_admin", "subscription.mark_paid"));
 check("billing_admin audit scope rejects store activity action", !canViewPlatformAuditAction("billing_admin", "store_activity_logs.view_all"));
 check("template_manager audit scope allows pos_template action", canViewPlatformAuditAction("template_manager", "pos_template.update"));

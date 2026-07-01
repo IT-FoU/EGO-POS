@@ -1,4 +1,5 @@
 import { adjustCustomerLoyaltyPoints } from "@/features/loyalty/loyalty-service";
+import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { runWrite } from "@/lib/api/write-response";
 import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
@@ -12,5 +13,6 @@ export async function POST(request: Request) {
       }),
     request,
     WRITE_PERMISSIONS.customersUpdate,
+    { route: "/api/customers/points-adjust", storeAction: STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE, targetType: "customer" },
   );
 }
