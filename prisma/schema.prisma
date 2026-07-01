@@ -227,6 +227,8 @@ model Company {
   customerPayments   CustomerPayment[]
   promotionUsages    PromotionUsage[]
   auditLogs      AuditLog[]
+  platformAuditLogs PlatformAuditLog[]
+  storeActivityLogs StoreActivityLog[]
   settings       CompanySetting?
   subscriptions  SaaSSubscription[]
   notifications  Notification[]
@@ -288,6 +290,7 @@ model Branch {
   sales        Sale[]
   devices      PosDevice[]
   qrPaymentAccounts QrPaymentAccount[]
+  storeActivityLogs StoreActivityLog[]
   companyUsers CompanyUser[]
 
   @@index([companyId])
@@ -378,6 +381,7 @@ model User {
   companies       CompanyUser[]
   roles           UserRole[]
   auditLogs       AuditLog[]
+  storeActivityLogs StoreActivityLog[]
   loginHistory    LoginHistory[]
   favoriteProducts FavoriteProduct[]
 
@@ -1471,11 +1475,156 @@ model SuperAdmin {
   username  String   @unique
   email     String   @unique
   passwordHash String @map("password_hash")
+  role      String   @default("super_admin")
   status    UserStatus @default(active)
   createdAt DateTime @default(now()) @map("created_at")
   accessLogs CompanyAccessLog[]
+  platformAuditLogs PlatformAuditLog[]
 
   @@map("super_admins")
+}
+
+model PlatformSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json?
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("platform_settings")
+}
+
+model PlatformAuditLog {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now()) @map("created_at")
+  requestId   String?  @map("request_id")
+  actorType   String   @default("human") @map("actor_type")
+  actorId     String?  @map("actor_id")
+  actorName   String   @map("actor_name")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String?  @map("actor_role")
+  action      String
+  status      String   @default("success")
+  severity    String   @default("info")
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  targetName  String?  @map("target_name")
+  businessId  String?  @map("business_id")
+  beforeValue Json?    @map("before_value")
+  afterValue  Json?    @map("after_value")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  metadata    Json?
+  actor       SuperAdmin? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  business    Company?    @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([businessId, createdAt])
+  @@index([requestId])
+  @@index([status])
+  @@index([severity, createdAt])
+  @@map("platform_audit_logs")
+}
+
+model PlatformAuditLogArchive {
+  id          String   @id
+  createdAt   DateTime @map("created_at")
+  requestId   String?  @map("request_id")
+  actorType   String   @map("actor_type")
+  actorId     String?  @map("actor_id")
+  actorName   String   @map("actor_name")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String?  @map("actor_role")
+  action      String
+  status      String
+  severity    String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  targetName  String?  @map("target_name")
+  businessId  String?  @map("business_id")
+  beforeValue Json?    @map("before_value")
+  afterValue  Json?    @map("after_value")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  metadata    Json?
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([businessId, createdAt])
+  @@index([requestId])
+  @@index([status])
+  @@index([severity, createdAt])
+  @@map("platform_audit_log_archive")
+}
+
+model StoreActivityLog {
+  id           String   @id @default(cuid())
+  businessId   String   @map("business_id")
+  branchId     String?  @map("branch_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  occurredAt   DateTime @default(now()) @map("occurred_at")
+  syncedAt     DateTime? @map("synced_at")
+  actorId      String?  @map("actor_id")
+  actorName    String   @map("actor_name")
+  actorRole    String   @map("actor_role")
+  terminalId   String?  @map("terminal_id")
+  terminalName String?  @map("terminal_name")
+  deviceName   String?  @map("device_name")
+  action       String
+  status       String   @default("success")
+  targetType   String   @map("target_type")
+  targetId     String?  @map("target_id")
+  targetName   String?  @map("target_name")
+  amount       Decimal? @db.Decimal(12, 2)
+  currency     String   @default("LAK")
+  beforeValue  Json?    @map("before_value")
+  afterValue   Json?    @map("after_value")
+  metadata     Json?
+  business     Company  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  actor        User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([terminalId, createdAt])
+  @@index([action, createdAt])
+  @@index([status])
+  @@map("store_activity_logs")
+}
+
+model StoreActivityLogArchive {
+  id           String   @id
+  businessId   String   @map("business_id")
+  branchId     String?  @map("branch_id")
+  createdAt    DateTime @map("created_at")
+  occurredAt   DateTime @map("occurred_at")
+  syncedAt     DateTime? @map("synced_at")
+  actorId      String?  @map("actor_id")
+  actorName    String   @map("actor_name")
+  actorRole    String   @map("actor_role")
+  terminalId   String?  @map("terminal_id")
+  terminalName String?  @map("terminal_name")
+  deviceName   String?  @map("device_name")
+  action       String
+  status       String
+  targetType   String   @map("target_type")
+  targetId     String?  @map("target_id")
+  targetName   String?  @map("target_name")
+  amount       Decimal? @db.Decimal(12, 2)
+  currency     String
+  beforeValue  Json?    @map("before_value")
+  afterValue   Json?    @map("after_value")
+  metadata     Json?
+
+  @@index([businessId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([terminalId, createdAt])
+  @@index([action, createdAt])
+  @@index([status])
+  @@map("store_activity_log_archive")
 }
 
 model SetupAdmin {

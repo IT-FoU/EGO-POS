@@ -7,6 +7,7 @@ const ADMIN_COOKIE = "igo_super_admin_session";
 export const DEMO_SUPER_ADMIN = {
   email: "admin@igopos.local",
   id: "demo-super-admin",
+  role: "super_admin",
   status: "active",
   username: "igo-admin",
 } as const;
@@ -14,6 +15,7 @@ export const DEMO_SUPER_ADMIN = {
 export type AdminSession = {
   email: string;
   id: string;
+  role: string;
   username: string;
 };
 
@@ -45,13 +47,14 @@ export async function getAdminSession() {
     return {
       email: DEMO_SUPER_ADMIN.email,
       id: DEMO_SUPER_ADMIN.id,
+      role: DEMO_SUPER_ADMIN.role,
       username: DEMO_SUPER_ADMIN.username,
     } satisfies AdminSession;
   }
 
   const admin = await prisma.superAdmin
     .findFirst({
-      select: { email: true, id: true, status: true, username: true },
+      select: { email: true, id: true, role: true, status: true, username: true },
       where: { id: adminId, status: "active" },
     })
     .catch(() => null);
@@ -63,6 +66,7 @@ export async function getAdminSession() {
   return {
     email: admin.email,
     id: admin.id,
+    role: admin.role,
     username: admin.username,
   } satisfies AdminSession;
 }

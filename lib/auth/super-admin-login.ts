@@ -100,13 +100,14 @@ export async function authenticateSuperAdminLogin(
     await createAdminSession({
       email: DEMO_SUPER_ADMIN.email,
       id: DEMO_SUPER_ADMIN.id,
+      role: DEMO_SUPER_ADMIN.role,
       username: DEMO_SUPER_ADMIN.username,
     });
     return verified;
   }
 
   const admin = await prisma.superAdmin.findFirst({
-    select: { email: true, id: true, username: true },
+    select: { email: true, id: true, role: true, username: true },
     where: { email: identifier.trim() },
   });
 
@@ -117,6 +118,7 @@ export async function authenticateSuperAdminLogin(
   await createAdminSession({
     email: admin.email,
     id: admin.id,
+    role: admin.role,
     username: admin.username,
   });
 
