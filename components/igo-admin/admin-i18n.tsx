@@ -7,8 +7,7 @@ import { readStringFromStorage, runDemoStorageMigrations, writeStringToStorage }
 
 const LANGUAGE_KEY = DemoStorageKeys.locale;
 
-export const adminCopy = {
-  en: {
+const adminCopyEn = {
     activeBusinesses: "Active Businesses",
     action: "Action",
     activate: "Activate",
@@ -67,91 +66,35 @@ export const adminCopy = {
     userManagement: "User Management",
     users: "Users",
     viewBusinessControls: "View stores, owners, business template, plan, status, and platform controls.",
-  },
-  lo: {
-    activeBusinesses: "ທຸລະກິດທີ່ໃຊ້ງານ",
-    action: "ການກະທຳ",
-    activate: "ເປີດໃຊ້ງານ",
-    auditLogs: "ບັນທຶກການກວດສອບ",
-    block: "ບລັອກ",
-    business: "ທຸລະກິດ",
-    businessManagement: "ຈັດການທຸລະກິດ",
-    businesses: "ທຸລະກິດ",
-    company: "ບໍລິສັດ",
-    controls: "ການຄວບຄຸມ",
-    created: "ສ້າງເມື່ອ",
-    currentPlan: "ແຜນປັດຈຸບັນ",
-    dashboard: "ໜ້າຫຼັກ",
-    delete: "ລຶບ",
-    downgrade: "ຫຼຸດແຜນ",
-    egoAdmin: "EGO Admin",
-    egoSuperAdmin: "Super Admin",
-    superAdminBrand: "Super Admin",
-    adminPassword: "Password Super Admin",
-    adminUsername: "Email Super Admin",
-    headerRole: "Super Admin",
-    freePlan: "ຟຣີ",
-    loginSubtitle: "ສຳລັບເຈົ້າຂອງແພລດຟອມເທົ່ານັ້ນ.",
-    mainBranch: "ສາຂາຫຼັກ",
-    miniMart: "ມິນິມາດ",
-    module: "ໂມດູນ",
-    newRegistrations: "ການລົງທະບຽນໃໝ່",
-    owner: "ເຈົ້າຂອງ",
-    plan: "ແຜນ",
-    platformDashboard: "ໜ້າຫຼັກແພລດຟອມ",
-    platformManagement: "ຈັດການແພລດຟອມ",
-    platformOverview: "ພາບລວມທຸລະກິດ, ຜູ້ໃຊ້, ແຜນສະມາຊິກ ແລະ ກິດຈະກຳຂອງແພລດຟອມ.",
-    platformUserControls: "ເບິ່ງຜູ້ໃຊ້ແພລດຟອມ ແລະ ກຽມການຄວບຄຸມບລັອກ, ປົດບລັອກ ແລະ ຣີເຊັດ Password.",
-    platformActionsHistory: "ພື້ນຖານປະຫວັດການກະທຳສຳຄັນ ແລະ ກິດຈະກຳ Admin.",
-    resetPassword: "ຣີເຊັດ Password",
-    restore: "ກູ້ຄືນ",
-    signIn: "Login ເຂົ້າ Super Admin",
-    signingIn: "ກຳລັງ Login...",
-    signOut: "ອອກຈາກລະບົບ",
-    signingOut: "ກຳລັງອອກຈາກລະບົບ...",
-    status: "ສະຖານະ",
-    suspend: "ລະງັບ",
-    subscriptions: "ແຜນສະມາຊິກ",
-    subscriptionManagement: "ຈັດການແຜນສະມາຊິກ",
-    subscriptionOverview: "ເບິ່ງແຜນ ແລະ ກຽມການອັບເກຣດ, ຫຼຸດແຜນ ແລະ ປົດລັອກຟີເຈີພຣີມຽມ.",
-    suspendedBusinesses: "ທຸລະກິດທີ່ຖືກລະງັບ",
-    template: "ແມ່ແບບ",
-    time: "ເວລາ",
-    totalBusinesses: "ທຸລະກິດທັງໝົດ",
-    totalUsers: "ຜູ້ໃຊ້ທັງໝົດ",
-    unblock: "ປົດບລັອກ",
-    unassigned: "ຍັງບໍ່ກຳນົດ",
-    unlockPremium: "ປົດລັອກຟີເຈີພຣີມຽມ",
-    upgrade: "ອັບເກຣດ",
-    user: "ຜູ້ໃຊ້",
-    userManagement: "ຈັດການຜູ້ໃຊ້",
-    users: "ຜູ້ໃຊ້",
-    viewBusinessControls: "ເບິ່ງຮ້ານ, ເຈົ້າຂອງ, ແມ່ແບບທຸລະກິດ, ແຜນ, ສະຖານະ ແລະ ການຄວບຄຸມແພລດຟອມ.",
-  },
-};
+  };
+
+export const adminCopy = {
+  en: adminCopyEn,
+  th: adminCopyEn,
+} as const;
 
 export type AdminCopyKey = keyof typeof adminCopy.en;
 
 export function useAdminLocale() {
-  const [locale, setLocale] = useState<"lo" | "en">("en");
+  const [locale, setLocale] = useState<"th" | "en">("en");
 
   useEffect(() => {
     runDemoStorageMigrations();
     const stored = readStringFromStorage(LANGUAGE_KEY);
-    const nextLocale = stored === "lo" || stored === "en" ? stored : "en";
+    const nextLocale = stored === "th" || stored === "en" ? stored : "en";
     document.documentElement.lang = nextLocale;
     document.documentElement.dataset.locale = nextLocale;
     setLocale(nextLocale);
   }, []);
 
-  const updateLocale = useCallback((nextLocale: "lo" | "en") => {
+  const updateLocale = useCallback((nextLocale: "th" | "en") => {
     writeStringToStorage(LANGUAGE_KEY, nextLocale);
     document.documentElement.lang = nextLocale;
     document.documentElement.dataset.locale = nextLocale;
     setLocale(nextLocale);
   }, []);
 
-  return { copy: adminCopy[locale], locale, updateLocale };
+  return { copy: adminCopy.en, locale, updateLocale };
 }
 
 export function AdminText({ k }: { k: AdminCopyKey }) {
@@ -164,11 +107,11 @@ export function AdminLanguageToggle() {
   return (
     <div className="inline-flex h-10 shrink-0 items-center rounded-md border border-border px-2 text-xs font-semibold">
       <button
-        className={cn("px-1.5 transition", locale === "lo" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+        className={cn("px-1.5 transition", locale === "th" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
         type="button"
-        onClick={() => updateLocale("lo")}
+        onClick={() => updateLocale("th")}
       >
-        LAO
+        TH
       </button>
       <span className="text-muted-foreground">|</span>
       <button
@@ -176,7 +119,7 @@ export function AdminLanguageToggle() {
         type="button"
         onClick={() => updateLocale("en")}
       >
-        ENG
+        EN
       </button>
     </div>
   );
