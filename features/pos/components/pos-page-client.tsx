@@ -7,6 +7,7 @@ import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, 
 import type { LucideIcon } from "lucide-react";
 import type { HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
+import { OwnShiftReportDrawer } from "@/features/pos/components/own-shift-report-drawer";
 import { formatLak } from "@/features/pos/format";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
@@ -179,6 +180,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [recentSalesShowDeleted, setRecentSalesShowDeleted] = useState(false);
     const [recentSalesCustomStart, setRecentSalesCustomStart] = useState("");
     const [recentSalesCustomEnd, setRecentSalesCustomEnd] = useState("");
+    const [ownShiftReportOpen, setOwnShiftReportOpen] = useState(false);
     const [managerApprovalRequest, setManagerApprovalRequest] = useState<ManagerApprovalRequest | null>(null);
     const [managerApprovalPin, setManagerApprovalPin] = useState("");
     const [managerApprovalReason, setManagerApprovalReason] = useState("");
@@ -192,11 +194,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [visibleProducts, setVisibleProducts] = useState<PosProduct[]>(products);
     const [currentTime, setCurrentTime] = useState(HYDRATION_SAFE_TIME);
     const [businessDate, setBusinessDate] = useState(HYDRATION_SAFE_BUSINESS_DATE);
+    const [uiLocale, setUiLocale] = useState<"en" | "th">("en");
     const [stockReferenceDate, setStockReferenceDate] = useState(HYDRATION_SAFE_REFERENCE_DATE);
     const [billNo, setBillNo] = useState(nextSaleNo);
     useEffect(() => {
         setBillNo(nextSaleNo);
     }, [nextSaleNo]);
+    useEffect(() => {
+        setUiLocale(document.documentElement.dataset.locale === "th" ? "th" : "en");
+    }, []);
     useEffect(() => {
         setActiveCashSession(cashSession);
         if (cashSession.status === "open") {
@@ -1420,6 +1426,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
                   <ActionButton icon={RotateCcw} label="Resume Bill" onClick={resumeSale}/>
                   <ActionButton icon={ReceiptText} label="Hold Bill" onClick={holdSale}/>
+                  <ActionButton icon={CalendarDays} label={uiLocale === "th" ? "รายงานกะของฉัน" : "Own Shift Report"} onClick={() => setOwnShiftReportOpen(true)}/>
                 </div>
                 <div className="mt-2 grid gap-2">
                   <select className="field-input h-10 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
@@ -1459,6 +1466,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
+      {ownShiftReportOpen ? <OwnShiftReportDrawer locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
             setReceiptOpen(false);
