@@ -18,6 +18,7 @@ import {
 import {
   fetchRecentSales,
   fetchSaleReceipt,
+  type PostSaleManagerApprovalPayload,
   refundSaleRequest,
   reprintSaleReceipt,
   voidSaleRequest,
@@ -43,8 +44,8 @@ import {
     type PosPermissionAction,
     type PosPermissionPolicy,
 } from "@/features/pos/permissions";
-import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
-import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
+import { STORE_ACTIONS, STORE_ROLES } from "@/features/permissions/store-permissions";
+import { canUseStoreAction, resolveStoreUiRole } from "@/features/permissions/store-ui-permissions";
 const OPENING_CASH_DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500] as const;
 const HYDRATION_SAFE_TIME = "--:--";
 const HYDRATION_SAFE_BUSINESS_DATE = "--";
@@ -98,6 +99,11 @@ type DemoSaleRecord = {
     timeline: DemoSaleTimelineEvent[];
     totalAmount: number;
     warehouseId: string;
+};
+
+type ManagerApprovalRequest = {
+    action: "refund" | "void";
+    sale: DemoSaleRecord;
 };
 type ResolvedPayment = {
     cardAmount: number;
@@ -173,6 +179,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [recentSalesShowDeleted, setRecentSalesShowDeleted] = useState(false);
     const [recentSalesCustomStart, setRecentSalesCustomStart] = useState("");
     const [recentSalesCustomEnd, setRecentSalesCustomEnd] = useState("");
+    const [managerApprovalRequest, setManagerApprovalRequest] = useState<ManagerApprovalRequest | null>(null);
+    const [managerApprovalPin, setManagerApprovalPin] = useState("");
+    const [managerApprovalReason, setManagerApprovalReason] = useState("");
     const [mixedPaymentOpen, setMixedPaymentOpen] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [pendingApprovals, setPendingApprovals] = useState<PosPendingApprovalRequest[]>([]);
@@ -868,6 +877,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setRecentSales(nextSales);
     }
     function refundSale(sale: DemoSaleRecord) {
+        const canRefundDirectly = canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.SALE_REFUND)
+            && canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.PAYMENT_REFUND);
+        if (!canRefundDirectly && resolveStoreUiRole(posPermissionPolicy.role) === STORE_ROLES.CASHIER && !demoMode && sale.id) {
+            openManagerApprovalRequest("refund", sale);
+            return;
+        }
         if (!enforcePosAction("refund_bill", { amountLak: sale.totalAmount })) {
             return;
         }
@@ -893,6 +908,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setMessage(`${sale.saleNo} marked refunded.`);
     }
     function voidSale(sale: DemoSaleRecord) {
+        const canVoidDirectly = canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.SALE_VOID);
+        if (!canVoidDirectly && resolveStoreUiRole(posPermissionPolicy.role) === STORE_ROLES.CASHIER && !demoMode && sale.id) {
+            openManagerApprovalRequest("void", sale);
+            return;
+        }
         if (!enforcePosAction("void_bill", { amountLak: sale.totalAmount })) {
             return;
         }
@@ -922,6 +942,53 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         updateRecentSaleStatus(sale, "voided", "Voided");
         recordPosAudit("void_bill", "allowed", "not_required", `${sale.saleNo} voided and stock restored.`);
         setMessage(`${sale.saleNo} voided. Stock restored.`);
+    }
+    function openManagerApprovalRequest(action: ManagerApprovalRequest["action"], sale: DemoSaleRecord) {
+        setManagerApprovalRequest({ action, sale });
+        setManagerApprovalPin("");
+        setManagerApprovalReason(`${action === "refund" ? "Refund" : "Void"} ${sale.saleNo}`);
+    }
+    function closeManagerApprovalRequest() {
+        setManagerApprovalRequest(null);
+        setManagerApprovalPin("");
+        setManagerApprovalReason("");
+    }
+    async function submitManagerApprovalRequest() {
+        const request = managerApprovalRequest;
+        if (!request?.sale.id) {
+            return;
+        }
+        const reason = managerApprovalReason.trim();
+        if (!managerApprovalPin.trim() || !reason) {
+            setMessage("Manager PIN and reason are required.");
+            return;
+        }
+        const approval: PostSaleManagerApprovalPayload = {
+            managerPin: managerApprovalPin,
+            reason,
+        };
+        try {
+            const result = request.action === "refund"
+                ? await refundSaleRequest(request.sale.id, reason, approval)
+                : await voidSaleRequest(request.sale.id, reason, approval);
+            if (result.status === "pending_approval") {
+                setMessage(`${request.action === "refund" ? "Refund" : "Void"} pending approval for ${request.sale.saleNo}.`);
+                closeManagerApprovalRequest();
+                return;
+            }
+            await refreshRecentSalesFromServer();
+            recordPosAudit(
+                request.action === "refund" ? "refund_bill" : "void_bill",
+                "approved",
+                "approved",
+                `${request.sale.saleNo} ${request.action === "refund" ? "refunded" : "voided"} with manager PIN approval.`,
+            );
+            setMessage(`${request.sale.saleNo} ${request.action === "refund" ? "refunded" : "voided"} with manager approval.`);
+            closeManagerApprovalRequest();
+        } catch (error) {
+            setManagerApprovalPin("");
+            setMessage(error instanceof Error ? error.message : "Manager approval failed.");
+        }
     }
     function editSaleField(sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") {
         const action = field === "note" ? "edit_sale_note" : field === "customerName" ? "edit_sale_customer" : "edit_sale_payment";
@@ -1390,6 +1457,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }}/>) : null}
 
       {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
+
+      {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
             setReceiptOpen(false);
@@ -2016,6 +2085,50 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
       </div>
     </div>);
 }
+function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, onSubmit, pin, reason, sale }: {
+    action: "refund" | "void";
+    onClose: () => void;
+    onPinChange: (value: string) => void;
+    onReasonChange: (value: string) => void;
+    onSubmit: () => void;
+    pin: string;
+    reason: string;
+    sale: DemoSaleRecord;
+}) {
+    const label = action === "refund" ? "Refund" : "Void";
+    return (<PosModal title={`Manager approval: ${label}`} onClose={onClose}>
+      <div className="grid gap-4">
+        <div className="rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-sm font-semibold">{sale.saleNo}</p>
+              <p className="text-xs text-muted-foreground">{sale.customerName || "Guest"} - {formatReceiptDateTime(sale.createdAt)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="font-semibold">{formatLak(sale.totalAmount)} LAK</p>
+            </div>
+          </div>
+        </div>
+        <label className="grid gap-2 text-sm font-semibold">
+          Reason
+          <textarea className="field-input min-h-24 resize-y" value={reason} onChange={(event) => onReasonChange(event.target.value)} placeholder={`${label} reason`}/>
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          Manager / Owner PIN
+          <input className="field-input" type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={(event) => onPinChange(event.target.value)} placeholder="Enter manager PIN"/>
+        </label>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onSubmit}>
+            Approve {label}
+          </button>
+        </div>
+      </div>
+    </PosModal>);
+}
 function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
     currentRole: string;
     customEnd: string;
@@ -2041,6 +2154,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
     const canRefundSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_REFUND)
       && canUseStoreAction(currentRole, STORE_ACTIONS.PAYMENT_REFUND);
     const canVoidSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_VOID);
+    const canRequestManagerApproval = resolveStoreUiRole(currentRole) === STORE_ROLES.CASHIER;
     const canDeleteSale = canVoidSale;
     const filterOptions: Array<{ label: string; value: "today" | "yesterday" | "week" | "month" | "custom" }> = [
         { label: "Today", value: "today" },
@@ -2113,11 +2227,11 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>Edit Note</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>Edit Customer</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>Edit Payment</button>
-                  {canRefundSale ? (
-                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>Refund</button>
+                  {canRefundSale || canRequestManagerApproval ? (
+                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>{canRefundSale ? "Refund" : "Request Refund"}</button>
                   ) : null}
-                  {canVoidSale ? (
-                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>Void</button>
+                  {canVoidSale || canRequestManagerApproval ? (
+                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>{canVoidSale ? "Void" : "Request Void"}</button>
                   ) : null}
                   {canDeleteSale ? (
                     <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>

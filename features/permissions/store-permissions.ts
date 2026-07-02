@@ -131,4 +131,4 @@ export function getAllStoreActions() {
   return allStoreActions;
 }
 
-// TODO Permission Matrix Phase 2+: cashier void/refund approval should be handled by manager/owner approval flow.
+// Cashier refund/void remains denied here; the POS API can accept a separate audited manager PIN override.

@@ -7,6 +7,7 @@ import type {
   PosReceiptSnapshot,
   PostSaleMutationResult,
 } from "@/features/pos/post-sale-types";
+import type { StoreManagerPinApprovalResult } from "@/lib/auth/store-manager-approval";
 import {
   assertPosActionAllowed,
   buildPosPolicyForTenant,
@@ -362,7 +363,7 @@ async function assertPostSalePermission(
 
 export async function voidPrismaSale(
   tenant: TenantContext,
-  input: { reason?: string; saleId: string },
+  input: { managerPinApproval?: StoreManagerPinApprovalResult | null; reason?: string; saleId: string },
 ): Promise<PostSaleMutationResult> {
   const saleId = String(input.saleId).trim();
   if (!saleId) {
@@ -374,22 +375,24 @@ export async function voidPrismaSale(
     throw new Error("Sale was not found.");
   }
 
-  const permission = await assertPostSalePermission(tenant, "void_bill", preview.totalAmount);
-  if (permission.pendingApproval) {
-    const approval = await createApprovalRequest(
-      {
-        action: "void_sale",
-        amountLak: preview.totalAmount,
-        branchId: preview.branchId,
-        module: "pos",
-        payload: { reason: input.reason ?? null, saleId },
-        reason: permission.reason ?? "Void sale requires approval.",
-        referenceId: saleId,
-        ruleKey: "refund",
-      },
-      tenant,
-    );
-    return { approvalId: approval.id, sale: preview, status: "pending_approval" };
+  if (!input.managerPinApproval) {
+    const permission = await assertPostSalePermission(tenant, "void_bill", preview.totalAmount);
+    if (permission.pendingApproval) {
+      const approval = await createApprovalRequest(
+        {
+          action: "void_sale",
+          amountLak: preview.totalAmount,
+          branchId: preview.branchId,
+          module: "pos",
+          payload: { reason: input.reason ?? null, saleId },
+          reason: permission.reason ?? "Void sale requires approval.",
+          referenceId: saleId,
+          ruleKey: "refund",
+        },
+        tenant,
+      );
+      return { approvalId: approval.id, sale: preview, status: "pending_approval" };
+    }
   }
 
   return withTenantTransaction({
@@ -400,7 +403,7 @@ export async function voidPrismaSale(
     write: async (tx) => {
       const sale = await loadMutableSale(tx, tenant, saleId);
       assertSaleMutable(sale);
-      await voidSaleCore(tx, tenant, sale, input.reason);
+      await voidSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
       const cashierName = await resolveCashierName(tx, sale.createdBy);
       return {
         sale: mapSaleRow(
@@ -415,7 +418,7 @@ export async function voidPrismaSale(
 
 export async function refundPrismaSale(
   tenant: TenantContext,
-  input: { reason?: string; saleId: string },
+  input: { managerPinApproval?: StoreManagerPinApprovalResult | null; reason?: string; saleId: string },
 ): Promise<PostSaleMutationResult> {
   const saleId = String(input.saleId).trim();
   if (!saleId) {
@@ -427,22 +430,24 @@ export async function refundPrismaSale(
     throw new Error("Sale was not found.");
   }
 
-  const permission = await assertPostSalePermission(tenant, "refund_bill", preview.totalAmount);
-  if (permission.pendingApproval) {
-    const approval = await createApprovalRequest(
-      {
-        action: "refund_sale",
-        amountLak: preview.totalAmount,
-        branchId: preview.branchId,
-        module: "pos",
-        payload: { reason: input.reason ?? null, saleId },
-        reason: permission.reason ?? "Refund requires approval.",
-        referenceId: saleId,
-        ruleKey: "refund",
-      },
-      tenant,
-    );
-    return { approvalId: approval.id, sale: preview, status: "pending_approval" };
+  if (!input.managerPinApproval) {
+    const permission = await assertPostSalePermission(tenant, "refund_bill", preview.totalAmount);
+    if (permission.pendingApproval) {
+      const approval = await createApprovalRequest(
+        {
+          action: "refund_sale",
+          amountLak: preview.totalAmount,
+          branchId: preview.branchId,
+          module: "pos",
+          payload: { reason: input.reason ?? null, saleId },
+          reason: permission.reason ?? "Refund requires approval.",
+          referenceId: saleId,
+          ruleKey: "refund",
+        },
+        tenant,
+      );
+      return { approvalId: approval.id, sale: preview, status: "pending_approval" };
+    }
   }
 
   return withTenantTransaction({
@@ -453,7 +458,7 @@ export async function refundPrismaSale(
     write: async (tx) => {
       const sale = await loadMutableSale(tx, tenant, saleId);
       assertSaleMutable(sale);
-      await refundSaleCore(tx, tenant, sale, input.reason);
+      await refundSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
       const cashierName = await resolveCashierName(tx, sale.createdBy);
       return {
         sale: mapSaleRow(

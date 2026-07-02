@@ -5,9 +5,13 @@ import { runWrite } from "@/lib/api/write-response";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   return runWrite(
-    (tenant, body) => voidPrismaSale(tenant, { reason: typeof body.reason === "string" ? body.reason : undefined, saleId: id }),
+    (tenant, body) => voidPrismaSale(tenant, {
+      managerPinApproval: body.__storeManagerPinApproval,
+      reason: typeof body.reason === "string" ? body.reason : typeof body.approval?.reason === "string" ? body.approval.reason : undefined,
+      saleId: id,
+    }),
     request,
     undefined,
-    { route: "/api/pos/sales/[id]/void", storeAction: [STORE_ACTIONS.SALE_VOID, STORE_ACTIONS.PROMOTION_REVERSE], targetId: id, targetType: "sale" },
+    { allowManagerPinApproval: true, route: "/api/pos/sales/[id]/void", storeAction: [STORE_ACTIONS.SALE_VOID, STORE_ACTIONS.PROMOTION_REVERSE], targetId: id, targetType: "sale" },
   );
 }

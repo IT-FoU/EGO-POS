@@ -65,7 +65,7 @@ export async function requireStoreActionPermission({
     requiredPermission: context.requiredPermission ?? action,
   });
 
-  // TODO Phase 3.2+: cashier void/refund and other restricted actions should support owner/manager approval or PIN override.
+  // Non-POS restricted actions remain hard-denied until a future approval workflow explicitly supports them.
   throw new PermissionMatrixDeniedError(currentStoreUser.role, action);
 }
 

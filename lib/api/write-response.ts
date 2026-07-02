@@ -5,10 +5,17 @@ import { assertPermission, PermissionDeniedError, type PermissionKey } from "@/l
 import { PermissionMatrixDeniedError, type PermissionContext } from "@/features/permissions/platform-permissions";
 import { requireStoreActionPermissions } from "@/lib/auth/store-permission-guard";
 import type { StoreAction } from "@/features/permissions/store-permissions";
+import {
+  STORE_MANAGER_APPROVAL_BODY_KEY,
+  auditStoreManagerPinApproval,
+  requireStoreActionPermissionsOrManagerPinApproval,
+  type StoreManagerPinApprovalBody,
+} from "@/lib/auth/store-manager-approval";
 
 type StoreActionResolver = StoreAction | StoreAction[] | ((body: Record<string, unknown>) => StoreAction | StoreAction[]);
 
 type StorePermissionOptions = PermissionContext & {
+  allowManagerPinApproval?: boolean;
   storeAction?: StoreActionResolver;
 };
 
@@ -74,13 +81,31 @@ export async function runWrite<T>(
     const tenant = tenantFromSession(session);
     const body = request ? await request.json().catch(() => ({})) : {};
     const storeActions = resolveStoreActions(options.storeAction, body);
+    let managerPinApproval = null;
     if (storeActions.length) {
-      await requireStoreActionPermissions({ actions: storeActions, context: options, session, tenant });
+      if (options.allowManagerPinApproval) {
+        managerPinApproval = await requireStoreActionPermissionsOrManagerPinApproval({
+          actions: storeActions,
+          approval: body.approval as StoreManagerPinApprovalBody | undefined,
+          context: options,
+          session,
+          tenant,
+        });
+        if (managerPinApproval) {
+          body[STORE_MANAGER_APPROVAL_BODY_KEY] = managerPinApproval;
+        }
+      } else {
+        await requireStoreActionPermissions({ actions: storeActions, context: options, session, tenant });
+      }
     }
     if (permission) {
       await assertPermission(tenant, permission);
     }
-    return NextResponse.json(writeSuccess(await handler(tenant, body)));
+    const data = await handler(tenant, body);
+    if (managerPinApproval) {
+      await auditStoreManagerPinApproval({ actions: storeActions, approval: managerPinApproval, context: options });
+    }
+    return NextResponse.json(writeSuccess(data));
   } catch (error) {
     return apiJsonFromError(error);
   }

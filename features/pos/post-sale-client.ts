@@ -7,6 +7,11 @@ import {
 } from "@/features/pos/post-sale-repository";
 import type { PosRecentSaleRecord, PosReceiptSnapshot, PostSaleMutationResult } from "@/features/pos/post-sale-types";
 
+export type PostSaleManagerApprovalPayload = {
+  managerPin: string;
+  reason: string;
+};
+
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
@@ -34,18 +39,18 @@ export async function reprintSaleReceipt(saleId: string) {
   return readJson<{ receiptNo: string; saleId: string; saleNo: string }>(response);
 }
 
-export async function voidSaleRequest(saleId: string, reason?: string) {
+export async function voidSaleRequest(saleId: string, reason?: string, approval?: PostSaleManagerApprovalPayload) {
   const response = await fetch(`/api/pos/sales/${saleId}/void`, {
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ approval, reason }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
   return readJson<PostSaleMutationResult>(response);
 }
 
-export async function refundSaleRequest(saleId: string, reason?: string) {
+export async function refundSaleRequest(saleId: string, reason?: string, approval?: PostSaleManagerApprovalPayload) {
   const response = await fetch(`/api/pos/sales/${saleId}/refund`, {
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ approval, reason }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });

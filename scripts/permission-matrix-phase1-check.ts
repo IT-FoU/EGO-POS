@@ -18,6 +18,7 @@ import {
   canViewStoreNavigationItem,
   resolveStoreUiRole,
 } from "../features/permissions/store-ui-permissions";
+import { isManagerPinApprovalEligible } from "../lib/auth/store-manager-approval";
 
 function check(name: string, value: boolean) {
   assert.equal(value, true, name);
@@ -45,6 +46,10 @@ check("cashier cannot sale.refund", !hasStorePermission("cashier", STORE_ACTIONS
 check("cashier cannot inventory.adjust", !hasStorePermission("cashier", STORE_ACTIONS.INVENTORY_ADJUST));
 check("cashier cannot product.price_change", !hasStorePermission("cashier", STORE_ACTIONS.PRODUCT_PRICE_CHANGE));
 check("cashier cannot reports.view_full", !hasStorePermission("cashier", STORE_ACTIONS.REPORTS_VIEW_FULL));
+check("cashier manager PIN override eligible for refund bundle", isManagerPinApprovalEligible([STORE_ACTIONS.SALE_REFUND, STORE_ACTIONS.PAYMENT_REFUND]));
+check("cashier manager PIN override eligible for void bundle", isManagerPinApprovalEligible([STORE_ACTIONS.SALE_VOID, STORE_ACTIONS.PROMOTION_REVERSE]));
+check("cashier manager PIN override not eligible for inventory", !isManagerPinApprovalEligible([STORE_ACTIONS.INVENTORY_ADJUST]));
+check("cashier manager PIN override not eligible for customer credit", !isManagerPinApprovalEligible([STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE]));
 check("UI resolves mixed store roles to owner privilege", resolveStoreUiRole(["Cashier", "Owner"]) === "owner");
 check("cashier UI can see POS navigation", canViewStoreNavigationItem("cashier", "pos"));
 check("cashier UI cannot see Products navigation", !canViewStoreNavigationItem("cashier", "products"));
