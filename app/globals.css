@@ -37,7 +37,7 @@
   --danger: #ef4444;
 }
 
-html[data-locale="lo"] {
+html[data-locale="th"] {
   --app-font-family: "Phetsarath OT", "Noto Sans Lao", sans-serif;
 }
 

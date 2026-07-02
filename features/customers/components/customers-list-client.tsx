@@ -12,11 +12,11 @@ import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
 import { cn } from "@/lib/utils";
 
-function readUiLocale(): "en" | "lo" {
+function readUiLocale(): "en" | "th" {
     if (typeof document === "undefined") {
         return "en";
     }
-    return document.documentElement.dataset.locale === "lo" ? "lo" : "en";
+    return document.documentElement.dataset.locale === "th" ? "th" : "en";
 }
 const statusOptions: Array<CustomerStatus | "all"> = ["all", "active", "inactive"];
 type Segment = "all" | "new" | "regular" | "vip" | "inactive" | "lost";
@@ -53,7 +53,7 @@ export function CustomersListClient({ customers, payments, purchases, storeRoles
     const [segment, setSegment] = useState<Segment>("all");
     const [message, setMessage] = useState<string | null>(null);
     const [modal, setModal] = useState<CustomerModal>(null);
-    const [locale, setLocale] = useState<"en" | "lo">("en");
+    const [locale, setLocale] = useState<"en" | "th">("en");
     const canManageCredit = canUseStoreAction(storeRoles, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE);
     useEffect(() => {
         const syncLocale = () => setLocale(readUiLocale());
@@ -118,12 +118,12 @@ export function CustomersListClient({ customers, payments, purchases, storeRoles
         { label: "Snacks", value: 35 },
         { label: "Household", value: 20 },
     ];
-    const text = locale === "lo"
+    const text = locale === "th"
         ? {
-            create: "ສ້າງລູກຄ້າ",
-            export: "ສົ່ງອອກລູກຄ້າ",
-            import: "ນຳເຂົ້າລູກຄ້າ",
-            title: "ລູກຄ້າ",
+            create: "Create customer",
+            export: "Export customers",
+            import: "Import customers",
+            title: "Customers",
         }
         : {
             create: "Create customer",

@@ -96,7 +96,7 @@ export function validateProvisionStoreInput(input: ProvisionStoreInput): string 
     return "Selected business template is not available for provisioning yet.";
   }
 
-  if (!["en", "lo"].includes(defaultLocale)) {
+  if (!["en", "th"].includes(defaultLocale)) {
     return "Default language must be English or Lao.";
   }
 

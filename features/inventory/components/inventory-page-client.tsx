@@ -18,13 +18,13 @@ export function InventoryPageClient({ items, movements, warehouses, }: {
     warehouses: Warehouse[];
 }) {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
-    const [locale, setLocale] = useState<"en" | "lo">("en");
+    const [locale, setLocale] = useState<"en" | "th">("en");
     const [activePanel, setActivePanel] = useState<InventoryDashboardPanel>(null);
     const [stockFilter, setStockFilter] = useState<InventoryStockFilter>("all");
     useEffect(() => {
         const readLocale = () => {
             const storedLocale = readStringFromStorage(DemoStorageKeys.locale);
-            setLocale(storedLocale === "lo" ? "lo" : "en");
+            setLocale(storedLocale === "th" ? "th" : "en");
         };
         readLocale();
         window.addEventListener("storage", readLocale);
@@ -69,10 +69,10 @@ export function InventoryPageClient({ items, movements, warehouses, }: {
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm font-medium text-primary">
-              {locale === "lo" ? "ຈັດການສາງ" : "Inventory Management"}
+              {locale === "th" ? "Inventory Management" : "Inventory Management"}
             </p>
             <h1 className="mt-2 text-3xl font-semibold">
-              {locale === "lo" ? "ສາງສິນຄ້າ" : "Inventory"}
+              {locale === "th" ? "Inventory" : "Inventory"}
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.multi.warehouse.stock.overview.with.low.stoc")}</p>
           </div>

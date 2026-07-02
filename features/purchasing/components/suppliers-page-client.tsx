@@ -15,11 +15,11 @@ export function SuppliersPageClient({ suppliers, purchaseOrders, payables, }: {
 }) {
     const [query, setQuery] = useState("");
     const [selectedSupplierId, setSelectedSupplierId] = useState(suppliers[0]?.id ?? "");
-    const [locale, setLocale] = useState<"en" | "lo">("en");
+    const [locale, setLocale] = useState<"en" | "th">("en");
     useEffect(() => {
         const readLocale = () => {
             const storedLocale = readStringFromStorage(DemoStorageKeys.locale);
-            setLocale(storedLocale === "lo" ? "lo" : "en");
+            setLocale(storedLocale === "th" ? "th" : "en");
         };
         readLocale();
         window.addEventListener("storage", readLocale);
@@ -42,7 +42,7 @@ export function SuppliersPageClient({ suppliers, purchaseOrders, payables, }: {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-primary">Supplier Management</p>
-            <h1 className="mt-2 text-3xl font-semibold">{locale === "lo" ? "ຜູ້ສະໜອງ" : "Suppliers"}</h1>
+            <h1 className="mt-2 text-3xl font-semibold">{locale === "th" ? "Suppliers" : "Suppliers"}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.supplier.list.and.detail.summary.with.purcha")}</p>
           </div>
         </div>

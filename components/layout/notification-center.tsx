@@ -18,9 +18,9 @@ const labels = {
         empty: "No urgent alerts",
         title: "Notifications",
     },
-    lo: {
-        empty: "ບໍ່ມີແຈ້ງເຕືອນດ່ວນ",
-        title: "ແຈ້ງເຕືອນ",
+    th: {
+        empty: "No urgent alerts",
+        title: "Notifications",
     },
 };
 const severityClass: Record<NotificationSeverity, string> = {
@@ -45,7 +45,7 @@ export function NotificationCenter({ locale }: {
     locale?: string;
 }) {
     const [isOpen, setIsOpen] = useState(false);
-    const copy = locale === "en" ? labels.en : labels.lo;
+    const copy = locale === "en" ? labels.en : labels.th;
     const notifications = useMemo<NotificationItem[]>(() => [
         {
             href: "/inventory",

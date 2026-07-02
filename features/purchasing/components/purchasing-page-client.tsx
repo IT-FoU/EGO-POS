@@ -38,7 +38,7 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
     const [query, setQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<PurchaseStatus | "all">("all");
     const [pendingId, setPendingId] = useState<string | null>(null);
-    const [locale, setLocale] = useState<"en" | "lo">("en");
+    const [locale, setLocale] = useState<"en" | "th">("en");
     const [todayIso, setTodayIso] = useState("");
     const [profileMessage, setProfileMessage] = useState<string | null>(null);
     function runStatusAction(order: PurchaseOrder, action: ManualPurchaseAction) {
@@ -62,7 +62,7 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
     useEffect(() => {
         const readLocale = () => {
             const storedLocale = readStringFromStorage(DemoStorageKeys.locale);
-            setLocale(storedLocale === "lo" ? "lo" : "en");
+            setLocale(storedLocale === "th" ? "th" : "en");
         };
         readLocale();
         setTodayIso(new Date().toISOString().slice(0, 10));
@@ -105,7 +105,7 @@ export function PurchasingPageClient({ purchaseOrders, suppliers, payables, }: {
           <div>
             <p className="text-sm font-medium text-primary">Purchasing Management</p>
             <h1 className="mt-2 text-3xl font-semibold">
-              {locale === "lo" ? "ຈັດຊື້" : "Purchasing"}
+              {locale === "th" ? "Purchasing" : "Purchasing"}
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.supplier.purchasing.workspace.for.purchase.o")}</p>
           </div>

@@ -138,7 +138,7 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
       activeWarehouseId: "gobox-default-warehouse",
       activeCompanyId: "gobox-company",
       activeCompanyName: "GO BOX",
-      locale: "lo",
+      locale: "th",
       roles: [staffUser.role],
       allowPOSAccess: staffUser.allowPosAccess,
       allowBackOfficeAccess: staffUser.allowBackOfficeAccess,
@@ -191,7 +191,7 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
     activeWarehouseId: demoUser.activeWarehouseId,
     activeCompanyId: demoUser.activeCompanyId,
     activeCompanyName: demoUser.activeCompanyName,
-    locale: "lo",
+    locale: "th",
     roles: [...demoUser.roles],
   };
 }

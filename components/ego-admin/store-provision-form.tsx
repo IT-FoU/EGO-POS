@@ -69,7 +69,7 @@ export function StoreProvisionForm({
       branchName: String(formData.get("branchName") ?? ""),
       businessTemplateKey: String(formData.get("businessTemplateKey") ?? ""),
       defaultCurrency: String(formData.get("defaultCurrency") ?? "LAK"),
-      defaultLocale: String(formData.get("defaultLocale") ?? "lo"),
+      defaultLocale: String(formData.get("defaultLocale") ?? "th"),
       ownerEmail: String(formData.get("ownerEmail") ?? ""),
       ownerFullName: String(formData.get("ownerFullName") ?? ""),
       ownerTemporaryPassword: String(formData.get("ownerTemporaryPassword") ?? ""),
@@ -196,8 +196,8 @@ export function StoreProvisionForm({
         </label>
         <label className="grid gap-2 text-sm font-medium">
           {dictionary.defaultLanguage}
-          <select className="rounded-md border border-border px-3 py-2" defaultValue="lo" name="defaultLocale">
-            <option value="lo">Lao</option>
+          <select className="rounded-md border border-border px-3 py-2" defaultValue="th" name="defaultLocale">
+            <option value="th">Thai</option>
             <option value="en">English</option>
           </select>
         </label>

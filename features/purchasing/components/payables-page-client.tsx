@@ -20,11 +20,11 @@ export function PayablesPageClient({ payables, suppliers, }: {
     const [query, setQuery] = useState("");
     const [paidDrafts, setPaidDrafts] = useState<Record<string, number>>({});
     const [message, setMessage] = useState<string | null>(null);
-    const [locale, setLocale] = useState<"en" | "lo">("en");
+    const [locale, setLocale] = useState<"en" | "th">("en");
     useEffect(() => {
         const readLocale = () => {
             const storedLocale = readStringFromStorage(DemoStorageKeys.locale);
-            setLocale(storedLocale === "lo" ? "lo" : "en");
+            setLocale(storedLocale === "th" ? "th" : "en");
         };
         readLocale();
         window.addEventListener("storage", readLocale);
@@ -71,7 +71,7 @@ export function PayablesPageClient({ payables, suppliers, }: {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-primary">Supplier Credit</p>
-            <h1 className="mt-2 text-3xl font-semibold">{locale === "lo" ? "ໜີ້ຜູ້ສະໜອງ" : "Payables"}</h1>
+            <h1 className="mt-2 text-3xl font-semibold">{locale === "th" ? "Payables" : "Payables"}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.supplier.outstanding.balances.with.paid.unpa")}</p>
           </div>
         </div>

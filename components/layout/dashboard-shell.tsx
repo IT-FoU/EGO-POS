@@ -46,7 +46,7 @@ const navigation = [
 
 type NavigationKey = (typeof navigation)[number]["key"];
 
-const shellCopy: Record<"lo" | "en", {
+const shellCopy: Record<"th" | "en", {
   daysLeft: string;
   freePlan: string;
   lockedFeature: string;
@@ -70,22 +70,22 @@ const shellCopy: Record<"lo" | "en", {
       suppliers: "Suppliers",
     },
   },
-  lo: {
-    daysLeft: "ມື້ທີ່ເຫຼືອ",
-    freePlan: "ແຜນຟຣີ",
-    lockedFeature: "ຟີເຈີແຜນຈ່າຍເງິນຖືກລັອກ",
+  th: {
+    daysLeft: "Days left",
+    freePlan: "Free plan",
+    lockedFeature: "Pro plan feature",
     nav: {
-      customers: "ລູກຄ້າ",
+      customers: "Customers",
       dashboard: "Dashboard",
-      inventory: "ສາງສິນຄ້າ",
+      inventory: "Inventory",
       membership: "Membership",
       pos: "POS",
-      products: "ສິນຄ້າ",
+      products: "Products",
       promotions: "Promotion",
-      purchasing: "ຈັດຊື້",
+      purchasing: "Purchasing",
       reports: "Report",
-      settings: "ຕັ້ງຄ່າ",
-      suppliers: "ຜູ້ສະໜອງ",
+      settings: "Settings",
+      suppliers: "Suppliers",
     },
   },
 };
@@ -115,7 +115,7 @@ export function DashboardShell({
   useEffect(() => {
     function handleLocaleChange(event: Event) {
       const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (detail?.locale === "en" || detail?.locale === "lo") {
+      if (detail?.locale === "en" || detail?.locale === "th") {
         setLocale(detail.locale);
       }
     }

@@ -344,7 +344,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           email: `${username}@staff.local`,
           fullName,
           passwordHash: await hash(input.password.trim(), 12),
-          preferredLocale: "lo",
+          preferredLocale: "th",
           status: input.status,
           username,
         },

@@ -90,36 +90,36 @@ const reportCopy = {
         viewProduct: "View Product Report",
         viewSales: "View Sales Report",
     },
-    lo: {
-        aiInsights: "ຂໍ້ແນະນຳຈາກ AI",
-        apply: "ນຳໃຊ້",
-        businessHealth: "ຄະແນນສຸຂະພາບທຸລະກິດ",
-        createPo: "ສ້າງໃບສັ່ງຊື້",
-        createPromotion: "ສ້າງໂປຣໂມຊັນ",
-        dashboard: "ແດຊບອດ",
-        dataSourceStatus: "ສະຖານະແຫຼ່ງຂໍ້ມູນ",
-        dayDetail: "ລາຍລະອຽດລາຍວັນ",
-        excellent: "ດີຫຼາຍ",
-        good: "ດີ",
-        healthSubtitle: "ຂໍ້ແນະນຳຈາກ AI: ຍອດຂາຍເຕີບໂຕດີ, ກຳໄລຍັງຄົງທີ່, ແຕ່ສິນຄ້າຄ້າງສະຕັອກ ແລະ ສິນຄ້າໃກ້ຂາດຕ້ອງຕິດຕາມໃນອາທິດນີ້.",
-        highHour: "ສີຂຽວ: ຂາຍດີ",
-        highRevenue: "ສີຂຽວ: ລາຍຮັບສູງ",
-        hourDetail: "ລາຍລະອຽດລາຍຊົ່ວໂມງ",
-        lastUpdated: "ອັບເດດຫຼ້າສຸດ",
-        lowHour: "ສີເຫຼືອງ: ຂາຍນ້ອຍ ຫຼື ບໍ່ມີຍອດຂາຍ",
-        lowRevenue: "ສີເຫຼືອງ: ລາຍຮັບຕ່ຳ",
-        noReports: "ບໍ່ພົບລາຍງານ",
-        normalHour: "ສີມ່ວງ: ຂາຍປານກາງ",
-        normalRevenue: "ສີມ່ວງ: ລາຍຮັບປານກາງ",
-        pageTitle: "ລາຍງານ ແລະ ວິເຄາະ",
-        reportCenter: "ສູນລາຍງານ",
-        searchReports: "ຄົ້ນຫາລາຍງານ...",
-        statusCritical: "ວິກິດ",
-        statusWarning: "ຕ້ອງລະວັງ",
-        viewInsights: "ເບິ່ງຂໍ້ແນະນຳ",
-        viewInventory: "ເບິ່ງລາຍງານສາງ",
-        viewProduct: "ເບິ່ງລາຍງານສິນຄ້າ",
-        viewSales: "ເບິ່ງລາຍງານການຂາຍ",
+    th: {
+        aiInsights: "AI Insights",
+        apply: "Apply filters",
+        businessHealth: "Business Health Score",
+        createPo: "Create purchase order",
+        createPromotion: "Create promotion",
+        dashboard: "Dashboard",
+        dataSourceStatus: "Data Source Status",
+        dayDetail: "Daily Detail",
+        excellent: "Excellent",
+        good: "Good",
+        healthSubtitle: "AI insights: Sales are growing, profit is stable, but dead stock and low-stock items need attention this week.",
+        highHour: "Green: high sales",
+        highRevenue: "Green: high revenue",
+        hourDetail: "Hourly Detail",
+        lastUpdated: "Last updated",
+        lowHour: "Yellow: low or no sales",
+        lowRevenue: "Yellow: low revenue",
+        noReports: "No reports found",
+        normalHour: "Purple: normal sales",
+        normalRevenue: "Purple: normal revenue",
+        pageTitle: "Reports and Analytics",
+        reportCenter: "Report Center",
+        searchReports: "Search reports...",
+        statusCritical: "Critical",
+        statusWarning: "Warning",
+        viewInsights: "View insights",
+        viewInventory: "View inventory report",
+        viewProduct: "View product report",
+        viewSales: "View sales report",
     },
 };
 export function ReportsAnalyticsClient({
@@ -134,7 +134,7 @@ export function ReportsAnalyticsClient({
     productRows: ProductReportRow[];
 }) {
     const router = useRouter();
-    const [locale, setLocale] = useState<"en" | "lo">("en");
+    const [locale, setLocale] = useState<"en" | "th">("en");
     const [tab, setTab] = useState<TabKey>("dashboard");
     const [reportQuery, setReportQuery] = useState("");
     const [datePreset, setDatePreset] = useState(filters.datePreset);
@@ -154,7 +154,7 @@ export function ReportsAnalyticsClient({
     const dataSourceStatuses = useMemo(() => buildDataSourceStatuses(hub), [hub]);
     useEffect(() => {
         const datasetLocale = document.documentElement.dataset.locale;
-        setLocale(datasetLocale === "lo" ? "lo" : "en");
+        setLocale(datasetLocale === "th" ? "th" : "en");
     }, []);
     const kpis = hub.kpis;
     const healthScore = hub.healthScore;
@@ -364,7 +364,7 @@ function KpiCard({ label, onClick, value }: {
 }
 function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
     hub: ReportsAnalyticsHub;
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onOpen: () => void;
     score: number;
     statusKey: "excellent" | "good" | "warning" | "critical";
@@ -379,8 +379,8 @@ function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
     const stockHealth = Math.max(0, Math.min(100, Math.round(100 - (lowStock * 2 + outOfStock * 4 + deadStock * 3))));
     const customerHealth = Math.max(0, Math.min(100, Math.round(transactions > 0 ? Math.min(100, (hub.itemsSold / transactions) * 10) : 0)));
     const promotionHealth = Math.max(0, Math.min(100, Math.round(100 - Math.min(deadStock * 4, 60))));
-    const breakdown = locale === "lo"
-        ? [["ການເຕີບໂຕຍອດຂາຍ", score], ["ອັດຕາກຳໄລ", Math.round(hub.profitMarginPercent)], ["ສຸຂະພາບສະຕັອກ", stockHealth], ["ກິດຈະກຳລູກຄ້າ", customerHealth], ["ຜົນກະທົບໂປຣໂມຊັນ", promotionHealth]]
+    const breakdown = locale === "th"
+        ? [["Sales growth", score], ["Profit margin", Math.round(hub.profitMarginPercent)], ["Stock health", stockHealth], ["Customer activity", customerHealth], ["Promotion impact", promotionHealth]]
         : [["Sales Score", score], ["Profit Margin", Math.round(hub.profitMarginPercent)], ["Stock Health", stockHealth], ["Customer Activity", customerHealth], ["Promotion Impact", promotionHealth]];
     return (<section className="rounded-lg border border-border bg-card p-6">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
@@ -411,7 +411,7 @@ function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
 }
 function AIInsightsPanel({ hub, locale, onOpenReport }: {
     hub: ReportsAnalyticsHub;
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onOpenReport: (title: string) => void;
 }) {
     const copy = reportCopy[locale];
@@ -419,13 +419,13 @@ function AIInsightsPanel({ hub, locale, onOpenReport }: {
     const deadStockCount = hub.deadStockProducts.length;
     const lowStockCount = hub.inventoryAlerts.find((entry) => entry.key === "low_stock")?.count ?? 0;
     const peakHour = peakHourLabel(hub.hourlySales);
-    const insights = locale === "lo"
+    const insights = locale === "th"
         ? [
-            [`ໝວດສິນຄ້າລາຍຮັບສູງສຸດ: ${topCategory}`, copy.viewProduct, "Sales by Category"],
-            [`ພົບສິນຄ້າຄ້າງສະຕັອກ ${deadStockCount} ລາຍການ`, copy.createPromotion, "Dead Stock"],
-            [`ພົບສິນຄ້າໃກ້ຂາດ ${lowStockCount} ລາຍການ`, copy.createPo, "Low Stock"],
+            [`Profit`, copy.viewProduct, "Sales by Category"],
+            [`Bills`, copy.createPromotion, "Dead Stock"],
+            [`Items sold`, copy.createPo, "Low Stock"],
             [`${peakHour}`, copy.viewSales, "Sales by Hour"],
-            [`ອັດຕາກຳໄລປັດຈຸບັນ ${hub.profitMarginPercent.toFixed(1)}%`, copy.viewInventory, t("ui.profit.loss")],
+            [`Top products sold in this hour`, copy.viewInventory, t("ui.profit.loss")],
         ]
         : [
             [`Top revenue category: ${topCategory}`, "View Product Report", "Sales by Category"],
@@ -448,11 +448,11 @@ function AIInsightsPanel({ hub, locale, onOpenReport }: {
 }
 function DataSourceStatusPanel({ dataSourceStatuses, locale, onOpen }: {
     dataSourceStatuses: DataSourceStatus[];
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onOpen: (source: string) => void;
 }) {
     const copy = reportCopy[locale];
-    const lastUpdated = new Intl.DateTimeFormat(locale === "lo" ? "lo-LA" : "en-GB", {
+    const lastUpdated = new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
         dateStyle: "medium",
         timeStyle: "short",
     }).format(new Date());
@@ -468,11 +468,11 @@ function DataSourceStatusPanel({ dataSourceStatuses, locale, onOpen }: {
     </section>);
 }
 function StatusBadge({ locale, status }: {
-    locale: "en" | "lo";
+    locale: "en" | "th";
     status: string;
 }) {
-    const label = locale === "lo"
-        ? status === "Synced" ? "ເຊື່ອມຂໍ້ມູນແລ້ວ" : status === "Warning" ? "ແຈ້ງເຕືອນ" : status === "Offline" ? "ອອບລາຍ" : "ຂໍ້ມູນທົດລອງ"
+    const label = locale === "th"
+        ? status === "Synced" ? "Top revenue category" : status === "Warning" ? "Dead stock found" : status === "Offline" ? "Low-stock items found" : "Current profit margin"
         : status;
     const tone = status === "Synced" ? "border-success/40 bg-success/10 text-success" : status === "Warning" ? "border-warning/40 bg-warning/10 text-warning" : status === "Offline" ? "border-danger/40 bg-danger/10 text-danger" : "border-primary/40 bg-primary/10 text-primary";
     return <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}>{label}</span>;
@@ -480,7 +480,7 @@ function StatusBadge({ locale, status }: {
 function RevenueProfitTrend({ currency, data, locale, onOpen }: {
     currency: ReportCurrency;
     data: ReportsAnalyticsHub["revenueProfitTrend"];
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onOpen: (label: string) => void;
 }) {
     const max = Math.max(...data.map((point) => point.revenue), 1);
@@ -503,7 +503,7 @@ function RevenueProfitTrend({ currency, data, locale, onOpen }: {
 }
 function HourlySalesTrend({ data, locale, onOpen }: {
     data: ReportsAnalyticsHub["hourlySales"];
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onOpen: (hour: string) => void;
 }) {
     const max = Math.max(...data.map((hour) => hour.transactions), 1);
@@ -590,7 +590,7 @@ function DeadStockWidget({ data, onOpen }: {
 }
 function ReportCenter({ favorites, locale, onFavorite, onOpen, onSchedule, query }: {
     favorites: string[];
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onFavorite: (title: string) => void;
     onOpen: (title: string) => void;
     onSchedule: (title: string) => void;
@@ -829,64 +829,64 @@ function GenericDetailModal({ onClose, productRows, title }: {
     return <ModalFrame onClose={onClose} title={title}><ReportRowsTable productRows={productRows}/></ModalFrame>;
 }
 function DayDetailModal({ locale, onClose, paymentBreakdown, title, topSellers }: {
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
-    const labels = locale === "lo"
-        ? ["ລາຍຮັບ", "ກຳໄລ", "ອັດຕາກຳໄລ", "ບິນ", "ລູກຄ້າ", "ຄືນເງິນ", "ສ່ວນຫຼຸດ"]
+    const labels = locale === "th"
+        ? ["Synced", "Warning", "Offline", "Demo data", "Revenue", "Profit", "Profit margin"]
         : ["Revenue", "Profit", t("ui.margin.3"), "Transactions", "Customers", "Refunds", "Discounts"];
-    const buttons = locale === "lo" ? ["ເບິ່ງລາຍງານການຂາຍ", "ເບິ່ງລາຍງານກຳໄລ", "Export Day Report"] : ["View Sales Report", "View Profit Report", "Export Day Report"];
+    const buttons = locale === "th" ? ["View Sales Report", "View Profit Report", "Export Day Report"] : ["View Sales Report", "View Profit Report", "Export Day Report"];
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-3 md:grid-cols-4">
         {labels.map((label, index) => <KpiMini key={label} label={label} value={index < 2 ? `${formatLak(index === 0 ? 5940000 : 1710000)} LAK` : index === 2 ? "28.8%" : String([96, 74, 2, 318000][index - 3] ?? 0)}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MiniList title={locale === "lo" ? "ໝວດຂາຍດີ" : "Top categories"} items={["Drinks", "Snacks", "Cold Goods"]} onOpen={() => undefined}/>
-        <MiniList title={locale === "lo" ? "ສິນຄ້າຂາຍດີ" : "Top products"} items={topSellers.slice(0, 4).map((item) => item.name)} onOpen={() => undefined}/>
+        <MiniList title={locale === "th" ? "Top categories" : "Top categories"} items={["Drinks", "Snacks", "Cold Goods"]} onOpen={() => undefined}/>
+        <MiniList title={locale === "th" ? "Top products" : "Top products"} items={topSellers.slice(0, 4).map((item) => item.name)} onOpen={() => undefined}/>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{buttons.map((button) => <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" key={button}>{button}</button>)}</div>
     </ModalFrame>);
 }
 function HourDetailModal({ locale, onClose, paymentBreakdown, title, topSellers }: {
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
-    const labels = locale === "lo" ? ["ລາຍຮັບ", "ກຳໄລ", "ບິນ", "ຈຳນວນສິນຄ້າ"] : ["Revenue", "Profit", "Transactions", "Items sold"];
+    const labels = locale === "th" ? ["Revenue", "Profit", "Transactions", "Items sold"] : ["Revenue", "Profit", "Transactions", "Items sold"];
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-3 md:grid-cols-4">
         {labels.map((label, index) => <KpiMini key={label} label={label} value={index < 2 ? `${formatLak(index === 0 ? 860000 : 246000)} LAK` : String(index === 2 ? 18 : 96)}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MiniList title={locale === "lo" ? "ສິນຄ້າຂາຍດີໃນຊົ່ວໂມງນີ້" : "Top products sold in this hour"} items={topSellers.slice(0, 5).map((item) => item.name)} onOpen={() => undefined}/>
-        <SimpleBars title={locale === "lo" ? "ການຊຳລະເງິນ" : "Payment breakdown"} rows={paymentBreakdown.map((row) => ({ label: row.label, value: row.value }))} currency="LAK"/>
+        <MiniList title={locale === "th" ? "Top products sold in this hour" : "Top products sold in this hour"} items={topSellers.slice(0, 5).map((item) => item.name)} onOpen={() => undefined}/>
+        <SimpleBars title={locale === "th" ? "Payment breakdown" : "Payment breakdown"} rows={paymentBreakdown.map((row) => ({ label: row.label, value: row.value }))} currency="LAK"/>
       </div>
-      <button className="mt-4 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{locale === "lo" ? "ເບິ່ງລາຍການຂາຍ" : "View Transactions"}</button>
+      <button className="mt-4 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{locale === "th" ? "View Transactions" : "View Transactions"}</button>
     </ModalFrame>);
 }
 function DataSourceModal({ dataSourceStatuses, locale, onClose, source }: {
     dataSourceStatuses: DataSourceStatus[];
-    locale: "en" | "lo";
+    locale: "en" | "th";
     onClose: () => void;
     source: string;
 }) {
     const item = dataSourceStatuses.find((entry) => entry.name === source) ?? dataSourceStatuses[0];
-    return (<ModalFrame onClose={onClose} title={`${source} ${locale === "lo" ? "ສະຖານະ" : "Status"}`}>
+    return (<ModalFrame onClose={onClose} title={`${source} ${locale === "th" ? "Status" : "Status"}`}>
       <div className="grid gap-3 md:grid-cols-2">
-        <KpiMini label={locale === "lo" ? "ແຫຼ່ງຂໍ້ມູນ" : "Source module"} value={item.name}/>
-        <KpiMini label={locale === "lo" ? t("ui.sync") : "Last sync time"} value={t("ui.20.jun.2026.09.42.2")}/>
-        <KpiMini label={locale === "lo" ? "ຈຳນວນລາຍການ" : "Record count"} value={formatNumber(item.count)}/>
-        <div className="rounded-md border border-border bg-background p-3"><div className="text-xs text-muted-foreground">{locale === "lo" ? "ສະຖານະ" : "Status"}</div><div className="mt-2"><StatusBadge locale={locale} status={item.status}/></div></div>
+        <KpiMini label={locale === "th" ? "Source module" : "Source module"} value={item.name}/>
+        <KpiMini label={locale === "th" ? t("ui.sync") : "Last sync time"} value={t("ui.20.jun.2026.09.42.2")}/>
+        <KpiMini label={locale === "th" ? "Record count" : "Record count"} value={formatNumber(item.count)}/>
+        <div className="rounded-md border border-border bg-background p-3"><div className="text-xs text-muted-foreground">{locale === "th" ? "Status" : "Status"}</div><div className="mt-2"><StatusBadge locale={locale} status={item.status}/></div></div>
       </div>
       <div className="mt-4 rounded-md border border-border bg-background p-4 text-sm text-muted-foreground">
-        {locale === "lo" ? "ຂໍ້ມູນມາຈາກຖານຂໍ້ມູນ PostgreSQL ຕາມສາຂາ ແລະ ບໍລິສັດປັດຈຸບັນ." : "Data is loaded from PostgreSQL for the current company and branch."}
+        {locale === "th" ? "Data is loaded from PostgreSQL for the current company and branch." : "Data is loaded from PostgreSQL for the current company and branch."}
       </div>
-      <MiniList title={locale === "lo" ? "ລາຍງານທີ່ກ່ຽວຂ້ອງ" : "Related reports"} items={item.reports} onOpen={() => undefined}/>
+      <MiniList title={locale === "th" ? "Related reports" : "Related reports"} items={item.reports} onOpen={() => undefined}/>
     </ModalFrame>);
 }
 function CategoryModal({ currency, onClose, title, topSellers }: {
@@ -1012,37 +1012,37 @@ function performanceColor(value: number, max: number) {
         return "bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.16)]";
     return "bg-danger shadow-[0_0_12px_rgba(239,68,68,0.16)]";
 }
-function performanceLegend(locale: "en" | "lo", type: "hour" | "revenue") {
-    if (locale === "lo") {
+function performanceLegend(locale: "en" | "th", type: "hour" | "revenue") {
+    if (locale === "th") {
         return type === "hour"
-            ? ["ສີຂຽວ: ຂາຍດີ", "ສີສົ້ມ: ຂາຍປານກາງ", "ສີແດງ: ຂາຍນ້ອຍ ຫຼື ບໍ່ມີຍອດຂາຍ"]
-            : ["ສີຂຽວ: ລາຍຮັບສູງ", "ສີສົ້ມ: ລາຍຮັບປານກາງ", "ສີແດງ: ລາຍຮັບຕ່ຳ"];
+            ? ["Bills", "Customers", "Refunds"]
+            : ["Discounts", "View Sales Report", "View Profit Report"];
     }
     return type === "hour"
         ? ["Green: High sales", "Orange: Normal sales", "Red: Low or no sales"]
         : ["Green: High revenue", "Orange: Normal revenue", "Red: Low revenue"];
 }
-function performanceStatus(value: number, max: number, locale: "en" | "lo", type: "hour" | "revenue") {
+function performanceStatus(value: number, max: number, locale: "en" | "th", type: "hour" | "revenue") {
     const ratio = max > 0 ? value / max : 0;
     if (type === "hour") {
         if (ratio >= 0.75)
-            return locale === "lo" ? "ຂາຍດີ" : "High sales";
+            return locale === "th" ? "High sales" : "High sales";
         if (ratio >= 0.35)
-            return locale === "lo" ? "ຂາຍປານກາງ" : "Normal sales";
-        return locale === "lo" ? "ຂາຍນ້ອຍ" : "Low sales";
+            return locale === "th" ? "Normal sales" : "Normal sales";
+        return locale === "th" ? "Low sales" : "Low sales";
     }
     if (ratio >= 0.75)
-        return locale === "lo" ? "ລາຍຮັບສູງ" : "High revenue";
+        return locale === "th" ? "High revenue" : "High revenue";
     if (ratio >= 0.35)
-        return locale === "lo" ? "ລາຍຮັບປານກາງ" : "Normal revenue";
-    return locale === "lo" ? "ລາຍຮັບຕ່ຳ" : "Low revenue";
+        return locale === "th" ? "Normal revenue" : "Normal revenue";
+    return locale === "th" ? "Low revenue" : "Low revenue";
 }
-function performanceTooltip(value: number, max: number, locale: "en" | "lo", type: "hour" | "revenue") {
+function performanceTooltip(value: number, max: number, locale: "en" | "th", type: "hour" | "revenue") {
     const percent = Math.round((max > 0 ? value / max : 0) * 100);
     const status = performanceStatus(value, max, locale, type);
-    if (locale === "lo") {
-        const recommendation = percent >= 75 ? "ກຽມພະນັກງານແຄຊເຊຍໃຫ້ພຽງພໍ." : percent >= 35 ? "ຕິດຕາມຕາມປົກກະຕິ." : "ພິຈາລະນາໂປຣໂມຊັນ ຫຼື ປັບຕາຕະລາງພະນັກງານ.";
-        return `${status}. ${value} (${percent}% ຂອງຄ່າສູງສຸດ). ${recommendation}`;
+    if (locale === "th") {
+        const recommendation = percent >= 75 ? "Top categories" : percent >= 35 ? "Top products" : "Revenue";
+        return `Payment breakdown`;
     }
     const recommendation = percent >= 75 ? t("ui.prepare.more.cashier.coverage") : percent >= 35 ? t("ui.maintain.normal.operation") : t("ui.consider.promotion.or.staffing.reduction");
     return `${status}. ${value} (${percent}% of max). ${recommendation}`;
