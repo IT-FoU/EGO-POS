@@ -15,7 +15,7 @@ export function LanguageToggle({
   onLocaleChange?: (locale: SupportedLocale) => void;
 }) {
   const [currentLocale, setCurrentLocale] = useState<SupportedLocale>(
-    locale === "lo" ? "lo" : DEFAULT_LOCALE,
+    locale === "th" ? "th" : DEFAULT_LOCALE,
   );
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function LanguageToggle({
   useEffect(() => {
     function handleLocaleChange(event: Event) {
       const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (detail?.locale === "en" || detail?.locale === "lo") {
+      if (detail?.locale === "en" || detail?.locale === "th") {
         setCurrentLocale(detail.locale);
       }
     }
@@ -37,6 +37,9 @@ export function LanguageToggle({
   }, []);
 
   function updateLocale(nextLocale: SupportedLocale) {
+    if (nextLocale === currentLocale) {
+      return;
+    }
     persistClientLocale(nextLocale);
     setCurrentLocale(nextLocale);
     onLocaleChange?.(nextLocale);
@@ -45,11 +48,11 @@ export function LanguageToggle({
   return (
     <div className="inline-flex h-10 shrink-0 items-center rounded-md border border-border px-2 text-xs font-semibold">
       <button
-        className={cn("px-1.5 transition", currentLocale === "lo" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+        className={cn("px-1.5 transition", currentLocale === "th" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
         type="button"
-        onClick={() => updateLocale("lo")}
+        onClick={() => updateLocale("th")}
       >
-        LAO
+        TH
       </button>
       <span className="text-muted-foreground">|</span>
       <button
@@ -57,7 +60,7 @@ export function LanguageToggle({
         type="button"
         onClick={() => updateLocale("en")}
       >
-        ENG
+        EN
       </button>
     </div>
   );

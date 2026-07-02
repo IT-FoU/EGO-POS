@@ -92,7 +92,7 @@ export default async function BusinessesPage({
         </section>
         <TemplatePicker
           continueLabel={dictionary.continueToBusinessSetup}
-          locale={session.user.locale ?? "lo"}
+          locale={session.user.locale ?? "th"}
           noTemplateSelectedLabel={platform.selectTemplateError}
           selectLabel={dictionary.select}
           selectedLabel={dictionary.selected}

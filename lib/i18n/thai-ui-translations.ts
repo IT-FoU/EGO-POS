@@ -1,0 +1,102 @@
+const technicalTerms = new Set([
+  "EGO POS",
+  "POS",
+  "QR",
+  "VAT",
+  "SKU",
+  "PIN",
+  "API",
+  "URL",
+  "CSV",
+  "PDF",
+  "LAK",
+  "THB",
+  "USD",
+]);
+
+const thaiUiTranslations: Record<string, string> = {
+  "Access denied": "ไม่มีสิทธิ์เข้าถึง",
+  "Active": "เปิดใช้งาน",
+  "Add": "เพิ่ม",
+  "Add Product": "เพิ่มสินค้า",
+  "Address": "ที่อยู่",
+  "Apply": "ใช้",
+  "Approval required": "ต้องได้รับการอนุมัติ",
+  "Audit Logs": "บันทึกการตรวจสอบ",
+  "Back": "กลับ",
+  "Business Setup": "ตั้งค่าธุรกิจ",
+  "Cancel": "ยกเลิก",
+  "Cash": "เงินสด",
+  "Cashier": "แคชเชียร์",
+  "Categories": "หมวดหมู่",
+  "Category": "หมวดหมู่",
+  "Change": "เงินทอน",
+  "Close": "ปิด",
+  "Close Day": "ปิดวัน",
+  "Confirm": "ยืนยัน",
+  "Create Product": "สร้างสินค้า",
+  "Customer": "ลูกค้า",
+  "Customers": "ลูกค้า",
+  "Dashboard": "แดชบอร์ด",
+  "Delete": "ลบ",
+  "Discount": "ส่วนลด",
+  "Edit": "แก้ไข",
+  "Email": "อีเมล",
+  "English": "อังกฤษ",
+  "Export": "ส่งออก",
+  "Free": "ฟรี",
+  "Guest": "ลูกค้าทั่วไป",
+  "Inactive": "ปิดใช้งาน",
+  "Inventory": "สต๊อกสินค้า",
+  "Language": "ภาษา",
+  "Low Stock": "สินค้าใกล้หมด",
+  "Membership": "สมาชิก",
+  "New Sale": "ขายใหม่",
+  "Notifications": "การแจ้งเตือน",
+  "Open": "เปิด",
+  "Paid": "ชำระแล้ว",
+  "Password": "รหัสผ่าน",
+  "Pay": "ชำระเงิน",
+  "Payment": "การชำระเงิน",
+  "Phone": "โทรศัพท์",
+  "Print Receipt": "พิมพ์ใบเสร็จ",
+  "Products": "สินค้า",
+  "Promotions": "โปรโมชัน",
+  "Purchasing": "จัดซื้อ",
+  "Receipt Settings": "ตั้งค่าใบเสร็จ",
+  "Recent Sales": "บิลล่าสุด",
+  "Refund": "คืนเงิน",
+  "Reports": "รายงาน",
+  "Reports & Analytics": "รายงานและวิเคราะห์",
+  "Reprint": "พิมพ์ซ้ำ",
+  "Save": "บันทึก",
+  "Search": "ค้นหา",
+  "Settings": "ตั้งค่า",
+  "Sign in": "เข้าสู่ระบบ",
+  "Sign out": "ออกจากระบบ",
+  "Staff": "พนักงาน",
+  "Store Dashboard": "แดชบอร์ดร้าน",
+  "Suppliers": "ซัพพลายเออร์",
+  "Thai": "ไทย",
+  "Today": "วันนี้",
+  "Total": "รวม",
+  "Username": "ชื่อผู้ใช้",
+  "View Receipt": "ดูใบเสร็จ",
+  "Void": "ยกเลิก",
+  "Void Bill": "ยกเลิกบิล",
+  "You do not have permission to view this section.": "คุณไม่มีสิทธิ์ดูส่วนนี้",
+};
+
+export function translateToThai(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || technicalTerms.has(trimmed)) {
+    return value;
+  }
+
+  const exact = thaiUiTranslations[trimmed];
+  if (exact) {
+    return value.replace(trimmed, exact);
+  }
+
+  return value;
+}

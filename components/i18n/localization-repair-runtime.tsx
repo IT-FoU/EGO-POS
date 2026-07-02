@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { translateToLao } from "@/lib/i18n/lao-ui-translations";
+import { translateToThai } from "@/lib/i18n/thai-ui-translations";
 import { DEFAULT_LOCALE } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 
@@ -17,15 +17,15 @@ export function LocalizationRepairRuntime() {
       return readClientLocale(document.documentElement.dataset.locale ?? DEFAULT_LOCALE);
     }
 
-    function translateTextNode(node: Text, locale: "lo" | "en") {
+    function translateTextNode(node: Text, locale: "th" | "en") {
       const original = textOriginals.get(node) ?? node.nodeValue ?? "";
       if (!textOriginals.has(node)) {
         textOriginals.set(node, original);
       }
-      node.nodeValue = locale === "lo" ? translateToLao(original) : original;
+      node.nodeValue = locale === "th" ? translateToThai(original) : original;
     }
 
-    function translateElementAttrs(element: Element, locale: "lo" | "en") {
+    function translateElementAttrs(element: Element, locale: "th" | "en") {
       for (const attr of translatedAttrs) {
         const originalAttr = `${attrOriginalPrefix}${attr}`;
         const current = element.getAttribute(attr);
@@ -40,7 +40,7 @@ export function LocalizationRepairRuntime() {
           continue;
         }
 
-        element.setAttribute(attr, locale === "lo" ? translateToLao(original) : original);
+        element.setAttribute(attr, locale === "th" ? translateToThai(original) : original);
       }
     }
 

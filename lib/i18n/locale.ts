@@ -7,12 +7,12 @@ export const LOCALE_COOKIE_NAME = "ego-pos-locale";
 export const LOCALE_CHANGE_EVENT = "ego-pos:locale-change";
 
 export function normalizeLocale(value?: string | null): SupportedLocale {
-  return value === "lo" ? "lo" : "en";
+  return value === "th" ? "th" : "en";
 }
 
 export function getServerLocale(...candidates: Array<string | undefined | null>): SupportedLocale {
   for (const candidate of candidates) {
-    if (candidate === "lo" || candidate === "en") {
+    if (candidate === "th" || candidate === "en") {
       return candidate;
     }
   }
@@ -25,7 +25,7 @@ export function readClientLocale(fallback?: string | null): SupportedLocale {
   }
 
   const stored = readStringFromStorage(DemoStorageKeys.locale);
-  if (stored === "lo" || stored === "en") {
+  if (stored === "th" || stored === "en") {
     return stored;
   }
 
@@ -35,7 +35,7 @@ export function readClientLocale(fallback?: string | null): SupportedLocale {
   }
 
   const datasetLocale = document.documentElement.dataset.locale;
-  if (datasetLocale === "lo" || datasetLocale === "en") {
+  if (datasetLocale === "th" || datasetLocale === "en") {
     return datasetLocale;
   }
 
@@ -49,7 +49,7 @@ export function readCookieLocale(): SupportedLocale | null {
 
   const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE_NAME}=([^;]*)`));
   const value = match?.[1];
-  return value === "lo" || value === "en" ? value : null;
+  return value === "th" || value === "en" ? value : null;
 }
 
 export function isClientLocaleSynced(locale: SupportedLocale) {

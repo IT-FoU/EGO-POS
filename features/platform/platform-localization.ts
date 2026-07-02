@@ -5,11 +5,11 @@ import {
   type BusinessTemplateType,
 } from "@/features/platform/platform-data";
 import { platformEn } from "@/locales/en/platform";
-import { platformLo } from "@/locales/lo/platform";
+import { platformTh } from "@/locales/th/platform";
 
 const platformLocales = {
   en: platformEn,
-  lo: platformLo,
+  th: platformTh,
 };
 
 export type LocalizedBusinessTemplate = BusinessTemplate & {
@@ -19,7 +19,7 @@ export type LocalizedBusinessTemplate = BusinessTemplate & {
 };
 
 export function getPlatformMessages(locale: SupportedLocale | string | undefined) {
-  return locale === "en" ? platformLocales.en : platformLocales.lo;
+  return locale === "th" ? platformLocales.th : platformLocales.en;
 }
 
 export function getLocalizedBusinessTemplates(

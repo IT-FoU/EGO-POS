@@ -53,7 +53,7 @@ export function LoginForm({
 }: {
   demoMode?: boolean;
   dictionary: LoginDictionary;
-  locale?: "en" | "lo";
+  locale?: "en" | "th";
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
