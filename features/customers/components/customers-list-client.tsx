@@ -8,6 +8,8 @@ import type { Customer, CustomerPayment, CustomerPurchase, CustomerStatus, } fro
 import { CustomerStatusBadge } from "@/features/customers/components/customer-status-badge";
 import { MembershipBadge } from "@/features/customers/components/membership-badge";
 import { calculateAvailablePoints, formatLak } from "@/features/customers/format";
+import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
+import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
 import { cn } from "@/lib/utils";
 
 function readUiLocale(): "en" | "lo" {
@@ -40,10 +42,11 @@ type CustomerInsight = Customer & {
 };
 const segmentOptions: Segment[] = ["all", "new", "regular", "vip", "inactive", "lost"];
 const currentMonth = "2026-06";
-export function CustomersListClient({ customers, payments, purchases, }: {
+export function CustomersListClient({ customers, payments, purchases, storeRoles, }: {
     customers: Customer[];
     payments: CustomerPayment[];
     purchases: CustomerPurchase[];
+    storeRoles?: string[];
 }) {
     const [query, setQuery] = useState("");
     const [status, setStatus] = useState<CustomerStatus | "all">("all");
@@ -51,6 +54,7 @@ export function CustomersListClient({ customers, payments, purchases, }: {
     const [message, setMessage] = useState<string | null>(null);
     const [modal, setModal] = useState<CustomerModal>(null);
     const [locale, setLocale] = useState<"en" | "lo">("en");
+    const canManageCredit = canUseStoreAction(storeRoles, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE);
     useEffect(() => {
         const syncLocale = () => setLocale(readUiLocale());
         syncLocale();
@@ -128,7 +132,7 @@ export function CustomersListClient({ customers, payments, purchases, }: {
             title: "Customers",
         };
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
-      {modal ? (<CustomerPopup customers={getInsightCustomers(modal, customerInsights)} modal={modal} onClose={() => setModal(null)}/>) : null}
+      {modal ? (<CustomerPopup canManageCredit={canManageCredit} customers={getInsightCustomers(modal, customerInsights)} modal={modal} onClose={() => setModal(null)}/>) : null}
 
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -164,10 +168,10 @@ export function CustomersListClient({ customers, payments, purchases, }: {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={Users} label="Active Customers" value={String(activeCustomers)} accent="blue" onClick={() => setModal({ key: "active", title: "Active Customers", type: "customers" })}/>
         <Metric icon={Gift} label="Available Points" value={formatLak(totalPoints)} accent="purple" onClick={() => setModal({ key: "points", title: "Customers With Points", type: "customers" })}/>
-        <Metric icon={WalletCards} label="Outstanding Balance" value={`${formatLak(totalOutstanding)} LAK`} accent="red" onClick={() => setModal({ key: "outstanding", title: "Outstanding Balance Customers", type: "customers" })}/>
+        {canManageCredit ? <Metric icon={WalletCards} label="Outstanding Balance" value={`${formatLak(totalOutstanding)} LAK`} accent="red" onClick={() => setModal({ key: "outstanding", title: "Outstanding Balance Customers", type: "customers" })}/> : null}
         <Metric icon={Plus} label="New Customers This Month" value={String(newCustomersThisMonth)} accent="green" onClick={() => setModal({ key: "new", title: "New Customers This Month", type: "customers" })}/>
         <Metric icon={Gem} label="VIP Customers" value={String(vipCustomers)} accent="yellow" onClick={() => setModal({ key: "vip", title: "VIP Customers", type: "customers" })}/>
-        <Metric icon={CreditCard} label="Customers With Debt" value={String(customersWithDebt)} accent="orange" onClick={() => setModal({ key: "debt", title: "Customers With Debt", type: "customers" })}/>
+        {canManageCredit ? <Metric icon={CreditCard} label="Customers With Debt" value={String(customersWithDebt)} accent="orange" onClick={() => setModal({ key: "debt", title: "Customers With Debt", type: "customers" })}/> : null}
         <Metric icon={Cake} label="Birthday This Month" value={String(birthdayThisMonth)} accent="cyan" onClick={() => setModal({ key: "birthday", title: "Birthday Customers This Month", type: "customers" })}/>
         <Metric icon={TrendingUp} label="Top Customers" value={String(topCustomers.length)} accent="blue" onClick={() => setModal({ key: "top", title: "Top Customers", type: "customers" })}/>
         <Metric icon={Users} label="Lost Customers" value={String(lostCustomers)} accent="gray" onClick={() => setModal({ key: "lost", title: "Lost Customers", type: "customers" })}/>
@@ -209,7 +213,7 @@ export function CustomersListClient({ customers, payments, purchases, }: {
                     <th className="px-4 py-3 font-semibold">Last Purchase Date</th>
                     <th className="px-4 py-3 text-right font-semibold">Lifetime Spending</th>
                     <th className="px-4 py-3 text-right font-semibold">Total Visits</th>
-                    <th className="px-4 py-3 text-right font-semibold">Credit Balance</th>
+                    {canManageCredit ? <th className="px-4 py-3 text-right font-semibold">Credit Balance</th> : null}
                     <th className="px-4 py-3 text-right font-semibold">Points</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 text-right font-semibold">Action</th>
@@ -234,7 +238,7 @@ export function CustomersListClient({ customers, payments, purchases, }: {
                       <td className="px-4 py-4">{formatDisplayDate(customer.lastPurchaseDate)}</td>
                       <td className="px-4 py-4 text-right font-semibold">{formatLak(customer.lifetimeSpendingLak)} LAK</td>
                       <td className="px-4 py-4 text-right font-semibold">{formatLak(customer.totalVisits)}</td>
-                      <td className="px-4 py-4 text-right font-semibold">{formatLak(customer.creditBalanceLak)} LAK</td>
+                      {canManageCredit ? <td className="px-4 py-4 text-right font-semibold">{formatLak(customer.creditBalanceLak)} LAK</td> : null}
                       <td className="px-4 py-4 text-right font-semibold">{formatLak(customer.availablePoints)}</td>
                       <td className="px-4 py-4">
                         <CustomerStatusBadge status={customer.status}/>
@@ -301,18 +305,19 @@ export function CustomersListClient({ customers, payments, purchases, }: {
           </div>
         </Panel>
 
-        <Panel title="Customer Credit Detail" icon={CreditCard} className="h-full">
+        {canManageCredit ? <Panel title="Customer Credit Detail" icon={CreditCard} className="h-full">
           <dl className="grid h-full gap-3 text-sm">
             <Summary label="Outstanding" value={`${formatLak(totalOutstanding)} LAK`} tone="warning"/>
             <Summary label="Overdue" value={`${formatLak(overdueBalance)} LAK`} tone="danger"/>
             <Summary label="Payments Recorded" value={`${formatLak(totalPayments)} LAK`}/>
             <Summary label="Customers With Debt" value={String(customersWithDebt)} tone="warning"/>
           </dl>
-        </Panel>
+        </Panel> : null}
       </section>
     </div>);
 }
-function CustomerPopup({ customers, modal, onClose, }: {
+function CustomerPopup({ canManageCredit, customers, modal, onClose, }: {
+    canManageCredit: boolean;
     customers: CustomerInsight[];
     modal: NonNullable<CustomerModal>;
     onClose: () => void;
@@ -373,7 +378,7 @@ function CustomerPopup({ customers, modal, onClose, }: {
                       <div className="grid gap-1 text-sm sm:text-right">
                         <span>{formatLak(customer.lifetimeSpendingLak)} LAK spent</span>
                         <span>{formatLak(customer.availablePoints)} points</span>
-                        <span>{formatLak(customer.creditBalanceLak)} LAK credit</span>
+                        {canManageCredit ? <span>{formatLak(customer.creditBalanceLak)} LAK credit</span> : null}
                       </div>
                     </div>
                   </Link>))}
