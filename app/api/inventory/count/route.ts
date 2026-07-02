@@ -8,6 +8,6 @@ export async function POST(request: Request) {
     (tenant, body) => createStockCount(body, tenant),
     request,
     WRITE_PERMISSIONS.inventoryCount,
-    { route: "/api/inventory/count", storeAction: STORE_ACTIONS.INVENTORY_COUNT, targetType: "inventory" },
+    { allowManagerPinApproval: true, route: "/api/inventory/count", storeAction: STORE_ACTIONS.INVENTORY_COUNT, targetType: "inventory" },
   );
 }

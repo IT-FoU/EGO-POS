@@ -10,7 +10,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     (tenant, body) => updatePrismaCustomer(id, body, tenant),
     request,
     WRITE_PERMISSIONS.customersUpdate,
-    { route: "/api/customers/[id]", storeAction: customerMutationActionsFromBody, targetId: id, targetType: "customer" },
+    { allowManagerPinApproval: true, route: "/api/customers/[id]", storeAction: customerMutationActionsFromBody, targetId: id, targetType: "customer" },
   );
 }
 

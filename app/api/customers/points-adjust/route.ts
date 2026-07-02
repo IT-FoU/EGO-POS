@@ -13,6 +13,6 @@ export async function POST(request: Request) {
       }),
     request,
     WRITE_PERMISSIONS.customersUpdate,
-    { route: "/api/customers/points-adjust", storeAction: STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE, targetType: "customer" },
+    { allowManagerPinApproval: true, route: "/api/customers/points-adjust", storeAction: STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE, targetType: "customer" },
   );
 }

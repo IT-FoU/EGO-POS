@@ -10,7 +10,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     (tenant, body) => updatePrismaProduct(id, body, tenant),
     request,
     WRITE_PERMISSIONS.productsUpdate,
-    { route: "/api/products/[id]", storeAction: productMutationActionsFromBody, targetId: id, targetType: "product" },
+    { allowManagerPinApproval: true, route: "/api/products/[id]", storeAction: productMutationActionsFromBody, targetId: id, targetType: "product" },
   );
 }
 
@@ -21,6 +21,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     (tenant) => url.searchParams.get("hard") === "true" ? deletePrismaProduct(id, tenant) : archivePrismaProduct(id, tenant),
     undefined,
     WRITE_PERMISSIONS.productsDelete,
-    { route: "/api/products/[id]", storeAction: STORE_ACTIONS.PRODUCT_DELETE, targetId: id, targetType: "product" },
+    { allowManagerPinApproval: true, route: "/api/products/[id]", storeAction: STORE_ACTIONS.PRODUCT_DELETE, targetId: id, targetType: "product" },
   );
 }

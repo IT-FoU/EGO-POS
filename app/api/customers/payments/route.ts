@@ -8,6 +8,6 @@ export async function POST(request: Request) {
     (tenant, body) => createPrismaCustomerPayment(body, tenant),
     request,
     WRITE_PERMISSIONS.customersPayment,
-    { route: "/api/customers/payments", storeAction: [STORE_ACTIONS.PAYMENT_RECEIVE, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE], targetType: "customer" },
+    { allowManagerPinApproval: true, route: "/api/customers/payments", storeAction: [STORE_ACTIONS.PAYMENT_RECEIVE, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE], targetType: "customer" },
   );
 }

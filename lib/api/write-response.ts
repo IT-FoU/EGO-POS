@@ -98,7 +98,11 @@ export async function runWrite<T>(
         await requireStoreActionPermissions({ actions: storeActions, context: options, session, tenant });
       }
     }
-    if (permission) {
+    // A validated manager/owner PIN approval is an explicit per-request override
+    // for the restricted store action. Directly permitted users still pass the
+    // legacy permission check; approved cashier requests do not need broad role
+    // permissions granted permanently.
+    if (permission && !managerPinApproval) {
       await assertPermission(tenant, permission);
     }
     const data = await handler(tenant, body);

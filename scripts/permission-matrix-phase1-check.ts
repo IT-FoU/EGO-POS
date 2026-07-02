@@ -18,11 +18,20 @@ import {
   canViewStoreNavigationItem,
   resolveStoreUiRole,
 } from "../features/permissions/store-ui-permissions";
-import { isManagerPinApprovalEligible } from "../lib/auth/store-manager-approval";
+import { isManagerPinApprovalEligible, managerApprovalMetadata } from "../lib/auth/store-manager-approval";
 
 function check(name: string, value: boolean) {
   assert.equal(value, true, name);
   console.log(`✓ ${name}`);
+}
+
+function hasSensitiveApprovalKey(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(hasSensitiveApprovalKey);
+  return Object.entries(value as Record<string, unknown>).some(([key, entry]) => {
+    const normalized = key.toLowerCase();
+    return normalized === "pin" || normalized.includes("password") || normalized.includes("approverpin") || normalized.includes("managerpin") || hasSensitiveApprovalKey(entry);
+  });
 }
 
 check("super_admin can perform all platform actions", hasPlatformPermission("super_admin", PLATFORM_ACTIONS.BUSINESS_DELETE));
@@ -52,8 +61,24 @@ check("cashier cannot reports.view_full", !hasStorePermission("cashier", STORE_A
 check("cashier cannot store activity logs own store", !hasStorePermission("cashier", STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE));
 check("cashier manager PIN override eligible for refund bundle", isManagerPinApprovalEligible([STORE_ACTIONS.SALE_REFUND, STORE_ACTIONS.PAYMENT_REFUND]));
 check("cashier manager PIN override eligible for void bundle", isManagerPinApprovalEligible([STORE_ACTIONS.SALE_VOID, STORE_ACTIONS.PROMOTION_REVERSE]));
-check("cashier manager PIN override not eligible for inventory", !isManagerPinApprovalEligible([STORE_ACTIONS.INVENTORY_ADJUST]));
-check("cashier manager PIN override not eligible for customer credit", !isManagerPinApprovalEligible([STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE]));
+check("cashier manager PIN override eligible for inventory.adjust", isManagerPinApprovalEligible([STORE_ACTIONS.INVENTORY_ADJUST]));
+check("cashier manager PIN override eligible for product.price_change", isManagerPinApprovalEligible([STORE_ACTIONS.PRODUCT_UPDATE, STORE_ACTIONS.PRODUCT_PRICE_CHANGE]));
+check("cashier manager PIN override eligible for product.delete", isManagerPinApprovalEligible([STORE_ACTIONS.PRODUCT_DELETE]));
+check("cashier manager PIN override eligible for customer credit", isManagerPinApprovalEligible([STORE_ACTIONS.PAYMENT_RECEIVE, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE]));
+check("cashier manager PIN override not eligible for reports", !isManagerPinApprovalEligible([STORE_ACTIONS.REPORTS_VIEW_FULL]));
+const approvalMetadata = managerApprovalMetadata({
+  approvedById: "manager_1",
+  approvedByName: "Manager",
+  approvedByRole: "manager",
+  reason: "Inventory recount",
+  requestedBy: {
+    businessId: "biz_1",
+    id: "cashier_1",
+    name: "Cashier",
+    role: "cashier",
+  },
+}, [STORE_ACTIONS.INVENTORY_ADJUST]);
+check("approval metadata does not include raw PIN/password keys", !hasSensitiveApprovalKey(approvalMetadata));
 check("UI resolves mixed store roles to owner privilege", resolveStoreUiRole(["Cashier", "Owner"]) === "owner");
 check("cashier UI can see POS navigation", canViewStoreNavigationItem("cashier", "pos"));
 check("cashier UI cannot see Products navigation", !canViewStoreNavigationItem("cashier", "products"));
