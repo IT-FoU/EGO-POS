@@ -3,7 +3,7 @@
 import { t } from "@/lib/i18n/ui";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
+import { Building2, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { updateSettingsAction } from "@/features/settings/actions";
 import type { CurrencyCode, SettingsFormData } from "@/features/settings/types";
@@ -19,6 +19,7 @@ import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "
 import { CUSTOMER_DISPLAY_TEMPLATES, DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
+import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
 import {
   readReceiptPrintModePreference,
   writeReceiptPrintModePreference,
@@ -374,6 +375,11 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             <input className="field-input" max="100" min="0" step="0.01" type="number" value={settings.vatRate} onChange={(event) => update("vatRate", Number(event.target.value))}/>
           </Field>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <SectionTitle icon={ScrollText} title="Store Activity Logs"/>
+        <div className="mt-5"><StoreActivityLogsClient /></div>
       </section>
 
     </div>);

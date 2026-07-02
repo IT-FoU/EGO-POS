@@ -39,6 +39,8 @@ check("owner can sale.refund", hasStorePermission("owner", STORE_ACTIONS.SALE_RE
 check("manager can sale.refund", hasStorePermission("manager", STORE_ACTIONS.SALE_REFUND));
 check("manager can inventory.adjust", hasStorePermission("manager", STORE_ACTIONS.INVENTORY_ADJUST));
 check("manager can reports.view_full", hasStorePermission("manager", STORE_ACTIONS.REPORTS_VIEW_FULL));
+check("owner can store activity logs own store", hasStorePermission("owner", STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE));
+check("manager can store activity logs own store", hasStorePermission("manager", STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE));
 check("cashier can sale.complete", canPerformStoreAction({ role: "cashier" }, STORE_ACTIONS.SALE_COMPLETE));
 check("cashier can customer.create", canPerformStoreAction({ role: "cashier" }, STORE_ACTIONS.CUSTOMER_CREATE));
 check("cashier cannot sale.void", !hasStorePermission("cashier", STORE_ACTIONS.SALE_VOID));
@@ -46,6 +48,7 @@ check("cashier cannot sale.refund", !hasStorePermission("cashier", STORE_ACTIONS
 check("cashier cannot inventory.adjust", !hasStorePermission("cashier", STORE_ACTIONS.INVENTORY_ADJUST));
 check("cashier cannot product.price_change", !hasStorePermission("cashier", STORE_ACTIONS.PRODUCT_PRICE_CHANGE));
 check("cashier cannot reports.view_full", !hasStorePermission("cashier", STORE_ACTIONS.REPORTS_VIEW_FULL));
+check("cashier cannot store activity logs own store", !hasStorePermission("cashier", STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE));
 check("cashier manager PIN override eligible for refund bundle", isManagerPinApprovalEligible([STORE_ACTIONS.SALE_REFUND, STORE_ACTIONS.PAYMENT_REFUND]));
 check("cashier manager PIN override eligible for void bundle", isManagerPinApprovalEligible([STORE_ACTIONS.SALE_VOID, STORE_ACTIONS.PROMOTION_REVERSE]));
 check("cashier manager PIN override not eligible for inventory", !isManagerPinApprovalEligible([STORE_ACTIONS.INVENTORY_ADJUST]));
