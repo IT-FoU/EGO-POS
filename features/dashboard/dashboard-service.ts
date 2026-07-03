@@ -26,6 +26,29 @@ export type TopSellingProduct = {
   totalLak: number;
 };
 
+export type DashboardLowStockItem = {
+  minStock: number;
+  name: string;
+  quantity: number;
+};
+
+export type DashboardRecentSale = {
+  createdAt: string;
+  paymentMethod: string;
+  saleNo: string;
+  status: string;
+  totalLak: number;
+};
+
+export type DashboardCurrencyCode = "LAK" | "THB" | "USD";
+
+export type DashboardCurrencyBreakdown = {
+  billCount: number;
+  currency: DashboardCurrencyCode;
+  paymentMethods: Array<{ method: string; total: number }>;
+  total: number;
+};
+
 export type DashboardRangeKey = "custom" | "month" | "today" | "week" | "year";
 
 export type DashboardDateRange = {
@@ -82,6 +105,8 @@ export type DashboardSnapshot = {
     voidCount: number;
   };
   hourlySales: TodaySalesPoint[];
+  lowStockItems: DashboardLowStockItem[];
+  recentSales: DashboardRecentSale[];
   period: {
     end: string;
     key: DashboardRangeKey;
@@ -89,6 +114,7 @@ export type DashboardSnapshot = {
     start: string;
   };
   shift: {
+    cashInLak: number;
     cashOutLak: number;
     cashSalesLak: number;
     expectedCashLak: number;
@@ -109,10 +135,22 @@ export type DashboardSnapshot = {
     voidCount: number;
   };
   paymentBreakdown: Array<{ method: string; totalLak: number }>;
+  currencyBreakdown: DashboardCurrencyBreakdown[];
   topProducts: TopSellingProduct[];
+  dataStatus: {
+    hasError: boolean;
+    isPartial: boolean;
+    message?: string;
+    warnings?: string[];
+  };
 };
 
-function emptySnapshot(): DashboardSnapshot {
+function logDashboardQueryFailure(functionName: string, queryName: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[${functionName}] ${queryName} failed: ${message}`);
+}
+
+function emptySnapshot(errorMessage?: string): DashboardSnapshot {
   const { end, label, start } = resolveDateRange({ key: "today" });
 
   return {
@@ -155,6 +193,8 @@ function emptySnapshot(): DashboardSnapshot {
       hour: `${String(hour).padStart(2, "0")}:00`,
       salesLak: 0,
     })),
+    lowStockItems: [],
+    recentSales: [],
     period: {
       end: end.toISOString(),
       key: "today",
@@ -162,6 +202,7 @@ function emptySnapshot(): DashboardSnapshot {
       start: start.toISOString(),
     },
     shift: {
+      cashInLak: 0,
       cashOutLak: 0,
       cashSalesLak: 0,
       expectedCashLak: 0,
@@ -182,7 +223,17 @@ function emptySnapshot(): DashboardSnapshot {
       voidCount: 0,
     },
     paymentBreakdown: [],
+    currencyBreakdown: [
+      { billCount: 0, currency: "LAK", paymentMethods: [], total: 0 },
+      { billCount: 0, currency: "THB", paymentMethods: [], total: 0 },
+      { billCount: 0, currency: "USD", paymentMethods: [], total: 0 },
+    ],
     topProducts: [],
+    dataStatus: {
+      hasError: Boolean(errorMessage),
+      isPartial: false,
+      message: errorMessage,
+    },
   };
 }
 
@@ -285,9 +336,30 @@ export async function getMiniMartDashboardSnapshot(
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   await assertPermission(tenant, READ_PERMISSIONS.dashboardView);
-  return getPrismaDashboardSnapshot(tenant, range);
+
+  try {
+    return await getPrismaDashboardSnapshot(tenant, range);
+  } catch (error) {
+    logDashboardQueryFailure("getMiniMartDashboardSnapshot", "dashboardSnapshot", error);
+    return emptySnapshot("Dashboard data could not be loaded");
+  }
 }
 
+/*
+ * Dashboard calculation contract
+ * - Revenue, transaction count, profit, COGS, inventory value, product rows, and
+ *   Reports-aligned payment/product aggregates come from getPrismaReportsSnapshot.
+ * - Reports uses completed sale filters and sale line cost snapshots; Dashboard
+ *   should not duplicate those formulas independently.
+ * - Dashboard-specific queries are limited to operational widgets such as current
+ *   shift state, alerts, recent bills, low-stock list, hourly sales, and close-day
+ *   drawer data.
+ * - Query failures never produce mock metrics. The service returns an empty
+ *   snapshot with dataStatus.hasError so callers can show an unavailable state.
+ * - No cache is applied here until checkout/refund/void invalidation exists.
+ * - Date ranges use inclusive start and exclusive end; custom ranges include the
+ *   full selected end day.
+ */
 export async function getPrismaDashboardSnapshot(
   tenant: TenantContext,
   range: DashboardDateRange,
@@ -300,201 +372,202 @@ export async function getPrismaDashboardSnapshot(
   const branchWhere = tenant.branchId ? { branchId: tenant.branchId } : {};
   const warehouseWhere = tenant.warehouseId ? { warehouseId: tenant.warehouseId } : {};
 
-  const [
-    sales,
-    salePayments,
-    inventoryBalances,
-    nearExpiryLots,
-    expiredLots,
-    customerCredit,
-    supplierPayables,
-    currentShift,
-    todayShifts,
-    deadStockProducts,
-    historicalSales,
-    saleItemPromotionRows,
-    loyaltyRedeemLedger,
-    refunds,
-    voidCount,
-    reportsSnapshot,
-  ] = await Promise.all([
-      prisma.sale.findMany({
-        include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  nameEn: true,
-                  nameLo: true,
-                },
+  const [sales, salePayments, inventoryBalances, reportsSnapshot] = await Promise.all([
+    prisma.sale.findMany({
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                nameEn: true,
+                nameLo: true,
               },
             },
           },
         },
-        where: {
+        payments: {
+          select: {
+            paymentMethod: true,
+          },
+        },
+      },
+      where: {
+        ...branchWhere,
+        companyId: tenant.companyId,
+        createdAt: { gte: start, lt: end },
+        saleStatus: "completed",
+      },
+    }),
+    prisma.salePayment.findMany({
+      include: {
+        sale: {
+          select: {
+            branchId: true,
+            companyId: true,
+          },
+        },
+      },
+      where: {
+        paymentDate: { gte: start, lt: end },
+        sale: {
+          ...branchWhere,
+          companyId: tenant.companyId,
+        },
+      },
+    }),
+    prisma.inventoryBalance.findMany({
+      include: {
+        product: {
+          select: {
+            costPriceLak: true,
+            minStock: true,
+            nameEn: true,
+            nameLo: true,
+          },
+        },
+      },
+      where: {
+        ...warehouseWhere,
+        companyId: tenant.companyId,
+      },
+    }),
+    getPrismaReportsSnapshot(tenant, {
+      branchId: tenant.branchId || undefined,
+      dateFrom: start,
+      datePreset: "custom",
+      dateTo: new Date(end.getTime() - 1),
+      warehouseId: tenant.warehouseId || undefined,
+    }),
+  ]);
+
+  const [nearExpiryLots, expiredLots, customerCredit] = await Promise.all([
+    prisma.inventoryLot.findMany({
+      include: {
+        product: {
+          select: {
+            nameEn: true,
+            nameLo: true,
+          },
+        },
+      },
+      where: {
+        ...warehouseWhere,
+        companyId: tenant.companyId,
+        expiryDate: { gte: start, lt: nearExpiryEnd },
+        quantity: { gt: 0 },
+      },
+    }),
+    prisma.inventoryLot.findMany({
+      where: {
+        ...warehouseWhere,
+        companyId: tenant.companyId,
+        expiryDate: { lt: start },
+        quantity: { gt: 0 },
+      },
+    }),
+    prisma.customer.aggregate({
+      _sum: { outstandingBalance: true },
+      where: {
+        ...branchWhere,
+        companyId: tenant.companyId,
+        outstandingBalance: { gt: 0 },
+        status: "active",
+      },
+    }),
+  ]);
+
+  const [supplierPayables, currentShift, todayShifts] = await Promise.all([
+    prisma.supplierPayable.aggregate({
+      _sum: { balanceAmount: true },
+      where: {
+        companyId: tenant.companyId,
+      },
+    }),
+    prisma.cashSession.findFirst({
+      include: { transactions: true },
+      orderBy: { openedAt: "desc" },
+      where: {
+        ...branchWhere,
+        cashierId: tenant.userId,
+        closedAt: null,
+        companyId: tenant.companyId,
+      },
+    }),
+    prisma.cashSession.findMany({
+      include: { transactions: true },
+      orderBy: { openedAt: "asc" },
+      where: {
+        ...branchWhere,
+        companyId: tenant.companyId,
+        openedAt: { gte: start, lt: end },
+      },
+    }),
+  ]);
+
+  const [deadStockProducts, historicalSales, saleItemPromotionRows] = await Promise.all([
+    prisma.product.count({
+      where: {
+        ...branchWhere,
+        companyId: tenant.companyId,
+        isActive: true,
+        saleItems: {
+          none: {
+            sale: {
+              createdAt: { gte: deadStockCutoff },
+              saleStatus: "completed",
+            },
+          },
+        },
+      },
+    }),
+    prisma.sale.findMany({
+      select: { totalAmount: true },
+      where: {
+        ...branchWhere,
+        companyId: tenant.companyId,
+        createdAt: { gte: historicalStart, lt: start },
+        saleStatus: "completed",
+      },
+    }),
+    prisma.saleItem.findMany({
+      select: { promotionDiscount: true },
+      where: {
+        sale: {
           ...branchWhere,
           companyId: tenant.companyId,
           createdAt: { gte: start, lt: end },
           saleStatus: "completed",
         },
-      }),
-      prisma.salePayment.findMany({
-        include: {
-          sale: {
-            select: {
-              branchId: true,
-              companyId: true,
-            },
-          },
-        },
-        where: {
-          paymentDate: { gte: start, lt: end },
-          sale: {
-            ...branchWhere,
-            companyId: tenant.companyId,
-          },
-        },
-      }),
-      prisma.inventoryBalance.findMany({
-        include: {
-          product: {
-            select: {
-              minStock: true,
-              nameEn: true,
-              nameLo: true,
-            },
-          },
-        },
-        where: {
-          ...warehouseWhere,
-          companyId: tenant.companyId,
-        },
-      }),
-      prisma.inventoryLot.findMany({
-        include: {
-          product: {
-            select: {
-              nameEn: true,
-              nameLo: true,
-            },
-          },
-        },
-        where: {
-          ...warehouseWhere,
-          companyId: tenant.companyId,
-          expiryDate: { gte: start, lt: nearExpiryEnd },
-          quantity: { gt: 0 },
-        },
-      }),
-      prisma.inventoryLot.findMany({
-        where: {
-          ...warehouseWhere,
-          companyId: tenant.companyId,
-          expiryDate: { lt: start },
-          quantity: { gt: 0 },
-        },
-      }),
-      prisma.customer.aggregate({
-        _sum: { outstandingBalance: true },
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          outstandingBalance: { gt: 0 },
-          status: "active",
-        },
-      }),
-      prisma.supplierPayable.aggregate({
-        _sum: { balanceAmount: true },
-        where: {
-          companyId: tenant.companyId,
-        },
-      }),
-      prisma.cashSession.findFirst({
-        include: { transactions: true },
-        orderBy: { openedAt: "desc" },
-        where: {
-          ...branchWhere,
-          cashierId: tenant.userId,
-          closedAt: null,
-          companyId: tenant.companyId,
-        },
-      }),
-      prisma.cashSession.findMany({
-        include: { transactions: true },
-        orderBy: { openedAt: "asc" },
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          openedAt: { gte: start, lt: end },
-        },
-      }),
-      prisma.product.count({
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          isActive: true,
-          saleItems: {
-            none: {
-              sale: {
-                createdAt: { gte: deadStockCutoff },
-                saleStatus: "completed",
-              },
-            },
-          },
-        },
-      }),
-      prisma.sale.findMany({
-        select: { totalAmount: true },
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          createdAt: { gte: historicalStart, lt: start },
-          saleStatus: "completed",
-        },
-      }),
-      prisma.saleItem.findMany({
-        select: { promotionDiscount: true },
-        where: {
-          sale: {
-            ...branchWhere,
-            companyId: tenant.companyId,
-            createdAt: { gte: start, lt: end },
-            saleStatus: "completed",
-          },
-        },
-      }),
-      prisma.loyaltyPointLedger.findMany({
-        select: { amountLak: true },
-        where: {
-          companyId: tenant.companyId,
-          createdAt: { gte: start, lt: end },
-          pointType: "redeem",
-        },
-      }),
-      prisma.refund.findMany({
-        select: { totalAmount: true },
-        where: {
-          companyId: tenant.companyId,
-          createdAt: { gte: start, lt: end },
-          sale: branchWhere,
-        },
-      }),
-      prisma.sale.count({
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          createdAt: { gte: start, lt: end },
-          saleStatus: "cancelled",
-        },
-      }),
-      getPrismaReportsSnapshot(tenant, {
-        branchId: tenant.branchId || undefined,
-        dateFrom: start,
-        datePreset: "custom",
-        dateTo: new Date(end.getTime() - 1),
-        warehouseId: tenant.warehouseId || undefined,
-      }),
-    ]);
+      },
+    }),
+  ]);
+
+  const [loyaltyRedeemLedger, refunds, voidCount] = await Promise.all([
+    prisma.loyaltyPointLedger.findMany({
+      select: { amountLak: true },
+      where: {
+        companyId: tenant.companyId,
+        createdAt: { gte: start, lt: end },
+        pointType: "redeem",
+      },
+    }),
+    prisma.refund.findMany({
+      select: { totalAmount: true },
+      where: {
+        companyId: tenant.companyId,
+        createdAt: { gte: start, lt: end },
+        sale: branchWhere,
+      },
+    }),
+    prisma.sale.count({
+      where: {
+        ...branchWhere,
+        companyId: tenant.companyId,
+        createdAt: { gte: start, lt: end },
+        saleStatus: "cancelled",
+      },
+    }),
+  ]);
 
     const grossSalesLak = sales.reduce((total, sale) => total + amount(sale.subtotal), 0);
     const discountLak = sales.reduce((total, sale) => total + amount(sale.discountAmount), 0);
@@ -506,10 +579,20 @@ export async function getPrismaDashboardSnapshot(
     const refundLak = refunds.reduce((total, row) => total + amount(row.totalAmount), 0);
     const netSalesLak = Math.max(salesTodayLak - refundLak, 0);
     const inventoryValueLak = amount(reportsSnapshot.hub.inventoryValueLak);
-    const itemsSoldToday = sales.reduce(
-      (total, sale) => total + sale.items.reduce((sum, item) => sum + amount(item.quantity), 0),
-      0,
+    const itemsSoldToday = amount(reportsSnapshot.hub.itemsSold);
+    const profitWarnings: string[] = [];
+    const missingSaleLineCosts = sales.some((sale) =>
+      sale.items.some((item) => item.costPrice == null || !Number.isFinite(Number(item.costPrice))),
     );
+    if (missingSaleLineCosts) {
+      profitWarnings.push("Some sale lines are missing cost snapshots; profit and COGS may be partial.");
+    }
+    const missingInventoryCosts = inventoryBalances.some(
+      (balance) => balance.product.costPriceLak == null || !Number.isFinite(Number(balance.product.costPriceLak)),
+    );
+    if (missingInventoryCosts) {
+      profitWarnings.push("Some inventory items are missing product cost; inventory value may be partial.");
+    }
     const cashSalesLak = salePayments
       .filter((payment) => payment.paymentMethod === "cash")
       .reduce((total, payment) => total + amount(payment.amount), 0);
@@ -527,6 +610,18 @@ export async function getPrismaDashboardSnapshot(
     const lowStockProducts = inventoryBalances.filter(
       (balance) => amount(balance.quantity) <= amount(balance.product.minStock),
     );
+    const lowStockItems = lowStockProducts
+      .map((balance) => ({
+        minStock: amount(balance.product.minStock),
+        name: balance.product.nameEn || balance.product.nameLo,
+        quantity: amount(balance.quantity),
+      }))
+      .sort((left, right) => left.quantity - right.quantity)
+      .slice(0, 20);
+    const cashInLak =
+      currentShift?.transactions
+        .filter((transaction) => transaction.transactionType === "cash_in")
+        .reduce((total, transaction) => total + amount(transaction.amount), 0) ?? 0;
     const cashOutLak =
       currentShift?.transactions
         .filter((transaction) => transaction.transactionType === "cash_out")
@@ -555,30 +650,68 @@ export async function getPrismaDashboardSnapshot(
     const topProducts = Array.from(topProductMap.values())
       .sort((left, right) => right.quantity - left.quantity)
       .slice(0, 10);
+    const recentSales = [...sales]
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, 20)
+      .map((sale) => ({
+        createdAt: sale.createdAt.toISOString(),
+        paymentMethod: sale.payments[0]?.paymentMethod ? String(sale.payments[0].paymentMethod) : "cash",
+        saleNo: sale.saleNo,
+        status: sale.saleStatus,
+        totalLak: amount(sale.totalAmount),
+      }));
     const paymentBreakdown = salePayments
       .reduce<Map<string, number>>((totals, payment) => {
         const method = String(payment.paymentMethod ?? "cash");
         totals.set(method, (totals.get(method) ?? 0) + amount(payment.amount));
         return totals;
       }, new Map());
-    const shiftSummaries = await Promise.all(
-      todayShifts.map(async (shift) => {
-        const shiftEnd = shift.closedAt ?? new Date();
-        const totals = await computeCashSessionTotalsForShift(shift, shiftEnd);
-        const counted = amount(shift.closingCash);
-        const expectedCashLak = amount(shift.expectedCash) || totals.expectedCashLak;
+    const billIdsByCurrency = new Map<DashboardCurrencyCode, Set<string>>([
+      ["LAK", new Set()],
+      ["THB", new Set()],
+      ["USD", new Set()],
+    ]);
+    const paymentByCurrency = new Map<DashboardCurrencyCode, Map<string, number>>([
+      ["LAK", new Map()],
+      ["THB", new Map()],
+      ["USD", new Map()],
+    ]);
+    for (const payment of salePayments) {
+      // The current sale_payments schema stores base LAK amounts only. Until
+      // production multi-currency fields exist, do not convert LAK into THB/USD.
+      const currency: DashboardCurrencyCode = "LAK";
+      const method = String(payment.paymentMethod ?? "cash");
+      billIdsByCurrency.get(currency)?.add(payment.saleId);
+      const methodTotals = paymentByCurrency.get(currency);
+      methodTotals?.set(method, (methodTotals.get(method) ?? 0) + amount(payment.amount));
+    }
+    const currencyBreakdown: DashboardCurrencyBreakdown[] = (["LAK", "THB", "USD"] as DashboardCurrencyCode[])
+      .map((currency) => {
+        const methodTotals = paymentByCurrency.get(currency) ?? new Map<string, number>();
         return {
-          cashierId: shift.cashierId,
-          closedAt: shift.closedAt?.toISOString() ?? null,
-          countedCashLak: counted,
-          differenceLak: amount(shift.cashDifference) || counted - expectedCashLak,
-          expectedCashLak,
-          openedAt: shift.openedAt.toISOString(),
-          openingCashLak: amount(shift.openingCash),
-          status: shift.closedAt ? "closed" : "open",
-        } satisfies ShiftSummary;
-      }),
-    );
+          billCount: billIdsByCurrency.get(currency)?.size ?? 0,
+          currency,
+          paymentMethods: Array.from(methodTotals.entries()).map(([method, total]) => ({ method, total })),
+          total: Array.from(methodTotals.values()).reduce((sum, total) => sum + total, 0),
+        };
+      });
+    const shiftSummaries: ShiftSummary[] = [];
+    for (const shift of todayShifts) {
+      const shiftEnd = shift.closedAt ?? new Date();
+      const totals = await computeCashSessionTotalsForShift(shift, shiftEnd);
+      const counted = amount(shift.closingCash);
+      const expectedCashLak = amount(shift.expectedCash) || totals.expectedCashLak;
+      shiftSummaries.push({
+        cashierId: shift.cashierId,
+        closedAt: shift.closedAt?.toISOString() ?? null,
+        countedCashLak: counted,
+        differenceLak: amount(shift.cashDifference) || counted - expectedCashLak,
+        expectedCashLak,
+        openedAt: shift.openedAt.toISOString(),
+        openingCashLak: amount(shift.openingCash),
+        status: shift.closedAt ? "closed" : "open",
+      });
+    }
     const closeDayExpectedCashLak = shiftSummaries.length > 0
       ? shiftSummaries.reduce((total, shift) => total + shift.expectedCashLak, 0)
       : expectedCashLak;
@@ -702,14 +835,18 @@ export async function getPrismaDashboardSnapshot(
         voidCount,
       },
       hourlySales,
+      lowStockItems,
       paymentBreakdown: Array.from(paymentBreakdown.entries()).map(([method, totalLak]) => ({ method, totalLak })),
+      currencyBreakdown,
       period: {
         end: end.toISOString(),
         key: range.key,
         label,
         start: start.toISOString(),
       },
+      recentSales,
       shift: {
+        cashInLak,
         cashOutLak,
         cashSalesLak,
         expectedCashLak,
@@ -730,5 +867,10 @@ export async function getPrismaDashboardSnapshot(
         voidCount,
       },
       topProducts,
+      dataStatus: {
+        hasError: false,
+        isPartial: profitWarnings.length > 0,
+        warnings: profitWarnings,
+      },
     };
 }
