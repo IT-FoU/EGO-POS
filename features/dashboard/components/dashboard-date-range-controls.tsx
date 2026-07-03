@@ -3,27 +3,29 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DashboardRangeKey } from "@/features/dashboard/dashboard-service";
-
-const options: Array<{ key: DashboardRangeKey; label: string }> = [
-  { key: "today", label: "Today" },
-  { key: "week", label: "This Week" },
-  { key: "month", label: "This Month" },
-  { key: "year", label: "This Year" },
-  { key: "custom", label: "Custom Date" },
-];
+import type { DashboardCopy } from "@/lib/i18n/dashboard-copy";
 
 export function DashboardDateRangeControls({
   activeRange,
+  copy,
   endDate,
   startDate,
 }: {
   activeRange: DashboardRangeKey;
+  copy: DashboardCopy;
   endDate?: string;
   startDate?: string;
 }) {
   const router = useRouter();
   const [customStart, setCustomStart] = useState(startDate ?? "");
   const [customEnd, setCustomEnd] = useState(endDate ?? "");
+  const options: Array<{ key: DashboardRangeKey; label: string }> = [
+    { key: "today", label: copy.today },
+    { key: "week", label: copy.thisWeek },
+    { key: "month", label: copy.thisMonth },
+    { key: "year", label: copy.thisYear },
+    { key: "custom", label: copy.customDate },
+  ];
 
   function applyRange(range: DashboardRangeKey) {
     if (range === "custom") {
@@ -48,8 +50,8 @@ export function DashboardDateRangeControls({
           <button
             className={
               activeRange === option.key
-                ? "h-9 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground"
-                : "h-9 rounded-md border border-border px-3 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-foreground"
+                ? "h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground"
+                : "h-10 rounded-md border border-border bg-background px-3 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-foreground"
             }
             key={option.key}
             type="button"
@@ -63,7 +65,7 @@ export function DashboardDateRangeControls({
       {activeRange === "custom" ? (
         <div className="grid gap-3 sm:grid-cols-[180px_180px_auto]">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Start date
+            {copy.startDate}
             <input
               className="field-input"
               type="date"
@@ -72,7 +74,7 @@ export function DashboardDateRangeControls({
             />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
-            End date
+            {copy.endDate}
             <input
               className="field-input"
               type="date"
@@ -85,7 +87,7 @@ export function DashboardDateRangeControls({
             type="button"
             onClick={() => applyRange("custom")}
           >
-            Apply
+            {copy.apply}
           </button>
         </div>
       ) : null}
