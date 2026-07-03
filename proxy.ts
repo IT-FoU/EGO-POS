@@ -23,7 +23,25 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
     return NextResponse.next();
   }
 
-  if (pathname === "/igo-admin/login" || pathname === "/api/igo-admin/login") {
+  if (
+    pathname === "/super-admin/login" ||
+    pathname === "/api/super-admin/login" ||
+    pathname === "/igo-admin/login" ||
+    pathname === "/api/igo-admin/login"
+  ) {
+    return NextResponse.next();
+  }
+
+  if (pathname === "/super-admin" || pathname.startsWith("/super-admin/")) {
+    const hasAdminSession = Boolean(request.cookies.get(ADMIN_COOKIE)?.value);
+
+    if (!hasAdminSession) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/super-admin/login";
+      loginUrl.search = "";
+      return NextResponse.redirect(loginUrl);
+    }
+
     return NextResponse.next();
   }
 
@@ -32,7 +50,7 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
 
     if (!hasAdminSession) {
       const loginUrl = request.nextUrl.clone();
-      loginUrl.pathname = "/igo-admin/login";
+      loginUrl.pathname = "/super-admin/login";
       loginUrl.search = "";
       return NextResponse.redirect(loginUrl);
     }
@@ -44,5 +62,12 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
 }
 
 export const config = {
-  matcher: ["/login", "/dashboard/:path*", "/igo-admin/:path*", "/api/igo-admin/:path*"],
+  matcher: [
+    "/login",
+    "/dashboard/:path*",
+    "/super-admin/:path*",
+    "/api/super-admin/login",
+    "/igo-admin/:path*",
+    "/api/igo-admin/:path*",
+  ],
 };

@@ -29,6 +29,13 @@ export async function rejectSuperAdminSessionForEgoAdminPortal() {
 }
 
 export async function requireSuperAdminPortalAccess() {
+  const superAdminSession = await getAdminSession();
+
+  if (superAdminSession) {
+    await rejectSetupAdminSessionForSuperAdminPortal();
+    return superAdminSession;
+  }
+
   await rejectMerchantSessionForAdminPortal();
   await rejectSetupAdminSessionForSuperAdminPortal();
 
