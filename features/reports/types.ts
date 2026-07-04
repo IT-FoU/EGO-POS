@@ -43,3 +43,18 @@ export type PurchaseTrendPoint = {
   purchaseValueLak: number;
   orderCount: number;
 };
+
+export type ReportDataQualityStatus = "complete" | "partial" | "unavailable" | "error";
+
+export type ReportDataQualityWarning = {
+  code: string;
+  message: string;
+  scope: string;
+  severity: "info" | "warning" | "error";
+};
+
+export type ReportDataQuality = {
+  failedScopes: string[];
+  status: ReportDataQualityStatus;
+  warnings: ReportDataQualityWarning[];
+};

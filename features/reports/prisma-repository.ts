@@ -12,9 +12,67 @@ import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { InventoryItem } from "@/features/inventory/types";
 import type { Product } from "@/features/products/types";
 import type { SupplierPurchaseOrder, SupplierReceiving } from "@/features/suppliers/types";
-import type { ProductReportRow, PurchaseTrendPoint, SalesMetric, SupplierPayableSummary, TrendPoint } from "@/features/reports/types";
+import type {
+  ProductReportRow,
+  PurchaseTrendPoint,
+  ReportDataQuality,
+  ReportDataQualityWarning,
+  SalesMetric,
+  SupplierPayableSummary,
+  TrendPoint,
+} from "@/features/reports/types";
 
 const db = prisma as any;
+
+function logPrismaQueryFailure(functionName: string, queryName: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[${functionName}] ${queryName} failed: ${message}`);
+}
+
+type ReportQueryResult<T> =
+  | { critical: boolean; ok: true; scope: string; value: T }
+  | { critical: boolean; ok: false; scope: string; warning: ReportDataQualityWarning };
+
+async function settleReportQuery<T>(
+  scope: string,
+  critical: boolean,
+  queryFn: () => Promise<T>,
+): Promise<ReportQueryResult<T>> {
+  try {
+    return { critical, ok: true, scope, value: await queryFn() };
+  } catch (error) {
+    logPrismaQueryFailure("getPrismaReportsSnapshot", scope, error);
+    return {
+      critical,
+      ok: false,
+      scope,
+      warning: {
+        code: critical ? "reports_critical_query_failed" : "reports_secondary_query_failed",
+        message: critical
+          ? "A critical reports query failed. KPI values from this snapshot should be treated as unavailable."
+          : "A secondary reports query failed. Some report lists or supporting charts may be incomplete.",
+        scope,
+        severity: critical ? "error" : "warning",
+      },
+    };
+  }
+}
+
+function resultOrFallback<T>(result: ReportQueryResult<unknown>, fallbackValue: T): T {
+  return result.ok ? result.value as T : fallbackValue;
+}
+
+function buildReportDataQuality(results: Array<ReportQueryResult<unknown>>): ReportDataQuality {
+  const warnings = results.flatMap((result) => (result.ok ? [] : [result.warning]));
+  const failedScopes = warnings.map((warning) => warning.scope);
+  const criticalFailed = results.some((result) => result.critical && !result.ok);
+
+  return {
+    failedScopes,
+    status: criticalFailed ? "unavailable" : warnings.length > 0 ? "partial" : "complete",
+    warnings,
+  };
+}
 
 function startOfDay(date = new Date()) {
   const start = new Date(date);
@@ -238,27 +296,31 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   trendStart.setDate(trendStart.getDate() - 6);
 
   const [
-    salesAggregate,
-    salesByPeriod,
-    saleItems,
-    saleItemsSold,
-    saleItemCostRows,
-    productGroups,
-    purchasesByPeriod,
-    paymentGroups,
-    payableGroups,
+    salesAggregateResult,
+    salesByPeriodResult,
+    saleItemsResult,
+    saleItemsSoldResult,
+    saleItemCostRowsResult,
+    productGroupsResult,
+    purchasesByPeriodResult,
+    paymentGroupsResult,
+    payableGroupsResult,
+    customersResult,
+    productsResult,
+    inventoryResult,
+    suppliersResult,
   ] = await Promise.all([
-    db.sale.aggregate({
+    settleReportQuery("salesAggregate", true, () => db.sale.aggregate({
       _count: { id: true },
       _sum: { profitAmount: true, taxAmount: true, totalAmount: true },
       where: saleFilter,
-    }),
-    db.sale.findMany({
+    })),
+    settleReportQuery("salesByPeriod", false, () => db.sale.findMany({
       orderBy: { createdAt: "asc" },
       select: { createdAt: true, profitAmount: true, taxAmount: true, totalAmount: true },
       where: saleFilter,
-    }),
-    db.saleItem.findMany({
+    })),
+    settleReportQuery("saleItems", false, () => db.saleItem.findMany({
       select: {
         profitAmount: true,
         quantity: true,
@@ -270,46 +332,112 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
         },
       },
       where: saleItemFilter,
-    }),
-    db.saleItem.aggregate({
+    })),
+    settleReportQuery("saleItemsSold", true, () => db.saleItem.aggregate({
       _sum: { quantity: true },
       where: saleItemFilter,
-    }),
-    db.saleItem.findMany({
+    })),
+    settleReportQuery("saleItemCostRows", true, () => db.saleItem.findMany({
       select: { costPrice: true, quantity: true },
       where: saleItemFilter,
-    }),
-    db.saleItem.groupBy({
+    })),
+    settleReportQuery("productGroups", false, () => db.saleItem.groupBy({
       by: ["productId"],
       _sum: { profitAmount: true, quantity: true, totalAmount: true },
       orderBy: { _sum: { totalAmount: "desc" } },
       take: 20,
       where: saleItemFilter,
-    }),
-    db.purchase.findMany({
+    })),
+    settleReportQuery("purchasesByPeriod", false, () => db.purchase.findMany({
       orderBy: { purchaseDate: "asc" },
       select: { purchaseDate: true, totalAmount: true },
       where: purchaseFilter,
-    }),
-    db.salePayment.groupBy({
+    })),
+    settleReportQuery("paymentGroups", false, () => db.salePayment.groupBy({
       by: ["paymentMethod"],
       _sum: { amount: true },
       where: { sale: saleFilter },
-    }),
-    db.supplierPayable.groupBy({
+    })),
+    settleReportQuery("payableGroups", false, () => db.supplierPayable.groupBy({
       by: ["supplierId"],
       _sum: { balanceAmount: true },
       where: { companyId: scope.companyId },
-    }),
+    })),
+    settleReportQuery("customersSnapshot", false, () => getPrismaCustomersSnapshot(scope)),
+    settleReportQuery("productsSnapshot", false, () => getPrismaProducts(scope)),
+    settleReportQuery("inventorySnapshot", true, () => getPrismaInventorySnapshot(tenant)),
+    settleReportQuery("suppliersSnapshot", false, () => getPrismaSuppliersSnapshot(tenant)),
   ]);
 
-  const [customers, products] = await Promise.all([
-    getPrismaCustomersSnapshot(scope),
-    getPrismaProducts(scope),
-  ]);
-  const [inventory, suppliers] = await Promise.all([
-    getPrismaInventorySnapshot(tenant),
-    getPrismaSuppliersSnapshot(tenant),
+  const customers = resultOrFallback(customersResult, {
+      analytics: {
+        activeCustomers: 0,
+        availablePoints: 0,
+        birthdayThisMonth: 0,
+        customersWithDebt: 0,
+        lifetimeSpendingLak: 0,
+        lostCustomers: 0,
+        newThisMonth: 0,
+        outstandingBalanceLak: 0,
+        overdueBalanceLak: 0,
+        paymentsRecordedLak: 0,
+        topCustomers: 0,
+        vipCustomers: 0,
+      },
+      customers: [],
+      payments: [],
+      purchases: [],
+    } as any);
+  const products = resultOrFallback(productsResult, [] as Product[]);
+  const inventory = resultOrFallback(inventoryResult, {
+    dashboard: {
+      adjustmentCountToday: 0,
+      deadStockCount: 0,
+      fastMovingCount: 0,
+      inventoryQuantity: 0,
+      inventoryValueLak: 0,
+      lowStockCount: 0,
+      nearExpiryCount: 0,
+      outOfStockCount: 0,
+      todayStockInCount: 0,
+    },
+    items: [],
+    lots: [],
+    movements: [],
+    todayStockIns: [],
+  } as any);
+  const suppliers = resultOrFallback(suppliersResult, {
+    payments: [],
+    purchaseOrders: [],
+    receivings: [],
+    suppliers: [],
+  } as any);
+  const salesAggregate = resultOrFallback(salesAggregateResult, {
+    _count: { id: 0 },
+    _sum: { profitAmount: 0, taxAmount: 0, totalAmount: 0 },
+  });
+  const salesByPeriod: Array<Record<string, any>> = resultOrFallback(salesByPeriodResult, []);
+  const saleItems: Array<Record<string, any>> = resultOrFallback(saleItemsResult, []);
+  const saleItemsSold = resultOrFallback(saleItemsSoldResult, { _sum: { quantity: 0 } });
+  const saleItemCostRows: Array<Record<string, any>> = resultOrFallback(saleItemCostRowsResult, []);
+  const productGroups: Array<Record<string, any>> = resultOrFallback(productGroupsResult, []);
+  const purchasesByPeriod: Array<Record<string, any>> = resultOrFallback(purchasesByPeriodResult, []);
+  const paymentGroups: Array<Record<string, any>> = resultOrFallback(paymentGroupsResult, []);
+  const payableGroups: Array<Record<string, any>> = resultOrFallback(payableGroupsResult, []);
+  const dataQuality = buildReportDataQuality([
+    salesAggregateResult,
+    salesByPeriodResult,
+    saleItemsResult,
+    saleItemsSoldResult,
+    saleItemCostRowsResult,
+    productGroupsResult,
+    purchasesByPeriodResult,
+    paymentGroupsResult,
+    payableGroupsResult,
+    customersResult,
+    productsResult,
+    inventoryResult,
+    suppliersResult,
   ]);
 
   const totalRevenue = amount(salesAggregate._sum.totalAmount);
@@ -400,6 +528,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     analytics,
     cogsLak: Math.round(totalCogsLak),
     customers: customers.customers,
+    dataQuality,
     filters,
     hub,
     inventoryItems,

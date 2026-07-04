@@ -5,7 +5,14 @@ import type { Supplier, SupplierPayment, SupplierPurchaseOrder, SupplierReceivin
 import type { ReportsAnalyticsHub } from "@/features/reports/build-analytics-hub";
 import type { ReportFilterOptions, ReportFilters } from "@/features/reports/report-filters";
 import { parseReportFilters } from "@/features/reports/report-filters";
-import type { ProductReportRow, PurchaseTrendPoint, SalesMetric, SupplierPayableSummary, TrendPoint } from "@/features/reports/types";
+import type {
+  ProductReportRow,
+  PurchaseTrendPoint,
+  ReportDataQuality,
+  SalesMetric,
+  SupplierPayableSummary,
+  TrendPoint,
+} from "@/features/reports/types";
 import { requireSession } from "@/lib/auth/session";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { tenantFromSession } from "@/lib/db/write-context";
@@ -21,6 +28,7 @@ export type ReportsSnapshot = {
   };
   cogsLak: number;
   customers: Customer[];
+  dataQuality: ReportDataQuality;
   filters: ReportFilters;
   hub: ReportsAnalyticsHub;
   inventoryItems: InventoryItem[];

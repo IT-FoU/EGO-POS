@@ -440,6 +440,10 @@ export async function getPrismaDashboardSnapshot(
     }),
   ]);
 
+  if (reportsSnapshot.dataQuality.status === "unavailable" || reportsSnapshot.dataQuality.status === "error") {
+    throw new Error(`Reports snapshot unavailable: ${reportsSnapshot.dataQuality.failedScopes.join(", ")}`);
+  }
+
   const [nearExpiryLots, expiredLots, customerCredit] = await Promise.all([
     prisma.inventoryLot.findMany({
       include: {
