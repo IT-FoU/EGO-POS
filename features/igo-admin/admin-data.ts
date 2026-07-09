@@ -197,11 +197,65 @@ export async function getAdminBusinesses(role?: string | null) {
 export async function getAdminUsers() {
   try {
     return await db.user.findMany({
-      include: {
+      select: {
+        createdAt: true,
+        email: true,
+        fullName: true,
+        id: true,
+        phone: true,
+        status: true,
+        username: true,
         companies: {
-          include: {
+          orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
+          select: {
+            allowBackOfficeAccess: true,
+            allowPosAccess: true,
+            branch: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            branchId: true,
             company: {
-              select: { id: true, name: true },
+              select: {
+                branches: {
+                  orderBy: [{ isMainBranch: "desc" }, { createdAt: "asc" }],
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                  take: 1,
+                },
+                id: true,
+                name: true,
+                storeCode: true,
+              },
+            },
+            companyId: true,
+            createdAt: true,
+            id: true,
+            isOwner: true,
+            requirePasswordChange: true,
+            status: true,
+          },
+        },
+        loginHistory: {
+          orderBy: { loginTime: "desc" },
+          select: {
+            loginTime: true,
+            status: true,
+          },
+          take: 1,
+        },
+        roles: {
+          select: {
+            companyId: true,
+            role: {
+              select: {
+                name: true,
+                templateKey: true,
+              },
             },
           },
         },

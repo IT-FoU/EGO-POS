@@ -90,11 +90,26 @@ type CenterBusiness = {
 };
 
 type CenterUser = {
-  companies?: Array<{ company?: { id?: string; name?: string } }>;
+  companies?: Array<{
+    allowBackOfficeAccess?: boolean;
+    allowPosAccess?: boolean;
+    branch?: { id?: string; name?: string | null } | null;
+    branchId?: string | null;
+    company?: { branches?: Array<{ id?: string; name?: string | null }>; id?: string; name?: string; storeCode?: string | null } | null;
+    companyId?: string;
+    createdAt?: string;
+    id?: string;
+    isOwner?: boolean;
+    requirePasswordChange?: boolean;
+    status?: string | null;
+  }>;
   createdAt?: string;
   email?: string | null;
   fullName?: string | null;
   id: string;
+  loginHistory?: Array<{ loginTime?: string; status?: string | null }>;
+  phone?: string | null;
+  roles?: Array<{ companyId?: string | null; role?: { name?: string | null; templateKey?: string | null } | null }>;
   status?: string | null;
   username?: string | null;
 };
@@ -220,6 +235,7 @@ type DrawerKind =
   | "store-users"
   | "platform-users"
   | "users"
+  | "user-detail"
   | "roles-permissions"
   | "platform-settings"
   | "platform-notifications"
@@ -594,6 +610,76 @@ const copy: Record<SupportedLocale, Record<string, string>> = {
 };
 
 type CenterCopy = Record<string, string>;
+
+Object.assign(copy.en, {
+  access: "Access",
+  accountStatus: "Account Status",
+  activeUsers: "Active Users",
+  branchAssignmentStatus: "Branch Assignment Status",
+  cashiersStaff: "Cashiers / Staff",
+  changeRole: "Change Role",
+  companyAssignmentStatus: "Company Assignment Status",
+  disableUser: "Disable User",
+  editUser: "Edit User",
+  email: "Email",
+  fullName: "Full Name",
+  loginAccess: "Login & Access",
+  loginIdentifier: "Login Identifier",
+  managers: "Managers",
+  noAccess: "No Access",
+  noUsersConnected: "No users connected yet.",
+  passwordStatus: "Password Status",
+  permissionSummary: "Permission Summary",
+  owners: "Owners",
+  posAccess: "POS Access",
+  resetPassword: "Reset Password",
+  roleName: "Role Name",
+  roleType: "Role Type",
+  storeBackOfficeAccess: "Store Back Office Access",
+  superAdminAccess: "Super Admin Access",
+  temporaryPasswordNotShown: "Not shown",
+  userDetails: "User Details",
+  userOverview: "User Overview",
+  usersMissingAssignment: "Users Missing Assignment",
+  usersWillAppearAfterStoresCreated: "Users will appear here after stores and owner accounts are created.",
+  viewBusiness: "View Business",
+  viewStore: "View Store",
+});
+
+Object.assign(copy.th, {
+  access: "สิทธิ์เข้าถึง",
+  accountStatus: "สถานะบัญชี",
+  activeUsers: "ผู้ใช้ที่ใช้งานอยู่",
+  branchAssignmentStatus: "สถานะการผูกสาขา",
+  cashiersStaff: "แคชเชียร์ / พนักงาน",
+  changeRole: "เปลี่ยนบทบาท",
+  companyAssignmentStatus: "สถานะการผูกธุรกิจ",
+  disableUser: "ปิดใช้งานผู้ใช้",
+  editUser: "แก้ไขผู้ใช้",
+  email: "อีเมล",
+  fullName: "ชื่อเต็ม",
+  loginAccess: "การเข้าสู่ระบบและสิทธิ์",
+  loginIdentifier: "ข้อมูลสำหรับเข้าสู่ระบบ",
+  managers: "ผู้จัดการ",
+  noAccess: "ไม่มีสิทธิ์",
+  noUsersConnected: "ยังไม่มีผู้ใช้",
+  passwordStatus: "สถานะรหัสผ่าน",
+  permissionSummary: "สรุปสิทธิ์",
+  owners: "เจ้าของ",
+  posAccess: "สิทธิ์ POS",
+  resetPassword: "รีเซ็ตรหัสผ่าน",
+  roleName: "ชื่อบทบาท",
+  roleType: "ประเภทบทบาท",
+  storeBackOfficeAccess: "สิทธิ์ Store Back Office",
+  superAdminAccess: "สิทธิ์ Super Admin",
+  temporaryPasswordNotShown: "ไม่แสดง",
+  userDetails: "รายละเอียดผู้ใช้",
+  userOverview: "ภาพรวมผู้ใช้",
+  usersMissingAssignment: "ผู้ใช้ที่ยังไม่มีการผูกสิทธิ์",
+  usersWillAppearAfterStoresCreated: "ผู้ใช้จะแสดงที่นี่หลังจากสร้างร้านและบัญชีเจ้าของ",
+  viewBusiness: "ดูธุรกิจ",
+  viewStore: "ดูร้าน",
+});
 
 Object.assign(copy.en, {
   auditCreated: "Audit Created",
@@ -2414,6 +2500,36 @@ type BusinessDirectoryRow = {
   subscriptionStatus: string;
   template: string;
   warehouseStatus: string;
+};
+
+type UserDirectoryRow = {
+  access: string;
+  activeAssignment: boolean;
+  assignmentId: string;
+  backOfficeAccess: boolean;
+  branchAssignmentStatus: string;
+  businessId: string;
+  businessName: string;
+  companyAssignmentStatus: string;
+  createdAt?: string;
+  email: string;
+  fullName: string;
+  isOwner: boolean;
+  lastActive?: string;
+  loginIdentifier: string;
+  missingAssignment: boolean;
+  permissionSummary: string;
+  phone: string;
+  posAccess: boolean;
+  requirePasswordChange: boolean;
+  roleName: string;
+  roleType: string;
+  status: string;
+  storeCode: string;
+  storeName: string;
+  user: CenterUser;
+  userId: string;
+  username: string;
 };
 
 function PageHeader({
@@ -4801,58 +4917,257 @@ function PlansMatrix({ onAction, role }: { onAction: (drawer: DrawerKind, select
   );
 }
 
-function UsersTable({ onAction, role, users }: { onAction: (drawer: DrawerKind, selected?: unknown) => void; role?: string | null; users: CenterUser[] }) {
+function buildUserDirectoryRows(data: CenterData, c: CenterCopy): UserDirectoryRow[] {
+  return data.users.map((user) => {
+    const assignment = user.companies?.[0] ?? null;
+    const company = assignment?.company ?? null;
+    const store = assignment?.branch ?? company?.branches?.[0] ?? null;
+    const role = user.roles?.find((entry) => !assignment?.companyId || entry.companyId === assignment.companyId)?.role ?? user.roles?.[0]?.role ?? null;
+    const roleName = assignment?.isOwner ? c.owner : role?.name ?? c.noAccess;
+    const backOfficeAccess = Boolean(assignment?.allowBackOfficeAccess);
+    const posAccess = Boolean(assignment?.allowPosAccess);
+    const access = backOfficeAccess && posAccess
+      ? "Back Office / POS"
+      : backOfficeAccess
+        ? "Back Office"
+        : posAccess
+          ? "POS"
+          : c.noAccess;
+    const missingAssignment = !assignment?.companyId || !company?.name || !store?.id;
+    return {
+      access,
+      activeAssignment: String(assignment?.status ?? "").toLowerCase() === "active",
+      assignmentId: assignment?.id ?? "-",
+      backOfficeAccess,
+      branchAssignmentStatus: assignment?.branchId ? c.activeStatus ?? c.active : c.notConnected,
+      businessId: company?.id ?? "-",
+      businessName: company?.name ?? "-",
+      companyAssignmentStatus: assignment?.companyId ? c.activeStatus ?? c.active : c.notConnected,
+      createdAt: user.createdAt,
+      email: user.email ?? "-",
+      fullName: user.fullName ?? user.username ?? user.email ?? "-",
+      isOwner: Boolean(assignment?.isOwner),
+      lastActive: user.loginHistory?.[0]?.loginTime,
+      loginIdentifier: user.email ?? user.username ?? "-",
+      missingAssignment,
+      permissionSummary: access,
+      phone: user.phone ?? "-",
+      posAccess,
+      requirePasswordChange: Boolean(assignment?.requirePasswordChange),
+      roleName,
+      roleType: role?.templateKey ?? (assignment?.isOwner ? "owner" : "store_user"),
+      status: user.status ?? c.notConnected,
+      storeCode: company?.storeCode ?? "-",
+      storeName: store?.name ?? "-",
+      user,
+      userId: user.id,
+      username: user.username ?? "-",
+    };
+  });
+}
+
+function isUserDirectoryRow(value: unknown): value is UserDirectoryRow {
+  return Boolean(value && typeof value === "object" && "userId" in value && "loginIdentifier" in value && "businessName" in value);
+}
+
+function UserDirectoryPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
   const { c } = useCenterCopy();
-  const userActions = [
-    { label: "View user" },
-    isSuperAdminRole(role) ? { label: "Edit user" } : null,
-    canUsePlatformAction(role, PLATFORM_ACTIONS.USER_ROLE_CHANGE) ? { label: "Change role" } : null,
-    isSuperAdminRole(role) ? { label: "Reset password" } : null,
-    isSuperAdminRole(role) ? { label: "Disable user" } : null,
-    { label: "View activity" },
-  ].filter(Boolean) as Array<{ label: string }>;
-  if (!users.length) {
-    return <EmptyState text={c.sectionEmpty} />;
-  }
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [accessFilter, setAccessFilter] = useState("all");
+  const [businessFilter, setBusinessFilter] = useState("all");
+  const rows = buildUserDirectoryRows(data, c);
+  const roleOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(rows.map((row) => row.roleName))).map((role) => ({ label: role, value: role }))];
+  const statusOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(rows.map((row) => row.status))).map((status) => ({ label: status, value: status }))];
+  const businessOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Map(rows.filter((row) => row.businessId !== "-").map((row) => [row.businessId, row.businessName])).entries()).map(([value, label]) => ({ label, value }))];
+  const accessOptions = [
+    { label: c.filterAll, value: "all" },
+    { label: "Back Office", value: "back-office" },
+    { label: "POS", value: "pos" },
+    { label: c.noAccess, value: "none" },
+  ];
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || `${row.fullName} ${row.email} ${row.username} ${row.businessName} ${row.storeName} ${row.storeCode}`.toLowerCase().includes(query);
+    const matchesRole = roleFilter === "all" || row.roleName === roleFilter;
+    const matchesStatus = statusFilter === "all" || row.status === statusFilter;
+    const matchesBusiness = businessFilter === "all" || row.businessId === businessFilter;
+    const matchesAccess = accessFilter === "all"
+      || (accessFilter === "back-office" && row.backOfficeAccess)
+      || (accessFilter === "pos" && row.posAccess)
+      || (accessFilter === "none" && !row.backOfficeAccess && !row.posAccess);
+    return matchesSearch && matchesRole && matchesStatus && matchesBusiness && matchesAccess;
+  });
+  const activeRows = rows.filter((row) => String(row.status).toLowerCase() === "active");
+  const ownerRows = rows.filter((row) => row.isOwner || row.roleName.toLowerCase().includes("owner"));
+  const managerRows = rows.filter((row) => row.roleName.toLowerCase().includes("manager"));
+  const cashierRows = rows.filter((row) => row.roleName.toLowerCase().includes("cashier") || (!row.isOwner && !row.roleName.toLowerCase().includes("manager")));
+  const missingRows = rows.filter((row) => row.missingAssignment);
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[#334155]">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
-          <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
-            <tr>
-              {["Name", "Email / Username", "Role", "Business", "Status", "Last login", "Actions"].map((header) => (
-                <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr className="border-t border-[#334155]" key={user.id}>
-                <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{user.fullName ?? "-"}</td>
-                <td className="px-4 py-3">{user.email ?? user.username ?? "-"}</td>
-                <td className="px-4 py-3">Store user</td>
-                <td className="px-4 py-3">{user.companies?.map((entry) => entry.company?.name).filter(Boolean).join(", ") || "-"}</td>
-                <td className="px-4 py-3"><StatusBadge value={user.status} /></td>
-                <td className="px-4 py-3">-</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    {userActions.map(({ label }) => (
-                      <button
-                        className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]"
-                        key={label}
-                        onClick={() => onAction("user-action", { label, user })}
-                        type="button"
-                      >
-                        {label}
-                      </button>
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.users}
+        subtitle={c.manageBusinessesTemplatesPlansUsersAndPlatformControls}
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder="Search users" value={search} />
+            <FilterSelect label={c.role} onChange={setRoleFilter} options={roleOptions} value={roleFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <FilterSelect label={c.access} onChange={setAccessFilter} options={accessOptions} value={accessFilter} />
+            <FilterSelect label={c.business} onChange={setBusinessFilter} options={businessOptions} value={businessFilter} />
+          </>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard label={c.totalStoreUsers} value={rows.length} />
+        <SummaryCard label={c.activeUsers} value={activeRows.length} />
+        <SummaryCard label={c.owners} value={ownerRows.length} />
+        <SummaryCard label={c.managers} value={managerRows.length} />
+        <SummaryCard label={c.cashiersStaff} value={cashierRows.length} />
+        <SummaryCard label={c.usersMissingAssignment} value={missingRows.length} />
+      </section>
+
+      <section className={dashboardPanelClass()}>
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1320px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[c.fullName, c.email, "Username", c.role, c.business, c.storeName, c.access, c.status, c.lastActive, c.createdAt, c.actions].map((header) => (
+                      <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
                     ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.userId} onClick={() => onAction("user-detail", row)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.fullName}</td>
+                      <td className="px-4 py-3">{row.email}</td>
+                      <td className="px-4 py-3">{row.username}</td>
+                      <td className="px-4 py-3">{row.roleName}</td>
+                      <td className="px-4 py-3">{row.businessName}</td>
+                      <td className="px-4 py-3">{row.storeName}</td>
+                      <td className="px-4 py-3">{row.access}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3">{row.lastActive ? new Date(row.lastActive).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3">{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("user-detail", row); }} type="button">
+                            {c.viewDetails}
+                          </button>
+                          <DisabledPillButton label={c.disabledNotConnected} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel title={c.noUsersConnected} description={c.usersWillAppearAfterStoresCreated} />
+        )}
+        <div className="mt-4">
+          <Link className="inline-flex rounded-md border border-[#5EEAD4] px-3 py-2 text-sm font-semibold text-[#5EEAD4]" href="/super-admin/stores/new">
+            {c.createBusiness}
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function UserDirectoryDetail({ row }: { row: UserDirectoryRow }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.userOverview} subtitle={row.email} />
+        <DetailGrid
+          rows={[
+            ["User ID", row.userId],
+            [c.fullName, row.fullName],
+            [c.email, row.email],
+            ["Username", row.username],
+            ["Phone", row.phone],
+            [c.status, <StatusBadge key="user-status" value={row.status} />],
+            [c.createdAt, row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.rolesPermissions} subtitle={row.roleName} />
+        <DetailGrid
+          rows={[
+            [c.roleName, row.roleName],
+            [c.roleType, row.roleType],
+            [c.permissionSummary, row.permissionSummary],
+            [c.superAdminAccess, c.noAccess],
+            [c.storeBackOfficeAccess, <StatusBadge key="bo" value={row.backOfficeAccess ? c.activeStatus ?? c.active : c.noAccess} />],
+            [c.posAccess, <StatusBadge key="pos" value={row.posAccess ? c.activeStatus ?? c.active : c.noAccess} />],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessDetails} subtitle={row.businessName} />
+        <DetailGrid
+          rows={[
+            [c.business, row.businessName],
+            [c.storeName, row.storeName],
+            [c.storeCode, row.storeCode],
+            [c.companyAssignmentStatus, <StatusBadge key="company-assignment" value={row.companyAssignmentStatus} />],
+            [c.branchAssignmentStatus, <StatusBadge key="branch-assignment" value={row.branchAssignmentStatus} />],
+            [c.activeAssignment, <StatusBadge key="active-assignment" value={row.activeAssignment ? c.activeStatus ?? c.active : c.noAccess} />],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.loginAccess} subtitle={row.loginIdentifier} />
+        <DetailGrid
+          rows={[
+            [c.lastActive, row.lastActive ? new Date(row.lastActive).toLocaleString() : "-"],
+            [c.loginIdentifier, row.loginIdentifier],
+            [c.accountStatus, <StatusBadge key="account-status" value={row.status} />],
+            [c.passwordStatus, c.temporaryPasswordNotShown],
+          ]}
+        />
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <Link className="rounded-md border border-[#5EEAD4] px-3 py-2 text-xs font-semibold text-[#5EEAD4]" href="/super-admin/businesses">
+          {c.viewBusiness}
+        </Link>
+        <Link className="rounded-md border border-[#5EEAD4] px-3 py-2 text-xs font-semibold text-[#5EEAD4]" href="/super-admin/stores">
+          {c.viewStore}
+        </Link>
+        <DisabledPillButton label={c.resetPassword} />
+        <DisabledPillButton label={c.disableUser} />
+        <DisabledPillButton label={c.editUser} />
+        <DisabledPillButton label={c.changeRole} />
+      </section>
+
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.technicalMetadata,
+            value: {
+              assignmentId: row.assignmentId,
+              businessId: row.businessId,
+              roleType: row.roleType,
+              storeCode: row.storeCode,
+              userId: row.userId,
+            },
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -5139,15 +5454,14 @@ function DrawerContent({
   }
   if (drawer === "users") {
     if (!canViewSuperAdminSection(role, "users")) return <AccessDeniedPanel />;
-    return (
-      <div className="grid gap-4">
-        <div className="flex flex-wrap gap-2">
-          <button className="rounded-md border border-[#5EEAD4] px-3 py-2 text-sm font-semibold" onClick={() => onAction("platform-users")} type="button">Platform Users</button>
-          <button className="rounded-md border border-[#5EEAD4] px-3 py-2 text-sm font-semibold" onClick={() => onAction("store-users")} type="button">Store Users</button>
-        </div>
-        <UsersTable users={data.users} onAction={onAction} role={role} />
-      </div>
-    );
+    return <UserDirectoryPage data={data} onAction={onAction} />;
+  }
+  if (drawer === "user-detail") {
+    if (!canViewSuperAdminSection(role, "users")) return <AccessDeniedPanel />;
+    if (isUserDirectoryRow(selected)) {
+      return <UserDirectoryDetail row={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
   }
   if (drawer === "roles-permissions") {
     if (!canViewSuperAdminSection(role, "roles")) return <AccessDeniedPanel />;
@@ -5176,7 +5490,7 @@ function DrawerContent({
   }
   if (drawer === "store-users") {
     if (!canViewSuperAdminSection(role, "users")) return <AccessDeniedPanel />;
-    return <UsersTable users={data.users} onAction={onAction} role={role} />;
+    return <UserDirectoryPage data={data} onAction={onAction} />;
   }
   if (drawer === "platform-users") {
     if (!canViewSuperAdminSection(role, "users")) return <AccessDeniedPanel />;
@@ -5376,6 +5690,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "template-view": c.posTemplates,
     templates: c.posTemplates,
     users: c.users,
+    "user-detail": c.userDetails,
     "user-action": c.users,
   };
   return drawer ? map[drawer] ?? c.sidebarBrand : c.sidebarBrand;
@@ -5861,17 +6176,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
     if (section === "plans") return <PlansMatrix onAction={open} role={role} />;
     if (section === "subscriptions") return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={open} role={role} />;
     if (section === "users") {
-      return (
-        <div className="grid gap-4">
-          {isSuperAdminRole(role) ? (
-            <div className="flex flex-wrap gap-2">
-              <button className="rounded-md border border-[#5EEAD4] px-3 py-2 text-sm font-semibold" onClick={() => open("platform-users")} type="button">Platform Users</button>
-              <button className="rounded-md border border-[#5EEAD4] px-3 py-2 text-sm font-semibold" onClick={() => open("store-users")} type="button">Store Users</button>
-            </div>
-          ) : null}
-          <UsersTable users={data.users} onAction={open} role={role} />
-        </div>
-      );
+      return <UserDirectoryPage data={data} onAction={open} />;
     }
     if (section === "roles") {
       return (
