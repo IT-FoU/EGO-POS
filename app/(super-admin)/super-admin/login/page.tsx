@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { LogoContainer } from "@/components/brand/logo-container";
-import { PortalLocaleSwitcher } from "@/components/auth/portal-locale-switcher";
-import { PortalLoginForm } from "@/components/auth/portal-login-form";
+import type { CSSProperties } from "react";
+import { SuperAdminLoginCard } from "@/components/auth/super-admin-login-card";
 import { getAdminSession } from "@/lib/admin/session";
-import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function SuperAdminLoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ locale?: string }>;
+  searchParams?: Promise<{ locale?: string | string[] }> | { locale?: string | string[] };
 }) {
   const session = await getAdminSession();
 
@@ -20,33 +18,31 @@ export default async function SuperAdminLoginPage({
     redirect("/super-admin");
   }
 
-  const params = await searchParams;
+  const params = await Promise.resolve(searchParams);
   const cookieStore = await cookies();
-  const locale = getServerLocale(params?.locale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  const dictionary = getDictionary(locale);
+  const queryLocale = Array.isArray(params?.locale) ? params?.locale[0] : params?.locale;
+  const locale = getServerLocale(queryLocale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <section className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl md:p-8">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <LogoContainer className="shadow-lg" size={96} />
-          <h1 className="mt-5 text-3xl font-semibold">{dictionary.superAdminPortal}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{dictionary.superAdminLoginSubtitle}</p>
-        </div>
-        <div className="mb-6 flex justify-center">
-          <PortalLocaleSwitcher locale={locale} loginPath="/super-admin/login" />
-        </div>
-        <PortalLoginForm
-          dictionary={dictionary}
-          identifierAutoComplete="email"
-          identifierLabel={dictionary.email}
-          identifierName="email"
-          identifierType="email"
-          loginApiPath="/api/super-admin/login"
-          passwordLabel={dictionary.password}
-          redirectTo="/super-admin"
-        />
-      </section>
+    <main
+      className="ego-center-theme relative flex min-h-screen overflow-hidden bg-[#020617] px-4 py-8 text-[#F8FAFC] sm:px-6"
+      style={
+        {
+          "--center-bg-deep": "#020617",
+          "--center-bg-main": "#0F172A",
+          "--center-border": "#334155",
+          "--center-card-bg": "#111827",
+          "--center-panel-bg": "#1E293B",
+          "--center-primary": "#5EEAD4",
+          "--center-primary-active": "#14B8A6",
+          "--center-primary-hover": "#2DD4BF",
+          "--center-text-muted": "#94A3B8",
+          "--center-text-primary": "#F8FAFC",
+          "--center-text-secondary": "#CBD5E1",
+        } as CSSProperties
+      }
+    >
+      <SuperAdminLoginCard initialLocale={locale} />
     </main>
   );
 }

@@ -50,10 +50,12 @@ export function LoginForm({
   demoMode = false,
   dictionary,
   locale: _locale,
+  registerHref = "/register",
 }: {
   demoMode?: boolean;
   dictionary: LoginDictionary;
   locale?: "en" | "th";
+  registerHref?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -246,7 +248,7 @@ export function LoginForm({
       </button>
       <Link
         className="flex h-12 items-center justify-center rounded-md border border-border px-5 text-base font-semibold text-card-foreground transition hover:border-primary"
-        href="/register"
+        href={registerHref}
       >
         {dictionary.registerNewAccount}
       </Link>
