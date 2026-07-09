@@ -121,13 +121,66 @@ export async function getAdminBusinesses(role?: string | null) {
         },
         branches: {
           orderBy: [{ isMainBranch: "desc" }, { createdAt: "asc" }],
-          take: 1,
+          select: {
+            address: true,
+            createdAt: true,
+            id: true,
+            isMainBranch: true,
+            name: true,
+            phone: true,
+            updatedAt: true,
+          },
+        },
+        members: {
+          orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
+          select: {
+            allowBackOfficeAccess: true,
+            allowPosAccess: true,
+            branchId: true,
+            createdAt: true,
+            id: true,
+            isOwner: true,
+            status: true,
+            user: {
+              select: { email: true, fullName: true, id: true, phone: true, username: true },
+            },
+          },
+          take: 5,
         },
         owner: {
           select: { email: true, fullName: true, id: true, phone: true, username: true },
         },
         plan: {
           select: { monthlyPrice: true, planName: true },
+        },
+        settings: {
+          select: {
+            baseCurrency: true,
+            currencyDisplay: true,
+            profileAddress: true,
+            profileEmail: true,
+            profilePhone: true,
+          },
+        },
+        subscriptions: {
+          orderBy: { startDate: "desc" },
+          select: {
+            endDate: true,
+            id: true,
+            plan: { select: { planName: true } },
+            startDate: true,
+            status: true,
+          },
+          take: 1,
+        },
+        warehouses: {
+          orderBy: [{ createdAt: "asc" }],
+          select: {
+            branchId: true,
+            id: true,
+            name: true,
+            type: true,
+          },
         },
       },
       orderBy: { createdAt: "desc" },

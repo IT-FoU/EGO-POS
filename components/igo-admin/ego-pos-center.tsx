@@ -50,14 +50,43 @@ import { cn } from "@/lib/utils";
 
 type CenterBusiness = {
   _count?: { branches?: number; members?: number };
-  branches?: Array<{ name?: string | null }>;
+  baseCurrency?: string | null;
+  branches?: Array<{
+    address?: string | null;
+    createdAt?: string;
+    id?: string;
+    isMainBranch?: boolean;
+    name?: string | null;
+    phone?: string | null;
+    updatedAt?: string;
+  }>;
   createdAt?: string;
+  defaultLocale?: string | null;
   id: string;
+  members?: Array<{
+    allowBackOfficeAccess?: boolean;
+    allowPosAccess?: boolean;
+    branchId?: string | null;
+    id?: string;
+    isOwner?: boolean;
+    status?: string | null;
+    user?: { email?: string | null; fullName?: string | null; id?: string; phone?: string | null; username?: string | null } | null;
+  }>;
   name: string;
-  owner?: { email?: string | null; fullName?: string | null; phone?: string | null; username?: string | null } | null;
+  owner?: { email?: string | null; fullName?: string | null; id?: string; phone?: string | null; username?: string | null } | null;
   plan?: { monthlyPrice?: string | number | null; planName?: string | null } | null;
+  settings?: {
+    baseCurrency?: string | null;
+    currencyDisplay?: string | null;
+    profileAddress?: string | null;
+    profileEmail?: string | null;
+    profilePhone?: string | null;
+  } | null;
   status?: string | null;
+  storeCode?: string | null;
+  subscriptions?: Array<{ endDate?: string | null; id?: string; plan?: { planName?: string | null } | null; startDate?: string; status?: string | null }>;
   businessTemplateKey?: string | null;
+  warehouses?: Array<{ branchId?: string | null; id?: string; name?: string | null; type?: string | null }>;
 };
 
 type CenterUser = {
@@ -608,6 +637,10 @@ Object.assign(copy.th, {
   viewAll: "ดูทั้งหมด",
 });
 
+Object.assign(copy.th, {
+  language: "ภาษา",
+});
+
 Object.assign(copy.en, {
   action: "Action",
   accessDenied: "Access denied",
@@ -943,6 +976,35 @@ Object.assign(copy.th, {
   templates: "เทมเพลต",
 });
 
+Object.assign(copy.th, {
+  activeStores: "ร้านที่ใช้งานอยู่",
+  actions: "การทำงาน",
+  activeAssignment: "การผูกสิทธิ์ใช้งาน",
+  backOfficeAccess: "สิทธิ์ Back Office",
+  branchId: "รหัสสาขา",
+  businessProfile: "ข้อมูลธุรกิจ",
+  companyId: "รหัสธุรกิจ",
+  createdAt: "วันที่สร้าง",
+  disableStore: "ปิดใช้งานร้าน",
+  editStore: "แก้ไขร้าน",
+  freePlanStores: "ร้านแผน Free",
+  miniMartStores: "ร้าน Mini Mart",
+  missingData: "ข้อมูลไม่ครบ",
+  missingStoreData: "ข้อมูลไม่ครบ",
+  openDashboard: "เปิดแดชบอร์ด",
+  ownerEmail: "อีเมลเจ้าของ",
+  ownerPhone: "เบอร์โทรเจ้าของ",
+  ownerUsername: "ชื่อผู้ใช้เจ้าของ",
+  posAccess: "สิทธิ์ POS",
+  resetOwnerPassword: "รีเซ็ตรหัสผ่านเจ้าของ",
+  setupComplete: "ตั้งค่าครบ",
+  storeCode: "รหัสร้าน",
+  storeDetails: "รายละเอียดร้าน",
+  storeOverview: "ภาพรวมร้าน",
+  subscriptionStatus: "สถานะแพ็กเกจ",
+  warehouseCreated: "สร้างคลังแล้ว",
+});
+
 Object.assign(copy.en, {
   actionCenterSubtitle: "Review approvals, sync issues, store alerts, plan issues, and system warnings.",
   actionDataNotConnected: "No connected action data yet.",
@@ -989,7 +1051,35 @@ Object.assign(copy.en, {
   securityAlerts: "Security Alerts",
   securityAlertsDescription: "Denied access, failed actions, and security warnings from audit logs.",
   storeDataNotConnected: "Store data is not connected yet.",
+  activeStores: "Active Stores",
+  miniMartStores: "Mini Mart Stores",
+  freePlanStores: "Free Plan Stores",
+  missingStoreData: "Missing Data",
   storeName: "Store Name",
+  storeCode: "Store Code",
+  createdAt: "Created At",
+  actions: "Actions",
+  storeDetails: "Store Details",
+  storeOverview: "Store Overview",
+  companyId: "Company ID",
+  branchId: "Branch ID",
+  language: "Language",
+  ownerEmail: "Owner Email",
+  ownerUsername: "Owner Username",
+  ownerPhone: "Owner Phone",
+  businessProfile: "Business Profile",
+  accessSetup: "Access & Setup",
+  backOfficeAccess: "Back Office Access",
+  posAccess: "POS Access",
+  activeAssignment: "Active Assignment",
+  warehouseCreated: "Warehouse Created",
+  subscriptionStatus: "Subscription Status",
+  setupComplete: "Setup Complete",
+  missingData: "Missing data",
+  openDashboard: "Open Dashboard",
+  resetOwnerPassword: "Reset Owner Password",
+  disableStore: "Disable Store",
+  editStore: "Edit Store",
   storePerformanceNotConnected: "Store performance data is not connected yet.",
   storePerformanceNotConnectedSubtext: "Connect sales, activity, stock, and sync data to calculate performance scores.",
   storePerformancePageTitle: "Store Performance",
@@ -2229,14 +2319,32 @@ type RecentActivityRow = {
 };
 
 type StoreDirectoryRow = {
+  activeAssignment: boolean;
+  address: string;
+  backOfficeAccess: string;
+  branchId: string;
   business: CenterBusiness;
   businessName: string;
+  companyId: string;
+  createdAt?: string;
+  currency: string;
+  language: string;
   lastActive?: string;
+  missingDataCount: number;
   owner: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  ownerUsername: string;
   plan: string;
+  posAccess: string;
+  rowId: string;
+  setupStatus: string;
   status: string;
+  storeCode: string;
   storeName: string;
+  subscriptionStatus: string;
   template: string;
+  warehouseStatus: string;
 };
 
 function PageHeader({
@@ -2670,19 +2778,55 @@ function CenterLogDetail({ log }: { log: CenterLog }) {
 }
 
 function buildStoreDirectoryRows(data: CenterData, c: CenterCopy): StoreDirectoryRow[] {
-  return data.businesses.map((business) => {
+  return data.businesses.flatMap((business) => {
+    const branches = business.branches?.length ? business.branches : [null];
     const lastActive = latestActivityForBusiness(data.storeActivityLogs, business.id);
-    const status = String(business.status ?? "").toLowerCase().includes("maintenance") ? c.maintenance : c.notConnected;
-    return {
-      business,
-      businessName: business.name,
-      lastActive,
-      owner: business.owner?.fullName ?? business.owner?.email ?? business.owner?.username ?? "-",
-      plan: business.plan?.planName ?? c.free,
-      status,
-      storeName: business.branches?.[0]?.name ?? business.name,
-      template: posTemplateNameFromKey(business.businessTemplateKey, c),
-    };
+    const ownerMember = business.members?.find((member) => member.isOwner) ?? business.members?.[0];
+    const owner = business.owner ?? ownerMember?.user ?? null;
+    const subscription = business.subscriptions?.[0];
+    const plan = subscription?.plan?.planName ?? business.plan?.planName ?? c.free;
+    const businessStatus = business.status ?? c.notConnected;
+    return branches.map((branch) => {
+      const branchWarehouses = business.warehouses?.filter((warehouse) => !branch?.id || warehouse.branchId === branch.id) ?? [];
+      const activeAssignment = Boolean(ownerMember && (!branch?.id || !ownerMember.branchId || ownerMember.branchId === branch.id));
+      const missingDataCount = [
+        !branch?.id,
+        !business.storeCode,
+        !owner?.email && !owner?.username,
+        !business.businessTemplateKey,
+        !plan,
+        !branchWarehouses.length,
+        !activeAssignment,
+      ].filter(Boolean).length;
+      return {
+        activeAssignment,
+        address: branch?.address ?? business.settings?.profileAddress ?? "-",
+        backOfficeAccess: ownerMember?.allowBackOfficeAccess === false ? c.disabled : c.activeStatus ?? c.active ?? "Active",
+        branchId: branch?.id ?? "-",
+        business,
+        businessName: business.name,
+        companyId: business.id,
+        createdAt: branch?.createdAt ?? business.createdAt,
+        currency: business.settings?.currencyDisplay ?? business.settings?.baseCurrency ?? business.baseCurrency ?? "LAK",
+        language: business.defaultLocale ?? "-",
+        lastActive,
+        missingDataCount,
+        owner: owner?.fullName ?? owner?.email ?? owner?.username ?? "-",
+        ownerEmail: owner?.email ?? "-",
+        ownerPhone: owner?.phone ?? "-",
+        ownerUsername: owner?.username ?? "-",
+        plan,
+        posAccess: ownerMember?.allowPosAccess === false ? c.disabled : c.activeStatus ?? c.active ?? "Active",
+        rowId: `${business.id}:${branch?.id ?? "missing-branch"}`,
+        setupStatus: missingDataCount > 0 ? c.missingData : c.setupComplete,
+        status: businessStatus,
+        storeCode: business.storeCode ?? "-",
+        storeName: branch?.name ?? business.name,
+        subscriptionStatus: subscription?.status ?? (plan.toLowerCase().includes("free") ? c.activeStatus ?? c.active ?? "Active" : c.notConnected),
+        template: posTemplateNameFromKey(business.businessTemplateKey, c),
+        warehouseStatus: branchWarehouses.length ? `${branchWarehouses.length}` : c.notConnected,
+      };
+    });
   });
 }
 
@@ -2694,22 +2838,25 @@ function StoresPage({ data, onAction }: { data: CenterData; onAction: (drawer: D
   const [statusFilter, setStatusFilter] = useState("all");
   const rows = buildStoreDirectoryRows(data, c);
   const templateOptions = [{ label: c.filterAll, value: "all" }, ...templateDefinitions.map((template) => ({ label: posTemplateName(template, c), value: template.key }))];
-  const planOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(data.businesses.map((business) => business.plan?.planName ?? c.free))).map((plan) => ({ label: plan, value: plan }))];
+  const planOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(rows.map((row) => row.plan))).map((plan) => ({ label: plan, value: plan }))];
+  const statusValues = Array.from(new Set(rows.map((row) => row.status).filter(Boolean)));
   const statusOptions = [
     { label: c.filterAll, value: "all" },
-    { label: c.onlineStores, value: "online" },
-    { label: c.offlineStores, value: "offline" },
-    { label: c.maintenance, value: "maintenance" },
-    { label: c.notConnected, value: c.notConnected },
+    ...statusValues.map((status) => ({ label: status, value: status })),
+    { label: c.missingStoreData, value: "missing-data" },
   ];
   const visibleRows = rows.filter((row) => {
     const query = search.trim().toLowerCase();
-    const matchesSearch = !query || `${row.storeName} ${row.businessName} ${row.owner}`.toLowerCase().includes(query);
+    const matchesSearch = !query || `${row.storeName} ${row.businessName} ${row.owner} ${row.ownerEmail} ${row.storeCode}`.toLowerCase().includes(query);
     const matchesTemplate = templateFilter === "all" || normalizePosTemplateKey(row.business.businessTemplateKey) === templateFilter;
     const matchesPlan = planFilter === "all" || row.plan === planFilter;
-    const matchesStatus = statusFilter === "all" || row.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || row.status === statusFilter || (statusFilter === "missing-data" && row.missingDataCount > 0);
     return matchesSearch && matchesTemplate && matchesPlan && matchesStatus;
   });
+  const activeRows = rows.filter((row) => String(row.status).toLowerCase() === "active");
+  const miniMartRows = rows.filter((row) => normalizePosTemplateKey(row.business.businessTemplateKey) === "mini-mart");
+  const freePlanRows = rows.filter((row) => row.plan.toLowerCase().includes("free"));
+  const missingRows = rows.filter((row) => row.missingDataCount > 0);
 
   return (
     <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
@@ -2723,43 +2870,50 @@ function StoresPage({ data, onAction }: { data: CenterData; onAction: (drawer: D
             <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
             <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
             <RefreshButton />
-            <DisabledPillButton label={c.disabledNotConnected} />
+            <Link className="inline-flex h-10 items-center rounded-md border border-[#5EEAD4] px-3 text-sm font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
+              {c.addStore}
+            </Link>
           </>
         }
       />
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
         <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.totalStores} value={rows.length} />
-        <SummaryCard helper={c.storeDataNotConnected} label={c.onlineStores} value={0} />
-        <SummaryCard helper={c.storeDataNotConnected} label={c.offlineStores} value={0} />
-        <SummaryCard helper={c.storeDataNotConnected} label={c.maintenance} value={rows.filter((row) => row.status === c.maintenance).length} />
-        <SummaryCard helper={c.storeDataNotConnected} label={c.notConnected} value={rows.filter((row) => row.status === c.notConnected).length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.activeStores} value={activeRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.miniMartStores} value={miniMartRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.freePlanStores} value={freePlanRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.missingStoreData} value={missingRows.length} />
       </section>
       <section className={dashboardPanelClass()}>
         <CommandSectionTitle title={c.storesPageTitle} subtitle={c.storeDataNotConnected} />
         {visibleRows.length ? (
           <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
             <div className="max-w-full overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-collapse text-sm">
+              <table className="w-full min-w-[1320px] border-collapse text-sm">
                 <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
                   <tr>
-                    {[c.storeName, c.business, c.owner, c.template, c.plan, c.status, c.lastActive, "Actions"].map((header) => (
+                    {[c.storeName, c.business, c.storeCode, c.owner, c.template, c.plan, c.status, c.lastActive, c.createdAt, c.actions].map((header) => (
                       <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {visibleRows.map((row) => (
-                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.business.id} onClick={() => onAction("business-view", row.business)}>
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.rowId} onClick={() => onAction("business-view", row)}>
                       <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.storeName}</td>
                       <td className="px-4 py-3">{row.businessName}</td>
-                      <td className="px-4 py-3">{row.owner}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[#CBD5E1]">{row.storeCode}</td>
+                      <td className="px-4 py-3">
+                        <div>{row.owner}</div>
+                        <div className="text-xs text-[#94A3B8]">{row.ownerEmail}</div>
+                      </td>
                       <td className="px-4 py-3">{row.template}</td>
                       <td className="px-4 py-3">{row.plan}</td>
                       <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
                       <td className="px-4 py-3">{row.lastActive ? new Date(row.lastActive).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3">{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-"}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
-                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("business-view", row.business); }} type="button">
+                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("business-view", row); }} type="button">
                             {c.viewDetails}
                           </button>
                           <DisabledPillButton label={c.disabledNotConnected} />
@@ -2775,6 +2929,99 @@ function StoresPage({ data, onAction }: { data: CenterData; onAction: (drawer: D
           <EmptyPanel title={c.storesTableEmpty} description={c.storesTableEmptySubtext} />
         )}
       </section>
+    </div>
+  );
+}
+
+function isStoreDirectoryRow(value: unknown): value is StoreDirectoryRow {
+  return Boolean(value && typeof value === "object" && "rowId" in value && "business" in value && "storeCode" in value);
+}
+
+function StoreDirectoryDetail({ row }: { row: StoreDirectoryRow }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.storeOverview} subtitle={row.storeName} />
+        <DetailGrid
+          rows={[
+            [c.storeName, row.storeName],
+            [c.storeCode, row.storeCode],
+            [c.branchId, row.branchId],
+            [c.companyId, row.companyId],
+            [c.template, row.template],
+            [c.plan, row.plan],
+            [c.status, <StatusBadge key="status" value={row.status} />],
+            [c.createdAt, row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.ownerAccount} subtitle={row.ownerEmail} />
+        <DetailGrid
+          rows={[
+            [c.owner, row.owner],
+            [c.ownerEmail, row.ownerEmail],
+            [c.ownerUsername, row.ownerUsername],
+            [c.ownerPhone, row.ownerPhone],
+            [c.role, c.owner],
+            [c.status, <StatusBadge key="owner-status" value={row.activeAssignment ? c.activeStatus ?? c.active ?? "Active" : c.notConnected} />],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessProfile} subtitle={row.businessName} />
+        <DetailGrid
+          rows={[
+            [c.business, row.businessName],
+            [c.currency, row.currency],
+            [c.language, row.language],
+            [c.country, "-"],
+            [c.branch, row.storeName],
+            ["Address", row.address],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.accessSetup} subtitle={row.setupStatus} />
+        <DetailGrid
+          rows={[
+            [c.backOfficeAccess, <StatusBadge key="back-office" value={row.backOfficeAccess} />],
+            [c.posAccess, <StatusBadge key="pos" value={row.posAccess} />],
+            [c.activeAssignment, <StatusBadge key="assignment" value={row.activeAssignment ? c.activeStatus ?? c.active ?? "Active" : c.notConnected} />],
+            [c.warehouseCreated, <StatusBadge key="warehouse" value={row.warehouseStatus} />],
+            [c.subscriptionStatus, <StatusBadge key="subscription" value={row.subscriptionStatus} />],
+            [c.missingStoreData, row.missingDataCount],
+          ]}
+        />
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <DisabledPillButton label={c.openDashboard} />
+        <DisabledPillButton label={c.resetOwnerPassword} />
+        <DisabledPillButton label={c.disableStore} />
+        <DisabledPillButton label={c.changePlan} />
+        <DisabledPillButton label={c.editStore} />
+      </section>
+
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.technicalMetadata,
+            value: {
+              branchId: row.branchId,
+              companyId: row.companyId,
+              ownerEmail: row.ownerEmail,
+              ownerUsername: row.ownerUsername,
+              storeCode: row.storeCode,
+              warehouseCount: row.business.warehouses?.length ?? 0,
+            },
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -4468,6 +4715,13 @@ function DrawerContent({
     });
     return <BusinessTable businesses={filtered} onAction={onAction} role={role} />;
   }
+  if (drawer === "business-view") {
+    if (!canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW)) return <AccessDeniedPanel />;
+    if (isStoreDirectoryRow(selected)) {
+      return <StoreDirectoryDetail row={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
+  }
   if (drawer === "templates") {
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.POS_TEMPLATE_VIEW)) return <AccessDeniedPanel />;
     return <TemplateList businesses={data.businesses} onAction={onAction} />;
@@ -4735,7 +4989,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "business-owner": c.manageOwner,
     "business-plan": c.changePlan,
     "business-suspend": c.archiveDelete,
-    "business-view": c.businessDetails,
+    "business-view": c.storeDetails,
     "audit-details": c.auditDetails,
     "active-stores-today": c.activeStoresToday,
     "bills-today": c.totalBillsToday,
