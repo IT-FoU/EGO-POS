@@ -7,6 +7,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   Activity,
   ArrowLeft,
+  ArrowDownRight,
+  ArrowUpRight,
   BarChart3,
   Bell,
   Building2,
@@ -15,16 +17,20 @@ import {
   ChevronRight,
   ClipboardList,
   CreditCard,
+  Download,
   Gauge,
   LayoutDashboard,
   Lock,
+  Minus,
   Maximize2,
   Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
+  RefreshCw,
   Settings,
   Shield,
   Sparkles,
+  Store,
   Users,
   X,
   type LucideIcon,
@@ -141,9 +147,28 @@ type CenterSubscription = {
   status?: string;
 };
 
+type CommandDashboardData = {
+  generatedAt?: string;
+  range?: { from: string; to: string };
+  salesByBusiness: Array<{
+    billCount: number;
+    businessId: string;
+    salesLak: number;
+    todayBillCount: number;
+    todaySalesLak: number;
+  }>;
+  salesByDay: Array<{
+    billCount: number;
+    date: string;
+    salesLak: number;
+  }>;
+  status: "connected" | "unavailable";
+};
+
 type CenterData = {
   auditLogs: CenterLog[];
   businesses: CenterBusiness[];
+  commandDashboard?: CommandDashboardData;
   currentPlatformUser?: { email: string; id: string; name: string; role: string } | null;
   platformAuditLogs: PlatformAuditLog[];
   platformUsersCount: number;
@@ -170,10 +195,18 @@ type DrawerKind =
   | "subscription-revenue"
   | "subscriptions"
   | "pending-actions"
+  | "active-stores-today"
+  | "sales-today"
+  | "bills-today"
   | "create-business"
   | "templates"
   | "plans"
   | "recent-activity"
+  | "store-performance-detail"
+  | "plan-analytics-detail"
+  | "system-health-detail"
+  | "integration-detail"
+  | "backup-restore-detail"
   | "business-view"
   | "business-edit"
   | "business-plan"
@@ -210,6 +243,16 @@ type SectionKind =
   | "roles"
   | "audit"
   | "settings";
+
+type PlaceholderSectionKind =
+  | "actionCenter"
+  | "recentActivity"
+  | "stores"
+  | "storePerformance"
+  | "planAnalytics"
+  | "systemHealth"
+  | "integrations"
+  | "backupRestore";
 
 function normalizeUiPlatformRole(role: string | null | undefined) {
   const normalized = String(role ?? "").trim().toLowerCase();
@@ -268,11 +311,19 @@ function canViewSuperAdminSection(role: string | null | undefined, section: Sect
 function canViewNavHref(role: string | null | undefined, href: string) {
   const sectionByHref: Record<string, SectionKind | "dashboard"> = {
     "/super-admin": "dashboard",
+    "/super-admin/action-center": "dashboard",
     "/super-admin/audit-logs": "audit",
+    "/super-admin/backup-restore": "settings",
     "/super-admin/businesses": "businesses",
+    "/super-admin/integrations": "settings",
+    "/super-admin/plan-analytics": "plans",
     "/super-admin/plans": "plans",
+    "/super-admin/recent-activity": "audit",
     "/super-admin/roles": "roles",
     "/super-admin/settings": "settings",
+    "/super-admin/store-performance": "businesses",
+    "/super-admin/stores": "businesses",
+    "/super-admin/system-health": "settings",
     "/super-admin/subscriptions": "subscriptions",
     "/super-admin/templates": "templates",
     "/super-admin/users": "users",
@@ -592,6 +643,76 @@ Object.assign(copy.en, {
   userAgent: "User Agent",
 });
 
+Object.assign(copy.en, {
+  actionCenter: "Action Center",
+  activeStoresToday: "Active Stores Today",
+  advancedDetails: "Advanced Details",
+  all: "All",
+  appStatus: "App status",
+  averageBill: "Average Bill",
+  backupStatus: "Backup status",
+  backupRestore: "Backup & Restore",
+  billCount: "Bill count",
+  bills: "Bills",
+  commandDashboardTitle: "EGO POS Center Dashboard",
+  critical: "Critical",
+  databaseStatus: "Database status",
+  dateRange: "Date range",
+  disabled: "Disabled",
+  emptyNoActions: "No actions need attention right now.",
+  emptyNoActivity: "No activity yet.",
+  emptyNoSalesData: "No sales data yet.",
+  emptyNoStorePerformance: "No store performance data yet.",
+  emptySystemHealth: "System health checks are not connected yet.",
+  error: "Error",
+  export: "Export",
+  exportNotReady: "Export is not connected yet.",
+  info: "Info",
+  login: "Login",
+  monthlyPlatformRevenue: "Monthly Platform Revenue",
+  noData: "No data",
+  notEnoughData: "Not enough data",
+  ordersBills: "Orders / Bills",
+  planAnalytics: "Plan Analytics",
+  planManagement: "Plan Management",
+  performanceScore: "Performance Score",
+  platformSalesOverview: "Platform Sales Overview",
+  refresh: "Refresh",
+  salesAmount: "Sales amount",
+  sales: "Sales",
+  scoreHelp: "Score is based on sales activity, store activity, stock alerts, sync status, and unresolved issues.",
+  sectionNotConnectedYet: "This section is not connected yet.",
+  stockAlerts: "Stock Alerts",
+  store: "Store",
+  storeHealth: "Store health",
+  storePerformance: "Store Performance",
+  storesNav: "Stores",
+  syncStatus: "Sync Status",
+  systemApiStatus: "API status",
+  systemHealthNotConnected: "System health checks are not connected yet.",
+  templateDataNotConnected: "Template data not connected yet.",
+  technicalMetadata: "Technical metadata",
+  thisMonth: "This Month",
+  thirtyDays: "30 Days",
+  today: "Today",
+  todaySales: "Today Sales",
+  topStoresBySales: "Top 10 Stores by Sales",
+  totalBillsToday: "Total Bills Today",
+  totalPlatformSales: "Total platform sales",
+  totalSalesToday: "Total Sales Today",
+  rawPayload: "Raw payload",
+  readableSummary: "Summary",
+  trialPlan: "Trial",
+  upgradePending: "Upgrade pending",
+  sevenDaySales: "7-day sales",
+  sevenDays: "7 Days",
+  viewActivity: "View activity",
+  viewPlan: "View plan",
+  viewTemplateStatus: "View template status",
+  vsPreviousPeriod: "vs previous period",
+  warning: "Warning",
+});
+
 Object.assign(copy.th, {
   action: "การทำงาน",
   accessDenied: "ไม่มีสิทธิ์",
@@ -628,8 +749,81 @@ Object.assign(copy.th, {
   userAgent: "User Agent",
 });
 
+Object.assign(copy.th, {
+  actionCenter: "ศูนย์การดำเนินการ",
+  activeStoresToday: "ร้านที่ใช้งานวันนี้",
+  advancedDetails: "รายละเอียดขั้นสูง",
+  all: "ทั้งหมด",
+  appStatus: "สถานะแอป",
+  averageBill: "บิลเฉลี่ย",
+  backupStatus: "สถานะสำรองข้อมูล",
+  backupRestore: "สำรองและกู้คืน",
+  billCount: "จำนวนบิล",
+  bills: "บิล",
+  commandDashboardTitle: "แดชบอร์ด EGO POS Center",
+  critical: "วิกฤต",
+  databaseStatus: "สถานะฐานข้อมูล",
+  dateRange: "ช่วงวันที่",
+  disabled: "ปิดใช้งาน",
+  emptyNoActions: "ตอนนี้ไม่มีรายการที่ต้องดำเนินการ",
+  emptyNoActivity: "ยังไม่มีกิจกรรม",
+  emptyNoSalesData: "ยังไม่มีข้อมูลยอดขาย",
+  emptyNoStorePerformance: "ยังไม่มีข้อมูลประสิทธิภาพร้าน",
+  emptySystemHealth: "ยังไม่ได้เชื่อมต่อการตรวจสอบสถานะระบบ",
+  error: "ข้อผิดพลาด",
+  export: "ส่งออก",
+  exportNotReady: "ยังไม่ได้เชื่อมต่อการส่งออก",
+  info: "ข้อมูล",
+  login: "เข้าสู่ระบบ",
+  monthlyPlatformRevenue: "รายได้แพลตฟอร์มรายเดือน",
+  noData: "ไม่มีข้อมูล",
+  notEnoughData: "ข้อมูลไม่เพียงพอ",
+  ordersBills: "ออเดอร์ / บิล",
+  planAnalytics: "วิเคราะห์แผน",
+  planManagement: "จัดการแผน",
+  performanceScore: "คะแนนประสิทธิภาพ",
+  platformSalesOverview: "ภาพรวมยอดขายแพลตฟอร์ม",
+  refresh: "รีเฟรช",
+  salesAmount: "ยอดขาย",
+  sales: "ยอดขาย",
+  scoreHelp: "คะแนนคำนวณจากยอดขาย กิจกรรมร้าน สต็อก การซิงก์ และปัญหาที่ยังไม่ถูกแก้ไข",
+  sectionNotConnectedYet: "ส่วนนี้ยังไม่ได้เชื่อมต่อ",
+  stockAlerts: "แจ้งเตือนสต็อก",
+  store: "ร้าน",
+  storeHealth: "สุขภาพร้าน",
+  storePerformance: "ประสิทธิภาพร้าน",
+  storesNav: "ร้านค้า",
+  syncStatus: "สถานะซิงก์",
+  systemApiStatus: "สถานะ API",
+  systemHealthNotConnected: "ยังไม่ได้เชื่อมต่อการตรวจสอบสถานะระบบ",
+  templateDataNotConnected: "ยังไม่ได้เชื่อมต่อข้อมูลเทมเพลต",
+  technicalMetadata: "ข้อมูลทางเทคนิค",
+  thisMonth: "เดือนนี้",
+  thirtyDays: "30 วัน",
+  today: "วันนี้",
+  todaySales: "ยอดขายวันนี้",
+  topStoresBySales: "10 ร้านยอดขายสูงสุด",
+  totalBillsToday: "บิลทั้งหมดวันนี้",
+  totalPlatformSales: "ยอดขายรวมแพลตฟอร์ม",
+  totalSalesToday: "ยอดขายรวมวันนี้",
+  rawPayload: "ข้อมูลดิบ",
+  readableSummary: "สรุป",
+  trialPlan: "ทดลองใช้",
+  upgradePending: "รออัปเกรด",
+  sevenDaySales: "ยอดขาย 7 วัน",
+  sevenDays: "7 วัน",
+  viewActivity: "ดูกิจกรรม",
+  viewPlan: "ดูแผน",
+  viewTemplateStatus: "ดูสถานะเทมเพลต",
+  vsPreviousPeriod: "เทียบช่วงก่อนหน้า",
+  warning: "เตือน",
+});
+
 Object.assign(copy.en, {
   storesBusinesses: "Stores / Businesses",
+  integrations: "Integrations",
+  settingsMenu: "Settings",
+  templates: "Templates",
 });
 
 Object.assign(copy.th, {
@@ -740,6 +934,380 @@ Object.assign(copy.th, {
   view: "ดู",
   viewAll: "ดูทั้งหมด",
   viewRecentActivity: "ดูกิจกรรมล่าสุด",
+});
+
+Object.assign(copy.th, {
+  integrations: "การเชื่อมต่อ",
+  settingsMenu: "ตั้งค่า",
+  templates: "เทมเพลต",
+});
+
+Object.assign(copy.en, {
+  actionCenterSubtitle: "Review approvals, sync issues, store alerts, plan issues, and system warnings.",
+  actionDataNotConnected: "No connected action data yet.",
+  activeActors: "Active Actors",
+  activityDataNotConnected: "Activity data is not connected yet.",
+  addStore: "Add Store",
+  approval: "Approval",
+  averagePerformanceScore: "Average Performance Score",
+  backup: "Backup",
+  backupWarnings: "Backup Warnings",
+  backupWarningsDescription: "Backup freshness and restore readiness warnings will appear here.",
+  category: "Category",
+  critical: "Critical",
+  disabledNotConnected: "Not connected yet",
+  excellent: "Excellent",
+  excellentStores: "Excellent Stores",
+  exportNotConnected: "Export is not connected yet.",
+  failedSync: "Failed Sync",
+  failedSyncDescription: "Sync failures and offline queue issues will appear here.",
+  filterAll: "All",
+  good: "Good",
+  info: "Info",
+  lowStockAlerts: "Low Stock Alerts",
+  lowStockAlertsDescription: "Stock alerts will appear after inventory alerts are connected.",
+  maintenance: "Maintenance",
+  noActionsNeedAttention: "No actions need attention right now.",
+  noActionsNeedAttentionSubtext: "Connect approval, sync, stock, plan, and backup data sources to activate this page.",
+  noIssues: "No issues",
+  noRecentActivityYet: "No recent activity yet.",
+  noRecentActivityYetSubtext: "Connect audit logs and platform events to review activity here.",
+  notConnected: "Not connected",
+  offlineStores: "Offline Stores",
+  onlineStores: "Online Stores",
+  pendingApprovals: "Pending Approvals",
+  pendingApprovalsDescription: "Approval requests will appear here after approval workflows are connected.",
+  performanceFilter: "Performance",
+  planIssues: "Plan Issues",
+  planIssuesDescription: "Subscription, expiry, and plan mismatch issues will appear here.",
+  recentActivitySubtitle: "Review platform events, store actions, user activity, and system logs.",
+  resolved: "Resolved",
+  search: "Search",
+  searchStores: "Search stores",
+  security: "Security",
+  securityAlerts: "Security Alerts",
+  securityAlertsDescription: "Denied access, failed actions, and security warnings from audit logs.",
+  storeDataNotConnected: "Store data is not connected yet.",
+  storeName: "Store Name",
+  storePerformanceNotConnected: "Store performance data is not connected yet.",
+  storePerformanceNotConnectedSubtext: "Connect sales, activity, stock, and sync data to calculate performance scores.",
+  storePerformancePageTitle: "Store Performance",
+  storePerformanceRows: "Store Performance",
+  storePerformanceSubtitle: "Compare sales activity, store health, sync status, stock alerts, and performance score.",
+  storesNeedingAttention: "Stores Needing Attention",
+  storesPageSubtitle: "View and manage stores, branches, templates, plans, and online status.",
+  storesPageTitle: "Stores",
+  storesTableEmpty: "No stores connected yet.",
+  storesTableEmptySubtext: "Stores will appear here after businesses are created and store data is connected.",
+  successfulEvents: "Successful Events",
+  sync: "Sync",
+  syncIssueStores: "Sync Issue Stores",
+  stockAlertStores: "Stock Alert Stores",
+  templateDrafts: "Template Drafts",
+  templateDraftsDescription: "Draft template readiness items from the current POS template registry.",
+  totalEvents: "Total Events",
+  totalStores: "Total Stores",
+  totalOpenActions: "Total Open Actions",
+  viewDetails: "View details",
+  warning: "Warning",
+  api: "API",
+  apiKeys: "API Keys",
+  autoBackup: "Auto Backup",
+  availableIntegrations: "Available Integrations",
+  backupDestination: "Backup destination",
+  backupFilter: "Backup",
+  backupRestoreSubtitle: "Manage backup readiness, restore workflow, storage destination, and recovery history.",
+  backupServiceNotConnected: "Backup service is not connected yet.",
+  backupSettings: "Backup Settings",
+  backupStatus: "Backup Status",
+  backupStorage: "Backup Storage",
+  backupStorageNotConnected: "Backup storage is not connected yet.",
+  backupWorkerDescription: "Backup worker and retention readiness.",
+  billingStatus: "Billing status",
+  branchCount: "Branches",
+  cloudBackup: "Cloud Backup",
+  cloudBackupBackend: "External backup storage provider.",
+  cloudBackupDescription: "Connect external backup storage.",
+  configure: "Configure",
+  configureStorage: "Configure Storage",
+  createBackup: "Create Backup",
+  currentPlan: "Current Plan",
+  apiHealthDescription: "API response and platform route checks.",
+  apiKeysBackend: "API key vault and rotation service.",
+  apiKeysDescription: "Manage secure API access for integrations.",
+  appHealthDescription: "Application runtime health endpoint.",
+  accounting: "Accounting",
+  accountingBackend: "Accounting provider API and mapping rules.",
+  accountingDescription: "Sync sales, tax, and invoices to accounting tools.",
+  automation: "Automation",
+  databaseHealthDescription: "Database connection and query readiness.",
+  encryption: "Encryption",
+  emailService: "Email Service",
+  emailServiceBackend: "Email service credentials and sender verification.",
+  emailServiceDescription: "Send receipts, alerts, and platform emails.",
+  ecommerceSync: "E-commerce Sync",
+  ecommerceSyncBackend: "Commerce platform connectors.",
+  ecommerceSyncDescription: "Sync online orders and products.",
+  expiringSoon: "Expiring Soon",
+  failed: "Failed",
+  failedBackups: "Failed Backups",
+  frequency: "Frequency",
+  healthy: "Healthy",
+  integrationsEmpty: "Integrations are not connected yet.",
+  integrationsEmptySubtext: "Configure integration providers when backend services are ready.",
+  integrationStatusNotConnected: "Integration status is not connected yet.",
+  integrationsSubtitle: "Manage payment, messaging, accounting, backup, API, and automation integrations.",
+  lastBackup: "Last Backup",
+  lastChecked: "Last Checked",
+  manual: "Manual",
+  manualBackup: "Manual Backup",
+  manualBackupDescription: "Create a manual platform backup when backup service is connected.",
+  messaging: "Messaging",
+  notificationService: "Notification Service",
+  notificationServiceBackend: "Notification routing and alert preferences.",
+  notificationServiceDescription: "Manage platform alerts.",
+  notificationAlerts: "Notification alerts",
+  payment: "Payment",
+  paymentGateway: "Payment Gateway",
+  paymentGatewayBackend: "Payment provider credentials and transaction status API.",
+  paymentGatewayDescription: "Connect payment providers for online payments and transaction status.",
+  planAnalyticsNotConnected: "Plan analytics is not connected yet.",
+  planAnalyticsSubtitle: "Track plan usage, subscription status, upgrade opportunities, and platform revenue.",
+  planDistribution: "Plan Distribution",
+  planDistributionNotConnected: "Plan distribution is not connected yet.",
+  planUsageDataEmpty: "No plan usage data yet.",
+  planUsageDataEmptySubtext: "Connect subscription and business plan data to review usage here.",
+  planUsageTable: "Plan Usage Table",
+  qrPayment: "QR Payment",
+  qrPaymentBackend: "QR payment provider and settlement callback.",
+  qrPaymentDescription: "Connect QR payment channels for store checkout and reports.",
+  queueJobs: "Queue / Jobs",
+  queueJobsDescription: "Background job and queue health checks.",
+  requiresSetup: "Requires Setup",
+  responseTime: "Response Time",
+  restore: "Restore",
+  restoreHistory: "Restore History",
+  restoreHistoryEmpty: "No restore history yet.",
+  restoreHistoryEmptySubtext: "Restore history will appear after backup and restore services are connected.",
+  restorePoint: "Restore Point",
+  restorePoints: "Restore Points",
+  retentionPeriod: "Retention period",
+  runChecks: "Run Checks",
+  scheduled: "Scheduled",
+  searchBackupHistory: "Search backup history",
+  searchIntegrations: "Search integrations",
+  searchService: "Search service",
+  service: "Service",
+  serviceStatus: "Service Status",
+  smsWhatsapp: "SMS / WhatsApp",
+  smsWhatsappBackend: "Messaging provider credentials and templates.",
+  smsWhatsappDescription: "Send customer notifications and membership messages.",
+  storage: "Storage",
+  storageProviderDescription: "Storage provider and usage checks.",
+  storageStatus: "Storage Status",
+  storageUsed: "Storage Used",
+  successful: "Successful",
+  syncWorkerDescription: "Offline queue and store sync worker checks.",
+  systemChecks: "System Checks",
+  systemHealthSubtitle: "Monitor app, database, API, sync, backup, and storage health.",
+  terminals: "Terminals",
+  testConnection: "Test connection",
+  trialStores: "Trial Stores",
+  upgradeCandidates: "Upgrade Candidates",
+  upgradeNotes: "Upgrade notes",
+  upgradeOpportunities: "Upgrade Opportunities",
+  upgradeOpportunitiesEmpty: "Upgrade opportunities are not connected yet.",
+  upgradeOpportunitiesEmptySubtext: "Connect usage limits, sales activity, and plan data to identify upgrade candidates.",
+  usage: "Usage",
+  webhooks: "Webhooks",
+  webhooksBackend: "Webhook delivery worker and signing secrets.",
+  webhooksDescription: "Send system events to external services.",
+  whatThisIntegrationDoes: "What this integration will do",
+  downloadBackup: "Download Backup",
+});
+
+Object.assign(copy.th, {
+  actionCenterSubtitle: "ตรวจสอบการอนุมัติ ปัญหาซิงก์ การแจ้งเตือนร้าน ปัญหาแพ็กเกจ และคำเตือนระบบ",
+  actionDataNotConnected: "ยังไม่ได้เชื่อมต่อข้อมูลรายการที่ต้องจัดการ",
+  activeActors: "ผู้ใช้งานที่มีกิจกรรม",
+  activityDataNotConnected: "ยังไม่ได้เชื่อมต่อข้อมูลกิจกรรม",
+  addStore: "เพิ่มร้าน",
+  approval: "การอนุมัติ",
+  averagePerformanceScore: "คะแนนเฉลี่ย",
+  backup: "สำรองข้อมูล",
+  backupWarnings: "คำเตือนสำรองข้อมูล",
+  backupWarningsDescription: "คำเตือนความพร้อมของการสำรองและกู้คืนข้อมูลจะแสดงที่นี่",
+  category: "หมวดหมู่",
+  critical: "ร้ายแรง",
+  disabledNotConnected: "ยังไม่ได้เชื่อมต่อ",
+  excellent: "ยอดเยี่ยม",
+  excellentStores: "ร้านที่ยอดเยี่ยม",
+  exportNotConnected: "ยังไม่ได้เชื่อมต่อการส่งออก",
+  failedSync: "ซิงก์ล้มเหลว",
+  failedSyncDescription: "ปัญหาการซิงก์และคิวออฟไลน์จะแสดงที่นี่",
+  filterAll: "ทั้งหมด",
+  good: "ดี",
+  info: "ข้อมูล",
+  lowStockAlerts: "แจ้งเตือนสต็อกต่ำ",
+  lowStockAlertsDescription: "การแจ้งเตือนสต็อกจะแสดงเมื่อเชื่อมต่อข้อมูลสินค้าคงคลังแล้ว",
+  maintenance: "บำรุงรักษา",
+  noActionsNeedAttention: "ตอนนี้ไม่มีรายการที่ต้องจัดการ",
+  noActionsNeedAttentionSubtext: "เชื่อมต่อข้อมูลการอนุมัติ ซิงก์ สต็อก แผน และสำรองข้อมูลเพื่อเปิดใช้งานหน้านี้",
+  noIssues: "ไม่มีปัญหา",
+  noRecentActivityYet: "ยังไม่มีกิจกรรมล่าสุด",
+  noRecentActivityYetSubtext: "เชื่อมต่อบันทึกตรวจสอบและกิจกรรมแพลตฟอร์มเพื่อดูข้อมูลที่นี่",
+  notConnected: "ยังไม่เชื่อมต่อ",
+  offlineStores: "ร้านออฟไลน์",
+  onlineStores: "ร้านออนไลน์",
+  pendingApprovals: "รออนุมัติ",
+  pendingApprovalsDescription: "คำขออนุมัติจะแสดงเมื่อเชื่อมต่อเวิร์กโฟลว์การอนุมัติแล้ว",
+  performanceFilter: "ประสิทธิภาพ",
+  planIssues: "ปัญหาแพ็กเกจ",
+  planIssuesDescription: "ปัญหาการสมัครใช้งาน วันหมดอายุ และแพ็กเกจจะแสดงที่นี่",
+  recentActivitySubtitle: "ตรวจสอบกิจกรรมแพลตฟอร์ม กิจกรรมร้าน ผู้ใช้ และบันทึกระบบ",
+  resolved: "แก้ไขแล้ว",
+  search: "ค้นหา",
+  searchStores: "ค้นหาร้าน",
+  security: "ความปลอดภัย",
+  securityAlerts: "แจ้งเตือนความปลอดภัย",
+  securityAlertsDescription: "การปฏิเสธสิทธิ์ การทำงานล้มเหลว และคำเตือนความปลอดภัยจากบันทึกตรวจสอบ",
+  storeDataNotConnected: "ยังไม่ได้เชื่อมต่อข้อมูลร้าน",
+  storeName: "ชื่อร้าน",
+  storePerformanceNotConnected: "ยังไม่ได้เชื่อมต่อข้อมูลประสิทธิภาพร้าน",
+  storePerformanceNotConnectedSubtext: "เชื่อมต่อยอดขาย กิจกรรม สต็อก และข้อมูลซิงก์เพื่อคำนวณคะแนน",
+  storePerformancePageTitle: "ประสิทธิภาพร้าน",
+  storePerformanceRows: "ประสิทธิภาพร้าน",
+  storePerformanceSubtitle: "เปรียบเทียบยอดขาย สุขภาพร้าน สถานะซิงก์ แจ้งเตือนสต็อก และคะแนนประสิทธิภาพ",
+  storesNeedingAttention: "ร้านที่ต้องดูแล",
+  storesPageSubtitle: "ดูและจัดการร้าน สาขา เทมเพลต แพ็กเกจ และสถานะออนไลน์",
+  storesPageTitle: "ร้านค้า",
+  storesTableEmpty: "ยังไม่มีร้านที่เชื่อมต่อ",
+  storesTableEmptySubtext: "ร้านจะแสดงที่นี่หลังจากสร้างธุรกิจและเชื่อมต่อข้อมูลร้านแล้ว",
+  successfulEvents: "สำเร็จ",
+  sync: "ซิงก์",
+  syncIssueStores: "ร้านที่มีปัญหาซิงก์",
+  stockAlertStores: "ร้านที่มีแจ้งเตือนสต็อก",
+  templateDrafts: "เทมเพลตฉบับร่าง",
+  templateDraftsDescription: "รายการความพร้อมของเทมเพลตฉบับร่างจากทะเบียน POS Template ปัจจุบัน",
+  totalEvents: "กิจกรรมทั้งหมด",
+  totalStores: "ร้านทั้งหมด",
+  totalOpenActions: "รายการเปิดทั้งหมด",
+  viewDetails: "ดูรายละเอียด",
+  warning: "คำเตือน",
+  api: "API",
+  apiKeys: "API Keys",
+  autoBackup: "สำรองอัตโนมัติ",
+  availableIntegrations: "การเชื่อมต่อที่มี",
+  backupDestination: "ปลายทางสำรองข้อมูล",
+  backupFilter: "สำรองข้อมูล",
+  backupRestoreSubtitle: "จัดการความพร้อมสำรองข้อมูล เวิร์กโฟลว์กู้คืน ปลายทางจัดเก็บ และประวัติกู้คืน",
+  backupServiceNotConnected: "ยังไม่ได้เชื่อมต่อบริการสำรองข้อมูล",
+  backupSettings: "ตั้งค่าสำรองข้อมูล",
+  backupStatus: "สถานะสำรองข้อมูล",
+  backupStorage: "พื้นที่สำรองข้อมูล",
+  backupStorageNotConnected: "ยังไม่ได้เชื่อมต่อพื้นที่สำรองข้อมูล",
+  backupWorkerDescription: "ความพร้อมของระบบสำรองข้อมูลและการเก็บรักษาข้อมูล",
+  billingStatus: "สถานะชำระเงิน",
+  branchCount: "สาขา",
+  cloudBackup: "สำรองข้อมูลคลาวด์",
+  cloudBackupBackend: "ผู้ให้บริการพื้นที่สำรองข้อมูลภายนอก",
+  cloudBackupDescription: "เชื่อมต่อพื้นที่สำรองข้อมูลภายนอก",
+  configure: "ตั้งค่า",
+  configureStorage: "ตั้งค่าพื้นที่จัดเก็บ",
+  createBackup: "สร้างข้อมูลสำรอง",
+  currentPlan: "แพ็กเกจปัจจุบัน",
+  apiHealthDescription: "ตรวจการตอบสนองของ API และเส้นทางแพลตฟอร์ม",
+  apiKeysBackend: "ระบบจัดเก็บและหมุนเวียน API key",
+  apiKeysDescription: "จัดการการเข้าถึง API สำหรับการเชื่อมต่ออย่างปลอดภัย",
+  appHealthDescription: "ปลายทางตรวจสถานะการทำงานของแอป",
+  accounting: "บัญชี",
+  accountingBackend: "API ผู้ให้บริการบัญชีและกฎการแมปข้อมูล",
+  accountingDescription: "ซิงก์ยอดขาย ภาษี และใบแจ้งหนี้ไปยังระบบบัญชี",
+  automation: "อัตโนมัติ",
+  databaseHealthDescription: "ตรวจการเชื่อมต่อฐานข้อมูลและความพร้อมการ query",
+  encryption: "การเข้ารหัส",
+  emailService: "บริการอีเมล",
+  emailServiceBackend: "ข้อมูลเชื่อมต่ออีเมลและการยืนยันผู้ส่ง",
+  emailServiceDescription: "ส่งใบเสร็จ แจ้งเตือน และอีเมลแพลตฟอร์ม",
+  ecommerceSync: "ซิงก์ E-commerce",
+  ecommerceSyncBackend: "ตัวเชื่อมต่อแพลตฟอร์มร้านค้าออนไลน์",
+  ecommerceSyncDescription: "ซิงก์ออเดอร์ออนไลน์และสินค้า",
+  expiringSoon: "ใกล้หมดอายุ",
+  failed: "ล้มเหลว",
+  failedBackups: "สำรองล้มเหลว",
+  frequency: "ความถี่",
+  healthy: "ปกติ",
+  integrationsEmpty: "ยังไม่ได้เชื่อมต่อ Integrations",
+  integrationsEmptySubtext: "ตั้งค่าผู้ให้บริการเชื่อมต่อเมื่อ backend พร้อม",
+  integrationStatusNotConnected: "ยังไม่ได้เชื่อมต่อสถานะการเชื่อมต่อ",
+  integrationsSubtitle: "จัดการการเชื่อมต่อชำระเงิน ข้อความ บัญชี สำรองข้อมูล API และระบบอัตโนมัติ",
+  lastBackup: "สำรองล่าสุด",
+  lastChecked: "ตรวจล่าสุด",
+  manual: "ด้วยตนเอง",
+  manualBackup: "สำรองด้วยตนเอง",
+  manualBackupDescription: "สร้างข้อมูลสำรองแพลตฟอร์มด้วยตนเองเมื่อเชื่อมต่อบริการสำรองข้อมูลแล้ว",
+  messaging: "ข้อความ",
+  notificationService: "บริการแจ้งเตือน",
+  notificationServiceBackend: "ระบบกำหนดเส้นทางแจ้งเตือนและการตั้งค่าการแจ้งเตือน",
+  notificationServiceDescription: "จัดการการแจ้งเตือนของแพลตฟอร์ม",
+  notificationAlerts: "แจ้งเตือน",
+  payment: "ชำระเงิน",
+  paymentGateway: "ช่องทางชำระเงิน",
+  paymentGatewayBackend: "ข้อมูลเชื่อมต่อผู้ให้บริการชำระเงินและ API สถานะธุรกรรม",
+  paymentGatewayDescription: "เชื่อมต่อผู้ให้บริการชำระเงินออนไลน์และสถานะธุรกรรม",
+  planAnalyticsNotConnected: "ยังไม่ได้เชื่อมต่อการวิเคราะห์แพ็กเกจ",
+  planAnalyticsSubtitle: "ติดตามการใช้งานแพ็กเกจ สถานะสมาชิก โอกาสอัปเกรด และความพร้อมรายได้แพลตฟอร์ม",
+  planDistribution: "สัดส่วนแพ็กเกจ",
+  planDistributionNotConnected: "ยังไม่ได้เชื่อมต่อสัดส่วนแพ็กเกจ",
+  planUsageDataEmpty: "ยังไม่มีข้อมูลการใช้งานแพ็กเกจ",
+  planUsageDataEmptySubtext: "เชื่อมต่อข้อมูลสมาชิกและแพ็กเกจธุรกิจเพื่อดูการใช้งานที่นี่",
+  planUsageTable: "ตารางการใช้งานแพ็กเกจ",
+  qrPayment: "ชำระเงิน QR",
+  qrPaymentBackend: "ผู้ให้บริการ QR Payment และ callback การชำระเงิน",
+  qrPaymentDescription: "เชื่อมต่อช่องทาง QR Payment สำหรับหน้าขายและรายงานร้าน",
+  queueJobs: "คิว / งานระบบ",
+  queueJobsDescription: "ตรวจสุขภาพงานเบื้องหลังและคิวงาน",
+  requiresSetup: "ต้องตั้งค่า",
+  responseTime: "เวลาตอบสนอง",
+  restore: "กู้คืน",
+  restoreHistory: "ประวัติกู้คืน",
+  restoreHistoryEmpty: "ยังไม่มีประวัติกู้คืน",
+  restoreHistoryEmptySubtext: "ประวัติกู้คืนจะแสดงหลังจากเชื่อมต่อบริการสำรองและกู้คืน",
+  restorePoint: "จุดกู้คืน",
+  restorePoints: "จุดกู้คืน",
+  retentionPeriod: "ระยะเวลาเก็บข้อมูล",
+  runChecks: "รันการตรวจสอบ",
+  scheduled: "ตามกำหนด",
+  searchBackupHistory: "ค้นหาประวัติสำรอง",
+  searchIntegrations: "ค้นหาการเชื่อมต่อ",
+  searchService: "ค้นหาบริการ",
+  service: "บริการ",
+  serviceStatus: "สถานะบริการ",
+  smsWhatsapp: "SMS / WhatsApp",
+  smsWhatsappBackend: "ข้อมูลเชื่อมต่อผู้ให้บริการข้อความและเทมเพลต",
+  smsWhatsappDescription: "ส่งข้อความแจ้งเตือนลูกค้าและสมาชิก",
+  storage: "พื้นที่จัดเก็บ",
+  storageProviderDescription: "ตรวจผู้ให้บริการพื้นที่จัดเก็บและการใช้งาน",
+  storageStatus: "สถานะพื้นที่จัดเก็บ",
+  storageUsed: "พื้นที่ใช้งาน",
+  successful: "สำเร็จ",
+  syncWorkerDescription: "ตรวจคิวออฟไลน์และระบบซิงก์ร้าน",
+  systemChecks: "การตรวจระบบ",
+  systemHealthSubtitle: "ตรวจสอบสถานะแอป ฐานข้อมูล API ซิงก์ สำรองข้อมูล และพื้นที่จัดเก็บ",
+  terminals: "เครื่องขาย",
+  testConnection: "ทดสอบการเชื่อมต่อ",
+  trialStores: "ร้านทดลองใช้",
+  upgradeCandidates: "ร้านที่อาจอัปเกรด",
+  upgradeNotes: "หมายเหตุอัปเกรด",
+  upgradeOpportunities: "โอกาสอัปเกรด",
+  upgradeOpportunitiesEmpty: "ยังไม่ได้เชื่อมต่อโอกาสอัปเกรด",
+  upgradeOpportunitiesEmptySubtext: "เชื่อมต่อขีดจำกัดการใช้งาน ยอดขาย และแพ็กเกจเพื่อระบุร้านที่ควรอัปเกรด",
+  usage: "การใช้งาน",
+  webhooks: "Webhooks",
+  webhooksBackend: "ระบบส่ง webhook และ signing secret",
+  webhooksDescription: "ส่ง event ของระบบไปยังบริการภายนอก",
+  whatThisIntegrationDoes: "สิ่งที่การเชื่อมต่อนี้จะทำ",
+  downloadBackup: "ดาวน์โหลดข้อมูลสำรอง",
 });
 
 type PosTemplateDefinition = {
@@ -973,17 +1541,17 @@ function CenterDrawer({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex overflow-hidden bg-[#020617] text-[#F8FAFC] shadow-2xl lg:left-[var(--center-sidebar-width)]">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 flex w-full max-w-[100vw] overflow-hidden bg-[#020617] text-[#F8FAFC] shadow-2xl lg:left-[var(--center-sidebar-width)] lg:w-[calc(100vw_-_var(--center-sidebar-width))]">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-[#334155] bg-[#0F172A]">
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[#334155] bg-[#111827] px-4 py-4 md:px-8">
           <div className="min-w-0">
             <button
               className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#5EEAD4] transition hover:text-[#F8FAFC]"
-              onClick={onBack ?? onClose}
+              onClick={onClose}
               type="button"
             >
               <ArrowLeft className="size-4" />
-              {backLabel ?? c.backToCenter}
+              {c.backToCenter}
             </button>
             <h2 className="truncate text-2xl font-semibold tracking-normal">{title}</h2>
           </div>
@@ -997,7 +1565,7 @@ function CenterDrawer({
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 md:px-8">{children}</div>
-        <footer className="sticky bottom-0 flex justify-end gap-3 border-t border-[#334155] bg-[#111827] px-4 py-4 md:px-8">
+        <footer className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-[#334155] bg-[#111827] px-4 py-4 md:px-8">
           {footer ?? (
             <button className="rounded-md border border-[#334155] px-4 py-2 text-sm font-semibold text-[#CBD5E1]" onClick={onClose} type="button">
               {c.close}
@@ -1104,6 +1672,1778 @@ function EmptyState({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+type CommandDatePreset = "today" | "7d" | "30d" | "month";
+type CommandActivityFilter = "all" | "sales" | "login" | "plan" | "template" | "permission" | "error";
+
+type StorePerformanceRow = {
+  averageBillLak: number;
+  billCount: number;
+  business: CenterBusiness;
+  lastActive?: string;
+  planName: string;
+  salesLak: number;
+  score: number | null;
+  stockAlerts: number | null;
+  syncStatus: "synced" | "unknown";
+  templateName: string;
+  todayBillCount: number;
+  todaySalesLak: number;
+};
+
+function dateRangeForPreset(preset: CommandDatePreset) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (preset === "today") return { from: today, to: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) };
+  if (preset === "7d") return { from: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6), to: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) };
+  if (preset === "month") return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) };
+  return { from: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29), to: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) };
+}
+
+function inDateRange(date: string | undefined, preset: CommandDatePreset) {
+  if (!date) return false;
+  const value = new Date(date);
+  const range = dateRangeForPreset(preset);
+  return value >= range.from && value < range.to;
+}
+
+function formatCompactMoney(value: number) {
+  if (!value) return "0 LAK";
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M LAK`;
+  if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}K LAK`;
+  return `${Math.round(value)} LAK`;
+}
+
+function salesAmount(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function salesForPreset(commandDashboard: CommandDashboardData | undefined, preset: CommandDatePreset) {
+  const salesByDay = (commandDashboard?.salesByDay ?? []).filter((row) => inDateRange(row.date, preset));
+  const salesByBusiness = new Map<string, { billCount: number; salesLak: number; todayBillCount: number; todaySalesLak: number }>();
+  for (const row of commandDashboard?.salesByBusiness ?? []) {
+    salesByBusiness.set(row.businessId, {
+      billCount: salesAmount(row.billCount),
+      salesLak: salesAmount(row.salesLak),
+      todayBillCount: salesAmount(row.todayBillCount),
+      todaySalesLak: salesAmount(row.todaySalesLak),
+    });
+  }
+  return { salesByBusiness, salesByDay };
+}
+
+function latestActivityForBusiness(logs: StoreActivityLog[], businessId: string) {
+  return logs
+    .filter((log) => log.businessId === businessId)
+    .map((log) => log.occurredAt ?? log.createdAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+}
+
+function storeScore(row: Pick<StorePerformanceRow, "billCount" | "lastActive" | "salesLak" | "stockAlerts" | "syncStatus">) {
+  const hasSales = row.salesLak > 0 || row.billCount > 0;
+  const hasActivity = Boolean(row.lastActive);
+  if (!hasSales && !hasActivity && row.stockAlerts === null && row.syncStatus === "unknown") return null;
+  let score = 35;
+  if (row.salesLak > 0) score += 25;
+  if (row.billCount > 0) score += Math.min(20, row.billCount * 2);
+  if (hasActivity) score += 15;
+  if (row.syncStatus === "synced") score += 10;
+  if ((row.stockAlerts ?? 0) > 0) score -= Math.min(20, (row.stockAlerts ?? 0) * 4);
+  return Math.max(1, Math.min(100, Math.round(score)));
+}
+
+function scoreTone(score: number | null) {
+  if (score === null) return "border-[#475569] bg-[#1E293B] text-[#94A3B8]";
+  if (score >= 85) return "border-[#22C55E]/30 bg-[#22C55E]/10 text-[#22C55E]";
+  if (score >= 65) return "border-[#38BDF8]/30 bg-[#38BDF8]/10 text-[#38BDF8]";
+  if (score >= 40) return "border-[#F59E0B]/30 bg-[#F59E0B]/10 text-[#F59E0B]";
+  return "border-[#EF4444]/30 bg-[#EF4444]/10 text-[#EF4444]";
+}
+
+function buildStorePerformanceRows(data: CenterData, preset: CommandDatePreset, c: CenterCopy) {
+  const { salesByBusiness } = salesForPreset(data.commandDashboard, preset);
+  return data.businesses.map((business) => {
+    const sales = salesByBusiness.get(business.id) ?? { billCount: 0, salesLak: 0, todayBillCount: 0, todaySalesLak: 0 };
+    const lastActive = latestActivityForBusiness(data.storeActivityLogs, business.id);
+    const row = {
+      averageBillLak: sales.billCount > 0 ? sales.salesLak / sales.billCount : 0,
+      billCount: sales.billCount,
+      business,
+      lastActive,
+      planName: business.plan?.planName ?? c.free,
+      salesLak: sales.salesLak,
+      score: null,
+      stockAlerts: null,
+      syncStatus: data.storeActivityLogs.some((log) => log.businessId === business.id && log.syncedAt) ? "synced" as const : "unknown" as const,
+      templateName: posTemplateNameFromKey(business.businessTemplateKey, c),
+      todayBillCount: sales.todayBillCount,
+      todaySalesLak: sales.todaySalesLak,
+    };
+    return { ...row, score: storeScore(row) };
+  });
+}
+
+function dashboardPanelClass(extra = "") {
+  return cn("min-w-0 max-w-full overflow-hidden rounded-lg border border-[#334155] bg-[#111827] p-4", extra);
+}
+
+function CommandSectionTitle({ action, subtitle, title }: { action?: React.ReactNode; subtitle?: string; title: string }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold text-[#F8FAFC]">{title}</h2>
+        {subtitle ? <p className="mt-1 text-xs text-[#94A3B8]">{subtitle}</p> : null}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function ScoreBadge({ score }: { score: number | null }) {
+  const { c } = useCenterCopy();
+  return (
+    <span className={cn("inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-semibold", scoreTone(score))}>
+      {score === null ? c.notEnoughData : `${score}/100`}
+    </span>
+  );
+}
+
+function CommandKpiCard({
+  label,
+  onOpen,
+  trend = "neutral",
+  value,
+}: {
+  label: string;
+  onOpen?: () => void;
+  trend?: "up" | "down" | "neutral";
+  value: string;
+}) {
+  const { c } = useCenterCopy();
+  const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : Minus;
+  const trendClass = trend === "up" ? "text-[#22C55E]" : trend === "down" ? "text-[#EF4444]" : "text-[#94A3B8]";
+  const Component = onOpen ? "button" : "div";
+  return (
+    <Component
+      className={cn(
+        "min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4 text-left",
+        onOpen && "transition hover:border-[#5EEAD4] hover:bg-[#1E293B]",
+      )}
+      onClick={onOpen}
+      type={onOpen ? "button" : undefined}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 text-[11px] font-semibold uppercase leading-snug tracking-wide text-[#94A3B8]">{label}</div>
+        <TrendIcon className={cn("size-4 shrink-0", trendClass)} />
+      </div>
+      <div className="mt-3 truncate text-2xl font-semibold text-[#F8FAFC]">{value}</div>
+      <div className="mt-2 text-xs text-[#64748B]">{c.vsPreviousPeriod}</div>
+      <div className="mt-3 flex h-7 items-end gap-1" aria-hidden="true">
+        {[35, 52, 42, 68, 58, 76].map((height, index) => (
+          <span className="w-full rounded-t-sm bg-[#5EEAD4]/20" key={`${height}-${index}`} style={{ height: `${height}%` }} />
+        ))}
+      </div>
+    </Component>
+  );
+}
+
+function PlatformSalesOverview({ data, onOpen, preset }: { data: CenterData; onOpen: () => void; preset: CommandDatePreset }) {
+  const { c } = useCenterCopy();
+  const { salesByDay } = salesForPreset(data.commandDashboard, preset);
+  const totalSales = salesByDay.reduce((sum, row) => sum + row.salesLak, 0);
+  const totalBills = salesByDay.reduce((sum, row) => sum + row.billCount, 0);
+  const maxSales = Math.max(...salesByDay.map((row) => row.salesLak), 0);
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.platformSalesOverview} subtitle={data.commandDashboard?.status === "unavailable" ? c.emptyNoSalesData : c.totalPlatformSales} />
+      {salesByDay.length ? (
+        <button className="grid w-full min-w-0 gap-4 text-left" onClick={onOpen} type="button">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniMetric label={c.salesAmount} value={formatCompactMoney(totalSales)} />
+            <MiniMetric label={c.billCount} value={String(totalBills)} />
+            <MiniMetric label={c.averageBill} value={formatCompactMoney(totalBills ? totalSales / totalBills : 0)} />
+          </div>
+          <div className="flex h-48 min-w-0 items-end gap-2 overflow-hidden rounded-lg border border-[#334155] bg-[#020617] p-3">
+            {salesByDay.map((row) => (
+              <div className="flex min-w-0 flex-1 flex-col items-center gap-2" key={row.date}>
+                <div className="w-full rounded-t-md bg-[#5EEAD4]" style={{ height: `${Math.max(8, (row.salesLak / maxSales) * 100)}%` }} />
+                <span className="max-w-full truncate text-[10px] text-[#94A3B8]">{row.date.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </button>
+      ) : (
+        <EmptyState text={c.emptyNoSalesData} />
+      )}
+    </section>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-[#334155] bg-[#1E293B] p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#94A3B8]">{label}</div>
+      <div className="mt-2 truncate text-lg font-semibold text-[#F8FAFC]">{value}</div>
+    </div>
+  );
+}
+
+function TopStoresBySales({ rows, onOpen }: { onOpen: (row: StorePerformanceRow) => void; rows: StorePerformanceRow[] }) {
+  const { c } = useCenterCopy();
+  const topRows = [...rows].filter((row) => row.salesLak > 0).sort((a, b) => b.salesLak - a.salesLak).slice(0, 10);
+  const max = Math.max(...topRows.map((row) => row.salesLak), 0);
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.topStoresBySales} />
+      {topRows.length ? (
+        <div className="grid gap-3">
+          {topRows.map((row, index) => (
+            <button className="grid w-full min-w-0 gap-2 rounded-lg border border-[#334155] bg-[#020617] p-3 text-left transition hover:border-[#5EEAD4]" key={row.business.id} onClick={() => onOpen(row)} type="button">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-[#F8FAFC]">#{index + 1} {row.business.name}</div>
+                  <div className="mt-1 text-xs text-[#94A3B8]">{row.templateName} | {row.planName}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-[#F8FAFC]">{formatCompactMoney(row.salesLak)}</div>
+                  <div className="text-xs text-[#94A3B8]">{row.billCount} {c.bills}</div>
+                </div>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-[#1E293B]">
+                <div className="h-full rounded-full bg-[#5EEAD4]" style={{ width: `${Math.max(4, (row.salesLak / max) * 100)}%` }} />
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <EmptyState text={c.emptyNoSalesData} />
+      )}
+    </section>
+  );
+}
+
+function StorePerformanceTable({ onOpen, rows }: { onOpen: (row: StorePerformanceRow) => void; rows: StorePerformanceRow[] }) {
+  const { c } = useCenterCopy();
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.storePerformance} subtitle={c.scoreHelp} />
+      {rows.length ? (
+        <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[1100px] border-collapse text-sm">
+              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                <tr>
+                  {[c.store, c.template, c.plan, c.todaySales, c.ordersBills, c.averageBill, c.stockAlerts, c.syncStatus, c.lastActive, c.performanceScore].map((header) => (
+                    <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.business.id} onClick={() => onOpen(row)}>
+                    <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.business.name}</td>
+                    <td className="px-4 py-3">{row.templateName}</td>
+                    <td className="px-4 py-3">{row.planName}</td>
+                    <td className="px-4 py-3">{formatCompactMoney(row.todaySalesLak)}</td>
+                    <td className="px-4 py-3">{row.billCount}</td>
+                    <td className="px-4 py-3">{formatCompactMoney(row.averageBillLak)}</td>
+                    <td className="px-4 py-3">{row.stockAlerts === null ? "-" : row.stockAlerts}</td>
+                    <td className="px-4 py-3"><StatusBadge value={row.syncStatus === "synced" ? "synced" : c.noData} /></td>
+                    <td className="px-4 py-3">{row.lastActive ? new Date(row.lastActive).toLocaleString() : "-"}</td>
+                    <td className="px-4 py-3"><ScoreBadge score={row.score} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <EmptyState text={c.emptyNoStorePerformance} />
+      )}
+    </section>
+  );
+}
+
+function ActionCenter({ data, onOpen, rows }: { data: CenterData; onOpen: (item: { severity: string; text: string }) => void; rows: StorePerformanceRow[] }) {
+  const { c } = useCenterCopy();
+  const draftTemplates = templateDefinitions.filter((template) => template.status.toLowerCase() !== "ready" && template.status.toLowerCase() !== "active");
+  const suspended = data.businesses.filter((business) => String(business.status ?? "").toLowerCase().includes("suspend"));
+  const lowScore = rows.filter((row) => row.score !== null && row.score < 40);
+  const actions = [
+    ...suspended.map((business) => ({ severity: c.critical, text: `${business.name}: ${c.suspendedBusinesses}` })),
+    ...lowScore.map((row) => ({ severity: c.warning, text: `${row.business.name}: ${c.performanceScore} ${row.score}/100` })),
+    ...draftTemplates.map((template) => ({ severity: c.info, text: `${posTemplateName(template, c)}: ${templateStatusLabel(template.status, c)}` })),
+  ];
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.actionCenter} />
+      {actions.length ? (
+        <div className="grid gap-2">
+          {actions.slice(0, 8).map((item, index) => (
+            <button className="w-full rounded-lg border border-[#334155] bg-[#020617] p-3 text-left transition hover:border-[#5EEAD4]" key={`${item.text}-${index}`} onClick={() => onOpen(item)} type="button">
+              <StatusBadge value={item.severity} />
+              <div className="mt-2 text-sm text-[#CBD5E1]">{item.text}</div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <EmptyState text={c.emptyNoActions} />
+      )}
+    </section>
+  );
+}
+
+function PlanEngineSummary({ businesses, onOpen }: { businesses: CenterBusiness[]; onOpen: (drawer: DrawerKind) => void }) {
+  const { c } = useCenterCopy();
+  const free = businesses.filter((business) => !business.plan?.planName || business.plan.planName.toLowerCase().includes("free")).length;
+  const pro = businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("pro")).length;
+  const trial = businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("trial")).length;
+  const total = Math.max(1, free + pro + trial);
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.planEngine} />
+      <div className="h-3 overflow-hidden rounded-full bg-[#020617]">
+        <div className="h-full bg-[#5EEAD4]" style={{ width: `${(pro / total) * 100}%` }} />
+      </div>
+      <div className="mt-4 grid gap-2 text-sm">
+        <PlanRow label={c.freePlan} onOpen={() => onOpen("businesses-free")} value={free} />
+        <PlanRow label={c.proPlan} onOpen={() => onOpen("businesses-pro")} value={pro} />
+        <PlanRow label={c.trialPlan} onOpen={() => onOpen("businesses-trial")} value={trial} />
+      </div>
+    </section>
+  );
+}
+
+function PlanRow({ label, onOpen, value }: { label: string; onOpen: () => void; value: number }) {
+  return (
+    <button className="flex w-full items-center justify-between gap-3 rounded-md border border-[#334155] bg-[#020617] px-3 py-2 text-left transition hover:border-[#5EEAD4]" onClick={onOpen} type="button">
+      <span className="text-[#CBD5E1]">{label}</span>
+      <span className="font-semibold text-[#F8FAFC]">{value}</span>
+    </button>
+  );
+}
+
+function TemplateUsageSummary({ businesses, onOpen }: { businesses: CenterBusiness[]; onOpen: (template: PosTemplateDefinition) => void }) {
+  const { c } = useCenterCopy();
+  const usedByKey = new Map<string, number>();
+  businesses.forEach((business) => {
+    const key = normalizePosTemplateKey(business.businessTemplateKey);
+    usedByKey.set(key, (usedByKey.get(key) ?? 0) + 1);
+  });
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.templateUsage} />
+      <div className="grid gap-2">
+        {templateDefinitions.map((template) => (
+          <button className="flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border border-[#334155] bg-[#020617] px-3 py-2 text-left transition hover:border-[#5EEAD4]" key={template.key} onClick={() => onOpen(template)} type="button">
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-[#F8FAFC]">{posTemplateName(template, c)}</span>
+              <span className="text-xs text-[#94A3B8]">{usedByKey.get(template.key) ?? 0} {c.stores}</span>
+            </span>
+            <StatusBadge value={templateStatusLabel(template.status, c)} />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SystemHealthSummary() {
+  const { c } = useCenterCopy();
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle title={c.systemHealth} />
+      <div className="grid gap-2">
+        {[c.appStatus, c.databaseStatus, c.syncStatus, c.backupStatus, c.systemApiStatus].map((label) => (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-[#334155] bg-[#020617] px-3 py-2" key={label}>
+            <span className="text-sm text-[#CBD5E1]">{label}</span>
+            <span className="text-xs text-[#94A3B8]">{c.notVerified}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-[#94A3B8]">{c.systemHealthNotConnected}</p>
+    </section>
+  );
+}
+
+function activityCategory(action: string | undefined): CommandActivityFilter {
+  const value = String(action ?? "").toLowerCase();
+  if (value.includes("sale") || value.includes("payment") || value.includes("refund") || value.includes("void")) return "sales";
+  if (value.includes("login")) return "login";
+  if (value.includes("plan") || value.includes("subscription")) return "plan";
+  if (value.includes("template")) return "template";
+  if (value.includes("permission") || value.includes("role")) return "permission";
+  if (value.includes("error") || value.includes("fail") || value.includes("denied")) return "error";
+  return "all";
+}
+
+function activityTone(action: string | undefined) {
+  const value = String(action ?? "").toLowerCase();
+  if (value.includes("complete") || value.includes("success") || value.includes("create")) return "success";
+  if (value.includes("void") || value.includes("refund") || value.includes("error") || value.includes("fail") || value.includes("denied")) return "danger";
+  if (value.includes("update") || value.includes("plan")) return "warning";
+  if (value.includes("login") || value.includes("open")) return "info";
+  return "muted";
+}
+
+function RecentActivityCommand({
+  filter,
+  logs,
+  onFilter,
+  onOpen,
+  onViewAll,
+}: {
+  filter: CommandActivityFilter;
+  logs: CenterLog[];
+  onFilter: (filter: CommandActivityFilter) => void;
+  onOpen: (log: CenterLog) => void;
+  onViewAll: () => void;
+}) {
+  const { c } = useCenterCopy();
+  const filters: Array<{ label: string; value: CommandActivityFilter }> = [
+    { label: c.all, value: "all" },
+    { label: c.sales, value: "sales" },
+    { label: c.login, value: "login" },
+    { label: c.plan, value: "plan" },
+    { label: c.template, value: "template" },
+    { label: c.requiresPermission, value: "permission" },
+    { label: c.error, value: "error" },
+  ];
+  const visibleLogs = logs.filter((log) => filter === "all" || activityCategory(log.action) === filter).slice(0, 8);
+  return (
+    <section className={dashboardPanelClass()}>
+      <CommandSectionTitle
+        title={c.recentActivity}
+        action={<button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={onViewAll} type="button">{c.viewAll}</button>}
+      />
+      <div className="mb-4 flex flex-wrap gap-2">
+        {filters.map((item) => (
+          <button
+            className={cn("rounded-md border px-3 py-1.5 text-xs font-semibold transition", filter === item.value ? "border-[#5EEAD4] bg-[#5EEAD4]/10 text-[#F8FAFC]" : "border-[#334155] text-[#94A3B8] hover:border-[#5EEAD4]")}
+            key={item.value}
+            onClick={() => onFilter(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {visibleLogs.length ? (
+        <div className="overflow-hidden rounded-lg border border-[#334155]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] border-collapse text-sm">
+              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                <tr>
+                  {[c.dateTime, c.actor, c.action, c.target, c.business, c.auditDetails].map((header) => (
+                    <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleLogs.map((log) => (
+                  <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={log.id} onClick={() => onOpen(log)}>
+                    <td className="whitespace-nowrap px-4 py-3">{log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}</td>
+                    <td className="px-4 py-3">{log.user?.fullName ?? log.user?.username ?? "-"}</td>
+                    <td className="px-4 py-3"><StatusBadge value={activityTone(log.action)} /> <span className="ml-2">{log.action ?? "-"}</span></td>
+                    <td className="px-4 py-3">{log.module ?? "-"}</td>
+                    <td className="px-4 py-3">{log.company?.name ?? "-"}</td>
+                    <td className="px-4 py-3"><button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); onOpen(log); }} type="button">{c.view}</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <EmptyState text={c.emptyNoActivity} />
+      )}
+    </section>
+  );
+}
+
+function StorePerformanceDetail({ row }: { row: StorePerformanceRow }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-4">
+      <DetailGrid
+        rows={[
+          [c.store, row.business.name],
+          [c.owner, row.business.owner?.fullName ?? row.business.owner?.email ?? "-"],
+          [c.template, row.templateName],
+          [c.plan, row.planName],
+          [c.todaySales, formatCompactMoney(row.todaySalesLak)],
+          [c.sevenDaySales, formatCompactMoney(row.salesLak)],
+          [c.bills, String(row.billCount)],
+          [c.averageBill, formatCompactMoney(row.averageBillLak)],
+          [c.stockAlerts, row.stockAlerts === null ? "-" : row.stockAlerts],
+          [c.syncStatus, row.syncStatus === "synced" ? c.connected : c.noData],
+          [c.lastActive, row.lastActive ? new Date(row.lastActive).toLocaleString() : "-"],
+          [c.performanceScore, <ScoreBadge key="score" score={row.score} />],
+        ]}
+      />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/businesses">{c.openPosDashboard}</Link>
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/audit-logs">{c.viewActivity}</Link>
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/plans">{c.viewPlan}</Link>
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/templates">{c.viewTemplateStatus}</Link>
+      </div>
+    </div>
+  );
+}
+
+type ActionSeverityFilter = "all" | "critical" | "warning" | "info" | "resolved";
+type ActionCategoryFilter = "all" | "approval" | "sync" | "stock" | "plan" | "template" | "security" | "backup";
+type PerformanceFilter = "all" | "excellent" | "good" | "warning" | "critical" | "unknown";
+
+type ActionCategoryCard = {
+  category: ActionCategoryFilter;
+  connected: boolean;
+  count: number;
+  description: string;
+  icon: LucideIcon;
+  severity: Exclude<ActionSeverityFilter, "all">;
+  title: string;
+};
+
+type RecentActivitySource =
+  | { kind: "legacy"; value: CenterLog }
+  | { kind: "platform"; value: PlatformAuditLog }
+  | { kind: "store"; value: StoreActivityLog };
+
+type RecentActivityRow = {
+  action: string;
+  actor: string;
+  business: string;
+  category: CommandActivityFilter;
+  date?: string;
+  id: string;
+  module: string;
+  source: RecentActivitySource;
+  status: string;
+  target: string;
+};
+
+type StoreDirectoryRow = {
+  business: CenterBusiness;
+  businessName: string;
+  lastActive?: string;
+  owner: string;
+  plan: string;
+  status: string;
+  storeName: string;
+  template: string;
+};
+
+function PageHeader({
+  controls,
+  subtitle,
+  title,
+}: {
+  controls?: React.ReactNode;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <header className="flex min-w-0 max-w-full flex-col gap-4 rounded-lg border border-[#334155] bg-[#111827] p-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-3xl font-semibold tracking-normal text-[#F8FAFC] md:text-4xl">{title}</h1>
+        <p className="mt-2 max-w-3xl text-sm text-[#94A3B8]">{subtitle}</p>
+      </div>
+      {controls ? <div className="flex min-w-0 flex-wrap items-center gap-2">{controls}</div> : null}
+    </header>
+  );
+}
+
+function SummaryCard({ helper, label, value }: { helper?: string; label: string; value: string | number }) {
+  return (
+    <section className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#94A3B8]">{label}</div>
+      <div className="mt-3 truncate text-2xl font-semibold text-[#F8FAFC]">{value}</div>
+      {helper ? <p className="mt-2 text-xs text-[#64748B]">{helper}</p> : null}
+    </section>
+  );
+}
+
+function EmptyPanel({ description, title }: { description: string; title: string }) {
+  return (
+    <section className="rounded-lg border border-dashed border-[#475569] bg-[#111827] p-8">
+      <div className="mx-auto max-w-2xl text-center">
+        <div className="mx-auto grid size-12 place-items-center rounded-md border border-[#5EEAD4]/30 bg-[#5EEAD4]/10 text-[#5EEAD4]">
+          <ClipboardList className="size-5" />
+        </div>
+        <h2 className="mt-4 text-lg font-semibold text-[#F8FAFC]">{title}</h2>
+        <p className="mt-2 text-sm text-[#94A3B8]">{description}</p>
+      </div>
+    </section>
+  );
+}
+
+function DisabledPillButton({ label }: { label: string }) {
+  return (
+    <button
+      className="inline-flex h-9 cursor-not-allowed items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#64748B]"
+      disabled
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function FilterSelect<T extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: T) => void;
+  options: Array<{ label: string; value: T }>;
+  value: T;
+}) {
+  return (
+    <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-[#334155] bg-[#020617] px-3 text-sm text-[#CBD5E1]">
+      <span className="text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{label}</span>
+      <select className="min-w-0 bg-transparent text-[#F8FAFC] outline-none" onChange={(event) => onChange(event.target.value as T)} value={value}>
+        {options.map((option) => (
+          <option className="bg-[#111827]" key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SearchControl({ onChange, placeholder, value }: { onChange: (value: string) => void; placeholder: string; value: string }) {
+  return (
+    <input
+      className="h-10 min-w-[12rem] rounded-md border border-[#334155] bg-[#020617] px-3 text-sm text-[#F8FAFC] outline-none placeholder:text-[#64748B] focus:border-[#5EEAD4]"
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      value={value}
+    />
+  );
+}
+
+function RefreshButton() {
+  const { c } = useCenterCopy();
+  const router = useRouter();
+  return (
+    <button className="inline-flex h-10 items-center gap-2 rounded-md border border-[#334155] px-3 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => router.refresh()} type="button">
+      <RefreshCw className="size-4" />
+      {c.refresh}
+    </button>
+  );
+}
+
+function ExportDisabledButton() {
+  const { c } = useCenterCopy();
+  return (
+    <button className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md border border-[#334155] px-3 text-sm font-semibold text-[#64748B]" disabled title={c.exportNotConnected} type="button">
+      <Download className="size-4" />
+      {c.export}
+    </button>
+  );
+}
+
+function issueStatusLabel(item: ActionCategoryCard, c: CenterCopy) {
+  if (!item.connected) return c.notConnected;
+  if (item.count > 0) return item.severity;
+  return c.noIssues;
+}
+
+function buildActionCategoryCards(data: CenterData, rows: StorePerformanceRow[], c: CenterCopy): ActionCategoryCard[] {
+  const failedSyncCount = data.storeActivityLogs.filter((log) => {
+    const text = `${log.action} ${log.status ?? ""}`.toLowerCase();
+    return text.includes("sync") && (text.includes("fail") || text.includes("error"));
+  }).length;
+  const planIssueCount = data.subscriptions.filter((subscription) => {
+    const status = String(subscription.status ?? "").toLowerCase();
+    return status.includes("past_due") || status.includes("expired") || status.includes("failed") || status.includes("cancel");
+  }).length;
+  const securityAlertCount = data.platformAuditLogs.filter((log) => {
+    const text = `${log.action} ${log.status ?? ""} ${log.severity ?? ""}`.toLowerCase();
+    return text.includes("security") || text.includes("denied") || text.includes("failed") || text.includes("critical");
+  }).length;
+  const draftTemplateCount = templateDefinitions.filter((template) => {
+    const status = template.status.toLowerCase();
+    return status.includes("draft") || status.includes("review") || status.includes("setup");
+  }).length;
+  const lowScoreCount = rows.filter((row) => row.score !== null && row.score < 40).length;
+
+  const cards: ActionCategoryCard[] = [
+    { category: "approval", connected: false, count: 0, description: c.pendingApprovalsDescription, icon: ClipboardList, severity: "info", title: c.pendingApprovals },
+    { category: "sync", connected: data.storeActivityLogs.length > 0, count: failedSyncCount, description: c.failedSyncDescription, icon: RefreshCw, severity: "warning", title: c.failedSync },
+    { category: "stock", connected: false, count: 0, description: c.lowStockAlertsDescription, icon: Store, severity: "warning", title: c.lowStockAlerts },
+    { category: "plan", connected: data.subscriptions.length > 0, count: planIssueCount, description: c.planIssuesDescription, icon: CreditCard, severity: "warning", title: c.planIssues },
+    { category: "template", connected: true, count: draftTemplateCount, description: c.templateDraftsDescription, icon: LayoutDashboard, severity: draftTemplateCount > 0 ? "info" : "resolved", title: c.templateDrafts },
+    { category: "security", connected: data.platformAuditLogs.length > 0, count: securityAlertCount, description: c.securityAlertsDescription, icon: Shield, severity: securityAlertCount > 0 ? "critical" : "resolved", title: c.securityAlerts },
+    { category: "backup", connected: false, count: 0, description: c.backupWarningsDescription, icon: Bell, severity: "info", title: c.backupWarnings },
+  ];
+  return cards.map((item) => {
+    if (item.category === "stock" && lowScoreCount > 0) {
+      return { ...item, connected: true, count: lowScoreCount, description: c.scoreHelp, severity: "warning" as const };
+    }
+    return item;
+  });
+}
+
+function ActionCenterPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [severity, setSeverity] = useState<ActionSeverityFilter>("all");
+  const [category, setCategory] = useState<ActionCategoryFilter>("all");
+  const [search, setSearch] = useState("");
+  const rows = buildStorePerformanceRows(data, "today", c);
+  const cards = buildActionCategoryCards(data, rows, c);
+  const realOpenCards = cards.filter((item) => item.connected && item.count > 0);
+  const visibleCards = cards.filter((item) => {
+    const haystack = `${item.title} ${item.description}`.toLowerCase();
+    return (severity === "all" || item.severity === severity)
+      && (category === "all" || item.category === category)
+      && (!search.trim() || haystack.includes(search.trim().toLowerCase()));
+  });
+  const summaryHelper = realOpenCards.length ? undefined : c.actionDataNotConnected;
+
+  const severityOptions: Array<{ label: string; value: ActionSeverityFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.critical, value: "critical" },
+    { label: c.warning, value: "warning" },
+    { label: c.info, value: "info" },
+    { label: c.resolved, value: "resolved" },
+  ];
+  const categoryOptions: Array<{ label: string; value: ActionCategoryFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.approval, value: "approval" },
+    { label: c.sync, value: "sync" },
+    { label: c.stockAlerts, value: "stock" },
+    { label: c.plan, value: "plan" },
+    { label: c.template, value: "template" },
+    { label: c.security, value: "security" },
+    { label: c.backup, value: "backup" },
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.actionCenter}
+        subtitle={c.actionCenterSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.severity} onChange={setSeverity} options={severityOptions} value={severity} />
+            <FilterSelect label={c.category} onChange={setCategory} options={categoryOptions} value={category} />
+            <SearchControl onChange={setSearch} placeholder={c.search} value={search} />
+            <RefreshButton />
+            <ExportDisabledButton />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={summaryHelper} label={c.critical} value={cards.filter((item) => item.severity === "critical" && item.count > 0).reduce((sum, item) => sum + item.count, 0)} />
+        <SummaryCard helper={summaryHelper} label={c.warning} value={cards.filter((item) => item.severity === "warning" && item.count > 0).reduce((sum, item) => sum + item.count, 0)} />
+        <SummaryCard helper={summaryHelper} label={c.info} value={cards.filter((item) => item.severity === "info" && item.count > 0).reduce((sum, item) => sum + item.count, 0)} />
+        <SummaryCard helper={summaryHelper} label={c.resolved} value={cards.filter((item) => item.severity === "resolved").length} />
+        <SummaryCard helper={summaryHelper} label={c.totalOpenActions} value={realOpenCards.reduce((sum, item) => sum + item.count, 0)} />
+      </section>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {visibleCards.map((item) => {
+          const Icon = item.icon;
+          const canOpen = item.connected && item.count > 0;
+          return (
+            <article className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4" key={item.category}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-md border border-[#5EEAD4]/35 bg-[#5EEAD4]/[0.12] text-[#5EEAD4]">
+                  <Icon className="size-4" />
+                </span>
+                <StatusBadge value={issueStatusLabel(item, c)} />
+              </div>
+              <h2 className="mt-4 text-base font-semibold text-[#F8FAFC]">{item.title}</h2>
+              <p className="mt-2 min-h-10 text-sm text-[#94A3B8]">{item.description}</p>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-2xl font-semibold text-[#F8FAFC]">{item.count}</span>
+                {canOpen ? (
+                  <button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => onAction("pending-actions", { severity: item.severity, text: item.title })} type="button">
+                    {c.viewDetails}
+                  </button>
+                ) : (
+                  <DisabledPillButton label={item.connected ? c.noIssues : c.disabledNotConnected} />
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </section>
+      {!realOpenCards.length ? <EmptyPanel title={c.noActionsNeedAttention} description={c.noActionsNeedAttentionSubtext} /> : null}
+    </div>
+  );
+}
+
+function buildRecentActivityRows(data: CenterData): RecentActivityRow[] {
+  const rowId = (prefix: string, id: string | undefined, action: string | undefined, date: string | undefined, target: string | undefined) =>
+    id ? `${prefix}-${id}` : `${prefix}-${action ?? "action"}-${date ?? "no-date"}-${target ?? "target"}`;
+  const legacyRows = data.auditLogs.map((log) => ({
+    action: log.action ?? "-",
+    actor: log.user?.fullName ?? log.user?.username ?? "-",
+    business: log.company?.name ?? "-",
+    category: activityCategory(log.action),
+    date: log.createdAt,
+    id: rowId("legacy", log.id, log.action, log.createdAt, log.module),
+    module: log.module ?? "-",
+    source: { kind: "legacy" as const, value: log },
+    status: activityTone(log.action),
+    target: log.module ?? "-",
+  }));
+  const platformRows = data.platformAuditLogs.map((log) => ({
+    action: log.action,
+    actor: log.actorName || log.actorEmail || "-",
+    business: log.business?.name ?? "-",
+    category: activityCategory(log.action),
+    date: log.createdAt,
+    id: rowId("platform", log.id, log.action, log.createdAt, log.targetName ?? log.targetType ?? undefined),
+    module: log.targetType ?? "Platform",
+    source: { kind: "platform" as const, value: log },
+    status: log.status ?? log.severity ?? activityTone(log.action),
+    target: log.targetName ?? log.targetType ?? "-",
+  }));
+  const storeRows = data.storeActivityLogs.map((log) => ({
+    action: log.action,
+    actor: log.actorName,
+    business: log.business?.name ?? log.businessId,
+    category: activityCategory(log.action),
+    date: log.occurredAt ?? log.createdAt,
+    id: rowId("store", log.id, log.action, log.occurredAt ?? log.createdAt, log.targetName ?? log.targetType ?? undefined),
+    module: "Store",
+    source: { kind: "store" as const, value: log },
+    status: log.status ?? activityTone(log.action),
+    target: log.targetName ?? log.targetType ?? "-",
+  }));
+  return [...platformRows, ...storeRows, ...legacyRows].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+}
+
+function openRecentActivityRow(row: RecentActivityRow, onAction: (drawer: DrawerKind, selected?: unknown) => void) {
+  if (row.source.kind === "platform") onAction("platform-audit-detail", row.source.value);
+  if (row.source.kind === "store") onAction("store-activity-detail", row.source.value);
+  if (row.source.kind === "legacy") onAction("audit-details", row.source.value);
+}
+
+function RecentActivityPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [preset, setPreset] = useState<CommandDatePreset>("today");
+  const [filter, setFilter] = useState<CommandActivityFilter>("all");
+  const [search, setSearch] = useState("");
+  const rows = buildRecentActivityRows(data);
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const inRange = row.date ? inDateRange(row.date, preset) : false;
+    const matchesFilter = filter === "all" || row.category === filter;
+    const matchesSearch = !query || `${row.actor} ${row.module} ${row.action} ${row.business} ${row.target}`.toLowerCase().includes(query);
+    return inRange && matchesFilter && matchesSearch;
+  });
+  const actors = new Set(visibleRows.map((row) => row.actor).filter((actor) => actor && actor !== "-"));
+  const errors = visibleRows.filter((row) => ["danger", "error", "failed", "denied", "critical"].some((token) => row.status.toLowerCase().includes(token))).length;
+  const warnings = visibleRows.filter((row) => row.status.toLowerCase().includes("warning")).length;
+  const success = visibleRows.filter((row) => !["danger", "error", "failed", "denied", "critical", "warning"].some((token) => row.status.toLowerCase().includes(token))).length;
+  const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
+    { label: c.today, value: "today" },
+    { label: c.sevenDays, value: "7d" },
+    { label: c.thirtyDays, value: "30d" },
+    { label: c.thisMonth, value: "month" },
+  ];
+  const filters: Array<{ label: string; value: CommandActivityFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.sales, value: "sales" },
+    { label: c.login, value: "login" },
+    { label: c.plan, value: "plan" },
+    { label: c.template, value: "template" },
+    { label: c.requiresPermission, value: "permission" },
+    { label: c.error, value: "error" },
+  ];
+  const columns = [
+    { key: "date-time", label: c.dateTime },
+    { key: "actor", label: c.actor },
+    { key: "module", label: c.module },
+    { key: "action", label: c.action },
+    { key: "business-store", label: c.business },
+    { key: "status", label: c.status },
+    { key: "details", label: c.auditDetails },
+  ];
+  const helper = rows.length ? undefined : c.activityDataNotConnected ?? "Activity data is not connected yet.";
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.recentActivity}
+        subtitle={c.recentActivitySubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.dateRange} onChange={setPreset} options={dateOptions} value={preset} />
+            <SearchControl onChange={setSearch} placeholder={c.search} value={search} />
+            <RefreshButton />
+            <ExportDisabledButton />
+          </>
+        }
+      />
+      <div className="flex flex-wrap gap-2">
+        {filters.map((item) => (
+          <button
+            className={cn("rounded-md border px-3 py-2 text-xs font-semibold transition", filter === item.value ? "border-[#5EEAD4] bg-[#5EEAD4]/10 text-[#F8FAFC]" : "border-[#334155] text-[#94A3B8] hover:border-[#5EEAD4]")}
+            key={item.value}
+            onClick={() => setFilter(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={helper} label={c.totalEvents} value={visibleRows.length} />
+        <SummaryCard helper={helper} label={c.successfulEvents} value={success} />
+        <SummaryCard helper={helper} label={c.warning} value={warnings} />
+        <SummaryCard helper={helper} label={c.error} value={errors} />
+        <SummaryCard helper={helper} label={c.activeActors} value={actors.size} />
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.recentActivity} subtitle={c.recentActivitySubtitle} />
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {columns.map((column) => (
+                      <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.id} onClick={() => openRecentActivityRow(row, onAction)}>
+                      <td className="whitespace-nowrap px-4 py-3">{row.date ? new Date(row.date).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3">{row.actor}</td>
+                      <td className="px-4 py-3">{row.module}</td>
+                      <td className="px-4 py-3 font-medium text-[#F8FAFC]">{row.action}</td>
+                      <td className="px-4 py-3">{row.business}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3">
+                        <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); openRecentActivityRow(row, onAction); }} type="button">
+                          {c.view}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel title={c.noRecentActivityYet} description={c.noRecentActivityYetSubtext} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CenterLogDetail({ log }: { log: CenterLog }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-4">
+      <DetailGrid
+        rows={[
+          [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
+          [c.actor, log.user?.fullName ?? log.user?.username ?? "-"],
+          [c.module, log.module ?? "-"],
+          [c.action, log.action ?? "-"],
+          [c.status, <StatusBadge key="status" value={activityTone(log.action)} />],
+          [c.business, log.company?.name ?? "-"],
+          [c.target, log.module ?? "-"],
+          [c.readableSummary, `${log.user?.fullName ?? log.user?.username ?? c.actor} ${log.action ?? c.action}`],
+        ]}
+      />
+      <AdvancedDetails sections={[{ title: c.rawPayload, value: log }]} />
+    </div>
+  );
+}
+
+function buildStoreDirectoryRows(data: CenterData, c: CenterCopy): StoreDirectoryRow[] {
+  return data.businesses.map((business) => {
+    const lastActive = latestActivityForBusiness(data.storeActivityLogs, business.id);
+    const status = String(business.status ?? "").toLowerCase().includes("maintenance") ? c.maintenance : c.notConnected;
+    return {
+      business,
+      businessName: business.name,
+      lastActive,
+      owner: business.owner?.fullName ?? business.owner?.email ?? business.owner?.username ?? "-",
+      plan: business.plan?.planName ?? c.free,
+      status,
+      storeName: business.branches?.[0]?.name ?? business.name,
+      template: posTemplateNameFromKey(business.businessTemplateKey, c),
+    };
+  });
+}
+
+function StoresPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [search, setSearch] = useState("");
+  const [templateFilter, setTemplateFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const rows = buildStoreDirectoryRows(data, c);
+  const templateOptions = [{ label: c.filterAll, value: "all" }, ...templateDefinitions.map((template) => ({ label: posTemplateName(template, c), value: template.key }))];
+  const planOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(data.businesses.map((business) => business.plan?.planName ?? c.free))).map((plan) => ({ label: plan, value: plan }))];
+  const statusOptions = [
+    { label: c.filterAll, value: "all" },
+    { label: c.onlineStores, value: "online" },
+    { label: c.offlineStores, value: "offline" },
+    { label: c.maintenance, value: "maintenance" },
+    { label: c.notConnected, value: c.notConnected },
+  ];
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || `${row.storeName} ${row.businessName} ${row.owner}`.toLowerCase().includes(query);
+    const matchesTemplate = templateFilter === "all" || normalizePosTemplateKey(row.business.businessTemplateKey) === templateFilter;
+    const matchesPlan = planFilter === "all" || row.plan === planFilter;
+    const matchesStatus = statusFilter === "all" || row.status === statusFilter;
+    return matchesSearch && matchesTemplate && matchesPlan && matchesStatus;
+  });
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.storesPageTitle}
+        subtitle={c.storesPageSubtitle}
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder={c.searchStores} value={search} />
+            <FilterSelect label={c.template} onChange={setTemplateFilter} options={templateOptions} value={templateFilter} />
+            <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <RefreshButton />
+            <DisabledPillButton label={c.disabledNotConnected} />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.totalStores} value={rows.length} />
+        <SummaryCard helper={c.storeDataNotConnected} label={c.onlineStores} value={0} />
+        <SummaryCard helper={c.storeDataNotConnected} label={c.offlineStores} value={0} />
+        <SummaryCard helper={c.storeDataNotConnected} label={c.maintenance} value={rows.filter((row) => row.status === c.maintenance).length} />
+        <SummaryCard helper={c.storeDataNotConnected} label={c.notConnected} value={rows.filter((row) => row.status === c.notConnected).length} />
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.storesPageTitle} subtitle={c.storeDataNotConnected} />
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1040px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[c.storeName, c.business, c.owner, c.template, c.plan, c.status, c.lastActive, "Actions"].map((header) => (
+                      <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.business.id} onClick={() => onAction("business-view", row.business)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.storeName}</td>
+                      <td className="px-4 py-3">{row.businessName}</td>
+                      <td className="px-4 py-3">{row.owner}</td>
+                      <td className="px-4 py-3">{row.template}</td>
+                      <td className="px-4 py-3">{row.plan}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3">{row.lastActive ? new Date(row.lastActive).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("business-view", row.business); }} type="button">
+                            {c.viewDetails}
+                          </button>
+                          <DisabledPillButton label={c.disabledNotConnected} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel title={c.storesTableEmpty} description={c.storesTableEmptySubtext} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StorePerformancePage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [preset, setPreset] = useState<CommandDatePreset>("today");
+  const [templateFilter, setTemplateFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [performanceFilter, setPerformanceFilter] = useState<PerformanceFilter>("all");
+  const [search, setSearch] = useState("");
+  const rows = buildStorePerformanceRows(data, preset, c);
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || row.business.name.toLowerCase().includes(query);
+    const matchesTemplate = templateFilter === "all" || normalizePosTemplateKey(row.business.businessTemplateKey) === templateFilter;
+    const matchesPlan = planFilter === "all" || row.planName === planFilter;
+    const matchesPerformance =
+      performanceFilter === "all"
+      || (performanceFilter === "excellent" && row.score !== null && row.score >= 85)
+      || (performanceFilter === "good" && row.score !== null && row.score >= 65 && row.score < 85)
+      || (performanceFilter === "warning" && row.score !== null && row.score >= 40 && row.score < 65)
+      || (performanceFilter === "critical" && row.score !== null && row.score < 40)
+      || (performanceFilter === "unknown" && row.score === null);
+    return matchesSearch && matchesTemplate && matchesPlan && matchesPerformance;
+  });
+  const scoredRows = visibleRows.filter((row) => row.score !== null);
+  const averageScore = scoredRows.length ? Math.round(scoredRows.reduce((sum, row) => sum + (row.score ?? 0), 0) / scoredRows.length) : c.notEnoughData;
+  const topRows = [...visibleRows].filter((row) => row.score !== null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 5);
+  const attentionRows = [...visibleRows].filter((row) => row.score !== null && row.score < 65).sort((a, b) => (a.score ?? 0) - (b.score ?? 0)).slice(0, 5);
+  const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
+    { label: c.today, value: "today" },
+    { label: c.sevenDays, value: "7d" },
+    { label: c.thirtyDays, value: "30d" },
+    { label: c.thisMonth, value: "month" },
+  ];
+  const templateOptions = [{ label: c.filterAll, value: "all" }, ...templateDefinitions.map((template) => ({ label: posTemplateName(template, c), value: template.key }))];
+  const planOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(data.businesses.map((business) => business.plan?.planName ?? c.free))).map((plan) => ({ label: plan, value: plan }))];
+  const performanceOptions: Array<{ label: string; value: PerformanceFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.excellent, value: "excellent" },
+    { label: c.good ?? "Good", value: "good" },
+    { label: c.warning, value: "warning" },
+    { label: c.critical, value: "critical" },
+    { label: c.notEnoughData, value: "unknown" },
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.storePerformancePageTitle}
+        subtitle={c.storePerformanceSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.dateRange} onChange={setPreset} options={dateOptions} value={preset} />
+            <FilterSelect label={c.template} onChange={setTemplateFilter} options={templateOptions} value={templateFilter} />
+            <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
+            <FilterSelect label={c.performanceFilter} onChange={setPerformanceFilter} options={performanceOptions} value={performanceFilter} />
+            <SearchControl onChange={setSearch} placeholder={c.searchStores} value={search} />
+            <RefreshButton />
+            <ExportDisabledButton />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={c.scoreHelp} label={c.averagePerformanceScore} value={averageScore} />
+        <SummaryCard helper={c.scoreHelp} label={c.excellentStores} value={visibleRows.filter((row) => row.score !== null && row.score >= 85).length} />
+        <SummaryCard helper={c.scoreHelp} label={c.storesNeedingAttention} value={visibleRows.filter((row) => row.score !== null && row.score < 65).length} />
+        <SummaryCard helper={c.storeDataNotConnected} label={c.stockAlertStores} value={visibleRows.filter((row) => (row.stockAlerts ?? 0) > 0).length} />
+        <SummaryCard helper={c.storeDataNotConnected} label={c.syncIssueStores} value={0} />
+      </section>
+      <section className="grid gap-6 xl:grid-cols-2">
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title={c.topStoresBySales} subtitle={c.scoreHelp} />
+          {topRows.length ? (
+            <div className="grid gap-2">
+              {topRows.map((row) => (
+                <button className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#334155] bg-[#020617] p-3 text-left transition hover:border-[#5EEAD4]" key={row.business.id} onClick={() => onAction("store-performance-detail", row)} type="button">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-[#F8FAFC]">{row.business.name}</span>
+                    <span className="text-xs text-[#94A3B8]">{row.templateName} | {row.planName}</span>
+                  </span>
+                  <ScoreBadge score={row.score} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text={c.storePerformanceNotConnected} />
+          )}
+        </section>
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title={c.storesNeedingAttention} subtitle={c.scoreHelp} />
+          {attentionRows.length ? (
+            <div className="grid gap-2">
+              {attentionRows.map((row) => (
+                <button className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#334155] bg-[#020617] p-3 text-left transition hover:border-[#5EEAD4]" key={row.business.id} onClick={() => onAction("store-performance-detail", row)} type="button">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-[#F8FAFC]">{row.business.name}</span>
+                    <span className="text-xs text-[#94A3B8]">{row.syncStatus === "synced" ? c.connected : c.noData}</span>
+                  </span>
+                  <ScoreBadge score={row.score} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text={c.storePerformanceNotConnected} />
+          )}
+        </section>
+      </section>
+      <StorePerformanceTable rows={visibleRows} onOpen={(row) => onAction("store-performance-detail", row)} />
+      {!rows.length ? <EmptyPanel title={c.storePerformanceNotConnected} description={c.storePerformanceNotConnectedSubtext} /> : null}
+    </div>
+  );
+}
+
+type PlanAnalyticsFilter = "all" | "free" | "pro" | "trial" | "expiring";
+type HealthStatusFilter = "all" | "healthy" | "warning" | "critical" | "not-connected";
+type IntegrationCategoryFilter = "all" | "payment" | "messaging" | "accounting" | "backup" | "api" | "automation";
+type IntegrationStatusFilter = "all" | "connected" | "not-connected" | "coming-soon";
+type BackupFilter = "all" | "successful" | "failed" | "scheduled" | "manual" | "not-connected";
+
+type IntegrationCard = {
+  category: IntegrationCategoryFilter;
+  description: string;
+  icon: LucideIcon;
+  id: string;
+  name: string;
+  requiredBackend: string;
+  status: "not-connected" | "coming-soon";
+};
+
+type HealthService = {
+  action: string;
+  description: string;
+  id: string;
+  name: string;
+  status: "not-connected";
+};
+
+function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [preset, setPreset] = useState<CommandDatePreset>("today");
+  const [planFilter, setPlanFilter] = useState<PlanAnalyticsFilter>("all");
+  const [search, setSearch] = useState("");
+  const rows = data.businesses.filter((business) => {
+    const plan = String(business.plan?.planName ?? c.free).toLowerCase();
+    const query = search.trim().toLowerCase();
+    const matchesPlan =
+      planFilter === "all"
+      || (planFilter === "free" && plan.includes("free"))
+      || (planFilter === "pro" && plan.includes("pro"))
+      || (planFilter === "trial" && plan.includes("trial"))
+      || (planFilter === "expiring" && plan.includes("trial"));
+    const matchesSearch = !query || `${business.name} ${business.owner?.fullName ?? ""} ${business.owner?.email ?? ""}`.toLowerCase().includes(query);
+    return matchesPlan && matchesSearch;
+  });
+  const freeCount = data.businesses.filter((business) => !business.plan?.planName || business.plan.planName.toLowerCase().includes("free")).length;
+  const proCount = data.businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("pro")).length;
+  const trialCount = data.businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("trial")).length;
+  const monthlyRevenue = data.subscriptions.reduce((sum, subscription) => sum + Number(subscription.plan?.monthlyPrice ?? 0), 0);
+  const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
+    { label: c.today, value: "today" },
+    { label: c.sevenDays, value: "7d" },
+    { label: c.thirtyDays, value: "30d" },
+    { label: c.thisMonth, value: "month" },
+  ];
+  const planOptions: Array<{ label: string; value: PlanAnalyticsFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.freePlan, value: "free" },
+    { label: c.proPlan, value: "pro" },
+    { label: c.trialPlan, value: "trial" },
+    { label: c.expiringSoon, value: "expiring" },
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.planAnalytics}
+        subtitle={c.planAnalyticsSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.dateRange} onChange={setPreset} options={dateOptions} value={preset} />
+            <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
+            <SearchControl onChange={setSearch} placeholder={c.search} value={search} />
+            <RefreshButton />
+            <ExportDisabledButton />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={data.businesses.length ? undefined : c.planAnalyticsNotConnected} label={c.freePlanBusinesses} value={freeCount} />
+        <SummaryCard helper={data.businesses.length ? undefined : c.planAnalyticsNotConnected} label={c.proPlanBusinesses} value={proCount} />
+        <SummaryCard helper={data.businesses.length ? undefined : c.planAnalyticsNotConnected} label={c.trialStores} value={trialCount} />
+        <SummaryCard helper={data.subscriptions.length ? undefined : c.planAnalyticsNotConnected} label={c.monthlyPlatformRevenue} value={money(monthlyRevenue)} />
+        <SummaryCard helper={c.planAnalyticsNotConnected} label={c.upgradeCandidates} value={0} />
+        <SummaryCard helper={c.planAnalyticsNotConnected} label={c.expiringSoon} value={0} />
+      </section>
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title={c.planDistribution} subtitle={data.businesses.length ? c.planAnalyticsSubtitle : c.planDistributionNotConnected} />
+          {data.businesses.length ? (
+            <div className="grid gap-3">
+              {[
+                { label: c.freePlan, value: freeCount },
+                { label: c.proPlan, value: proCount },
+                { label: c.trialPlan, value: trialCount },
+              ].map((item) => (
+                <div className="min-w-0" key={item.label}>
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="font-semibold text-[#F8FAFC]">{item.label}</span>
+                    <span className="text-[#94A3B8]">{item.value}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-[#020617]">
+                    <div className="h-full rounded-full bg-[#5EEAD4]" style={{ width: `${data.businesses.length ? (item.value / data.businesses.length) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel title={c.planDistributionNotConnected} description={c.planAnalyticsNotConnected} />
+          )}
+        </section>
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title={c.upgradeOpportunities} subtitle={c.upgradeOpportunitiesEmptySubtext} />
+          <EmptyPanel title={c.upgradeOpportunitiesEmpty} description={c.upgradeOpportunitiesEmptySubtext} />
+        </section>
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.planUsageTable} subtitle={c.planUsageDataEmptySubtext} />
+        {rows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[
+                      { key: "business", label: c.business },
+                      { key: "plan", label: c.currentPlan },
+                      { key: "branches", label: c.branchCount },
+                      { key: "terminals", label: c.terminals },
+                      { key: "usage", label: c.usage },
+                      { key: "status", label: c.status },
+                      { key: "action", label: c.action },
+                    ].map((column) => (
+                      <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((business) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={business.id} onClick={() => onAction("plan-analytics-detail", business)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{business.name}</td>
+                      <td className="px-4 py-3">{business.plan?.planName ?? c.free}</td>
+                      <td className="px-4 py-3">{business._count?.branches ?? business.branches?.length ?? 0}</td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3">{c.disabledNotConnected}</td>
+                      <td className="px-4 py-3"><StatusBadge value={business.status ?? c.notConnected} /></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <DisabledPillButton label={c.changePlan} />
+                          <DisabledPillButton label={c.viewDetails} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel title={c.planUsageDataEmpty} description={c.planUsageDataEmptySubtext} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PlanAnalyticsDetail({ business }: { business: CenterBusiness }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-4">
+      <DetailGrid
+        rows={[
+          [c.business, business.name],
+          [c.currentPlan, business.plan?.planName ?? c.free],
+          [c.usage, c.disabledNotConnected],
+          [c.branchCount, business._count?.branches ?? business.branches?.length ?? 0],
+          [c.terminals, "-"],
+          [c.billingStatus, c.disabledNotConnected],
+          [c.upgradeNotes, c.upgradeOpportunitiesEmpty],
+        ]}
+      />
+      <AdvancedDetails sections={[{ title: c.metadata, value: { businessId: business.id, businessTemplateKey: business.businessTemplateKey, status: business.status } }]} />
+    </div>
+  );
+}
+
+function SystemHealthPage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [statusFilter, setStatusFilter] = useState<HealthStatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const services: HealthService[] = [
+    { action: c.runChecks, description: c.appHealthDescription, id: "app", name: c.appStatus, status: "not-connected" },
+    { action: c.runChecks, description: c.databaseHealthDescription, id: "database", name: c.databaseStatus, status: "not-connected" },
+    { action: c.runChecks, description: c.apiHealthDescription, id: "api", name: c.systemApiStatus, status: "not-connected" },
+    { action: c.runChecks, description: c.syncWorkerDescription, id: "sync", name: c.syncStatus, status: "not-connected" },
+    { action: c.configure, description: c.backupWorkerDescription, id: "backup", name: c.backupStatus, status: "not-connected" },
+    { action: c.configure, description: c.storageProviderDescription, id: "storage", name: c.storageStatus, status: "not-connected" },
+    { action: c.runChecks, description: c.queueJobsDescription, id: "queue", name: c.queueJobs, status: "not-connected" },
+  ];
+  const filtered = services.filter((service) => {
+    const query = search.trim().toLowerCase();
+    const matchesStatus = statusFilter === "all" || statusFilter === "not-connected";
+    const matchesSearch = !query || `${service.name} ${service.description}`.toLowerCase().includes(query);
+    return matchesStatus && matchesSearch;
+  });
+  const statusOptions: Array<{ label: string; value: HealthStatusFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.healthy, value: "healthy" },
+    { label: c.warning, value: "warning" },
+    { label: c.critical, value: "critical" },
+    { label: c.notConnected, value: "not-connected" },
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.systemHealth}
+        subtitle={c.systemHealthSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <SearchControl onChange={setSearch} placeholder={c.searchService} value={search} />
+            <RefreshButton />
+            <DisabledPillButton label={c.runChecks} />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        {[c.appStatus, c.databaseStatus, c.systemApiStatus, c.syncStatus, c.backupStatus, c.storageStatus].map((label) => (
+          <SummaryCard helper={c.systemHealthNotConnected} key={label} label={label} value={c.notConnected} />
+        ))}
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.serviceStatus} subtitle={c.systemHealthNotConnected} />
+        <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse text-sm">
+              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                <tr>
+                  {[
+                    { key: "service", label: c.service },
+                    { key: "status", label: c.status },
+                    { key: "last-checked", label: c.lastChecked },
+                    { key: "response-time", label: c.responseTime },
+                    { key: "details", label: c.auditDetails },
+                    { key: "action", label: c.action },
+                  ].map((column) => (
+                    <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((service) => (
+                  <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={service.id} onClick={() => onAction("system-health-detail", service)}>
+                    <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{service.name}</td>
+                    <td className="px-4 py-3"><StatusBadge value={c.notConnected} /></td>
+                    <td className="px-4 py-3">-</td>
+                    <td className="px-4 py-3">-</td>
+                    <td className="px-4 py-3">{service.description}</td>
+                    <td className="px-4 py-3"><DisabledPillButton label={service.action} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.systemChecks} subtitle={c.systemHealthNotConnected} />
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {services.slice(1).map((service) => (
+            <article className="rounded-lg border border-[#334155] bg-[#020617] p-4" key={`check-${service.id}`}>
+              <h3 className="font-semibold text-[#F8FAFC]">{service.name}</h3>
+              <p className="mt-2 text-sm text-[#94A3B8]">{service.description}</p>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <StatusBadge value={c.notConnected} />
+                <DisabledPillButton label={service.action} />
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SystemHealthDetail({ service }: { service: HealthService }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-4">
+      <DetailGrid
+        rows={[
+          [c.service, service.name],
+          [c.status, <StatusBadge key="status" value={c.notConnected} />],
+          [c.lastChecked, "-"],
+          [c.responseTime, "-"],
+          [c.readableSummary, service.description],
+        ]}
+      />
+      <EmptyPanel title={c.systemHealthNotConnected} description={c.systemHealthSubtitle} />
+      <AdvancedDetails sections={[{ title: c.metadata, value: { serviceId: service.id, connected: false } }]} />
+    </div>
+  );
+}
+
+function integrationCards(c: CenterCopy): IntegrationCard[] {
+  return [
+    { category: "payment", description: c.paymentGatewayDescription, icon: CreditCard, id: "payment-gateway", name: c.paymentGateway, requiredBackend: c.paymentGatewayBackend, status: "not-connected" },
+    { category: "payment", description: c.qrPaymentDescription, icon: CreditCard, id: "qr-payment", name: c.qrPayment, requiredBackend: c.qrPaymentBackend, status: "not-connected" },
+    { category: "messaging", description: c.smsWhatsappDescription, icon: Bell, id: "sms-whatsapp", name: c.smsWhatsapp, requiredBackend: c.smsWhatsappBackend, status: "coming-soon" },
+    { category: "messaging", description: c.emailServiceDescription, icon: Bell, id: "email-service", name: c.emailService, requiredBackend: c.emailServiceBackend, status: "not-connected" },
+    { category: "accounting", description: c.accountingDescription, icon: ClipboardList, id: "accounting", name: c.accounting, requiredBackend: c.accountingBackend, status: "coming-soon" },
+    { category: "backup", description: c.cloudBackupDescription, icon: Download, id: "cloud-backup", name: c.cloudBackup, requiredBackend: c.cloudBackupBackend, status: "not-connected" },
+    { category: "api", description: c.apiKeysDescription, icon: Shield, id: "api-keys", name: c.apiKeys, requiredBackend: c.apiKeysBackend, status: "not-connected" },
+    { category: "automation", description: c.webhooksDescription, icon: Activity, id: "webhooks", name: c.webhooks, requiredBackend: c.webhooksBackend, status: "coming-soon" },
+    { category: "automation", description: c.ecommerceSyncDescription, icon: Store, id: "ecommerce-sync", name: c.ecommerceSync, requiredBackend: c.ecommerceSyncBackend, status: "coming-soon" },
+    { category: "messaging", description: c.notificationServiceDescription, icon: Bell, id: "notification-service", name: c.notificationService, requiredBackend: c.notificationServiceBackend, status: "not-connected" },
+  ];
+}
+
+function IntegrationsPage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [category, setCategory] = useState<IntegrationCategoryFilter>("all");
+  const [status, setStatus] = useState<IntegrationStatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const cards = integrationCards(c);
+  const visibleCards = cards.filter((card) => {
+    const query = search.trim().toLowerCase();
+    const matchesCategory = category === "all" || card.category === category;
+    const matchesStatus = status === "all" || card.status === status;
+    const matchesSearch = !query || `${card.name} ${card.description}`.toLowerCase().includes(query);
+    return matchesCategory && matchesStatus && matchesSearch;
+  });
+  const categoryOptions: Array<{ label: string; value: IntegrationCategoryFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.payment, value: "payment" },
+    { label: c.messaging, value: "messaging" },
+    { label: c.accounting, value: "accounting" },
+    { label: c.backup, value: "backup" },
+    { label: c.api, value: "api" },
+    { label: c.automation, value: "automation" },
+  ];
+  const statusOptions: Array<{ label: string; value: IntegrationStatusFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.connected, value: "connected" },
+    { label: c.notConnected, value: "not-connected" },
+    { label: c.comingSoon, value: "coming-soon" },
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.integrations}
+        subtitle={c.integrationsSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.category} onChange={setCategory} options={categoryOptions} value={category} />
+            <FilterSelect label={c.status} onChange={setStatus} options={statusOptions} value={status} />
+            <SearchControl onChange={setSearch} placeholder={c.searchIntegrations} value={search} />
+            <RefreshButton />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.connected} value={0} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.notConnected} value={cards.filter((card) => card.status === "not-connected").length} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.comingSoon} value={cards.filter((card) => card.status === "coming-soon").length} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.requiresSetup} value={cards.length} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.availableIntegrations} value={cards.length} />
+      </section>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {visibleCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <article className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4" key={card.id}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-md border border-[#5EEAD4]/35 bg-[#5EEAD4]/[0.12] text-[#5EEAD4]">
+                  <Icon className="size-4" />
+                </span>
+                <StatusBadge value={card.status === "coming-soon" ? c.comingSoon : c.notConnected} />
+              </div>
+              <h2 className="mt-4 text-base font-semibold text-[#F8FAFC]">{card.name}</h2>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{card.category}</p>
+              <p className="mt-2 min-h-12 text-sm text-[#94A3B8]">{card.description}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <DisabledPillButton label={c.configure} />
+                <button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => onAction("integration-detail", card)} type="button">
+                  {c.viewDetails}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+      {!visibleCards.length ? <EmptyPanel title={c.integrationsEmpty} description={c.integrationsEmptySubtext} /> : null}
+    </div>
+  );
+}
+
+function IntegrationDetail({ integration }: { integration: IntegrationCard }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-4">
+      <DetailGrid
+        rows={[
+          [c.integrations, integration.name],
+          [c.category, integration.category],
+          [c.status, <StatusBadge key="status" value={integration.status === "coming-soon" ? c.comingSoon : c.notConnected} />],
+          [c.whatThisIntegrationDoes, integration.description],
+          [c.requiresSetup, integration.requiredBackend],
+        ]}
+      />
+      <div className="flex flex-wrap gap-2">
+        <DisabledPillButton label={c.configure} />
+        <DisabledPillButton label={c.testConnection} />
+      </div>
+      <AdvancedDetails sections={[{ title: c.metadata, value: { id: integration.id, category: integration.category, connected: false } }]} />
+    </div>
+  );
+}
+
+function BackupRestorePage() {
+  const { c } = useCenterCopy();
+  const [filter, setFilter] = useState<BackupFilter>("all");
+  const [search, setSearch] = useState("");
+  const backupOptions: Array<{ label: string; value: BackupFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.successful, value: "successful" },
+    { label: c.failed, value: "failed" },
+    { label: c.scheduled, value: "scheduled" },
+    { label: c.manual, value: "manual" },
+    { label: c.notConnected, value: "not-connected" },
+  ];
+  const settings = [
+    { id: "auto", label: c.autoBackup, value: c.notConnected },
+    { id: "frequency", label: c.frequency, value: "-" },
+    { id: "destination", label: c.backupDestination, value: c.notConnected },
+    { id: "retention", label: c.retentionPeriod, value: "-" },
+    { id: "encryption", label: c.encryption, value: c.notConnected },
+    { id: "alerts", label: c.notificationAlerts, value: c.notConnected },
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.backupRestore}
+        subtitle={c.backupRestoreSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.backupFilter} onChange={setFilter} options={backupOptions} value={filter} />
+            <SearchControl onChange={setSearch} placeholder={c.searchBackupHistory} value={search} />
+            <RefreshButton />
+            <DisabledPillButton label={c.createBackup} />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard label={c.lastBackup} value="-" />
+        <SummaryCard label={c.backupStatus} value={c.notConnected} />
+        <SummaryCard label={c.autoBackup} value={c.notConnected} />
+        <SummaryCard label={c.storageUsed} value="-" />
+        <SummaryCard label={c.restorePoints} value={0} />
+        <SummaryCard label={c.failedBackups} value={0} />
+      </section>
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title={c.backupSettings} subtitle={c.backupServiceNotConnected} />
+          <div className="grid gap-2">
+            {settings.map((item) => (
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-[#334155] bg-[#020617] p-3" key={item.id}>
+                <div className="min-w-0">
+                  <div className="font-semibold text-[#F8FAFC]">{item.label}</div>
+                  <div className="mt-1 text-sm text-[#94A3B8]">{item.value}</div>
+                </div>
+                <DisabledPillButton label={c.configure} />
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title={c.manualBackup} subtitle={c.manualBackupDescription} />
+          <p className="text-sm text-[#94A3B8]">{c.backupServiceNotConnected}</p>
+          <div className="mt-4">
+            <DisabledPillButton label={c.createBackup} />
+          </div>
+        </section>
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.restoreHistory} subtitle={c.restoreHistoryEmptySubtext} />
+        <EmptyPanel title={c.restoreHistoryEmpty} description={c.restoreHistoryEmptySubtext} />
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.backupStorage} subtitle={c.backupStorageNotConnected} />
+        <DetailGrid
+          rows={[
+            [c.backupDestination, c.notConnected],
+            [c.storageUsed, "-"],
+            [c.retentionPeriod, "-"],
+            [c.syncedAt, "-"],
+            [c.status, <StatusBadge key="status" value={c.notConnected} />],
+          ]}
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <DisabledPillButton label={c.configureStorage} />
+          <DisabledPillButton label={c.restore} />
+          <DisabledPillButton label={c.downloadBackup} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DashboardMetricDetail({ data, drawer }: { data: CenterData; drawer: DrawerKind }) {
+  const { c } = useCenterCopy();
+  const rows = buildStorePerformanceRows(data, "today", c);
+  const activeRows = rows.filter((row) => row.todayBillCount > 0 || inDateRange(row.lastActive, "today"));
+  const totalSales = rows.reduce((sum, row) => sum + row.todaySalesLak, 0);
+  const totalBills = rows.reduce((sum, row) => sum + row.todayBillCount, 0);
+  const topRows = [...rows].filter((row) => row.todaySalesLak > 0 || row.todayBillCount > 0).sort((a, b) => b.todaySalesLak - a.todaySalesLak).slice(0, 10);
+
+  if (drawer === "active-stores-today") {
+    return (
+      <div className="grid gap-4">
+        <DetailGrid rows={[[c.activeStoresToday, String(activeRows.length)], [c.totalBusinesses, String(data.businesses.length)]]} />
+        {activeRows.length ? (
+          <div className="grid gap-2">
+            {activeRows.map((row) => (
+              <div className="rounded-lg border border-[#334155] bg-[#111827] p-4" key={row.business.id}>
+                <div className="font-semibold text-[#F8FAFC]">{row.business.name}</div>
+                <div className="mt-1 text-sm text-[#94A3B8]">{row.lastActive ? new Date(row.lastActive).toLocaleString() : c.noData}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text={c.emptyNoStorePerformance} />
+        )}
+      </div>
+    );
+  }
+
+  if (drawer === "sales-today") {
+    return (
+      <div className="grid gap-4">
+        <DetailGrid rows={[[c.totalSalesToday, formatCompactMoney(totalSales)], [c.totalBillsToday, String(totalBills)], [c.averageBill, formatCompactMoney(totalBills ? totalSales / totalBills : 0)]]} />
+        {topRows.length ? <SimpleTemplateList items={topRows.map((row) => `${row.business.name}: ${formatCompactMoney(row.todaySalesLak)} / ${row.todayBillCount} ${c.bills}`)} /> : <EmptyState text={c.emptyNoSalesData} />}
+      </div>
+    );
+  }
+
+  if (drawer === "bills-today") {
+    return (
+      <div className="grid gap-4">
+        <DetailGrid rows={[[c.totalBillsToday, String(totalBills)], [c.totalSalesToday, formatCompactMoney(totalSales)], [c.averageBill, formatCompactMoney(totalBills ? totalSales / totalBills : 0)]]} />
+        {topRows.length ? <SimpleTemplateList items={topRows.map((row) => `${row.business.name}: ${row.todayBillCount} ${c.bills}`)} /> : <EmptyState text={c.emptyNoSalesData} />}
+      </div>
+    );
+  }
+
+  return <EmptyState text={c.sectionEmpty} />;
 }
 
 function AccessDeniedPanel() {
@@ -1215,13 +3555,13 @@ function LogsTable({ logs, onOpen }: { logs: CenterLog[]; onOpen: (log: CenterLo
           </thead>
           <tbody>
             {logs.map((log) => (
-              <tr className="border-t border-[#334155]" key={log.id}>
+              <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={log.id} onClick={() => onOpen(log)}>
                 <td className="px-4 py-3">{log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}</td>
                 <td className="px-4 py-3">{log.user?.fullName ?? log.user?.username ?? "-"}</td>
                 <td className="px-4 py-3">{log.action ?? "-"}</td>
                 <td className="px-4 py-3">{log.company?.name ?? "-"}</td>
                 <td className="px-4 py-3">
-                  <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={() => onOpen(log)} type="button">
+                  <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); onOpen(log); }} type="button">
                     {c.view}
                   </button>
                 </td>
@@ -1245,6 +3585,43 @@ function AuditValue({ value }: { value: unknown }) {
     <pre className="max-h-64 overflow-auto rounded-lg border border-[#334155] bg-[#020617] p-3 text-xs leading-relaxed text-[#CBD5E1]">
       {JSON.stringify(value, null, 2)}
     </pre>
+  );
+}
+
+function hasAdvancedValue(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
+function formatReadableValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  return "Details available";
+}
+
+function AdvancedDetails({ sections }: { sections: Array<{ title: string; value: unknown }> }) {
+  const { c } = useCenterCopy();
+  const visibleSections = sections.filter((section) => hasAdvancedValue(section.value));
+  if (!visibleSections.length) {
+    return null;
+  }
+
+  return (
+    <details className="rounded-lg border border-[#334155] bg-[#111827]">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#5EEAD4]">{c.advancedDetails}</summary>
+      <div className="grid gap-4 border-t border-[#334155] p-4">
+        {visibleSections.map((section) => (
+          <section className="min-w-0" key={section.title}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{section.title}</h3>
+            <AuditValue value={section.value} />
+          </section>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -1279,7 +3656,7 @@ function PlatformAuditTable({ logs, onOpen }: { logs: PlatformAuditLog[]; onOpen
           </thead>
           <tbody>
             {logs.map((log) => (
-              <tr className="border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={log.id}>
+              <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={log.id} onClick={() => onOpen(log)}>
                 <td className="px-4 py-3 whitespace-nowrap">{log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}</td>
                 <td className="px-4 py-3">{log.actorName || log.actorEmail || "-"}</td>
                 <td className="px-4 py-3">{log.actorRole ?? log.actorType ?? "-"}</td>
@@ -1288,7 +3665,7 @@ function PlatformAuditTable({ logs, onOpen }: { logs: PlatformAuditLog[]; onOpen
                 <td className="px-4 py-3"><StatusBadge value={log.status ?? "success"} /></td>
                 <td className="px-4 py-3"><StatusBadge value={log.severity ?? "info"} /></td>
                 <td className="px-4 py-3">
-                  <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={() => onOpen(log)} type="button">
+                  <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); onOpen(log); }} type="button">
                     {c.view}
                   </button>
                 </td>
@@ -1319,7 +3696,7 @@ function StoreActivityTable({ logs, onOpen }: { logs: StoreActivityLog[]; onOpen
           </thead>
           <tbody>
             {logs.map((log) => (
-              <tr className="border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={log.id}>
+              <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={log.id} onClick={() => onOpen(log)}>
                 <td className="px-4 py-3 whitespace-nowrap">{log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{log.occurredAt ? new Date(log.occurredAt).toLocaleString() : "-"}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{log.syncedAt ? new Date(log.syncedAt).toLocaleString() : "-"}</td>
@@ -1331,7 +3708,7 @@ function StoreActivityTable({ logs, onOpen }: { logs: StoreActivityLog[]; onOpen
                 <td className="px-4 py-3">{log.currency ?? "LAK"}</td>
                 <td className="px-4 py-3">{log.terminalName ?? log.deviceName ?? "-"}</td>
                 <td className="px-4 py-3">
-                  <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={() => onOpen(log)} type="button">
+                  <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); onOpen(log); }} type="button">
                     {c.view}
                   </button>
                 </td>
@@ -1427,10 +3804,12 @@ function AuditLogsCenter({
 
 function PlatformAuditDetail({ log }: { log: PlatformAuditLog }) {
   const { c } = useCenterCopy();
+  const summary = `${log.actorName || log.actorEmail || c.platformAudit} ${log.action} ${log.targetName ?? log.targetType ?? ""}`.trim();
   return (
     <div className="grid gap-4">
       <DetailGrid
         rows={[
+          [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
           [c.actor, `${log.actorName}${log.actorEmail ? ` (${log.actorEmail})` : ""}`],
           [c.role, log.actorRole ?? log.actorType ?? "-"],
           [c.action, log.action],
@@ -1438,20 +3817,25 @@ function PlatformAuditDetail({ log }: { log: PlatformAuditLog }) {
           [c.severity, <StatusBadge key="severity" value={log.severity ?? "info"} />],
           [c.target, `${log.targetType ?? "-"}${log.targetName ? `: ${log.targetName}` : ""}`],
           [c.business, log.business?.name ?? log.businessId ?? "-"],
-          [c.requestId, log.requestId ?? "-"],
-          [c.ipAddress, log.ipAddress ?? "-"],
-          [c.userAgent, log.userAgent ?? "-"],
+          [c.readableSummary, summary || "-"],
         ]}
       />
-      <Panel title={c.before}><AuditValue value={log.beforeValue} /></Panel>
-      <Panel title={c.after}><AuditValue value={log.afterValue} /></Panel>
-      <Panel title={c.metadata}><AuditValue value={log.metadata} /></Panel>
+      <AdvancedDetails
+        sections={[
+          { title: c.before, value: log.beforeValue },
+          { title: c.after, value: log.afterValue },
+          { title: c.metadata, value: log.metadata },
+          { title: "IDs", value: { businessId: log.businessId, requestId: log.requestId, targetId: log.targetId } },
+          { title: c.technicalMetadata, value: { ipAddress: log.ipAddress, userAgent: log.userAgent } },
+        ]}
+      />
     </div>
   );
 }
 
 function StoreActivityDetail({ log }: { log: StoreActivityLog }) {
   const { c } = useCenterCopy();
+  const summary = `${log.actorName} ${log.action} ${log.targetName ?? log.targetType ?? ""}`.trim();
   return (
     <div className="grid gap-4">
       <DetailGrid
@@ -1468,11 +3852,19 @@ function StoreActivityDetail({ log }: { log: StoreActivityLog }) {
           [c.occurredAt, log.occurredAt ? new Date(log.occurredAt).toLocaleString() : "-"],
           [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
           [c.syncedAt, log.syncedAt ? new Date(log.syncedAt).toLocaleString() : "-"],
+          [c.status, <StatusBadge key="status" value={log.status ?? "success"} />],
+          [c.readableSummary, summary || "-"],
         ]}
       />
-      <Panel title={c.before}><AuditValue value={log.beforeValue} /></Panel>
-      <Panel title={c.after}><AuditValue value={log.afterValue} /></Panel>
-      <Panel title={c.metadata}><AuditValue value={log.metadata} /></Panel>
+      <AdvancedDetails
+        sections={[
+          { title: c.before, value: log.beforeValue },
+          { title: c.after, value: log.afterValue },
+          { title: c.metadata, value: log.metadata },
+          { title: "IDs", value: { branchId: log.branch?.id, businessId: log.businessId, targetId: log.targetId } },
+          { title: c.technicalMetadata, value: { deviceName: log.deviceName, terminalName: log.terminalName } },
+        ]}
+      />
     </div>
   );
 }
@@ -2116,6 +4508,9 @@ function DrawerContent({
     if (!canViewPlatformAudit(role)) return <AccessDeniedPanel />;
     return <LogsTable logs={data.auditLogs} onOpen={(log) => onAction("audit-details", log)} />;
   }
+  if (drawer === "audit-details") {
+    return <CenterLogDetail log={selected as CenterLog} />;
+  }
   if (drawer === "platform-audit-detail") {
     return <PlatformAuditDetail log={selected as PlatformAuditLog} />;
   }
@@ -2192,8 +4587,32 @@ function DrawerContent({
     if (!canViewSuperAdminSection(role, "subscriptions")) return <AccessDeniedPanel />;
     return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={onAction} role={role} />;
   }
+  if (drawer === "active-stores-today" || drawer === "sales-today" || drawer === "bills-today") {
+    if (!canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW)) return <AccessDeniedPanel />;
+    return <DashboardMetricDetail data={data} drawer={drawer} />;
+  }
   if (drawer === "pending-actions") {
-    return <EmptyState text="Pending actions will appear here when plan expiry, suspended businesses, failed billing, or platform review items need attention." />;
+    return selected ? (
+      <DetailGrid rows={[[c.action, (selected as { text?: string }).text ?? "-"], [c.severity, (selected as { severity?: string }).severity ?? c.info]]} />
+    ) : (
+      <EmptyState text="Pending actions will appear here when plan expiry, suspended businesses, failed billing, or platform review items need attention." />
+    );
+  }
+  if (drawer === "store-performance-detail") {
+    const row = selected as StorePerformanceRow | null;
+    return row ? <StorePerformanceDetail row={row} /> : <EmptyState text={c.emptyNoStorePerformance} />;
+  }
+  if (drawer === "plan-analytics-detail") {
+    return <PlanAnalyticsDetail business={selected as CenterBusiness} />;
+  }
+  if (drawer === "system-health-detail") {
+    return <SystemHealthDetail service={selected as HealthService} />;
+  }
+  if (drawer === "integration-detail") {
+    return <IntegrationDetail integration={selected as IntegrationCard} />;
+  }
+  if (drawer === "backup-restore-detail") {
+    return <EmptyPanel title={c.backupServiceNotConnected} description={c.backupRestoreSubtitle} />;
   }
 
   return <OperationalDrawer selected={selected} />;
@@ -2201,15 +4620,22 @@ function DrawerContent({
 
 function OperationalDrawer({ selected }: { selected: unknown }) {
   const { c } = useCenterCopy();
+  const selectedRecord = selected && typeof selected === "object" && !Array.isArray(selected) ? selected as Record<string, unknown> : null;
+  const readableRows = selectedRecord
+    ? Object.entries(selectedRecord)
+        .filter(([, value]) => value === null || ["string", "number", "boolean", "undefined"].includes(typeof value))
+        .slice(0, 8)
+        .map(([key, value]) => [key, formatReadableValue(value)] as [string, React.ReactNode])
+    : [];
+
   return (
     <div className="grid gap-4">
       <div className="rounded-lg border border-[#334155] bg-[#111827] p-5">
         <h3 className="text-lg font-semibold text-[#F8FAFC]">{c.featureAccess}</h3>
         <p className="mt-2 text-sm text-[#94A3B8]">{c.manualControl}</p>
       </div>
-      <pre className="max-h-80 overflow-auto rounded-lg border border-[#334155] bg-[#020617] p-4 text-xs text-[#CBD5E1]">
-        {JSON.stringify(selected ?? {}, null, 2)}
-      </pre>
+      {readableRows.length ? <DetailGrid rows={readableRows} /> : <EmptyState text={c.sectionEmpty} />}
+      <AdvancedDetails sections={[{ title: c.rawPayload, value: selected ?? {} }]} />
     </div>
   );
 }
@@ -2298,6 +4724,9 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "business-plan": c.changePlan,
     "business-suspend": c.archiveDelete,
     "business-view": c.businessDetails,
+    "audit-details": c.auditDetails,
+    "active-stores-today": c.activeStoresToday,
+    "bills-today": c.totalBillsToday,
     "businesses-active": c.activeBusinesses,
     "businesses-all": c.totalBusinesses,
     "businesses-free": c.freePlanBusinesses,
@@ -2307,6 +4736,11 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "create-business": c.createBusiness,
     "feature-edit": "Edit Feature",
     "pending-actions": c.pendingActions,
+    "plan-analytics-detail": c.planAnalytics,
+    "system-health-detail": c.systemHealth,
+    "integration-detail": c.integrations,
+    "backup-restore-detail": c.backupRestore,
+    "sales-today": c.totalSalesToday,
     "platform-audit-detail": c.platformAuditDetail,
     "plans": c.plansFeatures,
     "platform-users": c.platformAdminUsers,
@@ -2315,6 +4749,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "recent-activity": c.recentActivity,
     "roles-permissions": c.rolesPermissions,
     "setting-edit": c.platformSettings,
+    "store-performance-detail": c.storePerformance,
     "store-users": c.totalStoreUsers,
     "store-activity-detail": c.storeActivityDetail,
     subscriptions: c.subscriptions,
@@ -2336,6 +4771,10 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   }
   if (drawer?.startsWith("pos-template")) {
     return drawerTitle(drawer, c);
+  }
+  if (drawer === "store-performance-detail") {
+    const row = selected as StorePerformanceRow | null;
+    return row?.business.name ?? c.storePerformance;
   }
   return drawerTitle(drawer, c);
 }
@@ -2392,21 +4831,31 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
     items: Array<{ href: string; icon: LucideIcon; label: string }>;
     label: string;
   }> = [
-    { key: "command", label: c.command, items: [{ href: "/super-admin", icon: LayoutDashboard, label: c.dashboard }] },
+    {
+      key: "command",
+      label: c.command,
+      items: [
+        { href: "/super-admin", icon: LayoutDashboard, label: c.dashboard },
+        { href: "/super-admin/action-center", icon: ClipboardList, label: c.actionCenter },
+        { href: "/super-admin/recent-activity", icon: Activity, label: c.recentActivity },
+      ],
+    },
     {
       key: "businessControl",
       label: c.businessControl,
       items: [
         { href: "/super-admin/businesses", icon: Building2, label: c.businesses },
-        { href: "/super-admin/templates", icon: Sparkles, label: c.businessTemplates },
+        { href: "/super-admin/stores", icon: Store, label: c.storesNav },
+        { href: "/super-admin/store-performance", icon: Gauge, label: c.storePerformance },
       ],
     },
     {
       key: "planEngine",
       label: c.planEngine,
       items: [
-        { href: "/super-admin/plans", icon: BarChart3, label: c.plansFeatures },
-        { href: "/super-admin/subscriptions", icon: CreditCard, label: c.subscriptions },
+        { href: "/super-admin/plans", icon: BarChart3, label: c.planManagement },
+        { href: "/super-admin/templates", icon: Sparkles, label: c.templates },
+        { href: "/super-admin/plan-analytics", icon: CreditCard, label: c.planAnalytics },
       ],
     },
     {
@@ -2414,15 +4863,18 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
       label: c.rolesAccessControl,
       items: [
         { href: "/super-admin/users", icon: Users, label: c.users },
-        { href: "/super-admin/roles", icon: Shield, label: c.roles },
+        { href: "/super-admin/roles", icon: Shield, label: c.rolesPermissions },
+        { href: "/super-admin/audit-logs", icon: Activity, label: c.auditLogs },
       ],
     },
     {
       key: "systemVault",
       label: c.systemVault,
       items: [
-        { href: "/super-admin/settings", icon: Settings, label: c.platformSettings },
-        { href: "/super-admin/audit-logs", icon: Activity, label: c.auditLogs },
+        { href: "/super-admin/system-health", icon: Gauge, label: c.systemHealth },
+        { href: "/super-admin/integrations", icon: ClipboardList, label: c.integrations },
+        { href: "/super-admin/settings", icon: Settings, label: c.settingsMenu },
+        { href: "/super-admin/backup-restore", icon: Download, label: c.backupRestore },
       ],
     },
   ];
@@ -2431,8 +4883,8 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
     .filter((group) => group.items.length > 0);
 
   useEffect(() => {
-    const activeGroup = navGroups.find((group) => group.items.some((item) => pathname === item.href));
-    if (!activeGroup || pathname === "/super-admin") {
+    const activeGroup = navGroups.find((group) => group.items.some((item) => pathname === item.href || (item.href !== "/super-admin" && pathname.startsWith(item.href))));
+    if (!activeGroup) {
       return;
     }
     setOpenGroups((current) => ({ ...current, [activeGroup.key]: true }));
@@ -2467,7 +4919,7 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
 
   return (
     <div
-      className="ego-center-theme min-h-screen bg-[#0F172A] text-[#F8FAFC]"
+      className="ego-center-theme min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#0F172A] text-[#F8FAFC]"
       style={
         {
           "--center-bg-deep": "#020617",
@@ -2526,6 +4978,7 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
                   {group.items.map((item) => {
                     const Icon = item.icon;
                     const active = pathname === item.href;
+                    const itemLabel = item.label || item.href.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || c.sidebarBrand;
                     return (
                       <Link
                         className={cn(
@@ -2537,10 +4990,10 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
                         )}
                         href={item.href}
                         key={item.href}
-                        title={item.label}
+                        title={itemLabel}
                       >
                         <Icon className={cn("size-5", active && "text-[#5EEAD4]")} />
-                        <span className={cn(isSidebarCollapsed && "sr-only")}>{item.label}</span>
+                        <span className={cn("min-w-0 truncate", isSidebarCollapsed && "sr-only")}>{itemLabel}</span>
                       </Link>
                     );
                   })}
@@ -2560,11 +5013,11 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
           </button>
         </div>
       </aside>
-      <div className={cn("transition-[padding] duration-200", isSidebarCollapsed ? "lg:pl-[5.5rem]" : "lg:pl-72")}>
+      <div className={cn("min-w-0 max-w-full overflow-x-hidden transition-[padding] duration-200", isSidebarCollapsed ? "lg:pl-[5.5rem]" : "lg:pl-72")}>
         <header className="sticky top-0 z-30 border-b border-[#334155] bg-[#111827] px-4 py-4 md:px-8">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center justify-between gap-4">
             <div className="min-w-0" aria-hidden="true" />
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
               <div className="inline-flex h-10 items-center rounded-md border border-[#334155] px-2 text-xs font-semibold">
                 <button className={cn("px-1.5", locale === "th" ? "text-[#5EEAD4]" : "text-[#94A3B8]")} onClick={() => setLocale("th")} type="button">
                   TH
@@ -2597,19 +5050,20 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
               </button>
             </div>
           </div>
-          <nav className="mt-4 flex gap-2 overflow-x-auto lg:hidden">
+          <nav className="mt-4 flex max-w-full gap-2 overflow-x-auto lg:hidden">
             {navGroups.flatMap((group) => group.items).map((item) => {
               const Icon = item.icon;
+              const itemLabel = item.label || item.href.split("/").filter(Boolean).pop()?.replace(/-/g, " ") || c.sidebarBrand;
               return (
                 <Link className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-[#334155] px-3 text-sm text-[#CBD5E1]" href={item.href} key={item.href}>
                   <Icon className="size-4" />
-                  {item.label}
+                  {itemLabel}
                 </Link>
               );
             })}
           </nav>
         </header>
-        <main className="mx-auto w-full max-w-[1500px] px-4 py-6 md:px-8">{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-full px-4 py-6 md:px-8 2xl:max-w-[1500px]">{children}</main>
       </div>
       {isNotificationsOpen ? (
         <CenterDrawer onClose={() => setIsNotificationsOpen(false)} title={c.platformNotifications}>
@@ -2622,36 +5076,41 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
 
 export function EgoPosCenterDashboard({ data }: { data: CenterData }) {
   const { c } = useCenterCopy();
+  const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerKind>(null);
+  const [datePreset, setDatePreset] = useState<CommandDatePreset>("today");
+  const [currency, setCurrency] = useState("LAK");
+  const [activityFilter, setActivityFilter] = useState<CommandActivityFilter>("all");
   const [selected, setSelected] = useState<unknown>(null);
   const role = data.currentPlatformUser?.role;
   const proCount = data.businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("pro")).length;
   const freeCount = data.businesses.filter((business) => !business.plan?.planName || business.plan.planName.toLowerCase().includes("free")).length;
   const suspendedCount = data.businesses.filter((business) => business.status?.toLowerCase().includes("suspend")).length;
   const monthlyRevenue = data.subscriptions.reduce((sum, subscription) => sum + Number(subscription.plan?.monthlyPrice ?? 0), 0);
-  const canViewBusinesses = canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW);
   const canViewBilling = canViewSuperAdminSection(role, "subscriptions");
   const canViewTemplates = canUsePlatformAction(role, PLATFORM_ACTIONS.POS_TEMPLATE_VIEW);
   const canViewRecentActivity = isSuperAdminRole(role);
-  const normalizedRole = normalizeUiPlatformRole(role);
-  const dashboardKpis = [
-    canViewBusinesses && normalizedRole !== PLATFORM_ROLES.TEMPLATE_MANAGER
-      ? { drawer: "businesses-all" as DrawerKind, label: c.totalBusinesses, value: data.businesses.length }
-      : null,
-    canViewBusinesses && normalizedRole !== PLATFORM_ROLES.TEMPLATE_MANAGER
-      ? {
-          drawer: "businesses-active" as DrawerKind,
-          label: c.activeBusinesses,
-          value: data.businesses.filter((b) => (b.status ?? "active") === "active").length,
-        }
-      : null,
-    canViewBilling ? { drawer: "businesses-free" as DrawerKind, label: c.freePlan, value: freeCount } : null,
-    canViewBilling ? { drawer: "businesses-pro" as DrawerKind, label: c.proPlan, value: proCount } : null,
-    canViewBilling ? { drawer: "subscription-revenue" as DrawerKind, label: c.monthlyRevenue, value: money(monthlyRevenue) } : null,
-    isSuperAdminRole(role) || normalizedRole === PLATFORM_ROLES.SUPPORT_ADMIN
-      ? { drawer: "pending-actions" as DrawerKind, label: c.pendingActions, value: suspendedCount }
-      : null,
-  ].filter(Boolean) as Array<{ drawer: DrawerKind; label: string; value: string | number }>;
+  const storeRows = buildStorePerformanceRows(data, datePreset, c);
+  const todaySales = storeRows.reduce((sum, row) => sum + row.todaySalesLak, 0);
+  const todayBills = storeRows.reduce((sum, row) => sum + row.todayBillCount, 0);
+  const activeToday = storeRows.filter((row) => row.todayBillCount > 0 || inDateRange(row.lastActive, "today")).length;
+  const actionCount = suspendedCount + storeRows.filter((row) => row.score !== null && row.score < 40).length;
+  const dashboardKpis: Array<{ drawer: DrawerKind; label: string; trend: "up" | "down" | "neutral"; value: string }> = [
+    { drawer: "businesses-all", label: c.totalBusinesses, trend: "neutral", value: String(data.businesses.length) },
+    { drawer: "active-stores-today", label: c.activeStoresToday, trend: activeToday > 0 ? "up" : "neutral", value: String(activeToday) },
+    { drawer: "sales-today", label: c.totalSalesToday, trend: todaySales > 0 ? "up" : "neutral", value: formatCompactMoney(todaySales) },
+    { drawer: "bills-today", label: c.totalBillsToday, trend: todayBills > 0 ? "up" : "neutral", value: String(todayBills) },
+    { drawer: "subscription-revenue", label: c.monthlyPlatformRevenue, trend: monthlyRevenue > 0 ? "up" : "neutral", value: money(monthlyRevenue) },
+    { drawer: "businesses-free", label: c.freePlan, trend: "neutral", value: String(freeCount) },
+    { drawer: "businesses-pro", label: c.proPlan, trend: "neutral", value: String(proCount) },
+    { drawer: "pending-actions", label: c.pendingActions, trend: actionCount > 0 ? "down" : "neutral", value: String(actionCount) },
+  ];
+  const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
+    { label: c.today, value: "today" },
+    { label: c.sevenDays, value: "7d" },
+    { label: c.thirtyDays, value: "30d" },
+    { label: c.thisMonth, value: "month" },
+  ];
 
   const open = (next: DrawerKind, nextSelected?: unknown) => {
     setSelected(nextSelected ?? null);
@@ -2660,24 +5119,72 @@ export function EgoPosCenterDashboard({ data }: { data: CenterData }) {
   const parentDrawer = drawerParent(drawer, selected);
 
   return (
-    <div className="grid gap-6">
-      <header>
-        <h1 className="text-4xl font-semibold tracking-normal">{c.dashboard}</h1>
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <header className="flex min-w-0 max-w-full flex-col gap-4 rounded-lg border border-[#334155] bg-[#111827] p-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[#5EEAD4]/30 bg-[#5EEAD4]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-[#5EEAD4]">
+            <Gauge className="size-3.5" />
+            {c.sidebarBrand}
+          </div>
+          <h1 className="text-3xl font-semibold tracking-normal text-[#F8FAFC] md:text-4xl">{c.commandDashboardTitle}</h1>
+          <p className="mt-2 max-w-3xl text-sm text-[#94A3B8]">{c.manageBusinessesTemplatesPlansUsersAndPlatformControls}</p>
+        </div>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-[#334155] bg-[#020617] px-3 text-sm text-[#CBD5E1]">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{c.dateRange}</span>
+            <select className="bg-transparent text-[#F8FAFC] outline-none" onChange={(event) => setDatePreset(event.target.value as CommandDatePreset)} value={datePreset}>
+              {dateOptions.map((option) => <option className="bg-[#111827]" key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-[#334155] bg-[#020617] px-3 text-sm text-[#CBD5E1]">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{c.currency}</span>
+            <select className="bg-transparent text-[#F8FAFC] outline-none" onChange={(event) => setCurrency(event.target.value)} value={currency}>
+              {["LAK", "THB", "USD"].map((item) => <option className="bg-[#111827]" key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <button className="inline-flex h-10 items-center gap-2 rounded-md border border-[#334155] px-3 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => router.refresh()} type="button">
+            <RefreshCw className="size-4" />
+            {c.refresh}
+          </button>
+          <button className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md border border-[#334155] px-3 text-sm font-semibold text-[#64748B]" disabled title={c.exportNotReady} type="button">
+            <Download className="size-4" />
+            {c.export}
+          </button>
+        </div>
       </header>
 
-      {dashboardKpis.length ? (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          {dashboardKpis.map((kpi) => (
-            <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} onClick={() => open(kpi.drawer)} />
-          ))}
-        </section>
-      ) : null}
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-3">
+        {dashboardKpis.map((kpi) => (
+          <CommandKpiCard key={kpi.label} label={kpi.label} onOpen={() => open(kpi.drawer)} trend={kpi.trend} value={kpi.value} />
+        ))}
+      </section>
 
-      <DashboardNotifications onOpen={() => open("platform-notifications")} />
+      <section className="grid w-full min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]">
+        <div className="grid min-w-0 gap-6">
+          <PlatformSalesOverview data={data} onOpen={() => open("sales-today")} preset={datePreset} />
+          <TopStoresBySales rows={storeRows} onOpen={(row) => open("store-performance-detail", row)} />
+        </div>
+        <div className="grid min-w-0 content-start gap-6">
+          <ActionCenter data={data} onOpen={(item) => open("pending-actions", item)} rows={storeRows} />
+          {canViewBilling ? <PlanEngineSummary businesses={data.businesses} onOpen={(next) => open(next)} /> : null}
+          <SystemHealthSummary />
+        </div>
+      </section>
 
-      {canViewTemplates ? <DashboardPosTemplateStatus onOpen={(template) => open("pos-template-detail", template)} /> : null}
+      <StorePerformanceTable rows={storeRows} onOpen={(row) => open("store-performance-detail", row)} />
 
-      {canViewRecentActivity ? <DashboardRecentActivity logs={data.auditLogs} onOpen={(log) => open("audit-details", log)} onViewAll={() => open("recent-activity")} /> : null}
+      <section className="grid w-full min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+        {canViewRecentActivity ? (
+          <RecentActivityCommand
+            filter={activityFilter}
+            logs={data.auditLogs}
+            onFilter={setActivityFilter}
+            onOpen={(log) => open("audit-details", log)}
+            onViewAll={() => router.push("/super-admin/audit-logs")}
+          />
+        ) : null}
+        {canViewTemplates ? <TemplateUsageSummary businesses={data.businesses} onOpen={(template) => open("pos-template-detail", template)} /> : null}
+      </section>
 
       {drawer ? (
         <CenterDrawer
@@ -2787,6 +5294,87 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
           <DrawerContent data={data} drawer={drawer} onAction={open} onClose={() => open(null)} selected={selected} />
         </CenterDrawer>
       ) : null}
+    </div>
+  );
+}
+
+export function EgoPosCenterOperationalPage({
+  data,
+  section,
+}: {
+  data: CenterData;
+  section: PlaceholderSectionKind;
+}) {
+  const { c } = useCenterCopy();
+  const [drawer, setDrawer] = useState<DrawerKind>(null);
+  const [selected, setSelected] = useState<unknown>(null);
+  const role = data.currentPlatformUser?.role;
+  const open = (next: DrawerKind, nextSelected?: unknown) => {
+    setSelected(nextSelected ?? null);
+    setDrawer(next);
+  };
+  const parentDrawer = drawerParent(drawer, selected);
+
+  let body: React.ReactNode;
+  if (section === "actionCenter") {
+    body = <ActionCenterPage data={data} onAction={open} />;
+  } else if (section === "recentActivity") {
+    body = canViewPlatformAudit(role) ? <RecentActivityPage data={data} onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "stores") {
+    body = canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW) ? <StoresPage data={data} onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "storePerformance") {
+    body = canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW) ? <StorePerformancePage data={data} onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "planAnalytics") {
+    body = canViewSuperAdminSection(role, "plans") ? <PlanAnalyticsPage data={data} onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "systemHealth") {
+    body = canViewSuperAdminSection(role, "settings") ? <SystemHealthPage onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "integrations") {
+    body = canViewSuperAdminSection(role, "settings") ? <IntegrationsPage onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "backupRestore") {
+    body = canViewSuperAdminSection(role, "settings") ? <BackupRestorePage /> : <AccessDeniedPanel />;
+  } else {
+    body = <EgoPosCenterPlaceholderPage section={section} />;
+  }
+
+  return (
+    <>
+      {body}
+      {drawer ? (
+        <CenterDrawer
+          backLabel={drawerBackLabel(drawer, c, selected)}
+          onBack={parentDrawer ? () => open(parentDrawer.drawer, parentDrawer.selected) : undefined}
+          onClose={() => open(null)}
+          title={drawerTitleForSelected(drawer, c, selected)}
+        >
+          <DrawerContent data={data} drawer={drawer} onAction={open} onClose={() => open(null)} selected={selected} />
+        </CenterDrawer>
+      ) : null}
+    </>
+  );
+}
+
+export function EgoPosCenterPlaceholderPage({ section }: { section: PlaceholderSectionKind }) {
+  const { c } = useCenterCopy();
+  const titleMap: Record<PlaceholderSectionKind, string> = {
+    actionCenter: c.actionCenter,
+    backupRestore: c.backupRestore,
+    integrations: c.integrations,
+    planAnalytics: c.planAnalytics,
+    recentActivity: c.recentActivity,
+    storePerformance: c.storePerformance,
+    stores: c.storesNav,
+    systemHealth: c.systemHealth,
+  };
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <header>
+        <h1 className="text-3xl font-semibold tracking-normal">{titleMap[section]}</h1>
+        <p className="mt-2 text-sm text-[#94A3B8]">{c.sectionNotConnectedYet}</p>
+      </header>
+      <section className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-6">
+        <EmptyState text={c.sectionNotConnectedYet} />
+      </section>
     </div>
   );
 }

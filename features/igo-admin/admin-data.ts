@@ -304,3 +304,97 @@ export async function getAdminPlatformUsersCount() {
     throw error;
   }
 }
+
+type PlatformSalesRange = {
+  from: Date;
+  to: Date;
+};
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function addDays(value: Date, days: number) {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function amount(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function dayKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+export async function getAdminCommandDashboardData() {
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const tomorrowStart = addDays(todayStart, 1);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thirtyDaysStart = addDays(todayStart, -29);
+  const range: PlatformSalesRange = {
+    from: monthStart < thirtyDaysStart ? monthStart : thirtyDaysStart,
+    to: tomorrowStart,
+  };
+
+  try {
+    const sales = await db.sale.findMany({
+      orderBy: { createdAt: "asc" },
+      select: {
+        companyId: true,
+        createdAt: true,
+        id: true,
+        saleStatus: true,
+        totalAmount: true,
+      },
+      where: {
+        createdAt: { gte: range.from, lt: range.to },
+        saleStatus: "completed",
+      },
+    });
+
+    const byBusiness = new Map<string, { billCount: number; salesLak: number; todayBillCount: number; todaySalesLak: number }>();
+    const byDay = new Map<string, { billCount: number; salesLak: number }>();
+
+    for (const sale of sales) {
+      const createdAt = new Date(sale.createdAt);
+      const saleAmount = amount(sale.totalAmount);
+      const business = byBusiness.get(sale.companyId) ?? { billCount: 0, salesLak: 0, todayBillCount: 0, todaySalesLak: 0 };
+      business.billCount += 1;
+      business.salesLak += saleAmount;
+      if (createdAt >= todayStart && createdAt < tomorrowStart) {
+        business.todayBillCount += 1;
+        business.todaySalesLak += saleAmount;
+      }
+      byBusiness.set(sale.companyId, business);
+
+      const key = dayKey(createdAt);
+      const day = byDay.get(key) ?? { billCount: 0, salesLak: 0 };
+      day.billCount += 1;
+      day.salesLak += saleAmount;
+      byDay.set(key, day);
+    }
+
+    return {
+      generatedAt: now.toISOString(),
+      range: { from: range.from.toISOString(), to: range.to.toISOString() },
+      salesByBusiness: Array.from(byBusiness.entries()).map(([businessId, metrics]) => ({ businessId, ...metrics })),
+      salesByDay: Array.from(byDay.entries()).map(([date, metrics]) => ({ date, ...metrics })),
+      status: "connected" as const,
+    };
+  } catch (error) {
+    if (shouldUseDemoAdminFallback(error)) {
+      return {
+        generatedAt: now.toISOString(),
+        range: { from: range.from.toISOString(), to: range.to.toISOString() },
+        salesByBusiness: [],
+        salesByDay: [],
+        status: "unavailable" as const,
+      };
+    }
+    throw error;
+  }
+}

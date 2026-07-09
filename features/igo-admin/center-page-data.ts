@@ -1,6 +1,7 @@
 import {
   getAdminAuditLogs,
   getAdminBusinesses,
+  getAdminCommandDashboardData,
   getAdminPlatformUsersCount,
   getAdminPlatformAuditLogs,
   getAdminPlans,
@@ -17,7 +18,7 @@ function serializable<T>(value: T): T {
 export async function getEgoPosCenterPageData() {
   const currentPlatformUser = await getCurrentPlatformUser();
   const role = currentPlatformUser?.role;
-  const [businesses, users, auditLogs, platformAuditLogs, storeActivityLogs, plans, subscriptions, platformUsersCount] = await Promise.all([
+  const [businesses, users, auditLogs, platformAuditLogs, storeActivityLogs, plans, subscriptions, platformUsersCount, commandDashboard] = await Promise.all([
     getAdminBusinesses(role),
     getAdminUsers(),
     getAdminAuditLogs(),
@@ -26,7 +27,8 @@ export async function getEgoPosCenterPageData() {
     getAdminPlans(),
     getAdminSubscriptions(),
     getAdminPlatformUsersCount(),
+    getAdminCommandDashboardData(),
   ]);
 
-  return serializable({ auditLogs, businesses, currentPlatformUser, platformAuditLogs, platformUsersCount, plans, storeActivityLogs, subscriptions, users });
+  return serializable({ auditLogs, businesses, commandDashboard, currentPlatformUser, platformAuditLogs, platformUsersCount, plans, storeActivityLogs, subscriptions, users });
 }
