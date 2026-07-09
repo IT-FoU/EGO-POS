@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -428,11 +428,25 @@ function DetailDrawer({
   copy: DashboardCopy;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    if (!content) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [content, onClose]);
+
   if (!content) return null;
 
   return (
-    <section className="fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-3xl flex-col border-l border-border bg-card shadow-2xl">
-      <header className="border-b border-border p-5">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-[var(--dashboard-sidebar-width,5rem)]">
+      <section className="flex h-full w-full max-w-none flex-col overflow-x-hidden border-l border-border bg-card shadow-2xl">
+      <header className="sticky top-0 z-20 border-b border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-primary">{copy.detail}</p>
@@ -449,7 +463,7 @@ function DetailDrawer({
           </button>
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5">
         {content.rows?.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {content.rows.map((row) => (
@@ -473,6 +487,7 @@ function DetailDrawer({
         ) : null}
       </div>
     </section>
+    </div>
   );
 }
 
