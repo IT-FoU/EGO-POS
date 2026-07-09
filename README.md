@@ -36,6 +36,9 @@ npm run db:seed
 npm run dev
 ```
 
+Use `http://localhost:3000` for local development. Avoid `http://127.0.0.1:3000`
+so auth cookies and local sessions stay on the same canonical host.
+
 Seed login:
 
 - Username: `owner`

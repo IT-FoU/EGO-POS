@@ -5,9 +5,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { resolveStorePostLoginRedirectForUser } from "@/lib/auth/store-membership";
 import { LoginForm } from "@/components/auth/login-form";
 import { LoginLocaleSwitcher } from "@/components/auth/login-locale-switcher";
-import { LogoContainer } from "@/components/brand/logo-container";
 import { APP_NAME } from "@/lib/constants";
-import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 export default async function LoginPage({
@@ -34,22 +32,65 @@ export default async function LoginPage({
 
   const cookieStore = await cookies();
   const locale = getServerLocale(params?.locale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  const dictionary = getDictionary(locale);
+  const dictionary = locale === "th"
+    ? {
+        authNotReady: "ระบบยืนยันตัวตนยังไม่พร้อม กรุณาตรวจสอบฐานข้อมูลและการตั้งค่า",
+        databaseUnavailable: "ฐานข้อมูลยังไม่พร้อมใช้งาน",
+        hidePassword: "ซ่อนรหัสผ่าน",
+        invalidCredentials: "อีเมล ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง",
+        password: "รหัสผ่าน",
+        registerNewAccount: "",
+        showPassword: "แสดงรหัสผ่าน",
+        signIn: "เข้าสู่ระบบ",
+        signingIn: "กำลังเข้าสู่ระบบ...",
+        username: "อีเมล / ชื่อผู้ใช้",
+      }
+    : {
+        authNotReady: "Authentication is not ready. Check the database and environment settings.",
+        databaseUnavailable: "Database is not available.",
+        hidePassword: "Hide password",
+        invalidCredentials: "Email, username, or password is incorrect.",
+        password: "Password",
+        registerNewAccount: "",
+        showPassword: "Show password",
+        signIn: "Sign in",
+        signingIn: "Signing in...",
+        username: "Email / Username",
+      };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <section className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl md:p-8">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <LogoContainer className="shadow-lg" size={112} />
-          <h1 className="mt-5 text-4xl font-bold tracking-normal">{APP_NAME}</h1>
-          <p className="mt-2 text-sm font-semibold text-primary">{dictionary.storeLoginPortal}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{dictionary.loginTitle}</p>
-          <p className="mt-2 text-xs text-muted-foreground">{dictionary.storeLoginAudience}</p>
+    <main className="relative flex min-h-screen overflow-hidden bg-[#020617] px-4 py-8 text-[#F8FAFC] sm:px-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(94,234,212,0.12),transparent_32rem)]" />
+      <section className="relative z-10 m-auto w-full max-w-[500px]">
+        <div className="rounded-[2rem] border border-[#334155] bg-[#111827] p-6 shadow-xl sm:p-8">
+          <div className="mb-7 flex flex-col items-center text-center">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="grid size-12 place-items-center rounded-2xl border border-[#5EEAD4] bg-[#1E293B] text-xl font-black text-[#5EEAD4]">
+                E
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-black tracking-[0.22em] text-[#F8FAFC]">{APP_NAME}</div>
+                <div className="text-xs text-[#94A3B8]">{locale === "th" ? "เข้าสู่ระบบร้าน" : "Store access"}</div>
+              </div>
+            </div>
+            <h1 className="text-3xl font-black tracking-tight text-[#F8FAFC] sm:text-[2rem]">{APP_NAME}</h1>
+            <p className="mt-2 text-sm text-[#94A3B8]">{locale === "th" ? "เข้าสู่ระบบร้าน" : "Store access"}</p>
+          </div>
+
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full border border-[#334155] bg-[#1E293B] p-1 text-[#CBD5E1]">
+              <LoginLocaleSwitcher locale={locale} />
+            </div>
+          </div>
+
+          <LoginForm
+            demoMode={isDemoMode()}
+            dictionary={dictionary}
+            locale={locale}
+            showRegisterLink={false}
+            variant="premiumDark"
+          />
         </div>
-        <div className="mb-6 flex justify-center">
-          <LoginLocaleSwitcher locale={locale} />
-        </div>
-        <LoginForm demoMode={isDemoMode()} dictionary={dictionary} locale={locale} />
       </section>
     </main>
   );

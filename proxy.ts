@@ -2,6 +2,8 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 
 const ADMIN_COOKIE = "igo_super_admin_session";
+const LOCALHOST_DEV_HOST = "localhost:3000";
+const LOCALHOST_ALIAS_DEV_HOST = "127.0.0.1:3000";
 
 const dashboardAuth = withAuth({
   pages: {
@@ -9,8 +11,25 @@ const dashboardAuth = withAuth({
   },
 });
 
+function redirectLocalhostAlias(request: NextRequest) {
+  if (process.env.NODE_ENV !== "development") {
+    return null;
+  }
+
+  const host = request.headers.get("host");
+  if (host !== LOCALHOST_ALIAS_DEV_HOST) {
+    return null;
+  }
+
+  return NextResponse.redirect(`http://${LOCALHOST_DEV_HOST}${request.nextUrl.pathname}${request.nextUrl.search}`);
+}
+
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
+  const canonicalRedirect = redirectLocalhostAlias(request);
+  if (canonicalRedirect) {
+    return canonicalRedirect;
+  }
 
   if (pathname === "/login") {
     if (request.nextUrl.searchParams.has("username") || request.nextUrl.searchParams.has("password")) {
@@ -58,12 +77,18 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
     return NextResponse.next();
   }
 
+  if (!pathname.startsWith("/dashboard")) {
+    return NextResponse.next();
+  }
+
   return dashboardAuth(request as never, event as never);
 }
 
 export const config = {
   matcher: [
     "/login",
+    "/register",
+    "/auth",
     "/dashboard/:path*",
     "/super-admin/:path*",
     "/api/super-admin/login",
