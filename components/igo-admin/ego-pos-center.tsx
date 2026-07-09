@@ -44,6 +44,7 @@ import {
   normalizePlatformPermissionRole,
   type PlatformAction,
 } from "@/features/permissions/platform-permissions";
+import { EGO_ADMIN_PROVISIONING_TEMPLATES } from "@/lib/setup-admin/provisioning-templates";
 import { LOCALE_CHANGE_EVENT, persistClientLocale, readClientLocale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
 
@@ -4269,7 +4270,9 @@ function UsersTable({ onAction, role, users }: { onAction: (drawer: DrawerKind, 
 function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
   const { c } = useCenterCopy();
   const [step, setStep] = useState(0);
-  const [selectedTemplate, setSelectedTemplate] = useState(templateDefinitions[0]?.key ?? "mini-mart");
+  const firstProvisionableTemplate =
+    EGO_ADMIN_PROVISIONING_TEMPLATES.find((template) => template.enabled)?.key ?? "mini_mart";
+  const [selectedTemplate, setSelectedTemplate] = useState(firstProvisionableTemplate);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const steps = [c.chooseBusinessTemplate, c.businessInformation, c.ownerAccount, c.plan, c.confirmCreateBusiness];
@@ -4282,10 +4285,12 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
       businessTemplateKey: selectedTemplate,
       defaultCurrency: String(data.get("defaultCurrency") || "LAK"),
       defaultLocale: String(data.get("defaultLocale") || "th"),
+      ownerPhone: String(data.get("ownerPhone") || ""),
       ownerEmail: String(data.get("ownerEmail") || ""),
       ownerFullName: String(data.get("ownerFullName") || ""),
       ownerTemporaryPassword: String(data.get("ownerTemporaryPassword") || ""),
       ownerUsername: String(data.get("ownerUsername") || ""),
+      profileAddress: String(data.get("profileAddress") || ""),
       storeCode: String(data.get("storeCode") || ""),
       storeName: String(data.get("storeName") || ""),
       warehouseName: String(data.get("warehouseName") || "Main Warehouse"),
@@ -4323,15 +4328,16 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
 
       {step === 0 ? (
         <div className="grid gap-3 md:grid-cols-2">
-          {templateDefinitions.map((template) => (
+          {EGO_ADMIN_PROVISIONING_TEMPLATES.map((template) => (
             <button
-              className={cn("rounded-lg border p-4 text-left transition", selectedTemplate === template.key ? "border-[#5EEAD4] bg-[#5EEAD4]/10" : "border-[#334155] bg-[#111827] hover:border-[#5EEAD4]")}
+              className={cn("rounded-lg border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60", selectedTemplate === template.key ? "border-[#5EEAD4] bg-[#5EEAD4]/10" : "border-[#334155] bg-[#111827] hover:border-[#5EEAD4]")}
+              disabled={!template.enabled}
               key={template.key}
               onClick={() => setSelectedTemplate(template.key)}
               type="button"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-[#F8FAFC]">{template.name}</span>
+                <span className="font-semibold text-[#F8FAFC]">{template.label}</span>
                 <StatusBadge value={template.status} />
               </div>
               <p className="mt-2 text-sm text-[#94A3B8]">{template.features.join(" • ")}</p>
@@ -4373,6 +4379,10 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
           <input className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" defaultValue="Main Branch" name="branchName" />
         </label>
         <label className="grid gap-2 text-sm font-medium md:col-span-2">
+          Business address
+          <textarea className="min-h-20 rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" name="profileAddress" />
+        </label>
+        <label className="grid gap-2 text-sm font-medium md:col-span-2">
           Warehouse name
           <input className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" defaultValue="Main Warehouse" name="warehouseName" />
         </label>
@@ -4383,6 +4393,10 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
         <label className="grid gap-2 text-sm font-medium">
           Owner email
           <input className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" name="ownerEmail" required={step >= 2} type="email" />
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
+          Owner phone
+          <input className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" name="ownerPhone" type="tel" />
         </label>
         <label className="grid gap-2 text-sm font-medium">
           Owner username
@@ -4396,9 +4410,7 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
           {c.plan}
           <select className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" name="plan">
             <option value="Free">Free Plan</option>
-            <option value="Pro">Pro Plan</option>
-            <option value="Trial">Trial</option>
-            <option value="Custom">Custom</option>
+            <option disabled value="Pro">Pro Plan - Billing not connected yet</option>
           </select>
         </label>
       </div>

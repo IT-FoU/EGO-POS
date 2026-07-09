@@ -23,10 +23,12 @@ export async function POST(request: Request) {
     businessTemplateKey: readString(body.businessTemplateKey),
     defaultCurrency: readString(body.defaultCurrency).toUpperCase() as CurrencyCode,
     defaultLocale: readString(body.defaultLocale),
+    ownerPhone: readString(body.ownerPhone),
     ownerEmail: readString(body.ownerEmail),
     ownerFullName: readString(body.ownerFullName),
     ownerTemporaryPassword: typeof body.ownerTemporaryPassword === "string" ? body.ownerTemporaryPassword : "",
     ownerUsername: readString(body.ownerUsername),
+    profileAddress: readString(body.profileAddress),
     storeCode: readString(body.storeCode),
     storeName: readString(body.storeName),
     warehouseName: readString(body.warehouseName),
@@ -37,6 +39,36 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return Response.json({ error: result.error, ok: false }, { status: result.status });
   }
+
+  import("@/features/audit/platform-route-audit")
+    .then(({ writePlatformAuditForUser }) =>
+      writePlatformAuditForUser({
+        action: "business.create",
+        actor: permission.user,
+        afterValue: {
+          branchId: result.branchId,
+          businessTemplateKey: result.businessTemplateKey,
+          companyId: result.companyId,
+          ownerEmail: result.ownerEmail,
+          ownerUsername: result.ownerUsername,
+          storeCode: result.storeCode,
+          storeName: result.storeName,
+          warehouseId: result.warehouseId,
+        },
+        businessId: result.companyId,
+        metadata: {
+          loginUrl: result.loginUrl,
+          plan: "Free",
+          source: "super_admin_create_store",
+        },
+        request,
+        status: "success",
+        targetId: result.companyId,
+        targetName: result.storeName,
+        targetType: PLATFORM_TARGET_TYPES.BUSINESS,
+      }),
+    )
+    .catch(() => undefined);
 
   return Response.json({
     branchId: result.branchId,

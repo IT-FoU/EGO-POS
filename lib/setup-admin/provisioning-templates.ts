@@ -1,21 +1,24 @@
 import type { BusinessTemplateType } from "@/features/platform/platform-data";
 
-export type EgoAdminProvisioningTemplateKey = BusinessTemplateType | "rental";
+export type EgoAdminProvisioningTemplateKey = BusinessTemplateType | "clothes_rental" | "event_rental";
 
 export type EgoAdminProvisioningTemplate = {
   enabled: boolean;
+  features: string[];
   key: EgoAdminProvisioningTemplateKey;
   label: string;
+  status: "Ready" | "Coming soon";
 };
 
 export const EGO_ADMIN_PROVISIONING_TEMPLATES: EgoAdminProvisioningTemplate[] = [
-  { enabled: true, key: "mini_mart", label: "Mini Mart" },
-  { enabled: true, key: "restaurant", label: "Restaurant" },
-  { enabled: true, key: "pharmacy", label: "Pharmacy" },
-  { enabled: true, key: "clothing", label: "Clothes Shop" },
-  { enabled: true, key: "wholesale_store", label: "Wholesale" },
-  { enabled: true, key: "online_seller", label: "Online Seller" },
-  { enabled: false, key: "rental", label: "Rental (LP-5)" },
+  { enabled: true, features: ["MVP provisioning ready"], key: "mini_mart", label: "Mini Mart", status: "Ready" },
+  { enabled: false, features: ["Coming soon"], key: "restaurant", label: "Restaurant", status: "Coming soon" },
+  { enabled: false, features: ["Coming soon"], key: "pharmacy", label: "Pharmacy", status: "Coming soon" },
+  { enabled: false, features: ["Coming soon"], key: "clothing", label: "Clothes Shop", status: "Coming soon" },
+  { enabled: false, features: ["Coming soon"], key: "wholesale_store", label: "Wholesale", status: "Coming soon" },
+  { enabled: false, features: ["Coming soon"], key: "online_seller", label: "Online Seller", status: "Coming soon" },
+  { enabled: false, features: ["Coming soon"], key: "clothes_rental", label: "Clothes Rental", status: "Coming soon" },
+  { enabled: false, features: ["Coming soon"], key: "event_rental", label: "Event Rental", status: "Coming soon" },
 ];
 
 export function isEgoAdminProvisioningTemplateKey(value: string): value is EgoAdminProvisioningTemplateKey {

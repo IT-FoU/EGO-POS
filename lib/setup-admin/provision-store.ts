@@ -21,6 +21,8 @@ export type ProvisionStoreInput = {
   businessTemplateKey: string;
   defaultCurrency: CurrencyCode;
   defaultLocale: string;
+  ownerPhone?: string;
+  profileAddress?: string;
   ownerEmail: string;
   ownerFullName: string;
   ownerTemporaryPassword: string;
@@ -97,7 +99,7 @@ export function validateProvisionStoreInput(input: ProvisionStoreInput): string 
   }
 
   if (!["en", "th"].includes(defaultLocale)) {
-    return "Default language must be English or Lao.";
+    return "Default language must be English or Thai.";
   }
 
   if (!["LAK", "THB", "USD"].includes(input.defaultCurrency)) {
@@ -137,6 +139,8 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
   const ownerFullName = input.ownerFullName.trim();
   const ownerUsername = input.ownerUsername.trim();
   const ownerEmail = input.ownerEmail.trim().toLowerCase();
+  const ownerPhone = input.ownerPhone?.trim() ?? null;
+  const profileAddress = input.profileAddress?.trim() ?? null;
   const ownerTemporaryPassword = input.ownerTemporaryPassword.trim();
   const defaultLocale = input.defaultLocale.trim();
   const businessTemplateKey = input.businessTemplateKey;
@@ -180,6 +184,7 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
           email: ownerEmail,
           fullName: ownerFullName,
           passwordHash,
+          phone: ownerPhone,
           preferredLocale: defaultLocale,
           status: "active",
           username: ownerUsername,
@@ -203,9 +208,11 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
 
       const branch = await tx.branch.create({
         data: {
+          address: profileAddress,
           companyId: company.id,
           isMainBranch: true,
           name: branchName,
+          phone: ownerPhone,
         },
         select: { id: true },
       });
@@ -230,7 +237,9 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
           loyaltyMinRedeemPoints: 1,
           loyaltyPointValueLak: 1000,
           loyaltySpendPerPointLak: 10000,
+          profileAddress,
           profileEmail: ownerEmail,
+          profilePhone: ownerPhone,
           receiptFooter: `Thank you for shopping at ${storeName}`,
           receiptHeader: storeName,
           receiptPrefix,
