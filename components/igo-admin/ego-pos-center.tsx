@@ -216,6 +216,7 @@ type DrawerKind =
   | "businesses-pro"
   | "businesses-trial"
   | "businesses-suspended"
+  | "business-detail"
   | "store-users"
   | "platform-users"
   | "users"
@@ -593,6 +594,44 @@ const copy: Record<SupportedLocale, Record<string, string>> = {
 };
 
 type CenterCopy = Record<string, string>;
+
+Object.assign(copy.en, {
+  auditCreated: "Audit Created",
+  billingNotConnectedForPro: "Billing not connected for Pro",
+  businessCreated: "Company Created",
+  businessOverview: "Business Overview",
+  businessSetupStatus: "Setup Status",
+  businessesMissingData: "Businesses Missing Data",
+  countryRegion: "Country / Region",
+  miniMartBusinesses: "Mini Mart Businesses",
+  openStoreDashboard: "Open Store Dashboard",
+  ownerAssignmentActive: "Owner Assignment Active",
+  primaryStore: "Primary Store",
+  storeBranchCreated: "Store / Branch Created",
+  storesBranches: "Stores / Branches",
+  storesCount: "Stores Count",
+  templatePlan: "Template & Plan",
+  viewStores: "View Stores",
+});
+
+Object.assign(copy.th, {
+  auditCreated: "บันทึกตรวจสอบถูกสร้าง",
+  billingNotConnectedForPro: "ยังไม่ได้เชื่อมต่อระบบชำระเงินสำหรับ Pro",
+  businessCreated: "สร้างธุรกิจแล้ว",
+  businessOverview: "ภาพรวมธุรกิจ",
+  businessSetupStatus: "สถานะการตั้งค่าธุรกิจ",
+  businessesMissingData: "ธุรกิจข้อมูลไม่ครบ",
+  countryRegion: "ประเทศ/ภูมิภาค",
+  miniMartBusinesses: "ธุรกิจ Mini Mart",
+  openStoreDashboard: "เปิดแดชบอร์ดร้าน",
+  ownerAssignmentActive: "สิทธิ์เจ้าของใช้งานอยู่",
+  primaryStore: "ร้านหลัก",
+  storeBranchCreated: "สร้างร้าน/สาขาแล้ว",
+  storesBranches: "ร้าน / สาขา",
+  storesCount: "จำนวนร้าน",
+  templatePlan: "Template และแผน",
+  viewStores: "ดูร้านค้า",
+});
 
 Object.assign(copy.th, {
   backToPosTemplate: "กลับไป POS Template",
@@ -2347,6 +2386,36 @@ type StoreDirectoryRow = {
   warehouseStatus: string;
 };
 
+type BusinessDirectoryRow = {
+  activeAssignment: boolean;
+  address: string;
+  auditCreated: boolean;
+  backOfficeAccess: string;
+  business: CenterBusiness;
+  businessName: string;
+  companyId: string;
+  country: string;
+  createdAt?: string;
+  currency: string;
+  language: string;
+  missingDataCount: number;
+  owner: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  ownerUsername: string;
+  plan: string;
+  posAccess: string;
+  primaryBranchId: string;
+  primaryStoreName: string;
+  setupStatus: string;
+  status: string;
+  storeCode: string;
+  storesCount: number;
+  subscriptionStatus: string;
+  template: string;
+  warehouseStatus: string;
+};
+
 function PageHeader({
   controls,
   subtitle,
@@ -3017,6 +3086,280 @@ function StoreDirectoryDetail({ row }: { row: StoreDirectoryRow }) {
               ownerEmail: row.ownerEmail,
               ownerUsername: row.ownerUsername,
               storeCode: row.storeCode,
+              warehouseCount: row.business.warehouses?.length ?? 0,
+            },
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+function buildBusinessDirectoryRows(data: CenterData, c: CenterCopy): BusinessDirectoryRow[] {
+  return data.businesses.map((business) => {
+    const primaryBranch = business.branches?.[0] ?? null;
+    const ownerMember = business.members?.find((member) => member.isOwner) ?? business.members?.[0];
+    const owner = business.owner ?? ownerMember?.user ?? null;
+    const subscription = business.subscriptions?.[0];
+    const plan = subscription?.plan?.planName ?? business.plan?.planName ?? c.free;
+    const branchCount = business._count?.branches ?? business.branches?.length ?? 0;
+    const warehouseCount = business.warehouses?.length ?? 0;
+    const auditCreated = data.platformAuditLogs.some((log) => log.businessId === business.id || log.targetId === business.id)
+      || data.auditLogs.some((log) => log.company?.name === business.name)
+      || data.storeActivityLogs.some((log) => log.businessId === business.id);
+    const activeAssignment = Boolean(ownerMember?.isOwner || ownerMember);
+    const missingDataCount = [
+      !business.id,
+      !business.name,
+      !primaryBranch?.id,
+      !business.storeCode,
+      !owner?.email && !owner?.username,
+      !business.businessTemplateKey,
+      !plan,
+      !warehouseCount,
+      !activeAssignment,
+    ].filter(Boolean).length;
+    return {
+      activeAssignment,
+      address: business.settings?.profileAddress ?? primaryBranch?.address ?? "-",
+      auditCreated,
+      backOfficeAccess: ownerMember?.allowBackOfficeAccess === false ? c.disabled : c.activeStatus ?? c.active ?? "Active",
+      business,
+      businessName: business.name,
+      companyId: business.id,
+      country: "-",
+      createdAt: business.createdAt,
+      currency: business.settings?.currencyDisplay ?? business.settings?.baseCurrency ?? business.baseCurrency ?? "LAK",
+      language: business.defaultLocale ?? "-",
+      missingDataCount,
+      owner: owner?.fullName ?? owner?.email ?? owner?.username ?? "-",
+      ownerEmail: owner?.email ?? "-",
+      ownerPhone: owner?.phone ?? "-",
+      ownerUsername: owner?.username ?? "-",
+      plan,
+      posAccess: ownerMember?.allowPosAccess === false ? c.disabled : c.activeStatus ?? c.active ?? "Active",
+      primaryBranchId: primaryBranch?.id ?? "-",
+      primaryStoreName: primaryBranch?.name ?? business.name,
+      setupStatus: missingDataCount > 0 ? c.missingData : c.setupComplete,
+      status: business.status ?? c.notConnected,
+      storeCode: business.storeCode ?? "-",
+      storesCount: branchCount,
+      subscriptionStatus: subscription?.status ?? (plan.toLowerCase().includes("free") ? c.activeStatus ?? c.active ?? "Active" : c.notConnected),
+      template: posTemplateNameFromKey(business.businessTemplateKey, c),
+      warehouseStatus: warehouseCount ? `${warehouseCount}` : c.notConnected,
+    };
+  });
+}
+
+function isBusinessDirectoryRow(value: unknown): value is BusinessDirectoryRow {
+  return Boolean(value && typeof value === "object" && "companyId" in value && "primaryStoreName" in value && "storesCount" in value);
+}
+
+function BusinessDirectoryPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [search, setSearch] = useState("");
+  const [templateFilter, setTemplateFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const rows = buildBusinessDirectoryRows(data, c);
+  const templateOptions = [{ label: c.filterAll, value: "all" }, ...templateDefinitions.map((template) => ({ label: posTemplateName(template, c), value: template.key }))];
+  const planOptions = [{ label: c.filterAll, value: "all" }, ...Array.from(new Set(rows.map((row) => row.plan))).map((plan) => ({ label: plan, value: plan }))];
+  const statusValues = Array.from(new Set(rows.map((row) => row.status).filter(Boolean)));
+  const statusOptions = [
+    { label: c.filterAll, value: "all" },
+    ...statusValues.map((status) => ({ label: status, value: status })),
+    { label: c.businessesMissingData, value: "missing-data" },
+  ];
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || `${row.businessName} ${row.primaryStoreName} ${row.owner} ${row.ownerEmail} ${row.ownerUsername} ${row.storeCode}`.toLowerCase().includes(query);
+    const matchesTemplate = templateFilter === "all" || normalizePosTemplateKey(row.business.businessTemplateKey) === templateFilter;
+    const matchesPlan = planFilter === "all" || row.plan === planFilter;
+    const matchesStatus = statusFilter === "all" || row.status === statusFilter || (statusFilter === "missing-data" && row.missingDataCount > 0);
+    return matchesSearch && matchesTemplate && matchesPlan && matchesStatus;
+  });
+  const activeRows = rows.filter((row) => String(row.status).toLowerCase() === "active");
+  const miniMartRows = rows.filter((row) => normalizePosTemplateKey(row.business.businessTemplateKey) === "mini-mart");
+  const freePlanRows = rows.filter((row) => row.plan.toLowerCase().includes("free"));
+  const missingRows = rows.filter((row) => row.missingDataCount > 0);
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.businesses}
+        subtitle={c.manageBusinessesTemplatesPlansUsersAndPlatformControls}
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder={c.searchStores} value={search} />
+            <FilterSelect label={c.template} onChange={setTemplateFilter} options={templateOptions} value={templateFilter} />
+            <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <RefreshButton />
+            <Link className="inline-flex h-10 items-center rounded-md border border-[#5EEAD4] px-3 text-sm font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
+              {c.addStore}
+            </Link>
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.totalBusinesses} value={rows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.activeBusinesses} value={activeRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.miniMartBusinesses} value={miniMartRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.freePlanBusinesses} value={freePlanRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.storeDataNotConnected} label={c.businessesMissingData} value={missingRows.length} />
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.businesses} subtitle={rows.length ? c.manageBusinessesTemplatesPlansUsersAndPlatformControls : c.emptyBusinesses} />
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1320px] border-collapse text-sm">
+                <thead className="sticky top-0 bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[c.business, c.primaryStore, c.storeCode, c.owner, c.template, c.plan, c.status, c.storesCount, c.createdAt, c.actions].map((header) => (
+                      <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.companyId} onClick={() => onAction("business-detail", row)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.businessName}</td>
+                      <td className="px-4 py-3">{row.primaryStoreName}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[#CBD5E1]">{row.storeCode}</td>
+                      <td className="px-4 py-3">
+                        <div>{row.owner}</div>
+                        <div className="text-xs text-[#94A3B8]">{row.ownerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3">{row.template}</td>
+                      <td className="px-4 py-3">{row.plan}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3">{row.storesCount}</td>
+                      <td className="px-4 py-3">{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("business-detail", row); }} type="button">
+                            {c.viewDetails}
+                          </button>
+                          <DisabledPillButton label={c.disabledNotConnected} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            <EmptyPanel title="No businesses connected yet." description="Create a store from EGO POS Center to start managing customer businesses." />
+            <Link className="w-fit rounded-md border border-[#5EEAD4] px-4 py-2 text-sm font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
+              {c.addStore}
+            </Link>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function BusinessDirectoryDetail({ row }: { row: BusinessDirectoryRow }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={row.businessName} subtitle={row.primaryStoreName} />
+        <DetailGrid
+          rows={[
+            [c.companyId, row.companyId],
+            [c.business, row.businessName],
+            [c.status, <StatusBadge key="status" value={row.status} />],
+            [c.createdAt, row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"],
+            [c.currency, row.currency],
+            [c.language, row.language],
+            [c.countryRegion, row.country],
+            ["Address", row.address],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.ownerAccount} subtitle={row.ownerEmail} />
+        <DetailGrid
+          rows={[
+            [c.owner, row.owner],
+            [c.ownerEmail, row.ownerEmail],
+            [c.ownerUsername, row.ownerUsername],
+            [c.ownerPhone, row.ownerPhone],
+            [c.role, c.owner],
+            [c.status, <StatusBadge key="owner-status" value={row.activeAssignment ? c.activeStatus ?? c.active ?? "Active" : c.notConnected} />],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.storesBranches} subtitle={row.primaryStoreName} />
+        <DetailGrid
+          rows={[
+            [c.storeName, row.primaryStoreName],
+            [c.storeCode, row.storeCode],
+            [c.branchId, row.primaryBranchId],
+            [c.warehouseCreated, <StatusBadge key="warehouse" value={row.warehouseStatus} />],
+            [c.backOfficeAccess, <StatusBadge key="back-office" value={row.backOfficeAccess} />],
+            [c.posAccess, <StatusBadge key="pos" value={row.posAccess} />],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.templatePlan} subtitle={row.template} />
+        <DetailGrid
+          rows={[
+            [c.template, row.template],
+            [c.posTemplateStatus, normalizePosTemplateKey(row.business.businessTemplateKey) === "mini-mart" ? c.ready : c.draft],
+            [c.plan, row.plan],
+            [c.subscriptionStatus, <StatusBadge key="subscription" value={row.subscriptionStatus} />],
+            [c.billingStatus, row.plan.toLowerCase().includes("pro") ? c.billingNotConnectedForPro : c.disabledNotConnected],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessSetupStatus} subtitle={row.setupStatus} />
+        <DetailGrid
+          rows={[
+            [c.businessCreated, <StatusBadge key="business-created" value={row.companyId !== "-" ? c.connected : c.notConnected} />],
+            [c.storeBranchCreated, <StatusBadge key="branch-created" value={row.primaryBranchId !== "-" ? c.connected : c.notConnected} />],
+            [c.warehouseCreated, <StatusBadge key="warehouse-created" value={row.warehouseStatus} />],
+            [c.ownerAssignmentActive, <StatusBadge key="owner-assignment" value={row.activeAssignment ? c.activeStatus ?? c.active ?? "Active" : c.notConnected} />],
+            [c.subscriptionStatus, <StatusBadge key="free-plan" value={row.subscriptionStatus} />],
+            [c.auditCreated, <StatusBadge key="audit-created" value={row.auditCreated ? c.connected : c.notConnected} />],
+          ]}
+        />
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+          {c.viewStores}
+        </Link>
+        <DisabledPillButton label={c.openStoreDashboard} />
+        <DisabledPillButton label={c.edit} />
+        <DisabledPillButton label={c.disableStore} />
+        <DisabledPillButton label={c.resetOwnerPassword} />
+        <DisabledPillButton label={c.changePlan} />
+      </section>
+
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.technicalMetadata,
+            value: {
+              branchId: row.primaryBranchId,
+              companyId: row.companyId,
+              ownerEmail: row.ownerEmail,
+              ownerUsername: row.ownerUsername,
+              storeCode: row.storeCode,
+              subscriptionStatus: row.subscriptionStatus,
               warehouseCount: row.business.warehouses?.length ?? 0,
             },
           },
@@ -4722,6 +5065,13 @@ function DrawerContent({
     }
     return <OperationalDrawer selected={selected} />;
   }
+  if (drawer === "business-detail") {
+    if (!canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW)) return <AccessDeniedPanel />;
+    if (isBusinessDirectoryRow(selected)) {
+      return <BusinessDirectoryDetail row={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
+  }
   if (drawer === "templates") {
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.POS_TEMPLATE_VIEW)) return <AccessDeniedPanel />;
     return <TemplateList businesses={data.businesses} onAction={onAction} />;
@@ -4985,6 +5335,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
   }
   const map: Record<string, string> = {
     "business-edit": "Edit Business",
+    "business-detail": c.businessDetails,
     "business-features": c.manageFeatures,
     "business-owner": c.manageOwner,
     "business-plan": c.changePlan,
@@ -5503,7 +5854,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
 
   const body = useMemo(() => {
     if (!canViewSuperAdminSection(role, section)) return <AccessDeniedPanel />;
-    if (section === "businesses") return <BusinessTable businesses={data.businesses} onAction={open} role={role} />;
+    if (section === "businesses") return <BusinessDirectoryPage data={data} onAction={open} />;
     if (section === "templates") {
       return <TemplateList businesses={data.businesses} onAction={open} />;
     }
