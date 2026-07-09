@@ -192,6 +192,34 @@ type CenterSubscription = {
   status?: string;
 };
 
+type CenterRole = {
+  company?: { id?: string; name?: string; storeCode?: string | null } | null;
+  companyId?: string | null;
+  description?: string | null;
+  id: string;
+  isSystem?: boolean;
+  name: string;
+  permissions?: Array<{ permission?: { id?: string; key?: string; module?: string; name?: string } | null }>;
+  templateKey?: string | null;
+  users?: Array<{
+    companyId?: string | null;
+    user?: {
+      companies?: Array<{
+        allowBackOfficeAccess?: boolean;
+        allowPosAccess?: boolean;
+        branch?: { id?: string; name?: string | null } | null;
+        branchId?: string | null;
+        companyId?: string;
+        status?: string | null;
+      }>;
+      email?: string | null;
+      fullName?: string | null;
+      id?: string;
+      username?: string | null;
+    } | null;
+  }>;
+};
+
 type CommandDashboardData = {
   generatedAt?: string;
   range?: { from: string; to: string };
@@ -218,6 +246,7 @@ type CenterData = {
   platformAuditLogs: PlatformAuditLog[];
   platformUsersCount: number;
   plans: CenterPlan[];
+  roles: CenterRole[];
   storeActivityLogs: StoreActivityLog[];
   subscriptions: CenterSubscription[];
   users: CenterUser[];
@@ -237,6 +266,7 @@ type DrawerKind =
   | "users"
   | "user-detail"
   | "roles-permissions"
+  | "role-detail"
   | "platform-settings"
   | "platform-notifications"
   | "subscription-revenue"
@@ -646,6 +676,31 @@ Object.assign(copy.en, {
   viewStore: "View Store",
 });
 
+Object.assign(copy.en, {
+  assignedUserCount: "Assigned User Count",
+  backOfficeAccess: "Back Office Access",
+  branchLevelAccess: "Branch-level Access",
+  cashierStaffRoles: "Cashier / Staff Roles",
+  changePermissions: "Change Permissions",
+  customRoles: "Custom Roles",
+  disableRole: "Disable Role",
+  duplicateRole: "Duplicate Role",
+  editRole: "Edit Role",
+  permissionCount: "Permission Count",
+  permissionGroups: "Permission Groups",
+  permissionsAssigned: "Permissions Assigned",
+  posAccess: "POS Access",
+  roleCreated: "Role Created",
+  roleDetail: "Role Detail",
+  roleOverview: "Role Overview",
+  rolesMissingPermissions: "Roles Missing Permissions",
+  scopeBusiness: "Scope / Business",
+  storeLevelAccess: "Store-level Access",
+  systemRoles: "System Roles",
+  totalRoles: "Total Roles",
+  usersAssigned: "Users Assigned",
+});
+
 Object.assign(copy.th, {
   access: "สิทธิ์เข้าถึง",
   accountStatus: "สถานะบัญชี",
@@ -679,6 +734,31 @@ Object.assign(copy.th, {
   usersWillAppearAfterStoresCreated: "ผู้ใช้จะแสดงที่นี่หลังจากสร้างร้านและบัญชีเจ้าของ",
   viewBusiness: "ดูธุรกิจ",
   viewStore: "ดูร้าน",
+});
+
+Object.assign(copy.th, {
+  assignedUserCount: "จำนวนผู้ใช้ที่ผูกไว้",
+  backOfficeAccess: "สิทธิ์ Back Office",
+  branchLevelAccess: "สิทธิ์ระดับสาขา",
+  cashierStaffRoles: "บทบาทแคชเชียร์ / พนักงาน",
+  changePermissions: "เปลี่ยนสิทธิ์",
+  customRoles: "บทบาทกำหนดเอง",
+  disableRole: "ปิดใช้งานบทบาท",
+  duplicateRole: "ทำสำเนาบทบาท",
+  editRole: "แก้ไขบทบาท",
+  permissionCount: "จำนวนสิทธิ์",
+  permissionGroups: "กลุ่มสิทธิ์",
+  permissionsAssigned: "ผูกสิทธิ์แล้ว",
+  posAccess: "สิทธิ์ POS",
+  roleCreated: "สร้างบทบาทแล้ว",
+  roleDetail: "รายละเอียดบทบาท",
+  roleOverview: "ภาพรวมบทบาท",
+  rolesMissingPermissions: "บทบาทที่ยังไม่มีสิทธิ์",
+  scopeBusiness: "ขอบเขต / ธุรกิจ",
+  storeLevelAccess: "สิทธิ์ระดับร้าน",
+  systemRoles: "บทบาทระบบ",
+  totalRoles: "บทบาททั้งหมด",
+  usersAssigned: "ผู้ใช้ที่ผูกบทบาท",
 });
 
 Object.assign(copy.en, {
@@ -2530,6 +2610,34 @@ type UserDirectoryRow = {
   user: CenterUser;
   userId: string;
   username: string;
+};
+
+type RoleDirectoryRow = {
+  assignedUsers: Array<{
+    access: string;
+    businessName: string;
+    email: string;
+    fullName: string;
+    storeName: string;
+    userId: string;
+    username: string;
+  }>;
+  backOfficeAccess: string;
+  businessId: string;
+  businessName: string;
+  createdAt?: string;
+  isSystem: boolean;
+  permissionCount: number;
+  permissionKeys: string[];
+  permissionModules: string[];
+  posAccess: string;
+  role: CenterRole;
+  roleId: string;
+  roleName: string;
+  roleType: string;
+  status: string;
+  storeLevelAccess: string;
+  usersCount: number;
 };
 
 function PageHeader({
@@ -5172,6 +5280,305 @@ function UserDirectoryDetail({ row }: { row: UserDirectoryRow }) {
   );
 }
 
+function roleTypeLabel(role: CenterRole, c: CenterCopy) {
+  const template = String(role.templateKey ?? "").toLowerCase();
+  const name = role.name.toLowerCase();
+  if (template.includes("owner") || name.includes("owner")) return c.owner;
+  if (template.includes("manager") || name.includes("manager")) return c.managers;
+  if (template.includes("cashier") || name.includes("cashier")) return "Cashier";
+  if (template.includes("staff") || name.includes("staff")) return "Staff";
+  if (role.isSystem) return c.systemRoles;
+  return c.custom;
+}
+
+function roleAccessFromPermissions(permissionKeys: string[], modules: string[], assignedUsers: RoleDirectoryRow["assignedUsers"], c: CenterCopy) {
+  const normalizedKeys = permissionKeys.map((key) => key.toLowerCase());
+  const normalizedModules = modules.map((module) => module.toLowerCase());
+  const hasPosPermission = normalizedKeys.some((key) => key.startsWith("sale.") || key.startsWith("payment.") || key.includes("pos"))
+    || normalizedModules.some((module) => module.includes("pos") || module.includes("sale") || module.includes("payment"));
+  const hasBackOfficePermission = normalizedModules.some((module) => !["pos", "sale", "sales", "payment", "payments"].includes(module))
+    || normalizedKeys.some((key) => ["inventory.", "product.", "customer.", "promotion.", "reports.", "settings.", "purchasing.", "supplier."].some((prefix) => key.startsWith(prefix)));
+  const hasPosUser = assignedUsers.some((user) => user.access.includes("POS"));
+  const hasBackOfficeUser = assignedUsers.some((user) => user.access.includes("Back Office"));
+  return {
+    backOfficeAccess: hasBackOfficePermission || hasBackOfficeUser ? c.activeStatus ?? c.active : "-",
+    posAccess: hasPosPermission || hasPosUser ? c.activeStatus ?? c.active : "-",
+  };
+}
+
+function buildRoleDirectoryRows(data: CenterData, c: CenterCopy): RoleDirectoryRow[] {
+  return data.roles.map((role) => {
+    const permissionKeys = (role.permissions ?? []).map((entry) => entry.permission?.key).filter(Boolean) as string[];
+    const permissionModules = Array.from(new Set((role.permissions ?? []).map((entry) => entry.permission?.module).filter(Boolean) as string[]));
+    const assignedUsers = (role.users ?? []).map((entry) => {
+      const user = entry.user;
+      const assignment = user?.companies?.find((company) => !entry.companyId || company.companyId === entry.companyId) ?? user?.companies?.[0];
+      const backOffice = Boolean(assignment?.allowBackOfficeAccess);
+      const pos = Boolean(assignment?.allowPosAccess);
+      const access = backOffice && pos ? "Back Office / POS" : backOffice ? "Back Office" : pos ? "POS" : c.noAccess;
+      return {
+        access,
+        businessName: role.company?.name ?? "-",
+        email: user?.email ?? "-",
+        fullName: user?.fullName ?? user?.username ?? user?.email ?? "-",
+        storeName: assignment?.branch?.name ?? "-",
+        userId: user?.id ?? "-",
+        username: user?.username ?? "-",
+      };
+    });
+    const access = roleAccessFromPermissions(permissionKeys, permissionModules, assignedUsers, c);
+    return {
+      assignedUsers,
+      backOfficeAccess: access.backOfficeAccess,
+      businessId: role.company?.id ?? role.companyId ?? "-",
+      businessName: role.company?.name ?? (role.companyId ? "-" : "Platform"),
+      createdAt: undefined,
+      isSystem: Boolean(role.isSystem),
+      permissionCount: permissionKeys.length,
+      permissionKeys,
+      permissionModules,
+      posAccess: access.posAccess,
+      role,
+      roleId: role.id,
+      roleName: role.name,
+      roleType: roleTypeLabel(role, c),
+      status: c.activeStatus ?? c.active,
+      storeLevelAccess: role.companyId ? c.activeStatus ?? c.active : "-",
+      usersCount: role.users?.length ?? 0,
+    };
+  });
+}
+
+function isRoleDirectoryRow(value: unknown): value is RoleDirectoryRow {
+  return Boolean(value && typeof value === "object" && "roleId" in value && "permissionKeys" in value && "roleName" in value);
+}
+
+function RoleDirectoryPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [accessFilter, setAccessFilter] = useState("all");
+  const rows = buildRoleDirectoryRows(data, c);
+  const typeOptions = [
+    { label: c.filterAll, value: "all" },
+    ...Array.from(new Set(rows.map((row) => row.roleType))).map((type) => ({ label: type, value: type })),
+  ];
+  const statusOptions = [
+    { label: c.filterAll, value: "all" },
+    ...Array.from(new Set(rows.map((row) => row.status))).map((status) => ({ label: status, value: status })),
+    { label: c.notConnected, value: "not-connected" },
+  ];
+  const accessOptions = [
+    { label: c.filterAll, value: "all" },
+    { label: "POS", value: "pos" },
+    { label: "Back Office", value: "back-office" },
+    { label: "Back Office / POS", value: "both" },
+    { label: c.noAccess, value: "none" },
+  ];
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || `${row.roleName} ${row.businessName} ${row.permissionKeys.join(" ")}`.toLowerCase().includes(query);
+    const matchesType = typeFilter === "all" || row.roleType === typeFilter;
+    const matchesStatus = statusFilter === "all" || row.status === statusFilter || (statusFilter === "not-connected" && row.permissionCount === 0);
+    const hasPos = row.posAccess !== "-";
+    const hasBackOffice = row.backOfficeAccess !== "-";
+    const matchesAccess = accessFilter === "all"
+      || (accessFilter === "pos" && hasPos)
+      || (accessFilter === "back-office" && hasBackOffice)
+      || (accessFilter === "both" && hasPos && hasBackOffice)
+      || (accessFilter === "none" && !hasPos && !hasBackOffice);
+    return matchesSearch && matchesType && matchesStatus && matchesAccess;
+  });
+  const ownerRows = rows.filter((row) => row.roleType === c.owner);
+  const managerRows = rows.filter((row) => row.roleType === c.managers);
+  const cashierRows = rows.filter((row) => ["Cashier", "Staff"].includes(row.roleType));
+  const customRows = rows.filter((row) => row.roleType === c.custom);
+  const missingPermissionRows = rows.filter((row) => row.permissionCount === 0);
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.rolesPermissions}
+        subtitle={c.manageBusinessesTemplatesPlansUsersAndPlatformControls}
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder="Search roles" value={search} />
+            <FilterSelect label={c.roleType} onChange={setTypeFilter} options={typeOptions} value={typeFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <FilterSelect label={c.access} onChange={setAccessFilter} options={accessOptions} value={accessFilter} />
+          </>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard label={c.totalRoles} value={rows.length} />
+        <SummaryCard label={c.owners} value={ownerRows.length} />
+        <SummaryCard label={c.managers} value={managerRows.length} />
+        <SummaryCard label={c.cashierStaffRoles} value={cashierRows.length} />
+        <SummaryCard label={c.customRoles} value={customRows.length} />
+        <SummaryCard label={c.rolesMissingPermissions} value={missingPermissionRows.length} />
+      </section>
+
+      <section className={dashboardPanelClass()}>
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1260px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[c.roleName, c.scopeBusiness, c.roleType, c.users, c.permissionCount, c.posAccess, c.backOfficeAccess, c.status, c.createdAt, c.actions].map((header) => (
+                      <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.roleId} onClick={() => onAction("role-detail", row)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.roleName}</td>
+                      <td className="px-4 py-3">{row.businessName}</td>
+                      <td className="px-4 py-3">{row.roleType}</td>
+                      <td className="px-4 py-3">{row.usersCount}</td>
+                      <td className="px-4 py-3">{row.permissionCount}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.posAccess} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={row.backOfficeAccess} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3">
+                        <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("role-detail", row); }} type="button">
+                          {c.viewDetails}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel title="No roles connected yet." description="Roles will appear here after stores and user permissions are created." />
+        )}
+        <div className="mt-4">
+          <Link className="inline-flex rounded-md border border-[#5EEAD4] px-3 py-2 text-sm font-semibold text-[#5EEAD4]" href="/super-admin/users">
+            {c.viewBusiness === "View Business" ? "View Users" : c.users}
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RoleDirectoryDetail({ row }: { row: RoleDirectoryRow }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.roleOverview} subtitle={row.businessName} />
+        <DetailGrid
+          rows={[
+            ["Role ID", row.roleId],
+            [c.roleName, row.roleName],
+            [c.roleType, row.roleType],
+            [c.scopeBusiness, row.businessName],
+            [c.status, <StatusBadge key="role-status" value={row.status} />],
+            [c.createdAt, "-"],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.usersAssigned} subtitle={`${row.usersCount}`} />
+        {row.assignedUsers.length ? (
+          <div className="grid gap-2">
+            {row.assignedUsers.map((user) => (
+              <div className="rounded-lg border border-[#334155] bg-[#111827] p-4" key={`${row.roleId}-${user.userId}`}>
+                <div className="font-semibold text-[#F8FAFC]">{user.fullName}</div>
+                <div className="mt-1 text-sm text-[#94A3B8]">{user.email} · {user.username}</div>
+                <div className="mt-2 text-xs text-[#CBD5E1]">{user.businessName} / {user.storeName} · {user.access}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text="No users assigned to this role yet." />
+        )}
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.access} subtitle={row.roleType} />
+        <DetailGrid
+          rows={[
+            [c.backOfficeAccess, <StatusBadge key="back-office" value={row.backOfficeAccess} />],
+            [c.posAccess, <StatusBadge key="pos" value={row.posAccess} />],
+            [c.superAdminAccess, c.noAccess],
+            [c.storeLevelAccess, <StatusBadge key="store-level" value={row.storeLevelAccess} />],
+            [c.branchLevelAccess, row.assignedUsers.some((user) => user.storeName !== "-") ? c.activeStatus ?? c.active : "-"],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.permissionSummary} subtitle={`${row.permissionCount}`} />
+        <DetailGrid
+          rows={[
+            [c.permissionCount, row.permissionCount],
+            [c.permissionGroups, row.permissionModules.length ? row.permissionModules.join(", ") : "-"],
+          ]}
+        />
+        {row.permissionKeys.length ? (
+          <div className="flex flex-wrap gap-2">
+            {row.permissionKeys.map((key) => (
+              <span className="rounded-md border border-[#334155] bg-[#020617] px-2 py-1 text-xs text-[#CBD5E1]" key={key}>{key}</span>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text={c.rolesMissingPermissions} />
+        )}
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessSetupStatus} subtitle={row.status} />
+        <DetailGrid
+          rows={[
+            [c.roleCreated, <StatusBadge key="role-created" value={row.status} />],
+            [c.permissionsAssigned, <StatusBadge key="permissions-assigned" value={row.permissionCount > 0 ? c.activeStatus ?? c.active : c.notConnected} />],
+            [c.usersAssigned, <StatusBadge key="users-assigned" value={row.usersCount > 0 ? c.activeStatus ?? c.active : c.notConnected} />],
+            [c.activeAssignment, <StatusBadge key="assignment" value={row.businessId !== "-" ? c.activeStatus ?? c.active : "-" } />],
+          ]}
+        />
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <Link className="rounded-md border border-[#5EEAD4] px-3 py-2 text-xs font-semibold text-[#5EEAD4]" href="/super-admin/users">
+          View Users
+        </Link>
+        <Link className="rounded-md border border-[#5EEAD4] px-3 py-2 text-xs font-semibold text-[#5EEAD4]" href="/super-admin/businesses">
+          {c.viewBusiness}
+        </Link>
+        <DisabledPillButton label={c.editRole} />
+        <DisabledPillButton label={c.changePermissions} />
+        <DisabledPillButton label={c.disableRole} />
+        <DisabledPillButton label={c.duplicateRole} />
+      </section>
+
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.technicalMetadata,
+            value: {
+              businessId: row.businessId,
+              companyId: row.role.companyId,
+              isSystem: row.isSystem,
+              permissionKeys: row.permissionKeys,
+              roleId: row.roleId,
+              templateKey: row.role.templateKey,
+            },
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
 function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
   const { c } = useCenterCopy();
   const [step, setStep] = useState(0);
@@ -5465,12 +5872,14 @@ function DrawerContent({
   }
   if (drawer === "roles-permissions") {
     if (!canViewSuperAdminSection(role, "roles")) return <AccessDeniedPanel />;
-    return (
-      <div className="grid gap-6 lg:grid-cols-2">
-        <RoleList title="Platform roles" roles={platformRoles} onOpen={(role) => onAction("role-edit", { role, scope: "platform" })} />
-        <RoleList title="Store roles" roles={storeRoles} onOpen={(role) => onAction("role-edit", { role, scope: "store" })} />
-      </div>
-    );
+    return <RoleDirectoryPage data={data} onAction={onAction} />;
+  }
+  if (drawer === "role-detail") {
+    if (!canViewSuperAdminSection(role, "roles")) return <AccessDeniedPanel />;
+    if (isRoleDirectoryRow(selected)) {
+      return <RoleDirectoryDetail row={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
   }
   if (drawer === "platform-settings") {
     if (!canViewSuperAdminSection(role, "settings")) return <AccessDeniedPanel />;
@@ -5678,6 +6087,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "platform-settings": c.platformSettings,
     "platform-notifications": c.platformNotifications,
     "recent-activity": c.recentActivity,
+    "role-detail": c.roleDetail,
     "roles-permissions": c.rolesPermissions,
     "setting-edit": c.platformSettings,
     "store-performance-detail": c.storePerformance,
@@ -6179,12 +6589,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
       return <UserDirectoryPage data={data} onAction={open} />;
     }
     if (section === "roles") {
-      return (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <RoleList title="Platform roles" roles={platformRoles} onOpen={(role) => open("role-edit", { role, scope: "platform" })} />
-          <RoleList title="Store roles" roles={storeRoles} onOpen={(role) => open("role-edit", { role, scope: "store" })} />
-        </div>
-      );
+      return <RoleDirectoryPage data={data} onAction={open} />;
     }
     if (section === "audit") return <AuditLogsCenter data={data} onAction={open} role={role} />;
     return (

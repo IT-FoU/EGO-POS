@@ -271,6 +271,75 @@ export async function getAdminUsers() {
   }
 }
 
+export async function getAdminRoles() {
+  try {
+    return await db.role.findMany({
+      select: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            storeCode: true,
+          },
+        },
+        companyId: true,
+        description: true,
+        id: true,
+        isSystem: true,
+        name: true,
+        permissions: {
+          select: {
+            permission: {
+              select: {
+                id: true,
+                key: true,
+                module: true,
+                name: true,
+              },
+            },
+          },
+        },
+        templateKey: true,
+        users: {
+          select: {
+            companyId: true,
+            user: {
+              select: {
+                companies: {
+                  select: {
+                    allowBackOfficeAccess: true,
+                    allowPosAccess: true,
+                    branch: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                    branchId: true,
+                    companyId: true,
+                    status: true,
+                  },
+                },
+                email: true,
+                fullName: true,
+                id: true,
+                username: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ companyId: "asc" }, { name: "asc" }],
+      take: 100,
+    });
+  } catch (error) {
+    if (shouldUseDemoAdminFallback(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 export async function getAdminAuditLogs() {
   try {
     return await db.auditLog.findMany({
