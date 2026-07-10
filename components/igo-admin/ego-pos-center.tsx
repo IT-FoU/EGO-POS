@@ -171,6 +171,7 @@ type StoreActivityLog = {
 };
 
 type CenterPlan = {
+  customLogo?: boolean;
   id: string;
   isActive?: boolean;
   maxBranches?: number | null;
@@ -180,6 +181,8 @@ type CenterPlan = {
   maxReports?: number | null;
   monthlyPrice?: string | number | null;
   planName: string;
+  removeWatermark?: boolean;
+  yearlyPrice?: string | number | null;
 };
 
 type CenterSubscription = {
@@ -191,6 +194,8 @@ type CenterSubscription = {
   startDate?: string;
   status?: string;
 };
+
+type CenterBusinessSubscription = NonNullable<CenterBusiness["subscriptions"]>[number];
 
 type CenterRole = {
   company?: { id?: string; name?: string; storeCode?: string | null } | null;
@@ -278,6 +283,7 @@ type DrawerKind =
   | "create-business"
   | "templates"
   | "plans"
+  | "plan-management-detail"
   | "recent-activity"
   | "store-performance-detail"
   | "plan-analytics-detail"
@@ -797,6 +803,66 @@ Object.assign(copy.th, {
   storesCount: "จำนวนร้าน",
   templatePlan: "Template และแผน",
   viewStores: "ดูร้านค้า",
+});
+
+Object.assign(copy.en, {
+  activePlans: "Active Plans",
+  billingReadiness: "Upgrade / Billing Readiness",
+  billingStatus: "Billing Status",
+  businessStore: "Business / Store",
+  cancelSubscription: "Cancel Subscription",
+  currentPlan: "Current Plan",
+  freePlanRecords: "Free Plan Businesses",
+  monthlyPrice: "Monthly Price",
+  noPlanRecordsConnected: "No plan records connected yet.",
+  noPlanRecordsConnectedSubtext: "Plan records will appear after stores are created from EGO POS Center.",
+  notRequired: "Not required",
+  planCreatedAt: "Created At",
+  planDetails: "Plan Details",
+  planFeaturesLimits: "Plan Features / Limits",
+  planManagement: "Plan Management",
+  planManagementSubtitle: "Review real business plan assignments, subscription status, limits, and billing readiness.",
+  planRecords: "Plan Records",
+  plansMissingBilling: "Billing Not Connected",
+  proBillingNotEnabled: "Pro billing is not connected yet. Plan changes are disabled for now.",
+  proPlanRecords: "Pro Plan Businesses",
+  products: "Products",
+  promotions: "Promotions",
+  setupStatus: "Setup Status",
+  startedAt: "Started At",
+  updatedOrStartedAt: "Updated / Started At",
+  upgradeToPro: "Upgrade to Pro",
+  yearlyPrice: "Yearly Price",
+});
+
+Object.assign(copy.th, {
+  activePlans: "แผนที่ใช้งานอยู่",
+  billingReadiness: "ความพร้อมอัปเกรด / ชำระเงิน",
+  billingStatus: "สถานะการชำระเงิน",
+  businessStore: "ธุรกิจ / ร้าน",
+  cancelSubscription: "ยกเลิกการสมัครใช้งาน",
+  currentPlan: "แผนปัจจุบัน",
+  freePlanRecords: "ธุรกิจแผนฟรี",
+  monthlyPrice: "ราคารายเดือน",
+  noPlanRecordsConnected: "ยังไม่มีข้อมูลแผน",
+  noPlanRecordsConnectedSubtext: "ข้อมูลแผนจะแสดงหลังจากสร้างร้านจาก EGO POS Center",
+  notRequired: "ไม่จำเป็น",
+  planCreatedAt: "วันที่สร้าง",
+  planDetails: "รายละเอียดแผน",
+  planFeaturesLimits: "ฟีเจอร์ / ขีดจำกัดของแผน",
+  planManagement: "จัดการแผน",
+  planManagementSubtitle: "ตรวจสอบแผนจริงของธุรกิจ สถานะการสมัครใช้งาน ขีดจำกัด และความพร้อมการชำระเงิน",
+  planRecords: "ข้อมูลแผน",
+  plansMissingBilling: "ยังไม่เชื่อมต่อการชำระเงิน",
+  proBillingNotEnabled: "ยังไม่ได้เชื่อมต่อระบบชำระเงิน Pro จึงยังปิดการเปลี่ยนแผนไว้",
+  proPlanRecords: "ธุรกิจแผน Pro",
+  products: "สินค้า",
+  promotions: "โปรโมชัน",
+  setupStatus: "สถานะการตั้งค่า",
+  startedAt: "วันที่เริ่มต้น",
+  updatedOrStartedAt: "อัปเดต / เริ่มต้น",
+  upgradeToPro: "อัปเกรดเป็น Pro",
+  yearlyPrice: "ราคารายปี",
 });
 
 Object.assign(copy.th, {
@@ -2640,6 +2706,31 @@ type RoleDirectoryRow = {
   usersCount: number;
 };
 
+type PlanManagementRow = {
+  billingStatus: string;
+  business: CenterBusiness;
+  businessName: string;
+  companyId: string;
+  createdAt?: string;
+  currentPlan: string;
+  currentPlanKey: string;
+  missingDataCount: number;
+  owner: string;
+  ownerEmail: string;
+  ownerUsername: string;
+  plan: CenterPlan | null;
+  planStatus: string;
+  primaryStoreName: string;
+  setupStatus: string;
+  startedAt?: string;
+  storeCode: string;
+  storesCount: number;
+  subscription: CenterBusinessSubscription | null;
+  subscriptionId: string;
+  template: string;
+  updatedAt?: string;
+};
+
 function PageHeader({
   controls,
   subtitle,
@@ -3585,6 +3676,306 @@ function BusinessDirectoryDetail({ row }: { row: BusinessDirectoryRow }) {
               storeCode: row.storeCode,
               subscriptionStatus: row.subscriptionStatus,
               warehouseCount: row.business.warehouses?.length ?? 0,
+            },
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+function normalizePlanKey(value?: string | null) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function planCatalogMatch(plans: CenterPlan[], planName?: string | null) {
+  const key = normalizePlanKey(planName);
+  return plans.find((plan) => normalizePlanKey(plan.planName) === key) ?? null;
+}
+
+function planLimitValue(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "-";
+}
+
+function buildPlanManagementRows(data: CenterData, c: CenterCopy): PlanManagementRow[] {
+  return data.businesses.map((business) => {
+    const primaryBranch = business.branches?.[0] ?? null;
+    const ownerMember = business.members?.find((member) => member.isOwner) ?? business.members?.[0];
+    const owner = business.owner ?? ownerMember?.user ?? null;
+    const subscription = business.subscriptions?.[0] ?? null;
+    const currentPlan = subscription?.plan?.planName ?? business.plan?.planName ?? c.freePlan ?? c.free;
+    const currentPlanKey = normalizePlanKey(currentPlan);
+    const plan = planCatalogMatch(data.plans, currentPlan) ?? planCatalogMatch(data.plans, business.plan?.planName) ?? null;
+    const isFreePlan = currentPlanKey.includes("free");
+    const isProPlan = currentPlanKey.includes("pro");
+    const planStatus = subscription?.status ?? (isFreePlan ? c.activeStatus ?? c.active ?? "Active" : c.notConnected);
+    const billingStatus = isFreePlan ? c.notRequired : isProPlan ? c.billingNotConnectedForPro : c.notConnected;
+    const branchCount = business._count?.branches ?? business.branches?.length ?? 0;
+    const missingDataCount = [
+      !business.id,
+      !business.name,
+      !primaryBranch?.id,
+      !business.storeCode,
+      !owner?.email && !owner?.username,
+      !currentPlan,
+      !subscription?.id && !business.plan?.planName,
+    ].filter(Boolean).length;
+
+    return {
+      billingStatus,
+      business,
+      businessName: business.name,
+      companyId: business.id,
+      createdAt: business.createdAt,
+      currentPlan,
+      currentPlanKey,
+      missingDataCount,
+      owner: owner?.fullName ?? owner?.email ?? owner?.username ?? "-",
+      ownerEmail: owner?.email ?? "-",
+      ownerUsername: owner?.username ?? "-",
+      plan,
+      planStatus,
+      primaryStoreName: primaryBranch?.name ?? business.name,
+      setupStatus: missingDataCount > 0 ? c.missingData : c.setupComplete,
+      startedAt: subscription?.startDate,
+      storeCode: business.storeCode ?? "-",
+      storesCount: branchCount,
+      subscription,
+      subscriptionId: subscription?.id ?? "-",
+      template: posTemplateNameFromKey(business.businessTemplateKey, c),
+      updatedAt: primaryBranch?.updatedAt,
+    };
+  });
+}
+
+function isPlanManagementRow(value: unknown): value is PlanManagementRow {
+  return Boolean(value && typeof value === "object" && "companyId" in value && "currentPlan" in value && "billingStatus" in value);
+}
+
+function PlanManagementPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [search, setSearch] = useState("");
+  const [templateFilter, setTemplateFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [billingFilter, setBillingFilter] = useState("all");
+  const rows = buildPlanManagementRows(data, c);
+  const templateOptions = [{ label: c.filterAll, value: "all" }, ...templateDefinitions.map((template) => ({ label: posTemplateName(template, c), value: template.key }))];
+  const planOptions = [
+    { label: c.filterAll, value: "all" },
+    { label: c.freePlan, value: "free" },
+    { label: c.proPlan, value: "pro" },
+    { label: c.notConnected, value: "not-connected" },
+    ...Array.from(new Set(rows.map((row) => row.currentPlan).filter((plan) => plan && !["free", "pro"].includes(normalizePlanKey(plan))))).map((plan) => ({ label: plan, value: normalizePlanKey(plan) })),
+  ];
+  const statusOptions = [
+    { label: c.filterAll, value: "all" },
+    ...Array.from(new Set(rows.map((row) => row.planStatus).filter(Boolean))).map((status) => ({ label: status, value: status })),
+    { label: c.businessesMissingData, value: "missing-data" },
+  ];
+  const billingOptions = [
+    { label: c.filterAll, value: "all" },
+    { label: c.notRequired, value: "not-required" },
+    { label: c.billingNotConnectedForPro, value: "not-connected" },
+  ];
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || `${row.businessName} ${row.primaryStoreName} ${row.owner} ${row.ownerEmail} ${row.ownerUsername} ${row.storeCode}`.toLowerCase().includes(query);
+    const matchesTemplate = templateFilter === "all" || normalizePosTemplateKey(row.business.businessTemplateKey) === templateFilter;
+    const matchesPlan =
+      planFilter === "all"
+      || (planFilter === "free" && row.currentPlanKey.includes("free"))
+      || (planFilter === "pro" && row.currentPlanKey.includes("pro"))
+      || (planFilter === "not-connected" && row.planStatus === c.notConnected)
+      || row.currentPlanKey === planFilter;
+    const matchesStatus = statusFilter === "all" || row.planStatus === statusFilter || (statusFilter === "missing-data" && row.missingDataCount > 0);
+    const matchesBilling =
+      billingFilter === "all"
+      || (billingFilter === "not-required" && row.billingStatus === c.notRequired)
+      || (billingFilter === "not-connected" && row.billingStatus !== c.notRequired);
+    return matchesSearch && matchesTemplate && matchesPlan && matchesStatus && matchesBilling;
+  });
+  const activeRows = rows.filter((row) => String(row.planStatus).toLowerCase().includes("active"));
+  const freeRows = rows.filter((row) => row.currentPlanKey.includes("free"));
+  const proRows = rows.filter((row) => row.currentPlanKey.includes("pro"));
+  const missingBillingRows = rows.filter((row) => row.billingStatus !== c.notRequired);
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.planManagement}
+        subtitle={c.planManagementSubtitle}
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder={c.searchStores} value={search} />
+            <FilterSelect label={c.template} onChange={setTemplateFilter} options={templateOptions} value={templateFilter} />
+            <FilterSelect label={c.currentPlan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <FilterSelect label={c.billingStatus} onChange={setBillingFilter} options={billingOptions} value={billingFilter} />
+            <RefreshButton />
+            <DisabledPillButton label={c.exportNotConnected} />
+          </>
+        }
+      />
+
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.planRecords} value={rows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.activePlans} value={activeRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.freePlanRecords} value={freeRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.proPlanRecords} value={proRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.plansMissingBilling} value={missingBillingRows.length} />
+      </section>
+
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.planManagement} subtitle={rows.length ? c.planManagementSubtitle : c.noPlanRecordsConnectedSubtext} />
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1440px] border-collapse text-sm">
+                <thead className="sticky top-0 bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[c.business, c.primaryStore, c.storeCode, c.currentPlan, c.status, c.billingStatus, c.owner, c.template, c.createdAt, c.updatedOrStartedAt, c.actions].map((header) => (
+                      <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.companyId} onClick={() => onAction("plan-management-detail", row)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.businessName}</td>
+                      <td className="px-4 py-3">{row.primaryStoreName}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[#CBD5E1]">{row.storeCode}</td>
+                      <td className="px-4 py-3">{row.currentPlan}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.planStatus} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={row.billingStatus} /></td>
+                      <td className="px-4 py-3">
+                        <div>{row.owner}</div>
+                        <div className="text-xs text-[#94A3B8]">{row.ownerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3">{row.template}</td>
+                      <td className="px-4 py-3">{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-"}</td>
+                      <td className="px-4 py-3">{(row.updatedAt ?? row.startedAt) ? new Date(row.updatedAt ?? row.startedAt ?? "").toLocaleDateString() : "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("plan-management-detail", row); }} type="button">
+                            {c.viewDetails}
+                          </button>
+                          <DisabledPillButton label={c.changePlan} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            <EmptyPanel title={c.noPlanRecordsConnected} description={c.noPlanRecordsConnectedSubtext} />
+            <Link className="w-fit rounded-md border border-[#5EEAD4] px-4 py-2 text-sm font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
+              {c.addStore}
+            </Link>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PlanManagementDetail({ row }: { row: PlanManagementRow }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={row.businessName} subtitle={row.currentPlan} />
+        <DetailGrid
+          rows={[
+            [c.currentPlan, row.currentPlan],
+            [c.status, <StatusBadge key="plan-status" value={row.planStatus} />],
+            [c.billingStatus, <StatusBadge key="billing-status" value={row.billingStatus} />],
+            [c.startedAt, row.startedAt ? new Date(row.startedAt).toLocaleString() : "-"],
+            [c.planCreatedAt, row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessStore} subtitle={row.primaryStoreName} />
+        <DetailGrid
+          rows={[
+            [c.business, row.businessName],
+            [c.primaryStore, row.primaryStoreName],
+            [c.storeCode, row.storeCode],
+            [c.owner, row.owner],
+            [c.ownerEmail, row.ownerEmail],
+            [c.ownerUsername, row.ownerUsername],
+            [c.template, row.template],
+            [c.storesCount, row.storesCount],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.planFeaturesLimits} subtitle={row.plan?.planName ?? row.currentPlan} />
+        <DetailGrid
+          rows={[
+            [c.branchCount, planLimitValue(row.plan?.maxBranches)],
+            [c.cashiersStaff, planLimitValue(row.plan?.maxCashiers)],
+            [c.products, planLimitValue(row.plan?.maxProducts)],
+            [c.promotions, planLimitValue(row.plan?.maxPromotions)],
+            [c.reports, planLimitValue(row.plan?.maxReports)],
+            [c.monthlyPrice, row.plan?.monthlyPrice != null ? `${money(row.plan.monthlyPrice)} LAK` : "-"],
+            [c.yearlyPrice, row.plan?.yearlyPrice != null ? `${money(row.plan.yearlyPrice)} LAK` : "-"],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.setupStatus} subtitle={row.setupStatus} />
+        <DetailGrid
+          rows={[
+            [c.businessCreated, <StatusBadge key="business-created" value={row.companyId !== "-" ? c.connected : c.notConnected} />],
+            [c.storeBranchCreated, <StatusBadge key="store-created" value={row.primaryStoreName !== "-" ? c.connected : c.notConnected} />],
+            [c.subscriptionStatus, <StatusBadge key="subscription-status" value={row.planStatus} />],
+            [c.billingStatus, <StatusBadge key="billing-status-setup" value={row.billingStatus} />],
+            [c.businessesMissingData, row.missingDataCount],
+          ]}
+        />
+      </section>
+
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.billingReadiness} subtitle={c.proBillingNotEnabled} />
+        <div className="flex flex-wrap gap-2">
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">
+            {c.viewBusiness}
+          </Link>
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+            {c.viewStores}
+          </Link>
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/users">
+            {c.users}
+          </Link>
+          <DisabledPillButton label={c.changePlan} />
+          <DisabledPillButton label={c.upgradeToPro} />
+          <DisabledPillButton label={c.cancelSubscription} />
+          <DisabledPillButton label={c.billingHistory} />
+        </div>
+      </section>
+
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.technicalMetadata,
+            value: {
+              businessId: row.companyId,
+              businessTemplateKey: row.business.businessTemplateKey,
+              currentPlan: row.currentPlan,
+              ownerEmail: row.ownerEmail,
+              ownerUsername: row.ownerUsername,
+              planId: row.plan?.id,
+              storeCode: row.storeCode,
+              subscriptionId: row.subscriptionId,
+              subscriptionStatus: row.planStatus,
             },
           },
         ]}
@@ -5840,7 +6231,14 @@ function DrawerContent({
   }
   if (drawer === "plans") {
     if (!canViewSuperAdminSection(role, "plans")) return <AccessDeniedPanel />;
-    return <PlansMatrix onAction={onAction} role={role} />;
+    return <PlanManagementPage data={data} onAction={onAction} />;
+  }
+  if (drawer === "plan-management-detail") {
+    if (!canViewSuperAdminSection(role, "plans")) return <AccessDeniedPanel />;
+    if (isPlanManagementRow(selected)) {
+      return <PlanManagementDetail row={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
   }
   if (drawer === "recent-activity") {
     if (!canViewPlatformAudit(role)) return <AccessDeniedPanel />;
@@ -6077,6 +6475,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "feature-edit": "Edit Feature",
     "pending-actions": c.pendingActions,
     "plan-analytics-detail": c.planAnalytics,
+    "plan-management-detail": c.planDetails,
     "system-health-detail": c.systemHealth,
     "integration-detail": c.integrations,
     "backup-restore-detail": c.backupRestore,
@@ -6113,6 +6512,10 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   }
   if (drawer?.startsWith("pos-template")) {
     return drawerTitle(drawer, c);
+  }
+  if (drawer === "plan-management-detail") {
+    const row = selected as PlanManagementRow | null;
+    return row?.businessName ?? c.planDetails;
   }
   if (drawer === "store-performance-detail") {
     const row = selected as StorePerformanceRow | null;
@@ -6583,7 +6986,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
     if (section === "templates") {
       return <TemplateList businesses={data.businesses} onAction={open} />;
     }
-    if (section === "plans") return <PlansMatrix onAction={open} role={role} />;
+    if (section === "plans") return <PlanManagementPage data={data} onAction={open} />;
     if (section === "subscriptions") return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={open} role={role} />;
     if (section === "users") {
       return <UserDirectoryPage data={data} onAction={open} />;
