@@ -5007,7 +5007,8 @@ type PlanAnalyticsFilter = "all" | "free" | "pro" | "trial" | "expiring";
 type HealthStatusFilter = "all" | "connected" | "healthy" | "warning" | "critical" | "not-connected" | "not-checked";
 type IntegrationCategoryFilter = "all" | "payment" | "messaging" | "accounting" | "backup" | "api" | "automation" | "commerce" | "notification";
 type IntegrationStatusFilter = "all" | "connected" | "not-connected" | "coming-soon" | "requires-setup";
-type BackupFilter = "all" | "successful" | "failed" | "scheduled" | "manual" | "not-connected";
+type BackupAreaFilter = "all" | "backup" | "restore" | "storage" | "settings" | "history" | "security";
+type BackupStatusFilter = "all" | "connected" | "not-connected" | "coming-soon" | "failed" | "successful";
 
 type IntegrationCard = {
   backendConnected: boolean;
@@ -5028,6 +5029,22 @@ type IntegrationCard = {
   status: "connected" | "not-connected" | "coming-soon";
   summary: string;
   testConnectionAvailable: boolean;
+};
+
+type BackupRestoreArea = {
+  actionLabel: string;
+  backendConnected: boolean;
+  category: Exclude<BackupAreaFilter, "all">;
+  description: string;
+  icon: LucideIcon;
+  id: string;
+  name: string;
+  recommendation: string;
+  requiredBackend: string;
+  requiredSecurity: string;
+  requiredStorage: string;
+  status: Exclude<BackupStatusFilter, "all" | "failed" | "successful">;
+  summary: string;
 };
 
 type HealthService = {
@@ -6085,26 +6102,260 @@ function IntegrationDetail({ integration }: { integration: IntegrationCard }) {
   );
 }
 
-function BackupRestorePage() {
+function backupStatusLabel(status: BackupRestoreArea["status"], c: CenterCopy) {
+  return status === "coming-soon" ? c.comingSoon : c.notConnected;
+}
+
+function backupCategoryLabel(category: BackupRestoreArea["category"], c: CenterCopy) {
+  if (category === "backup") return c.backupFilter;
+  if (category === "restore") return c.restore;
+  if (category === "storage") return c.storage;
+  if (category === "settings") return c.backupSettings;
+  if (category === "history") return c.restoreHistory;
+  if (category === "security") return c.security;
+  return category;
+}
+
+function backupRestoreAreas(c: CenterCopy): BackupRestoreArea[] {
+  const notConnected = c.disabledNotConnected || "Not connected yet";
+  const storageRequirement = c.cloudBackupBackend || "External backup storage provider.";
+  const secureRequirement = "Super Admin access, encrypted storage, and audited restore approvals.";
+  return [
+    {
+      actionLabel: `${c.createBackup} - ${notConnected}`,
+      backendConnected: false,
+      category: "backup",
+      description: c.backupServiceNotConnected,
+      icon: Download,
+      id: "backup-service",
+      name: "Backup Service",
+      recommendation: "Connect the backup worker before manual or scheduled backups are enabled.",
+      requiredBackend: "Backup worker, database export job, storage writer, and audit logging.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: c.backupServiceNotConnected,
+    },
+    {
+      actionLabel: `${c.restore} - ${notConnected}`,
+      backendConnected: false,
+      category: "restore",
+      description: "Restore workflow is not connected yet.",
+      icon: RefreshCw,
+      id: "restore-service",
+      name: "Restore Service",
+      recommendation: "Connect restore validation, approval, and rollback workflow before restore actions are enabled.",
+      requiredBackend: "Restore runner, restore-point validator, approval workflow, and audit logging.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: "Restore service is not connected yet.",
+    },
+    {
+      actionLabel: `${c.configureStorage} - ${notConnected}`,
+      backendConnected: false,
+      category: "storage",
+      description: c.backupStorageNotConnected,
+      icon: Download,
+      id: "backup-storage",
+      name: c.backupStorage,
+      recommendation: "Configure a backup storage provider before storing backup archives.",
+      requiredBackend: storageRequirement,
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: c.backupStorageNotConnected,
+    },
+    {
+      actionLabel: `${c.changeSchedule || "Change Schedule"} - ${notConnected}`,
+      backendConnected: false,
+      category: "backup",
+      description: "Scheduled backup automation is not connected yet.",
+      icon: RefreshCw,
+      id: "auto-backup",
+      name: c.autoBackup,
+      recommendation: "Connect scheduler and retention policy before enabling auto backup.",
+      requiredBackend: "Scheduler, backup worker, retention policy, and notification workflow.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: "Auto backup is not connected yet.",
+    },
+    {
+      actionLabel: `${c.createBackup} - ${notConnected}`,
+      backendConnected: false,
+      category: "backup",
+      description: c.manualBackupDescription,
+      icon: Download,
+      id: "manual-backup",
+      name: c.manualBackup,
+      recommendation: "Enable manual backups only after backup service and storage are connected.",
+      requiredBackend: "Manual backup API, backup worker, storage writer, and audit event.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: c.backupServiceNotConnected,
+    },
+    {
+      actionLabel: `${c.viewDetails} - ${notConnected}`,
+      backendConnected: false,
+      category: "history",
+      description: c.restoreHistoryEmptySubtext,
+      icon: ClipboardList,
+      id: "restore-history",
+      name: c.restoreHistory,
+      recommendation: "Connect backup and restore event history before showing restore records.",
+      requiredBackend: "Backup history table, restore history table, and sanitized audit metadata.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: c.restoreHistoryEmpty,
+    },
+    {
+      actionLabel: `${c.configure} - ${notConnected}`,
+      backendConnected: false,
+      category: "settings",
+      description: "Backup retention policy is not connected yet.",
+      icon: Settings,
+      id: "retention-policy",
+      name: c.retentionPeriod,
+      recommendation: "Define retention rules after storage and backup history are connected.",
+      requiredBackend: "Retention policy storage and cleanup worker.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: "Retention policy is not connected yet.",
+    },
+    {
+      actionLabel: `${c.configure} - ${notConnected}`,
+      backendConnected: false,
+      category: "security",
+      description: "Backup encryption status is not connected yet.",
+      icon: Lock,
+      id: "backup-encryption",
+      name: c.encryption,
+      recommendation: "Connect encryption key management before storing backup archives.",
+      requiredBackend: "Key management and encrypted backup writer.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: "Encryption readiness is not connected yet.",
+    },
+    {
+      actionLabel: `${c.configure} - ${notConnected}`,
+      backendConnected: false,
+      category: "settings",
+      description: "Backup notification routing is not connected yet.",
+      icon: Bell,
+      id: "backup-notifications",
+      name: c.notificationAlerts,
+      recommendation: "Connect notification service before sending backup or restore alerts.",
+      requiredBackend: "Notification service, recipients, and alert templates.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "not-connected",
+      summary: "Backup notifications are not connected yet.",
+    },
+    {
+      actionLabel: `${c.viewDetails} - ${c.comingSoon}`,
+      backendConnected: false,
+      category: "restore",
+      description: "Disaster recovery workflow is planned but not implemented yet.",
+      icon: Shield,
+      id: "disaster-recovery",
+      name: "Disaster Recovery",
+      recommendation: "Create a recovery runbook after backup, restore, storage, retention, and approval workflows are connected.",
+      requiredBackend: "Recovery runbook, restore approvals, recovery target checks, and audit log.",
+      requiredSecurity: secureRequirement,
+      requiredStorage: storageRequirement,
+      status: "coming-soon",
+      summary: "Disaster recovery is coming soon.",
+    },
+  ];
+}
+
+function BackupRestorePage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
   const { c } = useCenterCopy();
-  const [filter, setFilter] = useState<BackupFilter>("all");
+  const [areaFilter, setAreaFilter] = useState<BackupAreaFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<BackupStatusFilter>("all");
   const [search, setSearch] = useState("");
-  const backupOptions: Array<{ label: string; value: BackupFilter }> = [
+  const areas = backupRestoreAreas(c);
+  const areaOptions: Array<{ label: string; value: BackupAreaFilter }> = [
     { label: c.filterAll, value: "all" },
-    { label: c.successful, value: "successful" },
-    { label: c.failed, value: "failed" },
-    { label: c.scheduled, value: "scheduled" },
-    { label: c.manual, value: "manual" },
+    { label: c.backupFilter, value: "backup" },
+    { label: c.restore, value: "restore" },
+    { label: c.storage, value: "storage" },
+    { label: c.backupSettings, value: "settings" },
+    { label: c.restoreHistory, value: "history" },
+    { label: c.security, value: "security" },
+  ];
+  const statusOptions: Array<{ label: string; value: BackupStatusFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.connected, value: "connected" },
     { label: c.notConnected, value: "not-connected" },
+    { label: c.comingSoon, value: "coming-soon" },
+    { label: c.failed, value: "failed" },
+    { label: c.successful, value: "successful" },
   ];
+  const visibleAreas = areas.filter((area) => {
+    const query = search.trim().toLowerCase();
+    const matchesArea = areaFilter === "all" || area.category === areaFilter;
+    const matchesStatus = statusFilter === "all" || area.status === statusFilter;
+    const matchesSearch = !query || `${area.name} ${backupCategoryLabel(area.category, c)} ${area.description} ${area.summary} ${area.requiredBackend}`.toLowerCase().includes(query);
+    return matchesArea && matchesStatus && matchesSearch;
+  });
+  const backupReadiness = visibleAreas.filter((area) => area.category === "backup" || area.category === "storage");
+  const restoreReadiness = visibleAreas.filter((area) => area.category === "restore" || area.category === "history");
   const settings = [
-    { id: "auto", label: c.autoBackup, value: c.notConnected },
+    { id: "auto", label: c.autoBackup, value: c.notConnected, area: areas.find((area) => area.id === "auto-backup") },
     { id: "frequency", label: c.frequency, value: "-" },
-    { id: "destination", label: c.backupDestination, value: c.notConnected },
-    { id: "retention", label: c.retentionPeriod, value: "-" },
-    { id: "encryption", label: c.encryption, value: c.notConnected },
-    { id: "alerts", label: c.notificationAlerts, value: c.notConnected },
+    { id: "destination", label: c.backupDestination, value: c.notConnected, area: areas.find((area) => area.id === "backup-storage") },
+    { id: "retention", label: c.retentionPeriod, value: "-", area: areas.find((area) => area.id === "retention-policy") },
+    { id: "encryption", label: c.encryption, value: c.notConnected, area: areas.find((area) => area.id === "backup-encryption") },
+    { id: "alerts", label: c.notificationAlerts, value: c.notConnected, area: areas.find((area) => area.id === "backup-notifications") },
   ];
+  const restoreHistoryColumns = [
+    { key: "dateTime", label: c.dateTime },
+    { key: "type", label: c.type || "Type" },
+    { key: "status", label: c.status },
+    { key: "performedBy", label: c.performedBy || "Performed By" },
+    { key: "restorePoint", label: c.restorePoint },
+    { key: "details", label: c.details || "Details" },
+  ];
+  const renderAreaCard = (area: BackupRestoreArea) => {
+    const Icon = area.icon;
+    return (
+      <article
+        className="min-w-0 cursor-pointer rounded-lg border border-[#334155] bg-[#111827] p-4 transition hover:border-[#5EEAD4]"
+        key={area.id}
+        onClick={() => onAction("backup-restore-detail", area)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onAction("backup-restore-detail", area);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-md border border-[#5EEAD4]/35 bg-[#5EEAD4]/[0.12] text-[#5EEAD4]">
+            <Icon className="size-4" />
+          </span>
+          <StatusBadge value={backupStatusLabel(area.status, c)} />
+        </div>
+        <h2 className="mt-4 text-base font-semibold text-[#F8FAFC]">{area.name}</h2>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{backupCategoryLabel(area.category, c)}</p>
+        <p className="mt-2 min-h-12 text-sm text-[#94A3B8]">{area.description}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <DisabledPillButton label={area.actionLabel} />
+          <button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("backup-restore-detail", area); }} type="button">
+            {c.viewDetails}
+          </button>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
@@ -6113,65 +6364,176 @@ function BackupRestorePage() {
         subtitle={c.backupRestoreSubtitle}
         controls={
           <>
-            <FilterSelect label={c.backupFilter} onChange={setFilter} options={backupOptions} value={filter} />
+            <FilterSelect label={c.category} onChange={setAreaFilter} options={areaOptions} value={areaFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
             <SearchControl onChange={setSearch} placeholder={c.searchBackupHistory} value={search} />
             <RefreshButton />
-            <DisabledPillButton label={c.createBackup} />
+            <DisabledPillButton label={`${c.createBackup} - ${c.backupServiceNotConnected}`} />
           </>
         }
       />
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        <SummaryCard label={c.lastBackup} value="-" />
-        <SummaryCard label={c.backupStatus} value={c.notConnected} />
-        <SummaryCard label={c.autoBackup} value={c.notConnected} />
-        <SummaryCard label={c.storageUsed} value="-" />
-        <SummaryCard label={c.restorePoints} value={0} />
-        <SummaryCard label={c.failedBackups} value={0} />
+        <SummaryCard helper={c.backupServiceNotConnected} label={c.backupStatus} value={c.notConnected} />
+        <SummaryCard helper={c.backupServiceNotConnected} label={c.lastBackup} value="-" />
+        <SummaryCard helper={c.restoreHistoryEmptySubtext} label={c.restorePoints} value={0} />
+        <SummaryCard helper={c.backupStorageNotConnected} label={c.storageUsed} value={c.notConnected} />
+        <SummaryCard helper={c.backupServiceNotConnected} label={c.autoBackup} value={c.notConnected} />
+        <SummaryCard helper={c.restoreHistoryEmptySubtext} label={c.failedBackups} value={0} />
       </section>
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+      <section className="flex min-w-0 flex-wrap gap-2 rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <DisabledPillButton label={`${c.createBackup} - ${c.backupServiceNotConnected}`} />
+        <DisabledPillButton label={`${c.restore} - ${c.backupServiceNotConnected}`} />
+        <DisabledPillButton label={`${c.downloadBackup} - ${c.backupStorageNotConnected}`} />
+        <DisabledPillButton label={`${c.configureStorage} - ${c.backupStorageNotConnected}`} />
+      </section>
+      <section className="grid gap-6 xl:grid-cols-2">
         <section className={dashboardPanelClass()}>
-          <CommandSectionTitle title={c.backupSettings} subtitle={c.backupServiceNotConnected} />
-          <div className="grid gap-2">
-            {settings.map((item) => (
-              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-[#334155] bg-[#020617] p-3" key={item.id}>
-                <div className="min-w-0">
-                  <div className="font-semibold text-[#F8FAFC]">{item.label}</div>
-                  <div className="mt-1 text-sm text-[#94A3B8]">{item.value}</div>
-                </div>
-                <DisabledPillButton label={c.configure} />
+          <CommandSectionTitle title="Backup Readiness" subtitle={c.backupServiceNotConnected} />
+          <div className="grid gap-4 md:grid-cols-2">{backupReadiness.map(renderAreaCard)}</div>
+        </section>
+        <section className={dashboardPanelClass()}>
+          <CommandSectionTitle title="Restore Readiness" subtitle={c.restoreHistoryEmptySubtext} />
+          <div className="grid gap-4 md:grid-cols-2">{restoreReadiness.map(renderAreaCard)}</div>
+        </section>
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.backupSettings} subtitle={c.backupServiceNotConnected} />
+        <div className="grid gap-2">
+          {settings.map((item) => (
+            <div
+              className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-[#334155] bg-[#020617] p-3 text-left transition hover:border-[#5EEAD4]"
+              key={item.id}
+              onClick={() => item.area ? onAction("backup-restore-detail", item.area) : undefined}
+              onKeyDown={(event) => {
+                if (item.area && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  onAction("backup-restore-detail", item.area);
+                }
+              }}
+              role={item.area ? "button" : undefined}
+              tabIndex={item.area ? 0 : undefined}
+            >
+              <div className="min-w-0">
+                <div className="font-semibold text-[#F8FAFC]">{item.label}</div>
+                <div className="mt-1 text-sm text-[#94A3B8]">{item.value}</div>
               </div>
-            ))}
-          </div>
-        </section>
-        <section className={dashboardPanelClass()}>
-          <CommandSectionTitle title={c.manualBackup} subtitle={c.manualBackupDescription} />
-          <p className="text-sm text-[#94A3B8]">{c.backupServiceNotConnected}</p>
-          <div className="mt-4">
-            <DisabledPillButton label={c.createBackup} />
-          </div>
-        </section>
+              <DisabledPillButton label={`${c.configure} - ${c.disabledNotConnected}`} />
+            </div>
+          ))}
+        </div>
       </section>
       <section className={dashboardPanelClass()}>
         <CommandSectionTitle title={c.restoreHistory} subtitle={c.restoreHistoryEmptySubtext} />
-        <EmptyPanel title={c.restoreHistoryEmpty} description={c.restoreHistoryEmptySubtext} />
-      </section>
-      <section className={dashboardPanelClass()}>
-        <CommandSectionTitle title={c.backupStorage} subtitle={c.backupStorageNotConnected} />
-        <DetailGrid
-          rows={[
-            [c.backupDestination, c.notConnected],
-            [c.storageUsed, "-"],
-            [c.retentionPeriod, "-"],
-            [c.syncedAt, "-"],
-            [c.status, <StatusBadge key="status" value={c.notConnected} />],
-          ]}
-        />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <DisabledPillButton label={c.configureStorage} />
-          <DisabledPillButton label={c.restore} />
-          <DisabledPillButton label={c.downloadBackup} />
+        <div className="overflow-hidden rounded-lg border border-[#334155]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
+              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                <tr>
+                  {restoreHistoryColumns.map((column) => (
+                    <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-4 py-6 text-center text-[#94A3B8]" colSpan={6}>
+                    {c.restoreHistoryEmpty}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="mt-4">
+          <EmptyPanel title={c.restoreHistoryEmpty} description={c.restoreHistoryEmptySubtext} />
         </div>
       </section>
+      <section className="grid gap-4 md:grid-cols-3">
+        <Link className="rounded-lg border border-[#334155] bg-[#111827] p-4 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/system-health">
+          {c.systemHealth}
+        </Link>
+        <Link className="rounded-lg border border-[#334155] bg-[#111827] p-4 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/integrations">
+          {c.integrations}
+        </Link>
+        <Link className="rounded-lg border border-[#334155] bg-[#111827] p-4 text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/action-center">
+          {c.actionCenter}
+        </Link>
+      </section>
+      {!visibleAreas.length ? <EmptyPanel title={c.backupServiceNotConnected} description={c.backupRestoreSubtitle} /> : null}
+    </div>
+  );
+}
+
+function BackupRestoreDetail({ area }: { area: BackupRestoreArea }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Service Overview" subtitle={area.summary} />
+        <DetailGrid
+          rows={[
+            [c.service, area.name],
+            [c.category, backupCategoryLabel(area.category, c)],
+            [c.status, <StatusBadge key="status" value={backupStatusLabel(area.status, c)} />],
+            [c.backupStatus, area.backendConnected ? c.connected : c.notConnected],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">What This Area Does</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{area.description}</p>
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.setupStatus} subtitle={backupStatusLabel(area.status, c)} />
+        <DetailGrid
+          rows={[
+            ["Backend connected", area.backendConnected ? c.connected : c.notConnected],
+            ["Backup records", "-"],
+            ["Restore points", "0"],
+            ["Last backup", "-"],
+            ["Last restore", "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Requirements" subtitle={area.requiredBackend} />
+        <DetailGrid
+          rows={[
+            ["Required backend", area.requiredBackend],
+            ["Storage requirement", area.requiredStorage],
+            ["Security requirement", area.requiredSecurity],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{area.recommendation}</p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <DisabledPillButton label={area.actionLabel} />
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/system-health">
+          {c.systemHealth}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/integrations">
+          {c.integrations}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/action-center">
+          {c.actionCenter}
+        </Link>
+      </div>
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.metadata,
+            value: sanitizeAuditValue({
+              backendConnected: area.backendConnected,
+              category: area.category,
+              id: area.id,
+              status: area.status,
+            }),
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -8080,7 +8442,7 @@ function DrawerContent({
     return <IntegrationDetail integration={selected as IntegrationCard} />;
   }
   if (drawer === "backup-restore-detail") {
-    return <EmptyPanel title={c.backupServiceNotConnected} description={c.backupRestoreSubtitle} />;
+    return <BackupRestoreDetail area={selected as BackupRestoreArea} />;
   }
 
   return <OperationalDrawer selected={selected} />;
@@ -8798,7 +9160,7 @@ export function EgoPosCenterOperationalPage({
   } else if (section === "integrations") {
     body = canViewSuperAdminSection(role, "settings") ? <IntegrationsPage onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "backupRestore") {
-    body = canViewSuperAdminSection(role, "settings") ? <BackupRestorePage /> : <AccessDeniedPanel />;
+    body = canViewSuperAdminSection(role, "settings") ? <BackupRestorePage onAction={open} /> : <AccessDeniedPanel />;
   } else {
     body = <EgoPosCenterPlaceholderPage section={section} />;
   }
