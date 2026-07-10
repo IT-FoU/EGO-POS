@@ -279,6 +279,7 @@ type DrawerKind =
   | "subscription-revenue"
   | "subscriptions"
   | "pending-actions"
+  | "action-center-detail"
   | "active-stores-today"
   | "sales-today"
   | "bills-today"
@@ -2686,7 +2687,7 @@ function StorePerformanceDetail({ row }: { row: StorePerformanceRow }) {
 }
 
 type ActionSeverityFilter = "all" | "critical" | "warning" | "info" | "resolved";
-type ActionCategoryFilter = "all" | "approval" | "sync" | "stock" | "plan" | "template" | "security" | "backup";
+type ActionCategoryFilter = "all" | "approval" | "sync" | "stock" | "plan" | "template" | "security" | "backup" | "system" | "setup";
 type PerformanceFilter = "all" | "excellent" | "good" | "warning" | "critical" | "unknown";
 
 type ActionCategoryCard = {
@@ -2697,6 +2698,34 @@ type ActionCategoryCard = {
   icon: LucideIcon;
   severity: Exclude<ActionSeverityFilter, "all">;
   title: string;
+};
+
+type ActionCenterSource =
+  | { kind: "readiness"; metadata?: unknown }
+  | { kind: "recent-activity"; row: RecentActivityRow }
+  | { kind: "system"; metadata?: unknown };
+
+type ActionCenterItem = {
+  actionLabel: string;
+  business?: string;
+  businessId?: string;
+  category: Exclude<ActionCategoryFilter, "all">;
+  date?: string;
+  description: string;
+  id: string;
+  module: string;
+  plan?: string;
+  recommendation: string;
+  severity: Exclude<ActionSeverityFilter, "all">;
+  source: ActionCenterSource;
+  sourceLabel: string;
+  status: string;
+  store?: string;
+  storeCode?: string;
+  summary: string;
+  title: string;
+  user?: string;
+  userId?: string;
 };
 
 type RecentActivitySource =
@@ -3044,21 +3073,249 @@ function buildActionCategoryCards(data: CenterData, rows: StorePerformanceRow[],
   });
 }
 
+function actionSeverityFromText(...values: unknown[]): Exclude<ActionSeverityFilter, "all"> {
+  const text = values.map((value) => String(value ?? "")).join(" ").toLowerCase();
+  if (text.includes("critical") || text.includes("denied") || text.includes("unauthorized") || text.includes("failed")) return "critical";
+  if (text.includes("warning") || text.includes("error") || text.includes("expired") || text.includes("past_due") || text.includes("missing")) return "warning";
+  if (text.includes("resolved") || text.includes("success")) return "resolved";
+  return "info";
+}
+
+function actionCategoryFromActivity(row: RecentActivityRow): Exclude<ActionCategoryFilter, "all"> {
+  const text = `${row.action} ${row.module} ${row.targetType} ${row.summary}`.toLowerCase();
+  if (text.includes("sync")) return "sync";
+  if (text.includes("stock") || text.includes("inventory")) return "stock";
+  if (row.filter === "plan" || text.includes("subscription") || text.includes("billing")) return "plan";
+  if (text.includes("template")) return "template";
+  if (row.filter === "permission" || row.filter === "login" || text.includes("security") || text.includes("denied")) return "security";
+  if (text.includes("backup")) return "backup";
+  if (row.filter === "business" || row.filter === "store" || row.filter === "user") return "setup";
+  return "system";
+}
+
+function actionTitleForActivity(row: RecentActivityRow, category: Exclude<ActionCategoryFilter, "all">, c: CenterCopy) {
+  if (row.filter === "error") return `${c.errorFailedEvents}: ${row.activityLabel}`;
+  if (category === "security") return `${c.securityAlerts}: ${row.activityLabel}`;
+  if (category === "plan") return `${c.planIssues}: ${row.activityLabel}`;
+  if (category === "setup") return `${c.setupStatus}: ${row.activityLabel}`;
+  return row.activityLabel;
+}
+
+function buildActionCenterItems(data: CenterData, c: CenterCopy): ActionCenterItem[] {
+  const items: ActionCenterItem[] = [];
+  const notConnectedAction = c.disabledNotConnected || "Not connected yet";
+  const safeSetupRecommendation = "Review this record before taking action. Direct resolution is not connected yet.";
+  const billingNotConnected = c.billingNotConnectedForPro || "Billing is not connected yet.";
+  const recentRows = buildRecentActivityRows(data, c);
+  const relevantActivityRows = recentRows.filter((row) => {
+    const text = `${row.action} ${row.status} ${row.module} ${row.summary}`.toLowerCase();
+    return row.filter === "error"
+      || row.filter === "permission"
+      || row.filter === "login"
+      || text.includes("failed")
+      || text.includes("denied")
+      || text.includes("critical")
+      || text.includes("warning")
+      || text.includes("security");
+  });
+
+  for (const row of relevantActivityRows.slice(0, 40)) {
+    const category = actionCategoryFromActivity(row);
+    const severity = actionSeverityFromText(row.status, row.action, row.module, row.summary);
+    items.push({
+      actionLabel: c.viewDetails,
+      business: row.business !== "-" ? row.business : undefined,
+      category,
+      date: row.date,
+      description: row.summary,
+      id: `activity-${row.id}`,
+      module: row.module,
+      recommendation: severity === "resolved" ? c.noIssues : notConnectedAction,
+      severity,
+      source: { kind: "recent-activity", row },
+      sourceLabel: c.recentActivity,
+      status: row.status || severity,
+      store: row.store !== "-" ? row.store : undefined,
+      summary: row.summary,
+      title: actionTitleForActivity(row, category, c),
+      user: row.actor !== "-" ? row.actor : undefined,
+    });
+  }
+
+  for (const business of data.businesses) {
+    const owner = business.owner;
+    const primaryStore = business.branches?.find((branch) => branch.isMainBranch) ?? business.branches?.[0];
+    const activeSubscription = business.subscriptions?.[0] ?? null;
+    const missing: string[] = [];
+    if (!owner?.email && !owner?.username) missing.push(c.owner);
+    if (!primaryStore?.name) missing.push(c.primaryStore);
+    if (!business.storeCode) missing.push(c.storeCode);
+    if (!business.plan?.planName && !activeSubscription?.plan?.planName) missing.push(c.plan);
+    if (!activeSubscription) missing.push(c.subscriptions);
+    if (!business.warehouses?.length) missing.push(c.warehouseCreated);
+    if (!business.settings?.baseCurrency && !business.settings?.currencyDisplay) missing.push(c.defaultCurrency);
+    if (String(business.status ?? "").toLowerCase() !== "active") missing.push(c.status);
+
+    if (missing.length) {
+      items.push({
+        actionLabel: c.viewBusiness,
+        business: business.name,
+        businessId: business.id,
+        category: "setup",
+        date: business.createdAt,
+        description: `${business.name}: ${missing.join(", ")}`,
+        id: `business-setup-${business.id}`,
+        module: c.setupStatus,
+        plan: business.plan?.planName ?? activeSubscription?.plan?.planName ?? "-",
+        recommendation: safeSetupRecommendation,
+        severity: missing.includes(c.owner) || missing.includes(c.primaryStore) ? "warning" : "info",
+        source: {
+          kind: "readiness",
+          metadata: {
+            businessId: business.id,
+            missing,
+            subscriptionId: activeSubscription?.id,
+          },
+        },
+        sourceLabel: c.setupStatus,
+        status: c.needSetup,
+        store: primaryStore?.name ?? undefined,
+        storeCode: business.storeCode ?? undefined,
+        summary: `${c.setupStatus}: ${missing.join(", ")}`,
+        title: `${business.name} ${c.needSetup}`,
+        user: owner?.fullName ?? owner?.email ?? owner?.username ?? undefined,
+        userId: owner?.id,
+      });
+    }
+  }
+
+  for (const user of data.users) {
+    const activeAssignments = user.companies?.filter((company) => String(company.status ?? "").toLowerCase() === "active") ?? [];
+    if (String(user.status ?? "").toLowerCase() !== "active" || activeAssignments.length === 0) {
+      const userName = user.fullName ?? user.email ?? user.username ?? c.storeUser;
+      items.push({
+        actionLabel: c.viewUser,
+        business: activeAssignments[0]?.company?.name,
+        category: "setup",
+        date: user.createdAt,
+        description: activeAssignments.length ? `${userName}: ${c.status} ${user.status ?? "-"}` : `${userName}: ${c.noData} ${c.businessStore}`,
+        id: `user-assignment-${user.id}`,
+        module: c.users,
+        recommendation: safeSetupRecommendation,
+        severity: "warning",
+        source: {
+          kind: "readiness",
+          metadata: {
+            companies: user.companies?.map((company) => ({
+              branchId: company.branchId,
+              companyId: company.companyId,
+              status: company.status,
+            })),
+            userId: user.id,
+          },
+        },
+        sourceLabel: c.setupStatus,
+        status: c.needSetup,
+        summary: activeAssignments.length ? c.needReview : c.noData,
+        title: `${c.users}: ${c.needSetup}`,
+        user: userName,
+        userId: user.id,
+      });
+    }
+  }
+
+  for (const subscription of data.subscriptions) {
+    const status = String(subscription.status ?? "").toLowerCase();
+    if (status.includes("past_due") || status.includes("expired") || status.includes("failed") || status.includes("cancel")) {
+      items.push({
+        actionLabel: c.viewPlan,
+        business: subscription.company?.name,
+        businessId: subscription.company?.id,
+        category: "plan",
+        date: subscription.endDate ?? subscription.startDate,
+        description: `${subscription.company?.name ?? c.business}: ${subscription.status ?? "-"}`,
+        id: `subscription-${subscription.id}`,
+        module: c.planManagement,
+        plan: subscription.plan?.planName ?? "-",
+        recommendation: billingNotConnected,
+        severity: "warning",
+        source: { kind: "readiness", metadata: { subscriptionId: subscription.id, status: subscription.status } },
+        sourceLabel: c.planManagement,
+        status: subscription.status ?? c.needReview,
+        summary: c.planIssues,
+        title: c.planIssues,
+      });
+    }
+  }
+
+  const hasPaidPlan = data.plans.some((plan) => Number(plan.monthlyPrice ?? 0) > 0 || String(plan.planName ?? "").toLowerCase().includes("pro"));
+  if (hasPaidPlan) {
+    items.push({
+      actionLabel: c.viewPlan,
+      category: "plan",
+      description: billingNotConnected,
+      id: "system-billing-not-connected",
+      module: c.planManagement,
+      recommendation: billingNotConnected,
+      severity: "info",
+      source: { kind: "system", metadata: { feature: "billing" } },
+      sourceLabel: c.systemHealth,
+      status: c.notConnected,
+      summary: billingNotConnected,
+      title: billingNotConnected,
+    });
+  }
+
+  [
+    { category: "backup" as const, id: "backup-service", module: c.backupRestore, title: c.backupStatus, summary: "Backup service is not connected yet." },
+    { category: "system" as const, id: "health-checks", module: c.systemHealth, title: c.systemHealth, summary: c.systemHealthNotConnected },
+    { category: "system" as const, id: "integrations", module: c.integrations, title: c.integrations, summary: c.integrationStatusNotConnected },
+  ].forEach((item) => {
+    items.push({
+      actionLabel: c.viewDetails,
+      category: item.category,
+      description: item.summary,
+      id: `system-${item.id}`,
+      module: item.module,
+      recommendation: notConnectedAction,
+      severity: "info",
+      source: { kind: "system", metadata: { feature: item.id } },
+      sourceLabel: c.systemHealth,
+      status: c.notConnected,
+      summary: item.summary,
+      title: item.title,
+    });
+  });
+
+  return items.sort((a, b) => {
+    const severityRank: Record<Exclude<ActionSeverityFilter, "all">, number> = { critical: 0, warning: 1, info: 2, resolved: 3 };
+    const rank = severityRank[a.severity] - severityRank[b.severity];
+    if (rank !== 0) return rank;
+    return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
+  });
+}
+
 function ActionCenterPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
   const { c } = useCenterCopy();
   const [severity, setSeverity] = useState<ActionSeverityFilter>("all");
   const [category, setCategory] = useState<ActionCategoryFilter>("all");
   const [search, setSearch] = useState("");
-  const rows = buildStorePerformanceRows(data, "today", c);
-  const cards = buildActionCategoryCards(data, rows, c);
-  const realOpenCards = cards.filter((item) => item.connected && item.count > 0);
-  const visibleCards = cards.filter((item) => {
-    const haystack = `${item.title} ${item.description}`.toLowerCase();
+  const items = buildActionCenterItems(data, c);
+  const visibleItems = items.filter((item) => {
+    const haystack = `${item.title} ${item.description} ${item.summary} ${item.business ?? ""} ${item.store ?? ""} ${item.user ?? ""} ${item.plan ?? ""} ${item.module}`.toLowerCase();
     return (severity === "all" || item.severity === severity)
       && (category === "all" || item.category === category)
       && (!search.trim() || haystack.includes(search.trim().toLowerCase()));
   });
-  const summaryHelper = realOpenCards.length ? undefined : c.actionDataNotConnected;
+  const openItems = items.filter((item) => item.severity !== "resolved");
+  const summaryHelper = items.length ? undefined : c.actionDataNotConnected;
+  const sections: Array<{ description: string; items: ActionCenterItem[]; key: string; title: string }> = [
+    { description: c.noActionsNeedAttentionSubtext, items: visibleItems.filter((item) => item.severity === "critical"), key: "critical", title: c.critical },
+    { description: c.noActionsNeedAttentionSubtext, items: visibleItems.filter((item) => item.severity === "warning" && item.category !== "setup"), key: "warning", title: c.warning },
+    { description: c.noActionsNeedAttentionSubtext, items: visibleItems.filter((item) => item.severity === "info" && item.category !== "setup"), key: "info", title: c.info },
+    { description: "Setup and readiness checks derived from real business, store, user, plan, and system state.", items: visibleItems.filter((item) => item.category === "setup"), key: "setup", title: "Setup / Readiness" },
+    { description: "Recently handled real events when available.", items: visibleItems.filter((item) => item.severity === "resolved"), key: "resolved", title: c.resolved },
+  ].filter((section) => section.items.length > 0);
 
   const severityOptions: Array<{ label: string; value: ActionSeverityFilter }> = [
     { label: c.filterAll, value: "all" },
@@ -3076,6 +3333,8 @@ function ActionCenterPage({ data, onAction }: { data: CenterData; onAction: (dra
     { label: c.template, value: "template" },
     { label: c.security, value: "security" },
     { label: c.backup, value: "backup" },
+    { label: c.systemHealth, value: "system" },
+    { label: c.setupStatus, value: "setup" },
   ];
 
   return (
@@ -3094,41 +3353,138 @@ function ActionCenterPage({ data, onAction }: { data: CenterData; onAction: (dra
         }
       />
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        <SummaryCard helper={summaryHelper} label={c.critical} value={cards.filter((item) => item.severity === "critical" && item.count > 0).reduce((sum, item) => sum + item.count, 0)} />
-        <SummaryCard helper={summaryHelper} label={c.warning} value={cards.filter((item) => item.severity === "warning" && item.count > 0).reduce((sum, item) => sum + item.count, 0)} />
-        <SummaryCard helper={summaryHelper} label={c.info} value={cards.filter((item) => item.severity === "info" && item.count > 0).reduce((sum, item) => sum + item.count, 0)} />
-        <SummaryCard helper={summaryHelper} label={c.resolved} value={cards.filter((item) => item.severity === "resolved").length} />
-        <SummaryCard helper={summaryHelper} label={c.totalOpenActions} value={realOpenCards.reduce((sum, item) => sum + item.count, 0)} />
+        <SummaryCard helper={summaryHelper} label={c.critical} value={items.filter((item) => item.severity === "critical").length} />
+        <SummaryCard helper={summaryHelper} label={c.warning} value={items.filter((item) => item.severity === "warning").length} />
+        <SummaryCard helper={summaryHelper} label={c.info} value={items.filter((item) => item.severity === "info").length} />
+        <SummaryCard helper={summaryHelper} label={c.resolved} value={items.filter((item) => item.severity === "resolved").length} />
+        <SummaryCard helper={summaryHelper} label={c.totalOpenActions} value={openItems.length} />
       </section>
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleCards.map((item) => {
-          const Icon = item.icon;
-          const canOpen = item.connected && item.count > 0;
-          return (
-            <article className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4" key={item.category}>
-              <div className="flex items-start justify-between gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-md border border-[#5EEAD4]/35 bg-[#5EEAD4]/[0.12] text-[#5EEAD4]">
-                  <Icon className="size-4" />
-                </span>
-                <StatusBadge value={issueStatusLabel(item, c)} />
+      {sections.length ? (
+        <section className="grid gap-5">
+          {sections.map((section) => (
+            <div className="min-w-0 rounded-lg border border-[#334155] bg-[#111827]" key={section.key}>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#334155] px-4 py-4">
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-[#F8FAFC]">{section.title}</h2>
+                  <p className="mt-1 text-sm text-[#94A3B8]">{section.description}</p>
+                </div>
+                <StatusBadge value={String(section.items.length)} />
               </div>
-              <h2 className="mt-4 text-base font-semibold text-[#F8FAFC]">{item.title}</h2>
-              <p className="mt-2 min-h-10 text-sm text-[#94A3B8]">{item.description}</p>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-2xl font-semibold text-[#F8FAFC]">{item.count}</span>
-                {canOpen ? (
-                  <button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => onAction("pending-actions", { severity: item.severity, text: item.title })} type="button">
-                    {c.viewDetails}
+              <div className="grid divide-y divide-[#334155]">
+                {section.items.map((item) => (
+                  <button
+                    className="grid min-w-0 gap-3 px-4 py-4 text-left transition hover:bg-[#5EEAD4]/[0.06] lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]"
+                    key={item.id}
+                    onClick={() => onAction("action-center-detail", item)}
+                    type="button"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <StatusBadge value={item.severity} />
+                        <span className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#94A3B8]">{item.category}</span>
+                      </div>
+                      <h3 className="mt-3 text-sm font-semibold text-[#F8FAFC]">{item.title}</h3>
+                      <p className="mt-1 line-clamp-2 text-sm text-[#94A3B8]">{item.description}</p>
+                    </div>
+                    <div className="min-w-0 text-sm text-[#CBD5E1]">
+                      <div className="truncate">{item.business ?? item.store ?? item.user ?? item.plan ?? item.module}</div>
+                      <div className="mt-1 truncate text-xs text-[#94A3B8]">{item.sourceLabel} - {item.date ? new Date(item.date).toLocaleString() : c.notConnected}</div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <StatusBadge value={item.status} />
+                      <ChevronRight className="size-4 text-[#94A3B8]" />
+                    </div>
                   </button>
-                ) : (
-                  <DisabledPillButton label={item.connected ? c.noIssues : c.disabledNotConnected} />
-                )}
+                ))}
               </div>
-            </article>
-          );
-        })}
+            </div>
+          ))}
+        </section>
+      ) : (
+        <EmptyPanel title={c.noActionsNeedAttention} description={c.noActionsNeedAttentionSubtext} />
+      )}
+    </div>
+  );
+}
+
+function ActionCenterDetail({ item }: { item: ActionCenterItem }) {
+  const { c } = useCenterCopy();
+  const relatedLinks = [
+    { enabled: true, href: "/super-admin/audit-logs", label: c.viewAuditLog },
+    { enabled: true, href: "/super-admin/recent-activity", label: c.viewActivity },
+    { enabled: Boolean(item.businessId), href: "/super-admin/businesses", label: c.viewBusiness },
+    { enabled: Boolean(item.store || item.storeCode), href: "/super-admin/stores", label: c.viewStore },
+    { enabled: Boolean(item.userId || item.user), href: "/super-admin/users", label: c.viewUser },
+    { enabled: Boolean(item.plan || item.category === "plan"), href: "/super-admin/plans", label: c.viewPlan },
+  ];
+  const metadata = item.source.kind === "recent-activity"
+    ? {
+        activityId: item.source.row.id,
+        action: item.source.row.action,
+        module: item.source.row.module,
+        sourceKind: item.source.row.source.kind,
+        status: item.source.row.status,
+        target: item.source.row.target,
+      }
+    : item.source.metadata;
+
+  return (
+    <div className="grid gap-6">
+      <CommandSectionTitle title={item.title} subtitle={item.summary} />
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Action Overview" />
+        <DetailGrid
+          rows={[
+            [c.severity, <StatusBadge key="severity" value={item.severity} />],
+            [c.category, item.category],
+            [c.status, <StatusBadge key="status" value={item.status} />],
+            ["Source", item.sourceLabel],
+            [c.dateTime, item.date ? new Date(item.date).toLocaleString() : "-"],
+            [c.summary, item.summary],
+          ]}
+        />
       </section>
-      {!realOpenCards.length ? <EmptyPanel title={c.noActionsNeedAttention} description={c.noActionsNeedAttentionSubtext} /> : null}
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.relatedContext} />
+        <DetailGrid
+          rows={[
+            [c.business, item.business ?? "-"],
+            [c.store, item.store ?? "-"],
+            [c.storeCode, item.storeCode ?? "-"],
+            [c.users, item.user ?? "-"],
+            [c.plan, item.plan ?? "-"],
+            [c.module, item.module],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{item.recommendation}</p>
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Source Event</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{item.description}</p>
+      </section>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {relatedLinks.map((link) => (
+          link.enabled ? (
+            <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href={link.href} key={link.label}>
+              {link.label}
+            </Link>
+          ) : (
+            <DisabledPillButton key={link.label} label={`${link.label} - ${c.disabledNotConnected}`} />
+          )
+        ))}
+        <DisabledPillButton label="Mark Resolved - Coming soon" />
+        <DisabledPillButton label="Retry Sync - Coming soon" />
+        <DisabledPillButton label="Configure Billing - Not connected" />
+      </div>
+      <AdvancedDetails
+        sections={[
+          { title: "Source Metadata", value: sanitizeAuditValue(metadata) },
+          { title: "Related IDs", value: sanitizeAuditValue({ businessId: item.businessId, storeCode: item.storeCode, userId: item.userId }) },
+        ]}
+      />
     </div>
   );
 }
@@ -6970,6 +7326,10 @@ function DrawerContent({
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_CREATE)) return <AccessDeniedPanel />;
     return <CreateBusinessWizard onClose={onClose} />;
   }
+  if (drawer === "action-center-detail") {
+    if (!isSuperAdminRole(role)) return <AccessDeniedPanel />;
+    return selected ? <ActionCenterDetail item={selected as ActionCenterItem} /> : <EmptyState text={c.noActionsNeedAttention} />;
+  }
   if (drawer?.startsWith("businesses")) {
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW)) return <AccessDeniedPanel />;
     const filtered = data.businesses.filter((business) => {
@@ -7277,6 +7637,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
   }
   const map: Record<string, string> = {
     "business-edit": "Edit Business",
+    "action-center-detail": c.actionCenter,
     "business-detail": c.businessDetails,
     "business-features": c.manageFeatures,
     "business-owner": c.manageOwner,
