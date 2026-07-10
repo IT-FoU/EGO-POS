@@ -5004,7 +5004,7 @@ function StorePerformancePage({ data, onAction }: { data: CenterData; onAction: 
 }
 
 type PlanAnalyticsFilter = "all" | "free" | "pro" | "trial" | "expiring";
-type HealthStatusFilter = "all" | "healthy" | "warning" | "critical" | "not-connected";
+type HealthStatusFilter = "all" | "connected" | "healthy" | "warning" | "critical" | "not-connected" | "not-checked";
 type IntegrationCategoryFilter = "all" | "payment" | "messaging" | "accounting" | "backup" | "api" | "automation";
 type IntegrationStatusFilter = "all" | "connected" | "not-connected" | "coming-soon";
 type BackupFilter = "all" | "successful" | "failed" | "scheduled" | "manual" | "not-connected";
@@ -5021,10 +5021,19 @@ type IntegrationCard = {
 
 type HealthService = {
   action: string;
+  category: "Core Platform" | "Data Services" | "System Vault";
+  checked: "real" | "not-connected" | "not-checked";
   description: string;
+  impact: string;
   id: string;
+  lastChecked?: string | null;
+  metadata?: Record<string, unknown>;
   name: string;
-  status: "not-connected";
+  recommendation: string;
+  responseTime?: string | null;
+  severity: Exclude<HealthStatusFilter, "all" | "healthy">;
+  status: "connected" | "warning" | "critical" | "not-connected" | "not-checked";
+  summary: string;
 };
 
 function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
@@ -5300,32 +5309,274 @@ function PlanAnalyticsDetail({ row }: { row: PlanManagementRow }) {
   );
 }
 
-function SystemHealthPage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+function buildSystemHealthServices(data: CenterData, c: CenterCopy): HealthService[] {
+  const generatedAt = data.commandDashboard?.generatedAt ?? null;
+  const commandConnected = data.commandDashboard?.status === "connected";
+  const platformUserConnected = Boolean(data.currentPlatformUser?.id);
+  const notConnectedRecommendation = "Connect this service when backend is ready.";
+  const notCheckedRecommendation = "Add a real health check before marking this service healthy.";
+  const service = (input: HealthService): HealthService => input;
+
+  return [
+    service({
+      action: c.viewDetails,
+      category: "Core Platform",
+      checked: "real",
+      description: "The EGO POS Center UI rendered this page successfully.",
+      id: "app",
+      impact: "Controls platform owner access to Super Admin operational pages.",
+      lastChecked: null,
+      metadata: { route: "/super-admin/system-health", rendered: true },
+      name: "App",
+      recommendation: "Continue monitoring via real browser and build checks.",
+      severity: "connected",
+      status: "connected",
+      summary: "The app UI is reachable because this page rendered.",
+    }),
+    service({
+      action: c.viewDetails,
+      category: "Core Platform",
+      checked: commandConnected ? "real" : "not-checked",
+      description: commandConnected ? "Dashboard sales query completed through the shared Super Admin data loader." : "The dedicated dashboard data query did not report a connected status.",
+      id: "database",
+      impact: "Affects EGO POS Center real-data pages and dashboard metrics.",
+      lastChecked: generatedAt,
+      metadata: { commandDashboardStatus: data.commandDashboard?.status ?? "unknown" },
+      name: "Database",
+      recommendation: commandConnected ? "Keep using the existing Prisma-backed data loader checks." : notCheckedRecommendation,
+      severity: commandConnected ? "connected" : "warning",
+      status: commandConnected ? "connected" : "warning",
+      summary: commandConnected ? "Prisma-backed command dashboard data is connected." : "Database readiness needs a dedicated health check.",
+    }),
+    service({
+      action: c.viewDetails,
+      category: "Core Platform",
+      checked: platformUserConnected ? "real" : "not-checked",
+      description: platformUserConnected ? "Super Admin access was resolved for this protected route." : "No platform user access was available to this page.",
+      id: "auth",
+      impact: "Controls access to Super Admin pages.",
+      lastChecked: null,
+      metadata: { platformRole: data.currentPlatformUser?.role ?? null },
+      name: "Auth",
+      recommendation: platformUserConnected ? "Keep Super Admin and Store Login auth separated." : notCheckedRecommendation,
+      severity: platformUserConnected ? "connected" : "critical",
+      status: platformUserConnected ? "connected" : "critical",
+      summary: platformUserConnected ? "Super Admin auth is connected for this protected request." : "Super Admin auth did not resolve a platform user.",
+    }),
+    service({
+      action: c.viewDetails,
+      category: "Core Platform",
+      checked: "real",
+      description: "The route uses the Super Admin portal guard before rendering.",
+      id: "super-admin-portal",
+      impact: "Protects EGO POS Center from store-user access.",
+      lastChecked: null,
+      metadata: { route: "/super-admin/system-health", guard: "requireSuperAdminPortalAccess" },
+      name: "Super Admin Portal",
+      recommendation: "Keep route protection unchanged.",
+      severity: "connected",
+      status: "connected",
+      summary: "Protected Super Admin route rendered after access guard.",
+    }),
+    service({
+      action: c.viewDetails,
+      category: "Core Platform",
+      checked: "not-checked",
+      description: "Store Login is not checked from System Health yet.",
+      id: "store-login",
+      impact: "Affects store owners, managers, cashiers, and staff entering Store Back Office.",
+      lastChecked: null,
+      metadata: { route: "/login", check: "not-run-from-system-health" },
+      name: "Store Login",
+      recommendation: notCheckedRecommendation,
+      severity: "not-checked",
+      status: "not-checked",
+      summary: "Store Login route exists but no live login check runs here.",
+    }),
+    service({
+      action: c.viewAuditLog,
+      category: "Data Services",
+      checked: "real",
+      description: "Audit log arrays loaded through the shared Super Admin data loader.",
+      id: "audit-logs",
+      impact: "Powers Audit Logs, Recent Activity, and Action Center signals.",
+      lastChecked: generatedAt,
+      metadata: {
+        legacyAuditLogs: data.auditLogs.length,
+        platformAuditLogs: data.platformAuditLogs.length,
+        storeActivityLogs: data.storeActivityLogs.length,
+      },
+      name: c.auditLogs,
+      recommendation: "Review Audit Logs for detailed event history.",
+      severity: "connected",
+      status: "connected",
+      summary: `${data.auditLogs.length + data.platformAuditLogs.length + data.storeActivityLogs.length} audit/activity records loaded.`,
+    }),
+    service({
+      action: c.viewPlan,
+      category: "Data Services",
+      checked: "real",
+      description: "Plan and subscription records loaded through the shared Super Admin data loader.",
+      id: "plan-data",
+      impact: "Powers Plan Management and Plan Analytics.",
+      lastChecked: generatedAt,
+      metadata: { plans: data.plans.length, subscriptions: data.subscriptions.length },
+      name: "Plan Data",
+      recommendation: "Use Plan Management for plan assignments and billing readiness.",
+      severity: "connected",
+      status: "connected",
+      summary: `${data.plans.length} plans and ${data.subscriptions.length} subscriptions loaded.`,
+    }),
+    service({
+      action: c.viewBusiness,
+      category: "Data Services",
+      checked: "real",
+      description: "Business and store records loaded through the shared Super Admin data loader.",
+      id: "business-store-data",
+      impact: "Powers Businesses, Stores, Store Performance, and setup readiness.",
+      lastChecked: generatedAt,
+      metadata: {
+        businesses: data.businesses.length,
+        stores: data.businesses.reduce((sum, business) => sum + (business.branches?.length ?? 0), 0),
+      },
+      name: "Business / Store Data",
+      recommendation: "Use Businesses or Stores for record-level review.",
+      severity: "connected",
+      status: "connected",
+      summary: `${data.businesses.length} businesses loaded.`,
+    }),
+    service({
+      action: c.viewUser,
+      category: "Data Services",
+      checked: "real",
+      description: "User and role records loaded through the shared Super Admin data loader.",
+      id: "user-role-data",
+      impact: "Powers Users and Roles & Permissions.",
+      lastChecked: generatedAt,
+      metadata: { roles: data.roles.length, users: data.users.length },
+      name: "User / Role Data",
+      recommendation: "Use Users or Roles & Permissions for access review.",
+      severity: "connected",
+      status: "connected",
+      summary: `${data.users.length} users and ${data.roles.length} roles loaded.`,
+    }),
+    service({
+      action: c.configure,
+      category: "System Vault",
+      checked: "not-connected",
+      description: c.proBillingNotEnabled,
+      id: "billing",
+      impact: "Pro plan upgrade and billing automation remain disabled.",
+      lastChecked: null,
+      metadata: { feature: "billing", connected: false },
+      name: "Billing",
+      recommendation: "Configure Billing - Billing not connected.",
+      severity: "not-connected",
+      status: "not-connected",
+      summary: c.billingNotConnectedForPro,
+    }),
+    service({
+      action: c.configure,
+      category: "System Vault",
+      checked: "not-connected",
+      description: "Backup service is not connected yet.",
+      id: "backup",
+      impact: "Manual backup, restore history, and backup automation are unavailable.",
+      lastChecked: null,
+      metadata: { feature: "backup", connected: false },
+      name: c.backupStatus,
+      recommendation: "Configure Backup - Not connected.",
+      severity: "not-connected",
+      status: "not-connected",
+      summary: "Backup service is not connected yet.",
+    }),
+    service({
+      action: c.configure,
+      category: "System Vault",
+      checked: "not-connected",
+      description: c.integrationStatusNotConnected,
+      id: "integrations",
+      impact: "External provider configuration and connection testing are unavailable.",
+      lastChecked: null,
+      metadata: { feature: "integrations", connected: false },
+      name: c.integrations,
+      recommendation: "Configure Integrations - Not connected.",
+      severity: "not-connected",
+      status: "not-connected",
+      summary: c.integrationStatusNotConnected,
+    }),
+    service({
+      action: c.configure,
+      category: "System Vault",
+      checked: "not-connected",
+      description: "Storage provider is not connected yet.",
+      id: "storage",
+      impact: "External storage usage and backup destination status are unavailable.",
+      lastChecked: null,
+      metadata: { feature: "storage", connected: false },
+      name: c.storageStatus,
+      recommendation: notConnectedRecommendation,
+      severity: "not-connected",
+      status: "not-connected",
+      summary: "Storage provider is not connected yet.",
+    }),
+    service({
+      action: c.runChecks,
+      category: "System Vault",
+      checked: "not-connected",
+      description: c.systemHealthNotConnected,
+      id: "health-checks",
+      impact: "Dedicated health endpoint, response time, uptime, and status automation are unavailable.",
+      lastChecked: null,
+      metadata: { feature: "health-checks", connected: false },
+      name: "Health Checks",
+      recommendation: "Run Health Check - Health endpoint not connected.",
+      severity: "not-connected",
+      status: "not-connected",
+      summary: c.systemHealthNotConnected,
+    }),
+  ];
+}
+
+function healthStatusLabel(status: HealthService["status"], c: CenterCopy) {
+  if (status === "connected") return c.connected;
+  if (status === "warning") return c.warning;
+  if (status === "critical") return c.critical;
+  if (status === "not-connected") return c.notConnected;
+  if (status === "not-checked") return "Not Checked";
+  return status;
+}
+
+function SystemHealthPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
   const { c } = useCenterCopy();
   const [statusFilter, setStatusFilter] = useState<HealthStatusFilter>("all");
   const [search, setSearch] = useState("");
-  const services: HealthService[] = [
-    { action: c.runChecks, description: c.appHealthDescription, id: "app", name: c.appStatus, status: "not-connected" },
-    { action: c.runChecks, description: c.databaseHealthDescription, id: "database", name: c.databaseStatus, status: "not-connected" },
-    { action: c.runChecks, description: c.apiHealthDescription, id: "api", name: c.systemApiStatus, status: "not-connected" },
-    { action: c.runChecks, description: c.syncWorkerDescription, id: "sync", name: c.syncStatus, status: "not-connected" },
-    { action: c.configure, description: c.backupWorkerDescription, id: "backup", name: c.backupStatus, status: "not-connected" },
-    { action: c.configure, description: c.storageProviderDescription, id: "storage", name: c.storageStatus, status: "not-connected" },
-    { action: c.runChecks, description: c.queueJobsDescription, id: "queue", name: c.queueJobs, status: "not-connected" },
-  ];
+  const services = buildSystemHealthServices(data, c);
   const filtered = services.filter((service) => {
     const query = search.trim().toLowerCase();
-    const matchesStatus = statusFilter === "all" || statusFilter === "not-connected";
-    const matchesSearch = !query || `${service.name} ${service.description}`.toLowerCase().includes(query);
+    const matchesStatus = statusFilter === "all"
+      || service.status === statusFilter
+      || (statusFilter === "healthy" && service.status === "connected");
+    const matchesSearch = !query || `${service.name} ${service.category} ${service.description} ${service.summary}`.toLowerCase().includes(query);
     return matchesStatus && matchesSearch;
   });
+  const sections = ["Core Platform", "Data Services", "System Vault"].map((category) => ({
+    category,
+    services: filtered.filter((service) => service.category === category),
+  })).filter((section) => section.services.length > 0);
   const statusOptions: Array<{ label: string; value: HealthStatusFilter }> = [
     { label: c.filterAll, value: "all" },
-    { label: c.healthy, value: "healthy" },
+    { label: c.connected, value: "connected" },
     { label: c.warning, value: "warning" },
     { label: c.critical, value: "critical" },
     { label: c.notConnected, value: "not-connected" },
+    { label: "Not Checked", value: "not-checked" },
   ];
+  const connectedCount = services.filter((service) => service.status === "connected").length;
+  const warningCount = services.filter((service) => service.status === "warning").length;
+  const criticalCount = services.filter((service) => service.status === "critical").length;
+  const notConnectedCount = services.filter((service) => service.status === "not-connected").length;
+  const lastChecked = data.commandDashboard?.generatedAt ? new Date(data.commandDashboard.generatedAt).toLocaleString() : "-";
 
   return (
     <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
@@ -5342,57 +5593,61 @@ function SystemHealthPage({ onAction }: { onAction: (drawer: DrawerKind, selecte
         }
       />
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        {[c.appStatus, c.databaseStatus, c.systemApiStatus, c.syncStatus, c.backupStatus, c.storageStatus].map((label) => (
-          <SummaryCard helper={c.systemHealthNotConnected} key={label} label={label} value={c.notConnected} />
-        ))}
+        <SummaryCard label={c.connected} value={connectedCount} />
+        <SummaryCard label={c.warning} value={warningCount} />
+        <SummaryCard label={c.critical} value={criticalCount} />
+        <SummaryCard label={c.notConnected} value={notConnectedCount} />
+        <SummaryCard label="Total Services" value={services.length} />
+        <SummaryCard helper={data.commandDashboard?.generatedAt ? undefined : "No dedicated runtime health check."} label={c.lastChecked} value={lastChecked} />
       </section>
-      <section className={dashboardPanelClass()}>
-        <CommandSectionTitle title={c.serviceStatus} subtitle={c.systemHealthNotConnected} />
-        <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
-          <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-sm">
-              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
-                <tr>
-                  {[
-                    { key: "service", label: c.service },
-                    { key: "status", label: c.status },
-                    { key: "last-checked", label: c.lastChecked },
-                    { key: "response-time", label: c.responseTime },
-                    { key: "details", label: c.auditDetails },
-                    { key: "action", label: c.action },
-                  ].map((column) => (
-                    <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((service) => (
-                  <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={service.id} onClick={() => onAction("system-health-detail", service)}>
-                    <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{service.name}</td>
-                    <td className="px-4 py-3"><StatusBadge value={c.notConnected} /></td>
-                    <td className="px-4 py-3">-</td>
-                    <td className="px-4 py-3">-</td>
-                    <td className="px-4 py-3">{service.description}</td>
-                    <td className="px-4 py-3"><DisabledPillButton label={service.action} /></td>
+      {sections.map((section) => (
+        <section className={dashboardPanelClass()} key={section.category}>
+          <CommandSectionTitle title={section.category} subtitle={section.category === "System Vault" ? c.systemHealthNotConnected : "Real status is derived from the current Super Admin data load."} />
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1040px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[
+                      { key: "service", label: c.service },
+                      { key: "category", label: c.category },
+                      { key: "status", label: c.status },
+                      { key: "last-checked", label: c.lastChecked },
+                      { key: "details", label: c.auditDetails },
+                      { key: "action", label: c.action },
+                    ].map((column) => (
+                      <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {section.services.map((service) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={service.id} onClick={() => onAction("system-health-detail", service)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{service.name}</td>
+                      <td className="px-4 py-3">{service.category}</td>
+                      <td className="px-4 py-3"><StatusBadge value={healthStatusLabel(service.status, c)} /></td>
+                      <td className="px-4 py-3">{service.lastChecked ? new Date(service.lastChecked).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3">{service.summary}</td>
+                      <td className="px-4 py-3"><DisabledPillButton label={service.action} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ))}
       <section className={dashboardPanelClass()}>
-        <CommandSectionTitle title={c.systemChecks} subtitle={c.systemHealthNotConnected} />
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {services.slice(1).map((service) => (
-            <article className="rounded-lg border border-[#334155] bg-[#020617] p-4" key={`check-${service.id}`}>
-              <h3 className="font-semibold text-[#F8FAFC]">{service.name}</h3>
-              <p className="mt-2 text-sm text-[#94A3B8]">{service.description}</p>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <CommandSectionTitle title="Readiness Notes" subtitle="Known unconnected services are shown explicitly instead of pretending they are healthy." />
+        <div className="grid gap-3 md:grid-cols-2">
+          {services.filter((service) => service.status === "not-connected").map((service) => (
+            <button className="rounded-lg border border-[#334155] bg-[#020617] p-4 text-left transition hover:border-[#5EEAD4]" key={`note-${service.id}`} onClick={() => onAction("system-health-detail", service)} type="button">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="font-semibold text-[#F8FAFC]">{service.name}</h3>
                 <StatusBadge value={c.notConnected} />
-                <DisabledPillButton label={service.action} />
               </div>
-            </article>
+              <p className="mt-2 text-sm text-[#94A3B8]">{service.summary}</p>
+            </button>
           ))}
         </div>
       </section>
@@ -5403,18 +5658,51 @@ function SystemHealthPage({ onAction }: { onAction: (drawer: DrawerKind, selecte
 function SystemHealthDetail({ service }: { service: HealthService }) {
   const { c } = useCenterCopy();
   return (
-    <div className="grid gap-4">
-      <DetailGrid
-        rows={[
-          [c.service, service.name],
-          [c.status, <StatusBadge key="status" value={c.notConnected} />],
-          [c.lastChecked, "-"],
-          [c.responseTime, "-"],
-          [c.readableSummary, service.description],
-        ]}
-      />
-      <EmptyPanel title={c.systemHealthNotConnected} description={c.systemHealthSubtitle} />
-      <AdvancedDetails sections={[{ title: c.metadata, value: { serviceId: service.id, connected: false } }]} />
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Service Overview" subtitle={service.summary} />
+        <DetailGrid
+          rows={[
+            [c.service, service.name],
+            [c.category, service.category],
+            [c.status, <StatusBadge key="status" value={healthStatusLabel(service.status, c)} />],
+            [c.severity, healthStatusLabel(service.severity, c)],
+            [c.readableSummary, service.summary],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Check Details" subtitle={service.description} />
+        <DetailGrid
+          rows={[
+            ["Check Type", service.checked === "real" ? "Real derived check" : service.checked === "not-connected" ? c.notConnected : "Not Checked"],
+            [c.lastChecked, service.lastChecked ? new Date(service.lastChecked).toLocaleString() : "-"],
+            [c.responseTime, service.responseTime ?? "-"],
+            [c.auditDetails, service.description],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Impact</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{service.impact}</p>
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{service.recommendation}</p>
+      </section>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/action-center">
+          {c.actionCenter}
+        </Link>
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/audit-logs">
+          {c.viewAuditLog}
+        </Link>
+        <DisabledPillButton label="Run Health Check - Health endpoint not connected" />
+        <DisabledPillButton label="Export Health Report - Coming soon" />
+        <DisabledPillButton label="Configure Billing - Billing not connected" />
+        <DisabledPillButton label="Configure Backup - Not connected" />
+      </div>
+      <AdvancedDetails sections={[{ title: c.metadata, value: sanitizeAuditValue({ checked: service.checked, id: service.id, metadata: service.metadata, status: service.status }) }]} />
     </div>
   );
 }
@@ -8244,7 +8532,7 @@ export function EgoPosCenterOperationalPage({
   } else if (section === "planAnalytics") {
     body = canViewSuperAdminSection(role, "plans") ? <PlanAnalyticsPage data={data} onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "systemHealth") {
-    body = canViewSuperAdminSection(role, "settings") ? <SystemHealthPage onAction={open} /> : <AccessDeniedPanel />;
+    body = canViewSuperAdminSection(role, "settings") ? <SystemHealthPage data={data} onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "integrations") {
     body = canViewSuperAdminSection(role, "settings") ? <IntegrationsPage onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "backupRestore") {
