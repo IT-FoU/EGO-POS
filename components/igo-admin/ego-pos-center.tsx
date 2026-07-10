@@ -126,6 +126,7 @@ type CenterLog = {
 type PlatformAuditLog = {
   action: string;
   actorEmail?: string | null;
+  actorId?: string | null;
   actorName: string;
   actorRole?: string | null;
   actorType?: string | null;
@@ -148,6 +149,7 @@ type PlatformAuditLog = {
 
 type StoreActivityLog = {
   action: string;
+  actorId?: string | null;
   actorName: string;
   actorRole: string;
   afterValue?: unknown;
@@ -922,9 +924,19 @@ Object.assign(copy.en, {
   backToStoreActivity: "Back to Store Activity",
   before: "Before",
   branch: "Branch",
+  auditLogsSubtitle: "Review Super Admin, business, store, user, permission, and system events recorded by EGO POS Center.",
+  businessStore: "Business / Store",
+  changeSummary: "Change Summary",
+  createActions: "Create Actions",
+  deleteLogs: "Delete Logs",
+  eventOverview: "Event Overview",
+  failedActions: "Failed Actions",
   dateTime: "Date / Time",
+  moduleFilter: "Module",
   ipAddress: "IP Address",
   metadata: "Metadata",
+  noAuditLogsConnected: "No audit logs connected yet.",
+  noAuditLogsConnectedSubtext: "Audit logs will appear after Super Admin, business, user, and system actions are recorded.",
   noPlatformAuditLogs: "No platform audit logs found.",
   noStoreActivityLogs: "No store activity logs found for this selection.",
   occurredAt: "Occurred At",
@@ -935,17 +947,42 @@ Object.assign(copy.en, {
   requiresPermission: "Requires permission",
   requiresSuperAdmin: "Requires Super Admin",
   requiresTemplateManager: "Requires Template Manager",
+  restoreRevert: "Restore / Revert",
   scopedAuditView: "Scoped audit view",
   selectBusinessForStoreActivity: "Select a business to view store activity.",
   severity: "Severity",
+  securityPermissionEvents: "Security / Permission Events",
   storeActivity: "Store Activity",
   storeActivityDetail: "Store Activity Detail",
   storeUser: "Store User",
   syncedAt: "Synced At",
+  systemEvents: "System Events",
   target: "Target",
   terminal: "Terminal",
+  totalLogs: "Total Logs",
+  updateActions: "Update Actions",
+  viewUser: "View User",
   youDoNotHavePermissionToViewThisSection: "You do not have permission to view this section.",
   userAgent: "User Agent",
+});
+
+Object.assign(copy.th, {
+  auditLogsSubtitle: "ตรวจสอบเหตุการณ์ Super Admin ธุรกิจ ร้าน ผู้ใช้ สิทธิ์ และระบบที่บันทึกโดย EGO POS Center",
+  businessStore: "ธุรกิจ / ร้าน",
+  changeSummary: "สรุปการเปลี่ยนแปลง",
+  createActions: "รายการสร้าง",
+  deleteLogs: "ลบบันทึก",
+  eventOverview: "ภาพรวมเหตุการณ์",
+  failedActions: "รายการล้มเหลว",
+  moduleFilter: "โมดูล",
+  noAuditLogsConnected: "ยังไม่มีบันทึกตรวจสอบ",
+  noAuditLogsConnectedSubtext: "บันทึกตรวจสอบจะแสดงหลังจากมีการบันทึกการทำงานของ Super Admin ธุรกิจ ผู้ใช้ และระบบ",
+  restoreRevert: "กู้คืน / ย้อนกลับ",
+  securityPermissionEvents: "เหตุการณ์ความปลอดภัย / สิทธิ์",
+  systemEvents: "เหตุการณ์ระบบ",
+  totalLogs: "บันทึกทั้งหมด",
+  updateActions: "รายการอัปเดต",
+  viewUser: "ดูผู้ใช้",
 });
 
 Object.assign(copy.en, {
@@ -2589,6 +2626,27 @@ type RecentActivityRow = {
   target: string;
 };
 
+type AuditModuleFilter = "all" | "super-admin" | "business" | "store" | "plan" | "user" | "role" | "pos" | "inventory" | "system";
+type AuditActionFilter = "all" | "create" | "update" | "delete" | "login" | "permission" | "error" | "other";
+type AuditStatusFilter = "all" | "success" | "failed" | "warning" | "info" | "unknown";
+
+type AuditLogRow = {
+  action: string;
+  actionFilter: AuditActionFilter;
+  actor: string;
+  business: string;
+  date?: string;
+  id: string;
+  metadataSearch: string;
+  module: string;
+  moduleFilter: AuditModuleFilter;
+  source: RecentActivitySource;
+  status: string;
+  statusFilter: AuditStatusFilter;
+  store: string;
+  target: string;
+};
+
 type StoreDirectoryRow = {
   activeAssignment: boolean;
   address: string;
@@ -3023,6 +3081,164 @@ function openRecentActivityRow(row: RecentActivityRow, onAction: (drawer: Drawer
   if (row.source.kind === "legacy") onAction("audit-details", row.source.value);
 }
 
+const AUDIT_SENSITIVE_KEY_PATTERN = /(password|passwordhash|password_hash|token|secret|credential|csrf|session|cookie|apikey|api_key|accesstoken|access_token|refreshtoken|refresh_token)/i;
+
+function sanitizeAuditValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeAuditValue(item));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !AUDIT_SENSITIVE_KEY_PATTERN.test(key))
+        .map(([key, entry]) => [key, sanitizeAuditValue(entry)]),
+    );
+  }
+  return value;
+}
+
+function safeAuditSearchText(...values: unknown[]) {
+  return values
+    .map((value) => {
+      const sanitized = sanitizeAuditValue(value);
+      if (sanitized === null || sanitized === undefined) return "";
+      if (typeof sanitized === "string" || typeof sanitized === "number" || typeof sanitized === "boolean") return String(sanitized);
+      return JSON.stringify(sanitized);
+    })
+    .join(" ")
+    .toLowerCase();
+}
+
+function auditActionFilter(action: string | undefined): AuditActionFilter {
+  const value = String(action ?? "").toLowerCase();
+  if (value.includes("create")) return "create";
+  if (value.includes("update") || value.includes("change") || value.includes("mark") || value.includes("extend")) return "update";
+  if (value.includes("delete") || value.includes("archive") || value.includes("cancel") || value.includes("disable") || value.includes("suspend")) return "delete";
+  if (value.includes("login") || value.includes("auth")) return "login";
+  if (value.includes("permission") || value.includes("role") || value.includes("denied")) return "permission";
+  if (value.includes("error") || value.includes("fail") || value.includes("critical")) return "error";
+  return "other";
+}
+
+function auditStatusFilter(status: string | undefined, severity?: string | null): AuditStatusFilter {
+  const value = `${status ?? ""} ${severity ?? ""}`.toLowerCase();
+  if (value.includes("success") || value.includes("complete") || value.includes("active")) return "success";
+  if (value.includes("failed") || value.includes("fail") || value.includes("denied") || value.includes("error") || value.includes("critical")) return "failed";
+  if (value.includes("warning") || value.includes("warn")) return "warning";
+  if (value.includes("info")) return "info";
+  return "unknown";
+}
+
+function auditModuleFilter(action: string | undefined, targetType?: string | null): AuditModuleFilter {
+  const value = `${action ?? ""} ${targetType ?? ""}`.toLowerCase();
+  if (value.includes("business") || value.includes("company")) return "business";
+  if (value.includes("store") || value.includes("branch")) return "store";
+  if (value.includes("plan") || value.includes("subscription") || value.includes("billing")) return "plan";
+  if (value.includes("user")) return "user";
+  if (value.includes("role") || value.includes("permission")) return "role";
+  if (value.includes("sale") || value.includes("pos") || value.includes("shift") || value.includes("payment")) return "pos";
+  if (value.includes("inventory") || value.includes("stock") || value.includes("product")) return "inventory";
+  if (value.includes("auth") || value.includes("settings") || value.includes("system")) return "system";
+  if (value.includes("template") || value.includes("feature")) return "super-admin";
+  return "system";
+}
+
+function auditModuleLabel(filter: AuditModuleFilter, c: CenterCopy) {
+  const labels: Record<AuditModuleFilter, string> = {
+    all: c.filterAll,
+    business: c.business,
+    inventory: c.inventory,
+    plan: c.plan,
+    pos: "POS",
+    role: c.rolesPermissions,
+    "super-admin": "Super Admin",
+    store: c.store,
+    system: c.systemVault ?? "System",
+    user: c.users,
+  };
+  return labels[filter] ?? filter;
+}
+
+function buildAuditLogRows(data: CenterData, c: CenterCopy): AuditLogRow[] {
+  const rowId = (prefix: string, id: string | undefined, action: string | undefined, date: string | undefined, target: string | undefined) =>
+    id ? `${prefix}-${id}` : `${prefix}-${action ?? "action"}-${date ?? "no-date"}-${target ?? "target"}`;
+
+  const legacyRows: AuditLogRow[] = data.auditLogs.map((log) => {
+    const action = log.action ?? "-";
+    const moduleFilter = auditModuleFilter(action, log.module);
+    const status = activityTone(action);
+    return {
+      action,
+      actionFilter: auditActionFilter(action),
+      actor: log.user?.fullName ?? log.user?.username ?? "-",
+      business: log.company?.name ?? "-",
+      date: log.createdAt,
+      id: rowId("legacy", log.id, action, log.createdAt, log.module),
+      metadataSearch: "",
+      module: log.module ?? auditModuleLabel(moduleFilter, c),
+      moduleFilter,
+      source: { kind: "legacy", value: log },
+      status,
+      statusFilter: auditStatusFilter(status),
+      store: "-",
+      target: log.module ?? "-",
+    };
+  });
+
+  const platformRows: AuditLogRow[] = data.platformAuditLogs.map((log) => {
+    const moduleFilter = auditModuleFilter(log.action, log.targetType);
+    const status = log.status ?? log.severity ?? activityTone(log.action);
+    return {
+      action: log.action,
+      actionFilter: auditActionFilter(log.action),
+      actor: log.actorName || log.actorEmail || "-",
+      business: log.business?.name ?? "-",
+      date: log.createdAt,
+      id: rowId("platform", log.id, log.action, log.createdAt, log.targetName ?? log.targetType ?? undefined),
+      metadataSearch: safeAuditSearchText(log.beforeValue, log.afterValue, log.metadata),
+      module: auditModuleLabel(moduleFilter, c),
+      moduleFilter,
+      source: { kind: "platform", value: log },
+      status,
+      statusFilter: auditStatusFilter(log.status ?? undefined, log.severity),
+      store: "-",
+      target: log.targetName ?? log.targetType ?? "-",
+    };
+  });
+
+  const storeRows: AuditLogRow[] = data.storeActivityLogs.map((log) => {
+    const moduleFilter = auditModuleFilter(log.action, log.targetType);
+    const status = log.status ?? activityTone(log.action);
+    return {
+      action: log.action,
+      actionFilter: auditActionFilter(log.action),
+      actor: log.actorName,
+      business: log.business?.name ?? "-",
+      date: log.occurredAt ?? log.createdAt,
+      id: rowId("store", log.id, log.action, log.occurredAt ?? log.createdAt, log.targetName ?? log.targetType ?? undefined),
+      metadataSearch: safeAuditSearchText(log.beforeValue, log.afterValue, log.metadata),
+      module: auditModuleLabel(moduleFilter, c),
+      moduleFilter,
+      source: { kind: "store", value: log },
+      status,
+      statusFilter: auditStatusFilter(log.status ?? undefined),
+      store: log.branch?.name ?? "-",
+      target: log.targetName ?? log.targetType ?? "-",
+    };
+  });
+
+  return [...platformRows, ...storeRows, ...legacyRows].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+}
+
+function openAuditLogRow(row: AuditLogRow, onAction: (drawer: DrawerKind, selected?: unknown) => void) {
+  if (row.source.kind === "platform") onAction("platform-audit-detail", row.source.value);
+  if (row.source.kind === "store") onAction("store-activity-detail", row.source.value);
+  if (row.source.kind === "legacy") onAction("audit-details", row.source.value);
+}
+
 function RecentActivityPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
   const { c } = useCenterCopy();
   const [preset, setPreset] = useState<CommandDatePreset>("today");
@@ -3143,20 +3359,30 @@ function RecentActivityPage({ data, onAction }: { data: CenterData; onAction: (d
 function CenterLogDetail({ log }: { log: CenterLog }) {
   const { c } = useCenterCopy();
   return (
-    <div className="grid gap-4">
-      <DetailGrid
-        rows={[
-          [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
-          [c.actor, log.user?.fullName ?? log.user?.username ?? "-"],
-          [c.module, log.module ?? "-"],
-          [c.action, log.action ?? "-"],
-          [c.status, <StatusBadge key="status" value={activityTone(log.action)} />],
-          [c.business, log.company?.name ?? "-"],
-          [c.target, log.module ?? "-"],
-          [c.readableSummary, `${log.user?.fullName ?? log.user?.username ?? c.actor} ${log.action ?? c.action}`],
-        ]}
-      />
-      <AdvancedDetails sections={[{ title: c.rawPayload, value: log }]} />
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.eventOverview} subtitle={log.action ?? c.auditLogs} />
+        <DetailGrid
+          rows={[
+            [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
+            [c.action, log.action ?? "-"],
+            [c.module, log.module ?? "-"],
+            [c.status, <StatusBadge key="status" value={activityTone(log.action)} />],
+            [c.target, log.module ?? "-"],
+            [c.readableSummary, `${log.user?.fullName ?? log.user?.username ?? c.actor} ${log.action ?? c.action}`],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.actor} subtitle={log.user?.fullName ?? log.user?.username ?? "-"} />
+        <DetailGrid
+          rows={[
+            [c.actor, log.user?.fullName ?? log.user?.username ?? "-"],
+            [c.business, log.company?.name ?? "-"],
+          ]}
+        />
+      </section>
+      <AdvancedDetails sections={[{ title: c.rawPayload, value: sanitizeAuditValue(log) }]} />
     </div>
   );
 }
@@ -5052,73 +5278,154 @@ function AuditLogsCenter({
   role?: string | null;
 }) {
   const { c } = useCenterCopy();
-  const [tab, setTab] = useState<"platform" | "store">("platform");
-  const [businessId, setBusinessId] = useState("");
-  const canSeePlatformAudit = canViewPlatformAudit(role);
-  const canSeeStoreActivity = isSuperAdminRole(role) || canViewStoreActivityLogs(role, { businessId });
-  const tabs = [
-    canSeePlatformAudit ? { label: c.platformAudit, value: "platform" as const } : null,
-    canSeeStoreActivity ? { label: c.storeActivity, value: "store" as const } : null,
-  ].filter(Boolean) as Array<{ label: string; value: "platform" | "store" }>;
-  const storeLogs = businessId ? data.storeActivityLogs.filter((log) => log.businessId === businessId) : [];
-
-  useEffect(() => {
-    if (!tabs.some((item) => item.value === tab)) {
-      setTab(tabs[0]?.value ?? "platform");
-    }
-  }, [tab, tabs]);
-
-  if (!tabs.length) {
+  const [preset, setPreset] = useState<CommandDatePreset>("30d");
+  const [moduleFilter, setModuleFilter] = useState<AuditModuleFilter>("all");
+  const [actionFilter, setActionFilter] = useState<AuditActionFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<AuditStatusFilter>("all");
+  const [search, setSearch] = useState("");
+  if (!isSuperAdminRole(role)) {
     return <AccessDeniedPanel />;
   }
+  const rows = buildAuditLogRows(data, c);
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesDate = row.date ? inDateRange(row.date, preset) : false;
+    const matchesModule = moduleFilter === "all" || row.moduleFilter === moduleFilter;
+    const matchesAction = actionFilter === "all" || row.actionFilter === actionFilter;
+    const matchesStatus = statusFilter === "all" || row.statusFilter === statusFilter;
+    const matchesSearch = !query || `${row.actor} ${row.action} ${row.module} ${row.business} ${row.store} ${row.target} ${row.metadataSearch}`.toLowerCase().includes(query);
+    return matchesDate && matchesModule && matchesAction && matchesStatus && matchesSearch;
+  });
+  const createRows = rows.filter((row) => row.actionFilter === "create");
+  const updateRows = rows.filter((row) => row.actionFilter === "update");
+  const failedRows = rows.filter((row) => row.statusFilter === "failed");
+  const securityRows = rows.filter((row) => row.actionFilter === "permission" || row.statusFilter === "failed" || row.status.toLowerCase().includes("security"));
+  const systemRows = rows.filter((row) => row.moduleFilter === "system" || row.moduleFilter === "super-admin");
+  const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
+    { label: c.today, value: "today" },
+    { label: c.sevenDays, value: "7d" },
+    { label: c.thirtyDays, value: "30d" },
+    { label: c.thisMonth, value: "month" },
+  ];
+  const moduleOptions: Array<{ label: string; value: AuditModuleFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: "Super Admin", value: "super-admin" },
+    { label: c.business, value: "business" },
+    { label: c.store, value: "store" },
+    { label: c.plan, value: "plan" },
+    { label: c.users, value: "user" },
+    { label: c.rolesPermissions, value: "role" },
+    { label: "POS", value: "pos" },
+    { label: c.inventory, value: "inventory" },
+    { label: c.systemVault ?? "System", value: "system" },
+  ];
+  const actionOptions: Array<{ label: string; value: AuditActionFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.createActions, value: "create" },
+    { label: c.updateActions, value: "update" },
+    { label: c.archiveDelete, value: "delete" },
+    { label: c.login, value: "login" },
+    { label: c.requiresPermission, value: "permission" },
+    { label: c.error, value: "error" },
+    { label: c.other ?? "Other", value: "other" },
+  ];
+  const statusOptions: Array<{ label: string; value: AuditStatusFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.successful, value: "success" },
+    { label: c.failed, value: "failed" },
+    { label: c.warning, value: "warning" },
+    { label: c.info, value: "info" },
+    { label: c.unknown ?? "Unknown", value: "unknown" },
+  ];
+  const helper = rows.length ? undefined : c.noAuditLogsConnectedSubtext;
 
   return (
-    <div className="grid gap-4">
-      <div className="flex flex-wrap gap-2">
-        {tabs.map(({ label, value }) => (
-          <button
-            className={cn(
-              "rounded-md border px-3 py-2 text-sm font-semibold transition",
-              tab === value ? "border-[#5EEAD4] bg-[#5EEAD4]/10 text-[#F8FAFC]" : "border-[#334155] text-[#CBD5E1] hover:border-[#5EEAD4]",
-            )}
-            key={value}
-            onClick={() => setTab(value)}
-            type="button"
-          >
-            {label}
-            {value === "platform" && getPlatformAuditActionScope(role).type === "scoped" ? (
-              <span className="ml-2 rounded-full border border-[#334155] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#94A3B8]">
-                {c.scopedAuditView}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
-
-      {tab === "platform" ? (
-        <PlatformAuditTable logs={data.platformAuditLogs} onOpen={(log) => onAction("platform-audit-detail", log)} />
-      ) : (
-        <div className="grid gap-4">
-          <label className="grid gap-2 text-sm text-[#CBD5E1] md:max-w-md">
-            <span className="font-semibold text-[#F8FAFC]">{c.business}</span>
-            <select
-              className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC] outline-none focus:border-[#5EEAD4]"
-              onChange={(event) => setBusinessId(event.target.value)}
-              value={businessId}
-            >
-              <option value="">{c.selectBusinessForStoreActivity}</option>
-              {data.businesses.map((business) => (
-                <option key={business.id} value={business.id}>{business.name}</option>
-              ))}
-            </select>
-          </label>
-          {businessId ? (
-            <StoreActivityTable logs={storeLogs} onOpen={(log) => onAction("store-activity-detail", log)} />
-          ) : (
-            <EmptyState text={c.selectBusinessForStoreActivity} />
-          )}
-        </div>
-      )}
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.auditLogs}
+        subtitle={c.auditLogsSubtitle}
+        controls={
+          <>
+            <FilterSelect label={c.dateRange} onChange={setPreset} options={dateOptions} value={preset} />
+            <FilterSelect label={c.moduleFilter} onChange={setModuleFilter} options={moduleOptions} value={moduleFilter} />
+            <FilterSelect label={c.action} onChange={setActionFilter} options={actionOptions} value={actionFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <SearchControl onChange={setSearch} placeholder={c.search} value={search} />
+            <RefreshButton />
+            <ExportDisabledButton />
+          </>
+        }
+      />
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper={helper} label={c.totalLogs} value={rows.length} />
+        <SummaryCard helper={helper} label={c.createActions} value={createRows.length} />
+        <SummaryCard helper={helper} label={c.updateActions} value={updateRows.length} />
+        <SummaryCard helper={helper} label={c.failedActions} value={failedRows.length} />
+        <SummaryCard helper={helper} label={c.securityPermissionEvents} value={securityRows.length} />
+        <SummaryCard helper={helper} label={c.systemEvents} value={systemRows.length} />
+      </section>
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.auditLogs} subtitle={rows.length ? c.auditLogsSubtitle : c.noAuditLogsConnectedSubtext} />
+        {visibleRows.length ? (
+          <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1320px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {[
+                      { key: "date", label: c.dateTime },
+                      { key: "actor", label: c.actor },
+                      { key: "action", label: c.action },
+                      { key: "module", label: c.module },
+                      { key: "business", label: c.businessStore },
+                      { key: "target", label: c.target },
+                      { key: "status", label: c.status },
+                      { key: "details", label: c.auditDetails },
+                      { key: "actions", label: c.actions },
+                    ].map((column) => (
+                      <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.id} onClick={() => openAuditLogRow(row, onAction)}>
+                      <td className="whitespace-nowrap px-4 py-3">{row.date ? new Date(row.date).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3">{row.actor}</td>
+                      <td className="px-4 py-3 font-medium text-[#F8FAFC]">{row.action}</td>
+                      <td className="px-4 py-3">{row.module}</td>
+                      <td className="px-4 py-3">
+                        <div>{row.business}</div>
+                        {row.store !== "-" ? <div className="text-xs text-[#94A3B8]">{row.store}</div> : null}
+                      </td>
+                      <td className="px-4 py-3">{row.target}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3">
+                        <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); openAuditLogRow(row, onAction); }} type="button">
+                          {c.viewDetails}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <Link className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/businesses" onClick={(event) => event.stopPropagation()}>
+                            {c.viewBusiness}
+                          </Link>
+                          <Link className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/stores" onClick={(event) => event.stopPropagation()}>
+                            {c.viewStore}
+                          </Link>
+                          <DisabledPillButton label={c.restoreRevert} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyPanel title={c.noAuditLogsConnected} description={c.noAuditLogsConnectedSubtext} />
+        )}
+      </section>
     </div>
   );
 }
@@ -5127,29 +5434,64 @@ function PlatformAuditDetail({ log }: { log: PlatformAuditLog }) {
   const { c } = useCenterCopy();
   const summary = `${log.actorName || log.actorEmail || c.platformAudit} ${log.action} ${log.targetName ?? log.targetType ?? ""}`.trim();
   return (
-    <div className="grid gap-4">
-      <DetailGrid
-        rows={[
-          [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
-          [c.actor, `${log.actorName}${log.actorEmail ? ` (${log.actorEmail})` : ""}`],
-          [c.role, log.actorRole ?? log.actorType ?? "-"],
-          [c.action, log.action],
-          [c.status, <StatusBadge key="status" value={log.status ?? "success"} />],
-          [c.severity, <StatusBadge key="severity" value={log.severity ?? "info"} />],
-          [c.target, `${log.targetType ?? "-"}${log.targetName ? `: ${log.targetName}` : ""}`],
-          [c.business, log.business?.name ?? log.businessId ?? "-"],
-          [c.readableSummary, summary || "-"],
-        ]}
-      />
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.eventOverview} subtitle={log.action} />
+        <DetailGrid
+          rows={[
+            [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
+            [c.action, log.action],
+            [c.module, auditModuleLabel(auditModuleFilter(log.action, log.targetType), c)],
+            [c.status, <StatusBadge key="status" value={log.status ?? "success"} />],
+            [c.severity, <StatusBadge key="severity" value={log.severity ?? "info"} />],
+            [c.target, `${log.targetType ?? "-"}${log.targetName ? `: ${log.targetName}` : ""}`],
+            [c.readableSummary, summary || "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.actor} subtitle={log.actorName || log.actorEmail || "-"} />
+        <DetailGrid
+          rows={[
+            [c.actor, log.actorName || "-"],
+            [c.email, log.actorEmail ?? "-"],
+            [c.role, log.actorRole ?? log.actorType ?? "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessStore} subtitle={log.business?.name ?? "-"} />
+        <DetailGrid
+          rows={[
+            [c.business, log.business?.name ?? "-"],
+            [c.store, "-"],
+            [c.storeCode, "-"],
+            [c.template, "-"],
+            [c.plan, "-"],
+          ]}
+        />
+      </section>
       <AdvancedDetails
         sections={[
-          { title: c.before, value: log.beforeValue },
-          { title: c.after, value: log.afterValue },
-          { title: c.metadata, value: log.metadata },
-          { title: "IDs", value: { businessId: log.businessId, requestId: log.requestId, targetId: log.targetId } },
-          { title: c.technicalMetadata, value: { ipAddress: log.ipAddress, userAgent: log.userAgent } },
+          { title: c.changeSummary, value: { after: sanitizeAuditValue(log.afterValue), before: sanitizeAuditValue(log.beforeValue) } },
+          { title: c.metadata, value: sanitizeAuditValue(log.metadata) },
+          { title: "IDs", value: { actorId: log.actorId, businessId: log.businessId, requestId: log.requestId, targetId: log.targetId } },
+          { title: c.technicalMetadata, value: sanitizeAuditValue({ ipAddress: log.ipAddress, userAgent: log.userAgent }) },
         ]}
       />
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">
+          {c.viewBusiness}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+          {c.viewStore}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/users">
+          {c.viewUser}
+        </Link>
+        <DisabledPillButton label={c.deleteLogs} />
+        <DisabledPillButton label={c.restoreRevert} />
+      </div>
     </div>
   );
 }
@@ -5158,34 +5500,64 @@ function StoreActivityDetail({ log }: { log: StoreActivityLog }) {
   const { c } = useCenterCopy();
   const summary = `${log.actorName} ${log.action} ${log.targetName ?? log.targetType ?? ""}`.trim();
   return (
-    <div className="grid gap-4">
-      <DetailGrid
-        rows={[
-          [c.business, log.business?.name ?? log.businessId],
-          [c.branch, log.branch?.name ?? "-"],
-          [c.terminal, log.terminalName ?? log.deviceName ?? "-"],
-          [c.storeUser, log.actorName],
-          [c.role, log.actorRole],
-          [c.action, log.action],
-          [c.target, `${log.targetType ?? "-"}${log.targetName ? `: ${log.targetName}` : ""}`],
-          [c.amount, log.amount ?? "-"],
-          [c.currency, log.currency ?? "LAK"],
-          [c.occurredAt, log.occurredAt ? new Date(log.occurredAt).toLocaleString() : "-"],
-          [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
-          [c.syncedAt, log.syncedAt ? new Date(log.syncedAt).toLocaleString() : "-"],
-          [c.status, <StatusBadge key="status" value={log.status ?? "success"} />],
-          [c.readableSummary, summary || "-"],
-        ]}
-      />
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.eventOverview} subtitle={log.action} />
+        <DetailGrid
+          rows={[
+            [c.dateTime, log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"],
+            [c.occurredAt, log.occurredAt ? new Date(log.occurredAt).toLocaleString() : "-"],
+            [c.action, log.action],
+            [c.module, auditModuleLabel(auditModuleFilter(log.action, log.targetType), c)],
+            [c.status, <StatusBadge key="status" value={log.status ?? "success"} />],
+            [c.target, `${log.targetType ?? "-"}${log.targetName ? `: ${log.targetName}` : ""}`],
+            [c.readableSummary, summary || "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.actor} subtitle={log.actorName} />
+        <DetailGrid
+          rows={[
+            [c.storeUser, log.actorName],
+            [c.role, log.actorRole],
+            [c.terminal, log.terminalName ?? log.deviceName ?? "-"],
+            [c.syncedAt, log.syncedAt ? new Date(log.syncedAt).toLocaleString() : "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessStore} subtitle={log.business?.name ?? "-"} />
+        <DetailGrid
+          rows={[
+            [c.business, log.business?.name ?? "-"],
+            [c.store, log.branch?.name ?? "-"],
+            [c.amount, log.amount ?? "-"],
+            [c.currency, log.currency ?? "LAK"],
+          ]}
+        />
+      </section>
       <AdvancedDetails
         sections={[
-          { title: c.before, value: log.beforeValue },
-          { title: c.after, value: log.afterValue },
-          { title: c.metadata, value: log.metadata },
-          { title: "IDs", value: { branchId: log.branch?.id, businessId: log.businessId, targetId: log.targetId } },
-          { title: c.technicalMetadata, value: { deviceName: log.deviceName, terminalName: log.terminalName } },
+          { title: c.changeSummary, value: { after: sanitizeAuditValue(log.afterValue), before: sanitizeAuditValue(log.beforeValue) } },
+          { title: c.metadata, value: sanitizeAuditValue(log.metadata) },
+          { title: "IDs", value: { actorId: log.actorId, branchId: log.branch?.id, businessId: log.businessId, targetId: log.targetId } },
+          { title: c.technicalMetadata, value: sanitizeAuditValue({ deviceName: log.deviceName, terminalName: log.terminalName }) },
         ]}
       />
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">
+          {c.viewBusiness}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+          {c.viewStore}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/users">
+          {c.viewUser}
+        </Link>
+        <DisabledPillButton label={c.deleteLogs} />
+        <DisabledPillButton label={c.restoreRevert} />
+      </div>
     </div>
   );
 }
