@@ -287,6 +287,7 @@ type DrawerKind =
   | "plans"
   | "plan-management-detail"
   | "recent-activity"
+  | "recent-activity-detail"
   | "store-performance-detail"
   | "plan-analytics-detail"
   | "system-health-detail"
@@ -938,6 +939,8 @@ Object.assign(copy.en, {
   noAuditLogsConnected: "No audit logs connected yet.",
   noAuditLogsConnectedSubtext: "Audit logs will appear after Super Admin, business, user, and system actions are recorded.",
   noPlatformAuditLogs: "No platform audit logs found.",
+  noRecentActivityYet: "No recent activity yet.",
+  noRecentActivityYetSubtext: "Recent activity will appear after Super Admin, business, user, plan, and system actions are recorded.",
   noStoreActivityLogs: "No store activity logs found for this selection.",
   occurredAt: "Occurred At",
   platformAudit: "Platform Audit",
@@ -961,6 +964,28 @@ Object.assign(copy.en, {
   terminal: "Terminal",
   totalLogs: "Total Logs",
   updateActions: "Update Actions",
+  activityLabel: "Activity",
+  activityOverview: "Activity Overview",
+  businessCreated: "Business created",
+  businessStoreEvents: "Business / Store Events",
+  errorFailedEvents: "Error / Failed Events",
+  exportActivity: "Export Activity",
+  loginEvent: "Login event",
+  permissionEvents: "Permission Events",
+  permissionUpdated: "Permission updated",
+  planEvents: "Plan Events",
+  planAssigned: "Plan assigned",
+  relatedContext: "Related Context",
+  safeChangeSummary: "Safe change summary",
+  storeCreated: "Store created",
+  systemEvent: "System event",
+  targetName: "Target Name",
+  targetType: "Target Type",
+  totalActivities: "Total Activities",
+  unknownActivity: "Unknown activity",
+  userCreated: "User created",
+  userEvents: "User Events",
+  viewAuditLog: "View Audit Log",
   viewUser: "View User",
   youDoNotHavePermissionToViewThisSection: "You do not have permission to view this section.",
   userAgent: "User Agent",
@@ -977,11 +1002,35 @@ Object.assign(copy.th, {
   moduleFilter: "โมดูล",
   noAuditLogsConnected: "ยังไม่มีบันทึกตรวจสอบ",
   noAuditLogsConnectedSubtext: "บันทึกตรวจสอบจะแสดงหลังจากมีการบันทึกการทำงานของ Super Admin ธุรกิจ ผู้ใช้ และระบบ",
+  noRecentActivityYet: "ยังไม่มีกิจกรรมล่าสุด",
+  noRecentActivityYetSubtext: "กิจกรรมล่าสุดจะแสดงหลังจากมีการบันทึกการทำงานของ Super Admin ธุรกิจ ผู้ใช้ แผน และระบบ",
   restoreRevert: "กู้คืน / ย้อนกลับ",
   securityPermissionEvents: "เหตุการณ์ความปลอดภัย / สิทธิ์",
   systemEvents: "เหตุการณ์ระบบ",
   totalLogs: "บันทึกทั้งหมด",
   updateActions: "รายการอัปเดต",
+  activityLabel: "กิจกรรม",
+  activityOverview: "ภาพรวมกิจกรรม",
+  businessCreated: "สร้างธุรกิจแล้ว",
+  businessStoreEvents: "เหตุการณ์ธุรกิจ / ร้าน",
+  errorFailedEvents: "ข้อผิดพลาด / ล้มเหลว",
+  exportActivity: "ส่งออกกิจกรรม",
+  loginEvent: "เหตุการณ์เข้าสู่ระบบ",
+  permissionEvents: "เหตุการณ์สิทธิ์",
+  permissionUpdated: "อัปเดตสิทธิ์แล้ว",
+  planEvents: "เหตุการณ์แผน",
+  planAssigned: "กำหนดแผนแล้ว",
+  relatedContext: "บริบทที่เกี่ยวข้อง",
+  safeChangeSummary: "สรุปการเปลี่ยนแปลงที่ปลอดภัย",
+  storeCreated: "สร้างร้านแล้ว",
+  systemEvent: "เหตุการณ์ระบบ",
+  targetName: "ชื่อเป้าหมาย",
+  targetType: "ประเภทเป้าหมาย",
+  totalActivities: "กิจกรรมทั้งหมด",
+  unknownActivity: "กิจกรรมไม่ทราบประเภท",
+  userCreated: "สร้างผู้ใช้แล้ว",
+  userEvents: "เหตุการณ์ผู้ใช้",
+  viewAuditLog: "ดูบันทึกตรวจสอบ",
   viewUser: "ดูผู้ใช้",
 });
 
@@ -1342,7 +1391,7 @@ Object.assign(copy.en, {
   noActionsNeedAttentionSubtext: "Connect approval, sync, stock, plan, and backup data sources to activate this page.",
   noIssues: "No issues",
   noRecentActivityYet: "No recent activity yet.",
-  noRecentActivityYetSubtext: "Connect audit logs and platform events to review activity here.",
+  noRecentActivityYetSubtext: "Recent activity will appear after Super Admin, business, user, plan, and system actions are recorded.",
   notConnected: "Not connected",
   offlineStores: "Offline Stores",
   onlineStores: "Online Stores",
@@ -1405,6 +1454,27 @@ Object.assign(copy.en, {
   templateDrafts: "Template Drafts",
   templateDraftsDescription: "Draft template readiness items from the current POS template registry.",
   totalEvents: "Total Events",
+  totalActivities: "Total Activities",
+  businessStoreEvents: "Business / Store Events",
+  errorFailedEvents: "Error / Failed Events",
+  permissionEvents: "Permission Events",
+  planEvents: "Plan Events",
+  userEvents: "User Events",
+  activityLabel: "Activity",
+  activityOverview: "Activity Overview",
+  businessCreated: "Business created",
+  exportActivity: "Export Activity",
+  loginEvent: "Login event",
+  permissionUpdated: "Permission updated",
+  relatedContext: "Related Context",
+  safeChangeSummary: "Safe change summary",
+  storeCreated: "Store created",
+  systemEvent: "System event",
+  targetName: "Target Name",
+  targetType: "Target Type",
+  unknownActivity: "Unknown activity",
+  userCreated: "User created",
+  viewAuditLog: "View Audit Log",
   totalStores: "Total Stores",
   totalOpenActions: "Total Open Actions",
   viewDetails: "View details",
@@ -1554,7 +1624,7 @@ Object.assign(copy.th, {
   noActionsNeedAttentionSubtext: "เชื่อมต่อข้อมูลการอนุมัติ ซิงก์ สต็อก แผน และสำรองข้อมูลเพื่อเปิดใช้งานหน้านี้",
   noIssues: "ไม่มีปัญหา",
   noRecentActivityYet: "ยังไม่มีกิจกรรมล่าสุด",
-  noRecentActivityYetSubtext: "เชื่อมต่อบันทึกตรวจสอบและกิจกรรมแพลตฟอร์มเพื่อดูข้อมูลที่นี่",
+  noRecentActivityYetSubtext: "กิจกรรมล่าสุดจะแสดงหลังจากมีการบันทึกการทำงานของ Super Admin ธุรกิจ ผู้ใช้ แผน และระบบ",
   notConnected: "ยังไม่เชื่อมต่อ",
   offlineStores: "ร้านออฟไลน์",
   onlineStores: "ร้านออนไลน์",
@@ -1589,6 +1659,27 @@ Object.assign(copy.th, {
   templateDrafts: "เทมเพลตฉบับร่าง",
   templateDraftsDescription: "รายการความพร้อมของเทมเพลตฉบับร่างจากทะเบียน POS Template ปัจจุบัน",
   totalEvents: "กิจกรรมทั้งหมด",
+  totalActivities: "กิจกรรมทั้งหมด",
+  businessStoreEvents: "เหตุการณ์ธุรกิจ / ร้าน",
+  errorFailedEvents: "ข้อผิดพลาด / ล้มเหลว",
+  permissionEvents: "เหตุการณ์สิทธิ์",
+  planEvents: "เหตุการณ์แผน",
+  userEvents: "เหตุการณ์ผู้ใช้",
+  activityLabel: "กิจกรรม",
+  activityOverview: "ภาพรวมกิจกรรม",
+  businessCreated: "สร้างธุรกิจแล้ว",
+  exportActivity: "ส่งออกกิจกรรม",
+  loginEvent: "เหตุการณ์เข้าสู่ระบบ",
+  permissionUpdated: "อัปเดตสิทธิ์แล้ว",
+  relatedContext: "บริบทที่เกี่ยวข้อง",
+  safeChangeSummary: "สรุปการเปลี่ยนแปลงที่ปลอดภัย",
+  storeCreated: "สร้างร้านแล้ว",
+  systemEvent: "เหตุการณ์ระบบ",
+  targetName: "ชื่อเป้าหมาย",
+  targetType: "ประเภทเป้าหมาย",
+  unknownActivity: "กิจกรรมไม่ทราบประเภท",
+  userCreated: "สร้างผู้ใช้แล้ว",
+  viewAuditLog: "ดูบันทึกตรวจสอบ",
   totalStores: "ร้านทั้งหมด",
   totalOpenActions: "รายการเปิดทั้งหมด",
   viewDetails: "ดูรายละเอียด",
@@ -2615,17 +2706,26 @@ type RecentActivitySource =
 
 type RecentActivityRow = {
   action: string;
+  activityLabel: string;
   actor: string;
+  actorEmail: string;
+  actorRole: string;
   business: string;
-  category: CommandActivityFilter;
   date?: string;
+  filter: RecentActivityFilter;
   id: string;
+  metadataSearch: string;
   module: string;
   source: RecentActivitySource;
   status: string;
+  store: string;
+  summary: string;
   target: string;
+  targetName: string;
+  targetType: string;
 };
 
+type RecentActivityFilter = "all" | "business" | "store" | "user" | "plan" | "permission" | "login" | "error" | "system";
 type AuditModuleFilter = "all" | "super-admin" | "business" | "store" | "plan" | "user" | "role" | "pos" | "inventory" | "system";
 type AuditActionFilter = "all" | "create" | "update" | "delete" | "login" | "permission" | "error" | "other";
 type AuditStatusFilter = "all" | "success" | "failed" | "warning" | "info" | "unknown";
@@ -3033,52 +3133,149 @@ function ActionCenterPage({ data, onAction }: { data: CenterData; onAction: (dra
   );
 }
 
-function buildRecentActivityRows(data: CenterData): RecentActivityRow[] {
+function recentActivityFilter(action: string | undefined, targetType?: string | null, module?: string | null): RecentActivityFilter {
+  const value = `${action ?? ""} ${targetType ?? ""} ${module ?? ""}`.toLowerCase();
+  if (value.includes("error") || value.includes("fail") || value.includes("denied") || value.includes("critical")) return "error";
+  if (value.includes("login") || value.includes("auth")) return "login";
+  if (value.includes("permission") || value.includes("role")) return "permission";
+  if (value.includes("plan") || value.includes("subscription") || value.includes("billing")) return "plan";
+  if (value.includes("user") || value.includes("owner") || value.includes("staff")) return "user";
+  if (value.includes("store") || value.includes("branch")) return "store";
+  if (value.includes("business") || value.includes("company")) return "business";
+  return "system";
+}
+
+function recentActivityLabel(action: string | undefined, filter: RecentActivityFilter, c: CenterCopy) {
+  const value = String(action ?? "").toLowerCase();
+  if (filter === "business" && value.includes("create")) return c.businessCreated;
+  if (filter === "store" && value.includes("create")) return c.storeCreated;
+  if (filter === "user" && value.includes("create")) return c.userCreated;
+  if (filter === "plan" && (value.includes("assign") || value.includes("create") || value.includes("change"))) return c.planAssigned;
+  if (filter === "permission") return c.permissionUpdated;
+  if (filter === "login") return c.loginEvent;
+  if (filter === "system") return c.systemEvent;
+  if (filter === "error") return c.errorFailedEvents;
+  return c.unknownActivity;
+}
+
+function recentActivityReadableValue(value: string | null | undefined, c: CenterCopy) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "-";
+  const normalized = raw.toLowerCase();
+  if (normalized === "cash_sessions" || normalized === "cash_session") return c.cashShift ?? "Cash shift";
+  if (normalized === "auth") return c.loginEvent;
+  return raw
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function recentActivitySummary(input: {
+  action: string;
+  actor: string;
+  business: string;
+  module: string;
+  store: string;
+  target: string;
+}) {
+  const actor = input.actor !== "-" ? input.actor : input.module;
+  const target = input.target !== "-" ? input.target : input.module;
+  const location = input.store !== "-" ? input.store : input.business !== "-" ? input.business : "";
+  return [actor, input.action, target, location].filter(Boolean).join(" · ");
+}
+
+function buildRecentActivityRows(data: CenterData, c: CenterCopy): RecentActivityRow[] {
   const rowId = (prefix: string, id: string | undefined, action: string | undefined, date: string | undefined, target: string | undefined) =>
     id ? `${prefix}-${id}` : `${prefix}-${action ?? "action"}-${date ?? "no-date"}-${target ?? "target"}`;
-  const legacyRows = data.auditLogs.map((log) => ({
-    action: log.action ?? "-",
-    actor: log.user?.fullName ?? log.user?.username ?? "-",
-    business: log.company?.name ?? "-",
-    category: activityCategory(log.action),
-    date: log.createdAt,
-    id: rowId("legacy", log.id, log.action, log.createdAt, log.module),
-    module: log.module ?? "-",
-    source: { kind: "legacy" as const, value: log },
-    status: activityTone(log.action),
-    target: log.module ?? "-",
-  }));
-  const platformRows = data.platformAuditLogs.map((log) => ({
-    action: log.action,
-    actor: log.actorName || log.actorEmail || "-",
-    business: log.business?.name ?? "-",
-    category: activityCategory(log.action),
-    date: log.createdAt,
-    id: rowId("platform", log.id, log.action, log.createdAt, log.targetName ?? log.targetType ?? undefined),
-    module: log.targetType ?? "Platform",
-    source: { kind: "platform" as const, value: log },
-    status: log.status ?? log.severity ?? activityTone(log.action),
-    target: log.targetName ?? log.targetType ?? "-",
-  }));
-  const storeRows = data.storeActivityLogs.map((log) => ({
-    action: log.action,
-    actor: log.actorName,
-    business: log.business?.name ?? log.businessId,
-    category: activityCategory(log.action),
-    date: log.occurredAt ?? log.createdAt,
-    id: rowId("store", log.id, log.action, log.occurredAt ?? log.createdAt, log.targetName ?? log.targetType ?? undefined),
-    module: "Store",
-    source: { kind: "store" as const, value: log },
-    status: log.status ?? activityTone(log.action),
-    target: log.targetName ?? log.targetType ?? "-",
-  }));
+  const legacyRows: RecentActivityRow[] = data.auditLogs.map((log) => {
+    const rawAction = log.action ?? "-";
+    const rawTarget = log.module ?? "-";
+    const action = recentActivityReadableValue(rawAction, c);
+    const target = recentActivityReadableValue(rawTarget, c);
+    const filter = recentActivityFilter(rawAction, log.module, log.module);
+    const module = log.module ? recentActivityReadableValue(log.module, c) : auditModuleLabel(auditModuleFilter(rawAction, log.module), c);
+    const row = {
+      action,
+      activityLabel: recentActivityLabel(rawAction, filter, c),
+      actor: log.user?.fullName ?? log.user?.username ?? "-",
+      actorEmail: "-",
+      actorRole: "-",
+      business: log.company?.name ?? "-",
+      date: log.createdAt,
+      filter,
+      id: rowId("legacy", log.id, rawAction, log.createdAt, log.module),
+      metadataSearch: "",
+      module,
+      source: { kind: "legacy" as const, value: log },
+      status: activityTone(rawAction),
+      store: "-",
+      target,
+      targetName: target,
+      targetType: target,
+    };
+    return { ...row, summary: recentActivitySummary(row) };
+  });
+  const platformRows: RecentActivityRow[] = data.platformAuditLogs.map((log) => {
+    const filter = recentActivityFilter(log.action, log.targetType);
+    const moduleFilter = auditModuleFilter(log.action, log.targetType);
+    const module = auditModuleLabel(moduleFilter, c);
+    const action = recentActivityReadableValue(log.action, c);
+    const target = recentActivityReadableValue(log.targetName ?? log.targetType, c);
+    const targetName = recentActivityReadableValue(log.targetName, c);
+    const targetType = recentActivityReadableValue(log.targetType, c);
+    const row = {
+      action,
+      activityLabel: recentActivityLabel(log.action, filter, c),
+      actor: log.actorName || log.actorEmail || "-",
+      actorEmail: log.actorEmail ?? "-",
+      actorRole: log.actorRole ?? log.actorType ?? "-",
+      business: log.business?.name ?? "-",
+      date: log.createdAt,
+      filter,
+      id: rowId("platform", log.id, log.action, log.createdAt, log.targetName ?? log.targetType ?? undefined),
+      metadataSearch: safeAuditSearchText(log.beforeValue, log.afterValue, log.metadata),
+      module,
+      source: { kind: "platform" as const, value: log },
+      status: log.status ?? log.severity ?? activityTone(log.action),
+      store: "-",
+      target,
+      targetName,
+      targetType,
+    };
+    return { ...row, summary: recentActivitySummary(row) };
+  });
+  const storeRows: RecentActivityRow[] = data.storeActivityLogs.map((log) => {
+    const filter = recentActivityFilter(log.action, log.targetType);
+    const module = auditModuleLabel(auditModuleFilter(log.action, log.targetType), c);
+    const action = recentActivityReadableValue(log.action, c);
+    const target = recentActivityReadableValue(log.targetName ?? log.targetType, c);
+    const targetName = recentActivityReadableValue(log.targetName, c);
+    const targetType = recentActivityReadableValue(log.targetType, c);
+    const row = {
+      action,
+      activityLabel: recentActivityLabel(log.action, filter, c),
+      actor: log.actorName,
+      actorEmail: "-",
+      actorRole: log.actorRole,
+      business: log.business?.name ?? "-",
+      date: log.occurredAt ?? log.createdAt,
+      filter,
+      id: rowId("store", log.id, log.action, log.occurredAt ?? log.createdAt, log.targetName ?? log.targetType ?? undefined),
+      metadataSearch: safeAuditSearchText(log.beforeValue, log.afterValue, log.metadata),
+      module,
+      source: { kind: "store" as const, value: log },
+      status: log.status ?? activityTone(log.action),
+      store: log.branch?.name ?? "-",
+      target,
+      targetName,
+      targetType,
+    };
+    return { ...row, summary: recentActivitySummary(row) };
+  });
   return [...platformRows, ...storeRows, ...legacyRows].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 }
 
 function openRecentActivityRow(row: RecentActivityRow, onAction: (drawer: DrawerKind, selected?: unknown) => void) {
-  if (row.source.kind === "platform") onAction("platform-audit-detail", row.source.value);
-  if (row.source.kind === "store") onAction("store-activity-detail", row.source.value);
-  if (row.source.kind === "legacy") onAction("audit-details", row.source.value);
+  onAction("recent-activity-detail", row);
 }
 
 const AUDIT_SENSITIVE_KEY_PATTERN = /(password|passwordhash|password_hash|token|secret|credential|csrf|session|cookie|apikey|api_key|accesstoken|access_token|refreshtoken|refresh_token)/i;
@@ -3240,45 +3437,54 @@ function openAuditLogRow(row: AuditLogRow, onAction: (drawer: DrawerKind, select
 }
 
 function RecentActivityPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
-  const { c } = useCenterCopy();
-  const [preset, setPreset] = useState<CommandDatePreset>("today");
-  const [filter, setFilter] = useState<CommandActivityFilter>("all");
+  const { c, locale } = useCenterCopy();
+  const [preset, setPreset] = useState<CommandDatePreset>("30d");
+  const [filter, setFilter] = useState<RecentActivityFilter>("all");
   const [search, setSearch] = useState("");
-  const rows = buildRecentActivityRows(data);
+  const rows = buildRecentActivityRows(data, c);
+  const dateRows = rows.filter((row) => (row.date ? inDateRange(row.date, preset) : false));
   const visibleRows = rows.filter((row) => {
     const query = search.trim().toLowerCase();
     const inRange = row.date ? inDateRange(row.date, preset) : false;
-    const matchesFilter = filter === "all" || row.category === filter;
-    const matchesSearch = !query || `${row.actor} ${row.module} ${row.action} ${row.business} ${row.target}`.toLowerCase().includes(query);
+    const matchesFilter = filter === "all" || row.filter === filter;
+    const matchesSearch =
+      !query ||
+      `${row.actor} ${row.actorEmail} ${row.actorRole} ${row.activityLabel} ${row.module} ${row.action} ${row.business} ${row.store} ${row.summary} ${row.target} ${row.metadataSearch}`
+        .toLowerCase()
+        .includes(query);
     return inRange && matchesFilter && matchesSearch;
   });
-  const actors = new Set(visibleRows.map((row) => row.actor).filter((actor) => actor && actor !== "-"));
-  const errors = visibleRows.filter((row) => ["danger", "error", "failed", "denied", "critical"].some((token) => row.status.toLowerCase().includes(token))).length;
-  const warnings = visibleRows.filter((row) => row.status.toLowerCase().includes("warning")).length;
-  const success = visibleRows.filter((row) => !["danger", "error", "failed", "denied", "critical", "warning"].some((token) => row.status.toLowerCase().includes(token))).length;
+  const businessStoreEvents = dateRows.filter((row) => row.filter === "business" || row.filter === "store").length;
+  const userEvents = dateRows.filter((row) => row.filter === "user").length;
+  const planEvents = dateRows.filter((row) => row.filter === "plan").length;
+  const permissionEvents = dateRows.filter((row) => row.filter === "permission").length;
+  const errorEvents = dateRows.filter((row) => row.filter === "error" || ["danger", "error", "failed", "denied", "critical"].some((token) => row.status.toLowerCase().includes(token))).length;
   const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
     { label: c.today, value: "today" },
     { label: c.sevenDays, value: "7d" },
     { label: c.thirtyDays, value: "30d" },
     { label: c.thisMonth, value: "month" },
   ];
-  const filters: Array<{ label: string; value: CommandActivityFilter }> = [
+  const filters: Array<{ label: string; value: RecentActivityFilter }> = [
     { label: c.filterAll, value: "all" },
-    { label: c.sales, value: "sales" },
-    { label: c.login, value: "login" },
+    { label: c.business, value: "business" },
+    { label: c.store, value: "store" },
+    { label: c.users, value: "user" },
     { label: c.plan, value: "plan" },
-    { label: c.template, value: "template" },
-    { label: c.requiresPermission, value: "permission" },
+    { label: locale === "en" ? "Permission" : c.requiresPermission, value: "permission" },
+    { label: c.login, value: "login" },
     { label: c.error, value: "error" },
+    { label: locale === "en" ? "System" : (c.systemVault ?? "System"), value: "system" },
   ];
   const columns = [
     { key: "date-time", label: c.dateTime },
     { key: "actor", label: c.actor },
+    { key: "activity", label: c.activityLabel },
     { key: "module", label: c.module },
-    { key: "action", label: c.action },
-    { key: "business-store", label: c.business },
+    { key: "business-store", label: c.businessStore },
     { key: "status", label: c.status },
-    { key: "details", label: c.auditDetails },
+    { key: "summary", label: c.summary },
+    { key: "actions", label: c.actions },
   ];
   const helper = rows.length ? undefined : c.activityDataNotConnected ?? "Activity data is not connected yet.";
 
@@ -3309,18 +3515,19 @@ function RecentActivityPage({ data, onAction }: { data: CenterData; onAction: (d
         ))}
       </div>
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        <SummaryCard helper={helper} label={c.totalEvents} value={visibleRows.length} />
-        <SummaryCard helper={helper} label={c.successfulEvents} value={success} />
-        <SummaryCard helper={helper} label={c.warning} value={warnings} />
-        <SummaryCard helper={helper} label={c.error} value={errors} />
-        <SummaryCard helper={helper} label={c.activeActors} value={actors.size} />
+        <SummaryCard helper={helper} label={c.totalActivities} value={dateRows.length} />
+        <SummaryCard helper={helper} label={c.businessStoreEvents} value={businessStoreEvents} />
+        <SummaryCard helper={helper} label={c.userEvents} value={userEvents} />
+        <SummaryCard helper={helper} label={c.planEvents} value={planEvents} />
+        <SummaryCard helper={helper} label={c.permissionEvents} value={permissionEvents} />
+        <SummaryCard helper={helper} label={c.errorFailedEvents} value={errorEvents} />
       </section>
       <section className={dashboardPanelClass()}>
         <CommandSectionTitle title={c.recentActivity} subtitle={c.recentActivitySubtitle} />
         {visibleRows.length ? (
           <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
             <div className="max-w-full overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-sm">
+              <table className="w-full min-w-[1240px] border-collapse text-sm">
                 <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
                   <tr>
                     {columns.map((column) => (
@@ -3332,15 +3539,30 @@ function RecentActivityPage({ data, onAction }: { data: CenterData; onAction: (d
                   {visibleRows.map((row) => (
                     <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.id} onClick={() => openRecentActivityRow(row, onAction)}>
                       <td className="whitespace-nowrap px-4 py-3">{row.date ? new Date(row.date).toLocaleString() : "-"}</td>
-                      <td className="px-4 py-3">{row.actor}</td>
-                      <td className="px-4 py-3">{row.module}</td>
-                      <td className="px-4 py-3 font-medium text-[#F8FAFC]">{row.action}</td>
-                      <td className="px-4 py-3">{row.business}</td>
-                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
                       <td className="px-4 py-3">
-                        <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); openRecentActivityRow(row, onAction); }} type="button">
-                          {c.view}
-                        </button>
+                        <div className="font-medium text-[#F8FAFC]">{row.actor}</div>
+                        {row.actorEmail !== "-" ? <div className="text-xs text-[#94A3B8]">{row.actorEmail}</div> : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-[#F8FAFC]">{row.activityLabel}</div>
+                        <div className="text-xs text-[#94A3B8]">{row.action}</div>
+                      </td>
+                      <td className="px-4 py-3">{row.module}</td>
+                      <td className="px-4 py-3">
+                        <div>{row.business}</div>
+                        {row.store !== "-" ? <div className="text-xs text-[#94A3B8]">{row.store}</div> : null}
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                      <td className="px-4 py-3 text-[#CBD5E1]">{row.summary}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button className="text-[#5EEAD4] underline-offset-4 hover:underline" onClick={(event) => { event.stopPropagation(); openRecentActivityRow(row, onAction); }} type="button">
+                            {c.view}
+                          </button>
+                          <Link className="text-[#94A3B8] underline-offset-4 hover:text-[#5EEAD4] hover:underline" href="/super-admin/audit-logs" onClick={(event) => event.stopPropagation()}>
+                            {c.viewAuditLog}
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -3383,6 +3605,110 @@ function CenterLogDetail({ log }: { log: CenterLog }) {
         />
       </section>
       <AdvancedDetails sections={[{ title: c.rawPayload, value: sanitizeAuditValue(log) }]} />
+    </div>
+  );
+}
+
+function RecentActivityDetail({ row }: { row: RecentActivityRow }) {
+  const { c } = useCenterCopy();
+  let rawIds: Record<string, unknown> = {};
+  let safeBefore: unknown;
+  let safeAfter: unknown;
+  let safeMetadata: unknown;
+
+  if (row.source.kind === "platform") {
+    const source = row.source.value;
+    rawIds = {
+      actorId: source.actorId,
+      businessId: source.businessId,
+      requestId: source.requestId,
+      targetId: source.targetId,
+    };
+    safeBefore = sanitizeAuditValue(source.beforeValue);
+    safeAfter = sanitizeAuditValue(source.afterValue);
+    safeMetadata = sanitizeAuditValue(source.metadata);
+  } else if (row.source.kind === "store") {
+    const source = row.source.value;
+    rawIds = {
+      actorId: source.actorId,
+      branchId: source.branch?.id,
+      businessId: source.businessId,
+      targetId: source.targetId,
+    };
+    safeBefore = sanitizeAuditValue(source.beforeValue);
+    safeAfter = sanitizeAuditValue(source.afterValue);
+    safeMetadata = sanitizeAuditValue(source.metadata);
+  } else {
+    rawIds = { auditId: row.source.value.id };
+  }
+
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.activityOverview} subtitle={row.activityLabel} />
+        <DetailGrid
+          rows={[
+            [c.dateTime, row.date ? new Date(row.date).toLocaleString() : "-"],
+            [c.activityLabel, row.activityLabel],
+            [c.module, row.module],
+            [c.status, <StatusBadge key="status" value={row.status} />],
+            [c.summary, row.summary],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.actor} subtitle={row.actor} />
+        <DetailGrid
+          rows={[
+            [c.actor, row.actor],
+            [c.email, row.actorEmail],
+            [c.role, row.actorRole],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.businessStore} subtitle={row.business !== "-" ? row.business : row.store} />
+        <DetailGrid
+          rows={[
+            [c.business, row.business],
+            [c.store, row.store],
+            [c.storeCode, "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.relatedContext} subtitle={row.target} />
+        <DetailGrid
+          rows={[
+            [c.targetType, row.targetType],
+            [c.targetName, row.targetName],
+            [c.safeChangeSummary, `${formatReadableValue(safeBefore)} -> ${formatReadableValue(safeAfter)}`],
+          ]}
+        />
+      </section>
+      <AdvancedDetails
+        sections={[
+          { title: c.changeSummary, value: { after: safeAfter, before: safeBefore } },
+          { title: c.metadata, value: safeMetadata },
+          { title: "IDs", value: rawIds },
+          { title: c.rawPayload, value: sanitizeAuditValue(row.source.value) },
+        ]}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/audit-logs">
+          {c.viewAuditLog}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">
+          {c.viewBusiness}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+          {c.viewStore}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/users">
+          {c.viewUser}
+        </Link>
+        <DisabledPillButton label={c.exportActivity} />
+      </div>
     </div>
   );
 }
@@ -6731,6 +7057,10 @@ function DrawerContent({
     if (!canViewPlatformAudit(role)) return <AccessDeniedPanel />;
     return <LogsTable logs={data.auditLogs} onOpen={(log) => onAction("audit-details", log)} />;
   }
+  if (drawer === "recent-activity-detail") {
+    if (!canViewPlatformAudit(role)) return <AccessDeniedPanel />;
+    return selected ? <RecentActivityDetail row={selected as RecentActivityRow} /> : <EmptyState text={c.noRecentActivityYet} />;
+  }
   if (drawer === "audit-details") {
     return <CenterLogDetail log={selected as CenterLog} />;
   }
@@ -6977,6 +7307,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "platform-settings": c.platformSettings,
     "platform-notifications": c.platformNotifications,
     "recent-activity": c.recentActivity,
+    "recent-activity-detail": c.recentActivity,
     "role-detail": c.roleDetail,
     "roles-permissions": c.rolesPermissions,
     "setting-edit": c.platformSettings,
