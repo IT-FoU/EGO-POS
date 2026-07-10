@@ -5005,18 +5005,29 @@ function StorePerformancePage({ data, onAction }: { data: CenterData; onAction: 
 
 type PlanAnalyticsFilter = "all" | "free" | "pro" | "trial" | "expiring";
 type HealthStatusFilter = "all" | "connected" | "healthy" | "warning" | "critical" | "not-connected" | "not-checked";
-type IntegrationCategoryFilter = "all" | "payment" | "messaging" | "accounting" | "backup" | "api" | "automation";
-type IntegrationStatusFilter = "all" | "connected" | "not-connected" | "coming-soon";
+type IntegrationCategoryFilter = "all" | "payment" | "messaging" | "accounting" | "backup" | "api" | "automation" | "commerce" | "notification";
+type IntegrationStatusFilter = "all" | "connected" | "not-connected" | "coming-soon" | "requires-setup";
 type BackupFilter = "all" | "successful" | "failed" | "scheduled" | "manual" | "not-connected";
 
 type IntegrationCard = {
-  category: IntegrationCategoryFilter;
+  backendConnected: boolean;
+  category: Exclude<IntegrationCategoryFilter, "all">;
+  credentialsConfigured: boolean;
   description: string;
+  exampleUseCase: string;
   icon: LucideIcon;
   id: string;
+  lastError?: string | null;
+  lastSync?: string | null;
   name: string;
+  recommendation: string;
   requiredBackend: string;
-  status: "not-connected" | "coming-soon";
+  requiredCredentials: string;
+  requiredPermissions: string;
+  requiresSetup: boolean;
+  status: "connected" | "not-connected" | "coming-soon";
+  summary: string;
+  testConnectionAvailable: boolean;
 };
 
 type HealthService = {
@@ -5708,18 +5719,177 @@ function SystemHealthDetail({ service }: { service: HealthService }) {
 }
 
 function integrationCards(c: CenterCopy): IntegrationCard[] {
+  const notConnectedRecommendation = "Connect this integration when backend service is ready.";
+  const comingSoonRecommendation = "This integration is planned but not implemented yet.";
+  const safeCard = (input: Omit<IntegrationCard, "backendConnected" | "credentialsConfigured" | "lastError" | "lastSync" | "requiresSetup" | "testConnectionAvailable">): IntegrationCard => ({
+    ...input,
+    backendConnected: false,
+    credentialsConfigured: false,
+    lastError: null,
+    lastSync: null,
+    requiresSetup: true,
+    testConnectionAvailable: false,
+  });
+
   return [
-    { category: "payment", description: c.paymentGatewayDescription, icon: CreditCard, id: "payment-gateway", name: c.paymentGateway, requiredBackend: c.paymentGatewayBackend, status: "not-connected" },
-    { category: "payment", description: c.qrPaymentDescription, icon: CreditCard, id: "qr-payment", name: c.qrPayment, requiredBackend: c.qrPaymentBackend, status: "not-connected" },
-    { category: "messaging", description: c.smsWhatsappDescription, icon: Bell, id: "sms-whatsapp", name: c.smsWhatsapp, requiredBackend: c.smsWhatsappBackend, status: "coming-soon" },
-    { category: "messaging", description: c.emailServiceDescription, icon: Bell, id: "email-service", name: c.emailService, requiredBackend: c.emailServiceBackend, status: "not-connected" },
-    { category: "accounting", description: c.accountingDescription, icon: ClipboardList, id: "accounting", name: c.accounting, requiredBackend: c.accountingBackend, status: "coming-soon" },
-    { category: "backup", description: c.cloudBackupDescription, icon: Download, id: "cloud-backup", name: c.cloudBackup, requiredBackend: c.cloudBackupBackend, status: "not-connected" },
-    { category: "api", description: c.apiKeysDescription, icon: Shield, id: "api-keys", name: c.apiKeys, requiredBackend: c.apiKeysBackend, status: "not-connected" },
-    { category: "automation", description: c.webhooksDescription, icon: Activity, id: "webhooks", name: c.webhooks, requiredBackend: c.webhooksBackend, status: "coming-soon" },
-    { category: "automation", description: c.ecommerceSyncDescription, icon: Store, id: "ecommerce-sync", name: c.ecommerceSync, requiredBackend: c.ecommerceSyncBackend, status: "coming-soon" },
-    { category: "messaging", description: c.notificationServiceDescription, icon: Bell, id: "notification-service", name: c.notificationService, requiredBackend: c.notificationServiceBackend, status: "not-connected" },
+    safeCard({
+      category: "payment",
+      description: c.paymentGatewayDescription,
+      exampleUseCase: "Online payment status and settlement tracking after a payment provider is connected.",
+      icon: CreditCard,
+      id: "payment-gateway",
+      name: c.paymentGateway,
+      recommendation: notConnectedRecommendation,
+      requiredBackend: c.paymentGatewayBackend,
+      requiredCredentials: "Payment provider account configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "not-connected",
+      summary: "Payment gateway backend is not connected.",
+    }),
+    safeCard({
+      category: "payment",
+      description: c.qrPaymentDescription,
+      exampleUseCase: "QR payment confirmation for checkout and reporting when provider callbacks are connected.",
+      icon: CreditCard,
+      id: "qr-payment",
+      name: c.qrPayment,
+      recommendation: notConnectedRecommendation,
+      requiredBackend: c.qrPaymentBackend,
+      requiredCredentials: "QR payment provider configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "not-connected",
+      summary: "QR payment provider is not connected.",
+    }),
+    safeCard({
+      category: "messaging",
+      description: c.smsWhatsappDescription,
+      exampleUseCase: "Customer membership and receipt notifications after messaging templates are implemented.",
+      icon: Bell,
+      id: "sms-whatsapp",
+      name: c.smsWhatsapp,
+      recommendation: comingSoonRecommendation,
+      requiredBackend: c.smsWhatsappBackend,
+      requiredCredentials: "Messaging provider configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "coming-soon",
+      summary: "Messaging integration is planned but not implemented.",
+    }),
+    safeCard({
+      category: "messaging",
+      description: c.emailServiceDescription,
+      exampleUseCase: "Receipts, alerts, and platform emails after a sender service is connected.",
+      icon: Bell,
+      id: "email-service",
+      name: c.emailService,
+      recommendation: notConnectedRecommendation,
+      requiredBackend: c.emailServiceBackend,
+      requiredCredentials: "Email provider sender configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "not-connected",
+      summary: "Email service backend is not connected.",
+    }),
+    safeCard({
+      category: "accounting",
+      description: c.accountingDescription,
+      exampleUseCase: "Sales, tax, and invoice export after accounting mapping is implemented.",
+      icon: ClipboardList,
+      id: "accounting",
+      name: c.accounting,
+      recommendation: comingSoonRecommendation,
+      requiredBackend: c.accountingBackend,
+      requiredCredentials: "Accounting provider configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "coming-soon",
+      summary: "Accounting integration is planned but not implemented.",
+    }),
+    safeCard({
+      category: "backup",
+      description: c.cloudBackupDescription,
+      exampleUseCase: "External backup storage after Backup & Restore service is connected.",
+      icon: Download,
+      id: "cloud-backup",
+      name: c.cloudBackup,
+      recommendation: notConnectedRecommendation,
+      requiredBackend: c.cloudBackupBackend,
+      requiredCredentials: "External backup storage configuration.",
+      requiredPermissions: "Super Admin system vault access.",
+      status: "not-connected",
+      summary: "Cloud backup storage is not connected.",
+    }),
+    safeCard({
+      category: "api",
+      description: c.apiKeysDescription,
+      exampleUseCase: "Secure external API access after a key vault and rotation policy exist.",
+      icon: Shield,
+      id: "api-keys",
+      name: c.apiKeys,
+      recommendation: notConnectedRecommendation,
+      requiredBackend: c.apiKeysBackend,
+      requiredCredentials: "Secure key vault and rotation policy.",
+      requiredPermissions: "Super Admin system vault access.",
+      status: "not-connected",
+      summary: "API key vault is not connected.",
+    }),
+    safeCard({
+      category: "automation",
+      description: c.webhooksDescription,
+      exampleUseCase: "Send platform events to external services after webhook delivery is implemented.",
+      icon: Activity,
+      id: "webhooks",
+      name: c.webhooks,
+      recommendation: comingSoonRecommendation,
+      requiredBackend: c.webhooksBackend,
+      requiredCredentials: "Webhook endpoint configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "coming-soon",
+      summary: "Webhook delivery is planned but not implemented.",
+    }),
+    safeCard({
+      category: "commerce",
+      description: c.ecommerceSyncDescription,
+      exampleUseCase: "Online order and product sync after commerce connectors are implemented.",
+      icon: Store,
+      id: "ecommerce-sync",
+      name: c.ecommerceSync,
+      recommendation: comingSoonRecommendation,
+      requiredBackend: c.ecommerceSyncBackend,
+      requiredCredentials: "Commerce platform connector configuration.",
+      requiredPermissions: "Super Admin integration settings access.",
+      status: "coming-soon",
+      summary: "E-commerce sync is planned but not implemented.",
+    }),
+    safeCard({
+      category: "notification",
+      description: c.notificationServiceDescription,
+      exampleUseCase: "Platform operational alerts after notification routing is connected.",
+      icon: Bell,
+      id: "notification-service",
+      name: c.notificationService,
+      recommendation: notConnectedRecommendation,
+      requiredBackend: c.notificationServiceBackend,
+      requiredCredentials: "Notification routing configuration.",
+      requiredPermissions: "Super Admin system vault access.",
+      status: "not-connected",
+      summary: "Notification service routing is not connected.",
+    }),
   ];
+}
+
+function integrationCategoryLabel(category: IntegrationCard["category"], c: CenterCopy) {
+  if (category === "payment") return c.payment;
+  if (category === "messaging") return c.messaging;
+  if (category === "accounting") return c.accounting;
+  if (category === "backup") return c.backupFilter;
+  if (category === "api") return c.api;
+  if (category === "automation") return c.automation;
+  if (category === "commerce") return c.commerce || "Commerce";
+  if (category === "notification") return c.notificationAlerts || "Notification";
+  return category;
+}
+
+function integrationReadinessStatusLabel(status: IntegrationCard["status"], c: CenterCopy) {
+  if (status === "connected") return c.connected;
+  return status === "coming-soon" ? c.comingSoon : c.notConnected;
 }
 
 function IntegrationsPage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
@@ -5731,8 +5901,8 @@ function IntegrationsPage({ onAction }: { onAction: (drawer: DrawerKind, selecte
   const visibleCards = cards.filter((card) => {
     const query = search.trim().toLowerCase();
     const matchesCategory = category === "all" || card.category === category;
-    const matchesStatus = status === "all" || card.status === status;
-    const matchesSearch = !query || `${card.name} ${card.description}`.toLowerCase().includes(query);
+    const matchesStatus = status === "all" || card.status === status || (status === "requires-setup" && card.requiresSetup);
+    const matchesSearch = !query || `${card.name} ${integrationCategoryLabel(card.category, c)} ${card.description} ${card.summary} ${integrationReadinessStatusLabel(card.status, c)}`.toLowerCase().includes(query);
     return matchesCategory && matchesStatus && matchesSearch;
   });
   const categoryOptions: Array<{ label: string; value: IntegrationCategoryFilter }> = [
@@ -5740,16 +5910,23 @@ function IntegrationsPage({ onAction }: { onAction: (drawer: DrawerKind, selecte
     { label: c.payment, value: "payment" },
     { label: c.messaging, value: "messaging" },
     { label: c.accounting, value: "accounting" },
-    { label: c.backup, value: "backup" },
+    { label: c.backupFilter || "Backup", value: "backup" },
     { label: c.api, value: "api" },
     { label: c.automation, value: "automation" },
+    { label: c.commerce || "Commerce", value: "commerce" },
+    { label: c.notificationAlerts || "Notification", value: "notification" },
   ];
   const statusOptions: Array<{ label: string; value: IntegrationStatusFilter }> = [
     { label: c.filterAll, value: "all" },
     { label: c.connected, value: "connected" },
     { label: c.notConnected, value: "not-connected" },
     { label: c.comingSoon, value: "coming-soon" },
+    { label: c.requiresSetup, value: "requires-setup" },
   ];
+  const connectedCards = cards.filter((card) => card.status === "connected").length;
+  const notConnectedCards = cards.filter((card) => card.status === "not-connected").length;
+  const comingSoonCards = cards.filter((card) => card.status === "coming-soon").length;
+  const requiresSetupCards = cards.filter((card) => card.requiresSetup).length;
 
   return (
     <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
@@ -5766,29 +5943,60 @@ function IntegrationsPage({ onAction }: { onAction: (drawer: DrawerKind, selecte
         }
       />
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        <SummaryCard helper={c.integrationStatusNotConnected} label={c.connected} value={0} />
-        <SummaryCard helper={c.integrationStatusNotConnected} label={c.notConnected} value={cards.filter((card) => card.status === "not-connected").length} />
-        <SummaryCard helper={c.integrationStatusNotConnected} label={c.comingSoon} value={cards.filter((card) => card.status === "coming-soon").length} />
-        <SummaryCard helper={c.integrationStatusNotConnected} label={c.requiresSetup} value={cards.length} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.connected} value={connectedCards} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.notConnected} value={notConnectedCards} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.comingSoon} value={comingSoonCards} />
+        <SummaryCard helper={c.integrationStatusNotConnected} label={c.requiresSetup} value={requiresSetupCards} />
         <SummaryCard helper={c.integrationStatusNotConnected} label={c.availableIntegrations} value={cards.length} />
       </section>
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {visibleCards.map((card) => {
           const Icon = card.icon;
           return (
-            <article className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4" key={card.id}>
+            <article
+              className="min-w-0 cursor-pointer rounded-lg border border-[#334155] bg-[#111827] p-4 transition hover:border-[#5EEAD4]"
+              key={card.id}
+              onClick={() => onAction("integration-detail", card)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onAction("integration-detail", card);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="flex items-start justify-between gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-md border border-[#5EEAD4]/35 bg-[#5EEAD4]/[0.12] text-[#5EEAD4]">
                   <Icon className="size-4" />
                 </span>
-                <StatusBadge value={card.status === "coming-soon" ? c.comingSoon : c.notConnected} />
+                <StatusBadge value={integrationReadinessStatusLabel(card.status, c)} />
               </div>
               <h2 className="mt-4 text-base font-semibold text-[#F8FAFC]">{card.name}</h2>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{card.category}</p>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{integrationCategoryLabel(card.category, c)}</p>
               <p className="mt-2 min-h-12 text-sm text-[#94A3B8]">{card.description}</p>
+              <div className="mt-4 grid gap-2 rounded-lg border border-[#334155] bg-[#020617] p-3 text-xs text-[#94A3B8]">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Backend connected</span>
+                  <span className="font-semibold text-[#CBD5E1]">{card.backendConnected ? c.yes || "Yes" : c.no || "No"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Credentials configured</span>
+                  <span className="font-semibold text-[#CBD5E1]">{card.credentialsConfigured ? c.yes || "Yes" : c.no || "No"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Test connection</span>
+                  <span className="font-semibold text-[#CBD5E1]">{card.testConnectionAvailable ? c.connected : c.notConnected}</span>
+                </div>
+              </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <DisabledPillButton label={c.configure} />
-                <button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => onAction("integration-detail", card)} type="button">
+                <span className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#64748B]">
+                  {c.configure} - {c.notConnected}
+                </span>
+                <span className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#64748B]">
+                  {c.testConnection} - {c.notConnected}
+                </span>
+                <button className="rounded-md border border-[#334155] px-3 py-2 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("integration-detail", card); }} type="button">
                   {c.viewDetails}
                 </button>
               </div>
@@ -5804,21 +6012,75 @@ function IntegrationsPage({ onAction }: { onAction: (drawer: DrawerKind, selecte
 function IntegrationDetail({ integration }: { integration: IntegrationCard }) {
   const { c } = useCenterCopy();
   return (
-    <div className="grid gap-4">
-      <DetailGrid
-        rows={[
-          [c.integrations, integration.name],
-          [c.category, integration.category],
-          [c.status, <StatusBadge key="status" value={integration.status === "coming-soon" ? c.comingSoon : c.notConnected} />],
-          [c.whatThisIntegrationDoes, integration.description],
-          [c.requiresSetup, integration.requiredBackend],
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Integration Overview" subtitle={integration.summary} />
+        <DetailGrid
+          rows={[
+            [c.integrations, integration.name],
+            [c.category, integrationCategoryLabel(integration.category, c)],
+            [c.status, <StatusBadge key="status" value={integrationReadinessStatusLabel(integration.status, c)} />],
+            [c.readableSummary, integration.summary],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">{c.whatThisIntegrationDoes}</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{integration.description}</p>
+        <p className="mt-3 text-sm text-[#CBD5E1]">{integration.exampleUseCase}</p>
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Setup Status" subtitle={integrationReadinessStatusLabel(integration.status, c)} />
+        <DetailGrid
+          rows={[
+            ["Backend connected", integration.backendConnected ? c.yes || "Yes" : c.no || "No"],
+            ["Credentials configured", integration.credentialsConfigured ? c.yes || "Yes" : c.no || "No"],
+            ["Test connection available", integration.testConnectionAvailable ? c.yes || "Yes" : c.no || "No"],
+            ["Last sync", integration.lastSync ? new Date(integration.lastSync).toLocaleString() : "-"],
+            ["Last error", integration.lastError ?? "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Requirements" subtitle={integration.requiredBackend} />
+        <DetailGrid
+          rows={[
+            ["Required backend service", integration.requiredBackend],
+            ["Required credentials", integration.requiredCredentials],
+            ["Required permissions", integration.requiredPermissions],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{integration.recommendation}</p>
+      </section>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/system-health">
+          {c.systemHealth}
+        </Link>
+        <Link className="rounded-md border border-[#334155] px-3 py-2 text-center text-sm font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/action-center">
+          {c.actionCenter}
+        </Link>
+        <DisabledPillButton label={`${c.configure} - ${c.notConnected}`} />
+        <DisabledPillButton label={`${c.testConnection} - ${c.notConnected}`} />
+        <DisabledPillButton label="View Logs - Coming soon" />
+      </div>
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.metadata,
+            value: sanitizeAuditValue({
+              backendConnected: integration.backendConnected,
+              category: integration.category,
+              id: integration.id,
+              requiresSetup: integration.requiresSetup,
+              status: integration.status,
+              testConnectionAvailable: integration.testConnectionAvailable,
+            }),
+          },
         ]}
       />
-      <div className="flex flex-wrap gap-2">
-        <DisabledPillButton label={c.configure} />
-        <DisabledPillButton label={c.testConnection} />
-      </div>
-      <AdvancedDetails sections={[{ title: c.metadata, value: { id: integration.id, category: integration.category, connected: false } }]} />
     </div>
   );
 }
