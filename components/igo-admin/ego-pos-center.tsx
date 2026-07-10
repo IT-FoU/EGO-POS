@@ -4121,31 +4121,37 @@ type HealthService = {
 
 function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
   const { c } = useCenterCopy();
-  const [preset, setPreset] = useState<CommandDatePreset>("today");
   const [planFilter, setPlanFilter] = useState<PlanAnalyticsFilter>("all");
   const [search, setSearch] = useState("");
-  const rows = data.businesses.filter((business) => {
-    const plan = String(business.plan?.planName ?? c.free).toLowerCase();
+  const rows = buildPlanManagementRows(data, c);
+  const visibleRows = rows.filter((row) => {
     const query = search.trim().toLowerCase();
     const matchesPlan =
       planFilter === "all"
-      || (planFilter === "free" && plan.includes("free"))
-      || (planFilter === "pro" && plan.includes("pro"))
-      || (planFilter === "trial" && plan.includes("trial"))
-      || (planFilter === "expiring" && plan.includes("trial"));
-    const matchesSearch = !query || `${business.name} ${business.owner?.fullName ?? ""} ${business.owner?.email ?? ""}`.toLowerCase().includes(query);
+      || (planFilter === "free" && row.currentPlanKey.includes("free"))
+      || (planFilter === "pro" && row.currentPlanKey.includes("pro"))
+      || (planFilter === "trial" && row.currentPlanKey.includes("trial"))
+      || (planFilter === "expiring" && String(row.planStatus).toLowerCase().includes("expir"));
+    const matchesSearch = !query || `${row.businessName} ${row.primaryStoreName} ${row.owner} ${row.ownerEmail} ${row.ownerUsername} ${row.storeCode} ${row.currentPlan} ${row.template}`.toLowerCase().includes(query);
     return matchesPlan && matchesSearch;
   });
-  const freeCount = data.businesses.filter((business) => !business.plan?.planName || business.plan.planName.toLowerCase().includes("free")).length;
-  const proCount = data.businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("pro")).length;
-  const trialCount = data.businesses.filter((business) => business.plan?.planName?.toLowerCase().includes("trial")).length;
-  const monthlyRevenue = data.subscriptions.reduce((sum, subscription) => sum + Number(subscription.plan?.monthlyPrice ?? 0), 0);
-  const dateOptions: Array<{ label: string; value: CommandDatePreset }> = [
-    { label: c.today, value: "today" },
-    { label: c.sevenDays, value: "7d" },
-    { label: c.thirtyDays, value: "30d" },
-    { label: c.thisMonth, value: "month" },
-  ];
+  const activeRows = rows.filter((row) => String(row.planStatus).toLowerCase().includes("active"));
+  const freeRows = rows.filter((row) => row.currentPlanKey.includes("free"));
+  const proRows = rows.filter((row) => row.currentPlanKey.includes("pro"));
+  const trialRows = rows.filter((row) => row.currentPlanKey.includes("trial"));
+  const expiringRows = rows.filter((row) => String(row.planStatus).toLowerCase().includes("expir"));
+  const missingBillingRows = rows.filter((row) => row.billingStatus !== c.notRequired);
+  const missingDataRows = rows.filter((row) => row.missingDataCount > 0 || row.planStatus === c.notConnected);
+  const distribution = [
+    { key: "free", label: c.freePlan, value: freeRows.length },
+    { key: "pro", label: c.proPlan, value: proRows.length },
+    { key: "trial", label: c.trialPlan, value: trialRows.length },
+    { key: "missing", label: c.notConnected, value: missingDataRows.length },
+  ].filter((item) => item.value > 0 || item.key !== "missing");
+  const statusBreakdown = Array.from(new Set(rows.map((row) => row.planStatus || c.notConnected))).map((status) => ({
+    label: status,
+    value: rows.filter((row) => (row.planStatus || c.notConnected) === status).length,
+  }));
   const planOptions: Array<{ label: string; value: PlanAnalyticsFilter }> = [
     { label: c.filterAll, value: "all" },
     { label: c.freePlan, value: "free" },
@@ -4161,39 +4167,36 @@ function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (dr
         subtitle={c.planAnalyticsSubtitle}
         controls={
           <>
-            <FilterSelect label={c.dateRange} onChange={setPreset} options={dateOptions} value={preset} />
             <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
-            <SearchControl onChange={setSearch} placeholder={c.search} value={search} />
+            <SearchControl onChange={setSearch} placeholder={c.searchStores} value={search} />
             <RefreshButton />
             <ExportDisabledButton />
           </>
         }
       />
       <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-        <SummaryCard helper={data.businesses.length ? undefined : c.planAnalyticsNotConnected} label={c.freePlanBusinesses} value={freeCount} />
-        <SummaryCard helper={data.businesses.length ? undefined : c.planAnalyticsNotConnected} label={c.proPlanBusinesses} value={proCount} />
-        <SummaryCard helper={data.businesses.length ? undefined : c.planAnalyticsNotConnected} label={c.trialStores} value={trialCount} />
-        <SummaryCard helper={data.subscriptions.length ? undefined : c.planAnalyticsNotConnected} label={c.monthlyPlatformRevenue} value={money(monthlyRevenue)} />
-        <SummaryCard helper={c.planAnalyticsNotConnected} label={c.upgradeCandidates} value={0} />
-        <SummaryCard helper={c.planAnalyticsNotConnected} label={c.expiringSoon} value={0} />
+        <SummaryCard helper={rows.length ? c.planManagementSubtitle : c.planAnalyticsNotConnected} label={c.planRecords} value={rows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.freePlanBusinesses} value={freeRows.length} />
+        <SummaryCard helper={rows.length ? c.proBillingNotEnabled : c.planAnalyticsNotConnected} label={c.proPlanBusinesses} value={proRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.trialStores} value={trialRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.activePlans} value={activeRows.length} />
+        <SummaryCard helper={rows.length ? undefined : c.planAnalyticsNotConnected} label={c.expiringSoon} value={expiringRows.length} />
+        <SummaryCard helper={rows.length ? c.proBillingNotEnabled : c.planAnalyticsNotConnected} label={c.plansMissingBilling} value={missingBillingRows.length} />
+        <SummaryCard helper={c.upgradeOpportunitiesEmptySubtext} label={c.upgradeCandidates} value={0} />
       </section>
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <section className={dashboardPanelClass()}>
-          <CommandSectionTitle title={c.planDistribution} subtitle={data.businesses.length ? c.planAnalyticsSubtitle : c.planDistributionNotConnected} />
-          {data.businesses.length ? (
+          <CommandSectionTitle title={c.planDistribution} subtitle={rows.length ? c.planManagementSubtitle : c.planDistributionNotConnected} />
+          {rows.length ? (
             <div className="grid gap-3">
-              {[
-                { label: c.freePlan, value: freeCount },
-                { label: c.proPlan, value: proCount },
-                { label: c.trialPlan, value: trialCount },
-              ].map((item) => (
+              {distribution.map((item) => (
                 <div className="min-w-0" key={item.label}>
                   <div className="mb-2 flex items-center justify-between gap-3 text-sm">
                     <span className="font-semibold text-[#F8FAFC]">{item.label}</span>
                     <span className="text-[#94A3B8]">{item.value}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-[#020617]">
-                    <div className="h-full rounded-full bg-[#5EEAD4]" style={{ width: `${data.businesses.length ? (item.value / data.businesses.length) * 100 : 0}%` }} />
+                    <div className="h-full rounded-full bg-[#5EEAD4]" style={{ width: `${rows.length ? (item.value / rows.length) * 100 : 0}%` }} />
                   </div>
                 </div>
               ))}
@@ -4203,25 +4206,55 @@ function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (dr
           )}
         </section>
         <section className={dashboardPanelClass()}>
-          <CommandSectionTitle title={c.upgradeOpportunities} subtitle={c.upgradeOpportunitiesEmptySubtext} />
-          <EmptyPanel title={c.upgradeOpportunitiesEmpty} description={c.upgradeOpportunitiesEmptySubtext} />
+          <CommandSectionTitle title={c.subscriptionStatus} subtitle={rows.length ? c.billingReadiness : c.planAnalyticsNotConnected} />
+          {rows.length ? (
+            <div className="grid gap-3">
+              {statusBreakdown.map((item) => (
+                <div className="min-w-0" key={item.label}>
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <StatusBadge value={item.label} />
+                    <span className="text-[#94A3B8]">{item.value}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-[#020617]">
+                    <div className="h-full rounded-full bg-[#38BDF8]" style={{ width: `${rows.length ? (item.value / rows.length) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel title={c.planAnalyticsNotConnected} description={c.planUsageDataEmptySubtext} />
+          )}
         </section>
       </section>
       <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={c.upgradeOpportunities} subtitle={c.upgradeOpportunitiesEmptySubtext} />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <EmptyPanel title={c.upgradeOpportunitiesEmpty} description={c.upgradeOpportunitiesEmptySubtext} />
+          <div className="grid gap-2">
+            <DisabledPillButton label={c.upgradeToPro} />
+            <DisabledPillButton label={c.changePlan} />
+            <DisabledPillButton label={c.billingHistory} />
+          </div>
+        </div>
+      </section>
+      <section className={dashboardPanelClass()}>
         <CommandSectionTitle title={c.planUsageTable} subtitle={c.planUsageDataEmptySubtext} />
-        {rows.length ? (
+        {visibleRows.length ? (
           <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
             <div className="max-w-full overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-sm">
+              <table className="w-full min-w-[1320px] border-collapse text-sm">
                 <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
                   <tr>
                     {[
                       { key: "business", label: c.business },
+                      { key: "store", label: c.primaryStore },
+                      { key: "store-code", label: c.storeCode },
                       { key: "plan", label: c.currentPlan },
-                      { key: "branches", label: c.branchCount },
-                      { key: "terminals", label: c.terminals },
-                      { key: "usage", label: c.usage },
-                      { key: "status", label: c.status },
+                      { key: "subscription", label: c.subscriptionStatus },
+                      { key: "billing", label: c.billingStatus },
+                      { key: "owner", label: c.owner },
+                      { key: "template", label: c.template },
+                      { key: "started", label: c.startedAt },
                       { key: "action", label: c.action },
                     ].map((column) => (
                       <th className="px-4 py-3 font-semibold" key={column.key}>{column.label}</th>
@@ -4229,18 +4262,32 @@ function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (dr
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((business) => (
-                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={business.id} onClick={() => onAction("plan-analytics-detail", business)}>
-                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{business.name}</td>
-                      <td className="px-4 py-3">{business.plan?.planName ?? c.free}</td>
-                      <td className="px-4 py-3">{business._count?.branches ?? business.branches?.length ?? 0}</td>
-                      <td className="px-4 py-3">-</td>
-                      <td className="px-4 py-3">{c.disabledNotConnected}</td>
-                      <td className="px-4 py-3"><StatusBadge value={business.status ?? c.notConnected} /></td>
+                  {visibleRows.map((row) => (
+                    <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.companyId} onClick={() => onAction("plan-analytics-detail", row)}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.businessName}</td>
+                      <td className="px-4 py-3">{row.primaryStoreName}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[#CBD5E1]">{row.storeCode}</td>
+                      <td className="px-4 py-3">{row.currentPlan}</td>
+                      <td className="px-4 py-3"><StatusBadge value={row.planStatus} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={row.billingStatus} /></td>
+                      <td className="px-4 py-3">
+                        <div>{row.owner}</div>
+                        <div className="text-xs text-[#94A3B8]">{row.ownerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3">{row.template}</td>
+                      <td className="px-4 py-3">{row.startedAt ? new Date(row.startedAt).toLocaleDateString() : row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "-"}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
+                          <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={(event) => { event.stopPropagation(); onAction("plan-analytics-detail", row); }} type="button">
+                            {c.viewPlan}
+                          </button>
+                          <Link className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/businesses" onClick={(event) => event.stopPropagation()}>
+                            {c.viewBusiness}
+                          </Link>
+                          <Link className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/stores" onClick={(event) => event.stopPropagation()}>
+                            {c.viewStore}
+                          </Link>
                           <DisabledPillButton label={c.changePlan} />
-                          <DisabledPillButton label={c.viewDetails} />
                         </div>
                       </td>
                     </tr>
@@ -4257,22 +4304,90 @@ function PlanAnalyticsPage({ data, onAction }: { data: CenterData; onAction: (dr
   );
 }
 
-function PlanAnalyticsDetail({ business }: { business: CenterBusiness }) {
+function PlanAnalyticsDetail({ row }: { row: PlanManagementRow }) {
   const { c } = useCenterCopy();
   return (
-    <div className="grid gap-4">
-      <DetailGrid
-        rows={[
-          [c.business, business.name],
-          [c.currentPlan, business.plan?.planName ?? c.free],
-          [c.usage, c.disabledNotConnected],
-          [c.branchCount, business._count?.branches ?? business.branches?.length ?? 0],
-          [c.terminals, "-"],
-          [c.billingStatus, c.disabledNotConnected],
-          [c.upgradeNotes, c.upgradeOpportunitiesEmpty],
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title={row.businessName} subtitle={row.currentPlan} />
+        <DetailGrid
+          rows={[
+            [c.business, row.businessName],
+            [c.primaryStore, row.primaryStoreName],
+            [c.storeCode, row.storeCode],
+            [c.currentPlan, row.currentPlan],
+            [c.subscriptionStatus, <StatusBadge key="subscription-status" value={row.planStatus} />],
+            [c.billingStatus, <StatusBadge key="billing-status" value={row.billingStatus} />],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.ownerAccount} subtitle={row.owner} />
+        <DetailGrid
+          rows={[
+            [c.owner, row.owner],
+            [c.ownerEmail, row.ownerEmail],
+            [c.ownerUsername, row.ownerUsername],
+            [c.template, row.template],
+            [c.storesCount, row.storesCount],
+            [c.setupStatus, row.setupStatus],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.planFeaturesLimits} subtitle={row.plan?.planName ?? row.currentPlan} />
+        <DetailGrid
+          rows={[
+            [c.branchCount, planLimitValue(row.plan?.maxBranches)],
+            [c.cashiersStaff, planLimitValue(row.plan?.maxCashiers)],
+            [c.products, planLimitValue(row.plan?.maxProducts)],
+            [c.promotions, planLimitValue(row.plan?.maxPromotions)],
+            [c.reports, planLimitValue(row.plan?.maxReports)],
+            [c.usage, row.plan ? c.connected : c.disabledNotConnected],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.billingReadiness} subtitle={c.proBillingNotEnabled} />
+        <DetailGrid
+          rows={[
+            [c.billingStatus, <StatusBadge key="billing-status-detail" value={row.billingStatus} />],
+            [c.monthlyPlatformRevenue, c.disabledNotConnected],
+            [c.upgradeCandidates, c.disabledNotConnected],
+            [c.expiringSoon, row.currentPlanKey.includes("pro") ? c.disabledNotConnected : c.notRequired],
+          ]}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">
+            {c.viewPlan}
+          </Link>
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">
+            {c.viewBusiness}
+          </Link>
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+            {c.viewStores}
+          </Link>
+          <DisabledPillButton label={c.changePlan} />
+          <DisabledPillButton label={c.upgradeToPro} />
+          <DisabledPillButton label={c.billingHistory} />
+        </div>
+      </section>
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.technicalMetadata,
+            value: {
+              businessId: row.companyId,
+              branchId: row.business.branches?.[0]?.id,
+              businessTemplateKey: row.business.businessTemplateKey,
+              planId: row.plan?.id,
+              storeCode: row.storeCode,
+              subscriptionId: row.subscriptionId,
+              subscriptionStatus: row.planStatus,
+            },
+          },
         ]}
       />
-      <AdvancedDetails sections={[{ title: c.metadata, value: { businessId: business.id, businessTemplateKey: business.businessTemplateKey, status: business.status } }]} />
     </div>
   );
 }
@@ -6340,7 +6455,11 @@ function DrawerContent({
     return row ? <StorePerformanceDetail row={row} /> : <EmptyState text={c.emptyNoStorePerformance} />;
   }
   if (drawer === "plan-analytics-detail") {
-    return <PlanAnalyticsDetail business={selected as CenterBusiness} />;
+    if (!canViewSuperAdminSection(role, "plans")) return <AccessDeniedPanel />;
+    if (isPlanManagementRow(selected)) {
+      return <PlanAnalyticsDetail row={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
   }
   if (drawer === "system-health-detail") {
     return <SystemHealthDetail service={selected as HealthService} />;
@@ -6516,6 +6635,10 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   if (drawer === "plan-management-detail") {
     const row = selected as PlanManagementRow | null;
     return row?.businessName ?? c.planDetails;
+  }
+  if (drawer === "plan-analytics-detail") {
+    const row = selected as PlanManagementRow | null;
+    return row?.businessName ?? c.planAnalytics;
   }
   if (drawer === "store-performance-detail") {
     const row = selected as StorePerformanceRow | null;
