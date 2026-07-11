@@ -22,7 +22,12 @@ function redirectLocalhostAlias(request: NextRequest) {
   }
 
   const redirectUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, `http://${LOCALHOST_DEV_HOST}`);
-  return Response.redirect(redirectUrl, 307);
+  return new NextResponse(null, {
+    status: 307,
+    headers: {
+      Location: redirectUrl.toString(),
+    },
+  });
 }
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
