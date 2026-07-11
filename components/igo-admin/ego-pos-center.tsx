@@ -1962,21 +1962,35 @@ const featureRows = [
   ["Export", "Locked", "Enabled", "Enabled", "Custom"],
 ];
 
-const platformSettings = [
-  "Platform name",
-  "Platform logo",
-  "Default language",
-  "Default currency",
-  "Default country",
-  "Default plan",
-  "Default free plan limits",
-  "Default business template",
-  "Maintenance mode",
-  "Ads / watermark",
-  "Cloud backup",
-  "System email/contact",
-  "Localization defaults",
-];
+type PlatformSettingCategory = "platform" | "access" | "templates" | "billing" | "security" | "system" | "localization";
+type PlatformSettingCategoryFilter = "all" | PlatformSettingCategory;
+type PlatformSettingStatus = "Active" | "Disabled" | "Not connected" | "Coming soon";
+type PlatformSettingStatusFilter = "all" | "active" | "disabled" | "not-connected" | "coming-soon";
+
+type PlatformSettingItem = {
+  actionLabel: string;
+  category: PlatformSettingCategory;
+  categoryLabel: string;
+  currentBehavior: string;
+  currentValue: string;
+  description: string;
+  id: string;
+  impact: string;
+  metadata: Record<string, unknown>;
+  name: string;
+  recommendedNextStep: string;
+  status: PlatformSettingStatus;
+};
+
+const platformSettingCategoryLabels: Record<PlatformSettingCategory, string> = {
+  access: "Access",
+  billing: "Billing",
+  localization: "Localization",
+  platform: "Platform",
+  security: "Security",
+  system: "System",
+  templates: "Templates",
+};
 
 const platformRoles = ["Super Admin", "Support Admin", "Billing Admin", "Template Manager"];
 const storeRoles = ["Owner", "Manager", "Cashier"];
@@ -6624,6 +6638,321 @@ function BackupRestoreDetail({ area }: { area: BackupRestoreArea }) {
   );
 }
 
+function platformSettingStatusKey(status: PlatformSettingStatus): Exclude<PlatformSettingStatusFilter, "all"> {
+  if (status === "Active") return "active";
+  if (status === "Disabled") return "disabled";
+  if (status === "Coming soon") return "coming-soon";
+  return "not-connected";
+}
+
+function platformSettingStatusClass(status: PlatformSettingStatus) {
+  if (status === "Active") return "border-[#22C55E]/40 bg-[#22C55E]/10 text-[#F8FAFC]";
+  if (status === "Disabled") return "border-[#475569] bg-[#334155]/40 text-[#CBD5E1]";
+  if (status === "Coming soon") return "border-[#F59E0B]/40 bg-[#F59E0B]/10 text-[#F8FAFC]";
+  return "border-[#475569] bg-[#020617] text-[#94A3B8]";
+}
+
+function PlatformSettingStatusBadge({ status }: { status: PlatformSettingStatus }) {
+  return <span className={cn("rounded-md border px-2 py-1 text-xs font-semibold", platformSettingStatusClass(status))}>{status}</span>;
+}
+
+function settingItem(input: Omit<PlatformSettingItem, "categoryLabel">): PlatformSettingItem {
+  return { ...input, categoryLabel: platformSettingCategoryLabels[input.category] };
+}
+
+function buildPlatformSettingItems(data: CenterData): PlatformSettingItem[] {
+  const miniMartTemplate = EGO_ADMIN_PROVISIONING_TEMPLATES.find((template) => template.key === "mini_mart");
+  const unsupportedTemplates = EGO_ADMIN_PROVISIONING_TEMPLATES.filter((template) => !template.enabled);
+  const freePlan = data.plans.find((plan) => String(plan.planName ?? "").toLowerCase().includes("free"));
+  const roleDataConnected = data.roles.length > 0;
+  const auditDataConnected = data.auditLogs.length > 0 || data.platformAuditLogs.length > 0 || data.storeActivityLogs.length > 0;
+  const platformUserConnected = Boolean(data.currentPlatformUser);
+  const createStoreEnabled = data.businesses.some((business) => business.owner || business.branches?.length || business.plan);
+
+  return [
+    settingItem({
+      actionLabel: "Edit Platform Profile - Coming soon",
+      category: "platform",
+      currentBehavior: "EGO POS Center is the platform owner workspace and EGO POS is the customer store product.",
+      currentValue: "EGO POS Center / EGO POS",
+      description: "Read-only platform identity shown to the platform owner.",
+      id: "platform-profile",
+      impact: "Controls how the platform is labeled in Super Admin surfaces. No branding write backend is enabled here.",
+      metadata: { productName: "EGO POS", safeEnvironmentVisible: process.env.NODE_ENV ?? "-" },
+      name: "Platform Profile",
+      recommendedNextStep: "Connect a platform profile settings backend before enabling edits.",
+      status: "Active",
+    }),
+    settingItem({
+      actionLabel: "Change Signup Policy - Coming soon",
+      category: "access",
+      currentBehavior: "Public self-registration is disabled. New customer stores are created by Super Admin through Create Store.",
+      currentValue: "Admin-created only",
+      description: "Controls whether customers can create businesses themselves.",
+      id: "signup-policy",
+      impact: "Keeps business creation controlled by EGO POS Admin and prevents unsupported public signup flows.",
+      metadata: { createBusinessBySuperAdmin: true, publicSignup: false, selfRegistration: false },
+      name: "Access & Signup Policy",
+      recommendedNextStep: "Keep public signup disabled until onboarding, billing, abuse controls, and provisioning review are complete.",
+      status: "Active",
+    }),
+    settingItem({
+      actionLabel: "Change Default Setup - Coming soon",
+      category: "templates",
+      currentBehavior: "Create Store defaults to Mini Mart, Free Plan, LAK, and English/Thai store language support.",
+      currentValue: "Mini Mart / Free / LAK",
+      description: "Default customer business setup used by the Super Admin Create Store flow.",
+      id: "default-business-setup",
+      impact: "Affects newly provisioned businesses only after a future backend settings flow is connected.",
+      metadata: { defaultCurrency: "LAK", defaultLanguage: ["English", "Thai"], defaultPlan: freePlan?.planName ?? "Free", defaultTemplate: miniMartTemplate?.label ?? "Mini Mart" },
+      name: "Default Business Setup",
+      recommendedNextStep: "Keep defaults read-only until a reviewed provisioning defaults backend exists.",
+      status: "Active",
+    }),
+    settingItem({
+      actionLabel: "Manage Templates - Coming soon",
+      category: "templates",
+      currentBehavior: "Mini Mart is selectable. Other templates are visible as coming soon and remain disabled.",
+      currentValue: "Mini Mart ready",
+      description: "Template availability used by Store provisioning.",
+      id: "template-availability",
+      impact: "Prevents unsupported template selection while still showing the roadmap.",
+      metadata: { readyTemplates: EGO_ADMIN_PROVISIONING_TEMPLATES.filter((template) => template.enabled).map((template) => template.label), unsupportedTemplates: unsupportedTemplates.map((template) => template.label) },
+      name: "Template Availability",
+      recommendedNextStep: "Complete and verify each template before enabling it for Create Store.",
+      status: miniMartTemplate?.enabled ? "Active" : "Not connected",
+    }),
+    settingItem({
+      actionLabel: "Configure Billing - Billing not connected",
+      category: "billing",
+      currentBehavior: "Free Plan is available. Pro Plan upgrades and billing provider actions are disabled.",
+      currentValue: "Free active / Pro disabled",
+      description: "Billing and plan monetization readiness.",
+      id: "billing-plans",
+      impact: "Pro upgrade, payment, and subscription automation are intentionally unavailable until billing is connected.",
+      metadata: { billingProviderConnected: false, freePlanRecords: data.subscriptions.filter((subscription) => String(subscription.plan?.planName ?? "").toLowerCase().includes("free")).length, proUpgradeEnabled: false },
+      name: "Billing & Plans",
+      recommendedNextStep: "Connect billing provider, subscription lifecycle, and audit behavior before enabling Pro actions.",
+      status: "Not connected",
+    }),
+    settingItem({
+      actionLabel: "Review Security - Coming soon",
+      category: "security",
+      currentBehavior: "Super Admin pages use route guards. Store owners are denied Super Admin access. Role and audit data are read-only here.",
+      currentValue: roleDataConnected && auditDataConnected ? "Guarded / audited" : "Guarded",
+      description: "Security and access readiness for EGO POS Center.",
+      id: "security-access",
+      impact: "Protects platform control pages and keeps sensitive fields out of Super Admin drawers.",
+      metadata: { auditDataConnected, platformUserConnected, roleDataConnected, routeGuard: "Super Admin only", storeOwnerAccess: "Denied" },
+      name: "Security & Access",
+      recommendedNextStep: "Keep route guard coverage and audit sanitization in place before adding editable security settings.",
+      status: platformUserConnected ? "Active" : "Not connected",
+    }),
+    settingItem({
+      actionLabel: "Run Health Checks - Not connected",
+      category: "system",
+      currentBehavior: "System Health page shows safe status. Live health endpoint checks are not connected.",
+      currentValue: "Safe status / no live endpoint",
+      description: "Platform service readiness without pretending live checks exist.",
+      id: "system-services",
+      impact: "System Health, storage, integration, and backup status stay explicit instead of reporting fake healthy states.",
+      metadata: { backupConnected: false, healthEndpointConnected: false, integrationsConnected: false, storageConnected: false },
+      name: "System Services",
+      recommendedNextStep: "Connect health endpoints, storage status, backup service, and integration checks before enabling actions.",
+      status: "Not connected",
+    }),
+    settingItem({
+      actionLabel: "Configure Localization - Coming soon",
+      category: "localization",
+      currentBehavior: "English and Thai are enabled. Lao is deferred. Base currency is LAK.",
+      currentValue: "EN / TH / LAK",
+      description: "Language and currency readiness for platform and store setup.",
+      id: "localization-currency",
+      impact: "Keeps current supported languages clear while preventing incomplete locale rollout.",
+      metadata: { baseCurrency: "LAK", enabledLanguages: ["English", "Thai"], laoEnabled: false, optionalReportingCurrencies: ["THB", "USD"] },
+      name: "Localization / Currency",
+      recommendedNextStep: "Add reviewed locale and currency settings before enabling store-level overrides from Super Admin.",
+      status: "Active",
+    }),
+  ];
+}
+
+function PlatformSettingsPage({ data, onAction }: { data: CenterData; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [categoryFilter, setCategoryFilter] = useState<PlatformSettingCategoryFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<PlatformSettingStatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const settings = useMemo(() => buildPlatformSettingItems(data), [data]);
+  const visibleSettings = settings.filter((item) => {
+    const query = search.trim().toLowerCase();
+    const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
+    const matchesStatus = statusFilter === "all" || platformSettingStatusKey(item.status) === statusFilter;
+    const matchesSearch = !query || [item.name, item.categoryLabel, item.status, item.currentValue, item.description].some((value) => value.toLowerCase().includes(query));
+    return matchesCategory && matchesStatus && matchesSearch;
+  });
+  const groupedSettings = (Object.keys(platformSettingCategoryLabels) as PlatformSettingCategory[])
+    .map((category) => ({
+      category,
+      items: visibleSettings.filter((item) => item.category === category),
+      title: platformSettingCategoryLabels[category],
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const activeCount = settings.filter((item) => item.status === "Active").length;
+  const disabledCount = settings.filter((item) => item.status === "Disabled").length;
+  const notConnectedCount = settings.filter((item) => item.status === "Not connected").length;
+  const comingSoonCount = settings.filter((item) => item.status === "Coming soon").length;
+
+  return (
+    <div className="grid min-w-0 max-w-full gap-6">
+      <PageHeader
+        title={c.platformSettings}
+        subtitle="Review platform settings and readiness safely. Settings are read-only until a reviewed backend write flow exists."
+        controls={
+          <>
+            <FilterSelect
+              label="Area"
+              onChange={setCategoryFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Platform", value: "platform" },
+                { label: "Access", value: "access" },
+                { label: "Templates", value: "templates" },
+                { label: "Billing", value: "billing" },
+                { label: "Security", value: "security" },
+                { label: "System", value: "system" },
+                { label: "Localization", value: "localization" },
+              ]}
+              value={categoryFilter}
+            />
+            <FilterSelect
+              label={c.status}
+              onChange={setStatusFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Active", value: "active" },
+                { label: "Disabled", value: "disabled" },
+                { label: "Not Connected", value: "not-connected" },
+                { label: "Coming Soon", value: "coming-soon" },
+              ]}
+              value={statusFilter}
+            />
+            <SearchControl onChange={setSearch} placeholder="Search settings" value={search} />
+            <RefreshButton />
+          </>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard helper="Read-only status" label="Platform Status" value="Active" />
+        <SummaryCard helper="No public signup" label="Signup Policy" value="Admin-created only" />
+        <SummaryCard helper="Selectable template" label="Default Template" value="Mini Mart" />
+        <SummaryCard helper="Provisioning default" label="Default Plan" value="Free" />
+        <SummaryCard helper="Provider disabled" label="Billing" value="Not connected" />
+        <SummaryCard helper="Services disabled" label="Backup / Integrations" value="Not connected" />
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-4">
+        <SummaryCard helper="Safe known settings" label="Active" value={activeCount} />
+        <SummaryCard helper="Intentionally off" label="Disabled" value={disabledCount} />
+        <SummaryCard helper="Backend required" label="Not Connected" value={notConnectedCount} />
+        <SummaryCard helper="Roadmap controls" label="Coming Soon" value={comingSoonCount} />
+      </section>
+
+      <section className="grid gap-4">
+        {groupedSettings.map((group) => (
+          <section className={dashboardPanelClass()} key={group.category}>
+            <CommandSectionTitle title={group.title} subtitle="Read-only settings status. Backend writes are not enabled from this page." />
+            <div className="grid gap-3">
+              {group.items.map((item) => (
+                <div className="grid gap-4 rounded-lg border border-[#334155] bg-[#020617] p-4 md:grid-cols-[1fr_auto] md:items-center" key={item.id}>
+                  <button className="min-w-0 text-left" onClick={() => onAction("setting-edit", item)} type="button">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="font-semibold text-[#F8FAFC]">{item.name}</span>
+                      <PlatformSettingStatusBadge status={item.status} />
+                    </div>
+                    <p className="mt-2 text-sm text-[#94A3B8]">{item.description}</p>
+                    <div className="mt-3 grid gap-2 text-xs text-[#CBD5E1] sm:grid-cols-2">
+                      <span><span className="text-[#64748B]">Current:</span> {item.currentValue}</span>
+                      <span><span className="text-[#64748B]">Category:</span> {item.categoryLabel}</span>
+                    </div>
+                  </button>
+                  <div className="flex flex-wrap gap-2 md:justify-end">
+                    <button className="inline-flex h-9 items-center gap-2 rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" onClick={() => onAction("setting-edit", item)} type="button">
+                      {c.view}
+                      <ChevronRight className="size-3" />
+                    </button>
+                    <DisabledPillButton label={item.actionLabel} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+        {!visibleSettings.length ? <EmptyPanel title="No settings match these filters." description="Adjust the search or filters to review platform readiness settings." /> : null}
+      </section>
+    </div>
+  );
+}
+
+function isPlatformSettingItem(value: unknown): value is PlatformSettingItem {
+  return Boolean(value && typeof value === "object" && "id" in value && "currentBehavior" in value && "recommendedNextStep" in value);
+}
+
+function PlatformSettingDetail({ item }: { item: PlatformSettingItem }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Setting Overview" subtitle={item.description} />
+        <DetailGrid
+          rows={[
+            ["Setting", item.name],
+            ["Category", item.categoryLabel],
+            ["Current value", item.currentValue],
+            [c.status, <PlatformSettingStatusBadge key="status" status={item.status} />],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Current Behavior</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{item.currentBehavior}</p>
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Impact</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{item.impact}</p>
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{item.recommendedNextStep}</p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <DisabledPillButton label={item.actionLabel} />
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/action-center">
+          {c.actionCenter}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#334155] px-3 text-xs font-semibold text-[#CBD5E1] transition hover:border-[#5EEAD4]" href="/super-admin/system-health">
+          {c.systemHealth}
+        </Link>
+      </div>
+      <AdvancedDetails
+        sections={[
+          {
+            title: c.metadata,
+            value: sanitizeAuditValue({
+              category: item.category,
+              currentValue: item.currentValue,
+              id: item.id,
+              metadata: item.metadata,
+              status: item.status,
+            }),
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
 function DashboardMetricDetail({ data, drawer }: { data: CenterData; drawer: DrawerKind }) {
   const { c } = useCenterCopy();
   const rows = buildStorePerformanceRows(data, "today", c);
@@ -8590,16 +8919,14 @@ function DrawerContent({
   }
   if (drawer === "platform-settings") {
     if (!canViewSuperAdminSection(role, "settings")) return <AccessDeniedPanel />;
-    return (
-      <div className="grid gap-3">
-        {platformSettings.map((setting) => (
-          <button className="flex items-center justify-between rounded-lg border border-[#334155] bg-[#111827] px-4 py-4 text-left transition hover:border-[#5EEAD4]" key={setting} onClick={() => onAction("setting-edit", setting)} type="button">
-            <span className="font-semibold text-[#F8FAFC]">{setting}</span>
-            <ChevronRight className="size-4 text-[#94A3B8]" />
-          </button>
-        ))}
-      </div>
-    );
+    return <PlatformSettingsPage data={data} onAction={onAction} />;
+  }
+  if (drawer === "setting-edit") {
+    if (!canViewSuperAdminSection(role, "settings")) return <AccessDeniedPanel />;
+    if (isPlatformSettingItem(selected)) {
+      return <PlatformSettingDetail item={selected} />;
+    }
+    return <OperationalDrawer selected={selected} />;
   }
   if (drawer === "platform-notifications") {
     return <EmptyState text={c.noPlatformNotifications} />;
@@ -8839,6 +9166,9 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   if (drawer === "store-performance-detail") {
     const row = selected as StorePerformanceRow | null;
     return row?.business.name ?? c.storePerformance;
+  }
+  if (drawer === "setting-edit" && isPlatformSettingItem(selected)) {
+    return selected.name;
   }
   return drawerTitle(drawer, c);
 }
@@ -9333,16 +9663,8 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
       return <RoleDirectoryPage data={data} onAction={open} />;
     }
     if (section === "audit") return <AuditLogsCenter data={data} onAction={open} role={role} />;
-    return (
-      <div className="grid gap-3">
-        {platformSettings.map((setting) => (
-          <button className="flex items-center justify-between rounded-lg border border-[#334155] bg-[#111827] px-4 py-4 text-left transition hover:border-[#5EEAD4]" key={setting} onClick={() => open("setting-edit", setting)} type="button">
-            <span className="font-semibold text-[#F8FAFC]">{setting}</span>
-            <ChevronRight className="size-4 text-[#94A3B8]" />
-          </button>
-        ))}
-      </div>
-    );
+    if (section === "settings") return <PlatformSettingsPage data={data} onAction={open} />;
+    return <AccessDeniedPanel />;
   }, [data, data.businesses, data.subscriptions, data.users, role, section]);
 
   return (
