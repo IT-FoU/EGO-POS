@@ -6769,8 +6769,8 @@ function AdvancedDetails({ sections }: { sections: Array<{ title: string; value:
 function DetailGrid({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      {rows.map(([label, value]) => (
-        <div className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4" key={label}>
+      {rows.map(([label, value], index) => (
+        <div className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4" key={`${label}-${index}`}>
           <div className="text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">{label}</div>
           <div className="mt-2 min-w-0 break-words text-sm text-[#F8FAFC]">{value}</div>
         </div>

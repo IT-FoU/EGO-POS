@@ -21,7 +21,8 @@ function redirectLocalhostAlias(request: NextRequest) {
     return null;
   }
 
-  return NextResponse.redirect(`http://${LOCALHOST_DEV_HOST}${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const redirectUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, `http://${LOCALHOST_DEV_HOST}`);
+  return Response.redirect(redirectUrl, 307);
 }
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
