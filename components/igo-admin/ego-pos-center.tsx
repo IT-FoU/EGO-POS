@@ -8655,6 +8655,25 @@ function drawerBackLabel(drawer: DrawerKind, c: CenterCopy, selected: unknown) {
   return c.backToCenter;
 }
 
+function superAdminActiveNavGroup(pathname: string) {
+  if (pathname === "/super-admin" || pathname.startsWith("/super-admin/action-center") || pathname.startsWith("/super-admin/recent-activity")) {
+    return "command";
+  }
+  if (pathname.startsWith("/super-admin/businesses") || pathname.startsWith("/super-admin/stores") || pathname.startsWith("/super-admin/store-performance")) {
+    return "businessControl";
+  }
+  if (pathname.startsWith("/super-admin/plans") || pathname.startsWith("/super-admin/templates") || pathname.startsWith("/super-admin/plan-analytics")) {
+    return "planEngine";
+  }
+  if (pathname.startsWith("/super-admin/users") || pathname.startsWith("/super-admin/roles") || pathname.startsWith("/super-admin/audit-logs")) {
+    return "accessControl";
+  }
+  if (pathname.startsWith("/super-admin/system-health") || pathname.startsWith("/super-admin/integrations") || pathname.startsWith("/super-admin/settings") || pathname.startsWith("/super-admin/backup-restore")) {
+    return "systemVault";
+  }
+  return "command";
+}
+
 export function EgoPosCenterShell({ children, role }: { children: React.ReactNode; role?: string | null; username: string }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -8663,12 +8682,15 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    accessControl: false,
-    businessControl: false,
-    command: true,
-    planEngine: false,
-    systemVault: false,
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const activeGroup = superAdminActiveNavGroup(pathname);
+    return {
+      accessControl: activeGroup === "accessControl",
+      businessControl: activeGroup === "businessControl",
+      command: activeGroup === "command",
+      planEngine: activeGroup === "planEngine",
+      systemVault: activeGroup === "systemVault",
+    };
   });
   const navGroupsRaw: Array<{
     key: string;
@@ -8727,11 +8749,8 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
     .filter((group) => group.items.length > 0);
 
   useEffect(() => {
-    const activeGroup = navGroups.find((group) => group.items.some((item) => pathname === item.href || (item.href !== "/super-admin" && pathname.startsWith(item.href))));
-    if (!activeGroup) {
-      return;
-    }
-    setOpenGroups((current) => ({ ...current, [activeGroup.key]: true }));
+    const activeGroup = superAdminActiveNavGroup(pathname);
+    setOpenGroups((current) => current[activeGroup] ? current : { ...current, [activeGroup]: true });
   }, [pathname]);
 
   useEffect(() => {
