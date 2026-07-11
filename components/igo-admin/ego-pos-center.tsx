@@ -1939,6 +1939,15 @@ const posTemplateDefinitions: PosTemplateDefinition[] = [
 
 const templateDefinitions = posTemplateDefinitions;
 
+type TemplateReadinessStatus = "ready" | "coming-soon" | "draft" | "disabled";
+type TemplateStatusFilter = "all" | TemplateReadinessStatus | "selectable";
+
+type TemplateUsageStats = {
+  businesses: number;
+  lastUsedAt: string | null;
+  stores: number;
+};
+
 const featureRows = [
   ["Products limit", "500", "Unlimited", "Unlimited", "Custom"],
   ["Bills per month", "1,000", "Unlimited", "Unlimited", "Custom"],
@@ -2082,6 +2091,13 @@ function templateStatusLabel(status: string, c: CenterCopy) {
   return status;
 }
 
+function templateReadinessLabel(status: TemplateReadinessStatus, c: CenterCopy) {
+  if (status === "ready") return `${c.ready} / ${c.active}`;
+  if (status === "coming-soon") return c.comingSoon;
+  if (status === "disabled") return c.disabled;
+  return c.draft;
+}
+
 function posTemplateName(template: PosTemplateDefinition, c: CenterCopy) {
   const map: Record<string, string> = {
     "clothes-rental": c.posTemplateClothesRental,
@@ -2106,8 +2122,75 @@ function normalizePosTemplateKey(value?: string | null) {
     minimart: "mini-mart",
     "mini-marts": "mini-mart",
     "online-sale": "online-sales",
+    "online-seller": "online-sales",
+    "wholesale-store": "wholesale",
   };
   return aliases[normalized] ?? normalized;
+}
+
+function realTemplateUsageKey(value?: string | null) {
+  if (!value?.trim()) {
+    return null;
+  }
+  return normalizePosTemplateKey(value);
+}
+
+function provisioningKeyForPosTemplate(template: PosTemplateDefinition) {
+  const map: Record<string, string> = {
+    "clothes-rental": "clothes_rental",
+    "clothes-sales": "clothing",
+    "event-rental": "event_rental",
+    "mini-mart": "mini_mart",
+    "online-sales": "online_seller",
+    pharmacy: "pharmacy",
+    restaurant: "restaurant",
+    wholesale: "wholesale_store",
+  };
+  return map[template.key] ?? template.key.replace(/-/g, "_");
+}
+
+function provisioningTemplateForPosTemplate(template: PosTemplateDefinition) {
+  const key = provisioningKeyForPosTemplate(template);
+  return EGO_ADMIN_PROVISIONING_TEMPLATES.find((entry) => entry.key === key) ?? null;
+}
+
+function templateReadiness(template: PosTemplateDefinition) {
+  const provisioningTemplate = provisioningTemplateForPosTemplate(template);
+  const status: TemplateReadinessStatus = provisioningTemplate?.enabled
+    ? "ready"
+    : provisioningTemplate?.status === "Coming soon"
+      ? "coming-soon"
+      : template.status.toLowerCase().includes("draft")
+        ? "draft"
+        : "disabled";
+
+  return {
+    createStoreSelectable: Boolean(provisioningTemplate?.enabled),
+    provisioningConnected: Boolean(provisioningTemplate?.enabled),
+    provisioningFeatures: provisioningTemplate?.features ?? [],
+    provisioningKey: provisioningTemplate?.key ?? provisioningKeyForPosTemplate(template),
+    status,
+  };
+}
+
+function templateUsageStats(businesses: CenterBusiness[], template: PosTemplateDefinition): TemplateUsageStats {
+  const stores = storesForTemplate(businesses, template);
+  const branchCount = stores.reduce((total, business) => total + (business._count?.branches ?? business.branches?.length ?? 0), 0);
+  const timestamps = stores
+    .flatMap((business) => [business.createdAt, ...(business.branches ?? []).map((branch) => branch.updatedAt ?? branch.createdAt)])
+    .filter((value): value is string => Boolean(value));
+
+  return {
+    businesses: stores.length,
+    lastUsedAt: timestamps.length
+      ? timestamps
+          .map((value) => new Date(value))
+          .filter((date) => Number.isFinite(date.getTime()))
+          .sort((a, b) => b.getTime() - a.getTime())[0]
+          ?.toISOString() ?? null
+      : null,
+    stores: branchCount,
+  };
 }
 
 function posTemplateNameFromKey(value: string | null | undefined, c: CenterCopy) {
@@ -2522,7 +2605,10 @@ function TemplateUsageSummary({ businesses, onOpen }: { businesses: CenterBusine
   const { c } = useCenterCopy();
   const usedByKey = new Map<string, number>();
   businesses.forEach((business) => {
-    const key = normalizePosTemplateKey(business.businessTemplateKey);
+    const key = realTemplateUsageKey(business.businessTemplateKey);
+    if (!key) {
+      return;
+    }
     usedByKey.set(key, (usedByKey.get(key) ?? 0) + 1);
   });
   return (
@@ -2535,7 +2621,7 @@ function TemplateUsageSummary({ businesses, onOpen }: { businesses: CenterBusine
               <span className="block truncate text-sm font-semibold text-[#F8FAFC]">{posTemplateName(template, c)}</span>
               <span className="text-xs text-[#94A3B8]">{usedByKey.get(template.key) ?? 0} {c.stores}</span>
             </span>
-            <StatusBadge value={templateStatusLabel(template.status, c)} />
+            <StatusBadge value={templateReadinessLabel(templateReadiness(template).status, c)} />
           </button>
         ))}
       </div>
@@ -7185,7 +7271,7 @@ function DashboardPosTemplateStatus({ onOpen }: { onOpen: (template: PosTemplate
           >
             <span className="min-w-0 truncate text-sm font-semibold text-[#F8FAFC]">{posTemplateName(template, c)}</span>
             <span className="flex shrink-0 items-center gap-3">
-              <StatusBadge value={templateStatusLabel(template.status, c)} />
+              <StatusBadge value={templateReadinessLabel(templateReadiness(template).status, c)} />
               <ChevronRight className="size-4 text-[#94A3B8]" />
             </span>
           </button>
@@ -7251,6 +7337,101 @@ function TemplateList({ businesses, onAction }: { businesses: CenterBusiness[]; 
   );
 }
 
+function TemplateReadinessList({ businesses, onAction }: { businesses: CenterBusiness[]; onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [statusFilter, setStatusFilter] = useState<TemplateStatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const readinessRows = templateDefinitions.map((template) => ({
+    readiness: templateReadiness(template),
+    template,
+    usage: templateUsageStats(businesses, template),
+  }));
+  const filteredRows = readinessRows.filter(({ readiness, template }) => {
+    const statusMatches =
+      statusFilter === "all"
+      || readiness.status === statusFilter
+      || (statusFilter === "selectable" && readiness.createStoreSelectable);
+    const query = search.trim().toLowerCase();
+    const searchText = [
+      posTemplateName(template, c),
+      template.key,
+      readiness.provisioningKey,
+      template.summary,
+      templateReadinessLabel(readiness.status, c),
+    ].join(" ").toLowerCase();
+    return statusMatches && (!query || searchText.includes(query));
+  });
+  const readyCount = readinessRows.filter((row) => row.readiness.status === "ready").length;
+  const comingSoonCount = readinessRows.filter((row) => row.readiness.status === "coming-soon").length;
+  const draftDisabledCount = readinessRows.filter((row) => row.readiness.status === "draft" || row.readiness.status === "disabled").length;
+  const businessesUsingTemplates = readinessRows.reduce((total, row) => total + row.usage.businesses, 0);
+  const selectableCount = readinessRows.filter((row) => row.readiness.createStoreSelectable).length;
+  const statusOptions: Array<{ label: string; value: TemplateStatusFilter }> = [
+    { label: c.filterAll, value: "all" },
+    { label: c.ready, value: "ready" },
+    { label: c.comingSoon, value: "coming-soon" },
+    { label: c.draft, value: "draft" },
+    { label: c.disabled, value: "disabled" },
+    { label: "Selectable", value: "selectable" },
+  ];
+
+  return (
+    <div className="grid min-w-0 gap-6">
+      <PageHeader
+        title={c.posTemplates}
+        subtitle="Review Create Store template readiness, provisioning support, and real usage across businesses."
+        controls={
+          <>
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <SearchControl onChange={setSearch} placeholder="Search templates, keys, or business type" value={search} />
+            <RefreshButton />
+          </>
+        }
+      />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard label="Total Templates" value={readinessRows.length} />
+        <SummaryCard label="Ready Templates" value={readyCount} />
+        <SummaryCard label={c.comingSoon} value={comingSoonCount} />
+        <SummaryCard label="Draft / Disabled" value={draftDisabledCount} />
+        <SummaryCard label="Businesses Using Templates" value={businessesUsingTemplates} />
+        <SummaryCard label="Selectable in Create Store" value={selectableCount} />
+      </div>
+      {filteredRows.length ? (
+        <div className="grid gap-3">
+          {filteredRows.map(({ readiness, template, usage }) => (
+            <button
+              className="w-full min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4 text-left transition hover:border-[#5EEAD4] hover:bg-[#5EEAD4]/[0.08]"
+              key={template.key}
+              onClick={() => onAction("pos-template-detail", template)}
+              type="button"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-[#F8FAFC]">{posTemplateName(template, c)}</h3>
+                    <StatusBadge value={templateReadinessLabel(readiness.status, c)} />
+                  </div>
+                  <p className="mt-1 text-sm text-[#94A3B8]">{template.summary}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#CBD5E1]">
+                    <span className="rounded-md border border-[#334155] px-2 py-1">Key: {readiness.provisioningKey}</span>
+                    <span className="rounded-md border border-[#334155] px-2 py-1">Selectable: {readiness.createStoreSelectable ? "Yes" : "No"}</span>
+                    <span className="rounded-md border border-[#334155] px-2 py-1">Provisioning: {readiness.provisioningConnected ? c.connected : c.notConnected}</span>
+                    <span className="rounded-md border border-[#334155] px-2 py-1">{usage.businesses} {c.businesses}</span>
+                    <span className="rounded-md border border-[#334155] px-2 py-1">{usage.stores} {c.stores}</span>
+                  </div>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-[#94A3B8]" />
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <EmptyPanel title="No templates match this view." description="Adjust search or filters to review template readiness." />
+      )}
+    </div>
+  );
+}
+
 function getPosTemplate(selected: unknown): PosTemplateDefinition | null {
   const value = selected as { template?: PosTemplateDefinition; key?: string } | PosTemplateDefinition | null;
   const key = value && "template" in value ? value.template?.key : value?.key;
@@ -7258,7 +7439,7 @@ function getPosTemplate(selected: unknown): PosTemplateDefinition | null {
 }
 
 function storesForTemplate(businesses: CenterBusiness[], template: PosTemplateDefinition) {
-  return businesses.filter((business) => normalizePosTemplateKey(business.businessTemplateKey) === template.key);
+  return businesses.filter((business) => realTemplateUsageKey(business.businessTemplateKey) === template.key);
 }
 
 function templateIntegration(template: PosTemplateDefinition) {
@@ -7276,50 +7457,89 @@ function templateIntegration(template: PosTemplateDefinition) {
   ];
 }
 
-function PosTemplateDetail({ onAction, template }: { onAction: (drawer: DrawerKind, selected?: unknown) => void; template: PosTemplateDefinition }) {
+function PosTemplateDetail({ businesses, template }: { businesses: CenterBusiness[]; onAction: (drawer: DrawerKind, selected?: unknown) => void; template: PosTemplateDefinition }) {
   const { c } = useCenterCopy();
-  const rows: Array<{ disabled?: boolean; drawer?: DrawerKind; label: string }> = [
-    { disabled: template.key !== "mini-mart", drawer: "pos-template-stores", label: template.key === "mini-mart" ? c.openMiniMartPos : c.openPosDashboard },
-    { drawer: "pos-template-stores", label: c.storesUsingTemplate },
-    { drawer: "pos-template-modules", label: c.modules },
-    { drawer: "pos-template-features", label: c.features },
-    { drawer: "pos-template-plan-locks", label: c.planLocks },
-    { drawer: "pos-template-permissions", label: c.defaultPermissions },
-    { drawer: "pos-template-reports", label: c.reports },
-    { drawer: "pos-template-settings", label: c.settingsDefaults },
-    { drawer: "pos-template-integration", label: c.integrationMap },
-  ];
+  const readiness = templateReadiness(template);
+  const usage = templateUsageStats(businesses, template);
+  const readinessLabel = templateReadinessLabel(readiness.status, c);
+  const nextStep = readiness.createStoreSelectable
+    ? "This template can be used in Create Store."
+    : "Complete provisioning and module readiness before enabling this template.";
 
   return (
-    <div className="grid gap-3">
-      {rows.map((row, index) => {
-        if (index === 0 && template.key === "mini-mart") {
-          return (
-            <Link
-              className="flex items-center justify-between rounded-lg border border-[#334155] bg-[#111827] px-4 py-4 text-left transition hover:border-[#5EEAD4] hover:bg-[#5EEAD4]/[0.08]"
-              href="/dashboard"
-              key={row.label}
-            >
-              <span className="font-semibold text-[#F8FAFC]">{row.label}</span>
-              <ChevronRight className="size-4 text-[#94A3B8]" />
-            </Link>
-          );
-        }
-        if (row.disabled) {
-          return null;
-        }
-        return (
-          <button
-            className="flex items-center justify-between rounded-lg border border-[#334155] bg-[#111827] px-4 py-4 text-left transition hover:border-[#5EEAD4] hover:bg-[#5EEAD4]/[0.08]"
-            key={row.label}
-            onClick={() => onAction(row.drawer ?? "pos-template-detail", template)}
-            type="button"
-          >
-            <span className="font-semibold text-[#F8FAFC]">{row.label}</span>
-            <ChevronRight className="size-4 text-[#94A3B8]" />
-          </button>
-        );
-      })}
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Template Overview" subtitle={template.summary} />
+        <DetailGrid
+          rows={[
+            ["Template name", posTemplateName(template, c)],
+            ["Template key", readiness.provisioningKey],
+            [c.status, <StatusBadge key="status" value={readinessLabel} />],
+            ["Selectable in Create Store", readiness.createStoreSelectable ? "Yes" : "No"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Provisioning Readiness" subtitle="Readiness is sourced from the same provisioning registry used by Create Store." />
+        <DetailGrid
+          rows={[
+            ["Provisioning connected", readiness.provisioningConnected ? c.connected : c.notConnected],
+            ["Schema ready", readiness.createStoreSelectable ? "Checked during Create Store" : "-"],
+            ["Create Store supported", readiness.createStoreSelectable ? "Yes" : "No"],
+            ["Required defaults available", readiness.createStoreSelectable ? "Applied by Create Store" : "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title={c.modules} subtitle="Module names are template requirements, not live module completion claims." />
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {template.modules.map((moduleName) => (
+            <div className="rounded-lg border border-[#334155] bg-[#111827] p-3" key={moduleName}>
+              <div className="text-sm font-semibold text-[#F8FAFC]">{moduleName}</div>
+              <div className="mt-1 text-xs text-[#94A3B8]">Required by template</div>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Usage" subtitle="Usage counts are calculated from loaded real business records." />
+        <DetailGrid
+          rows={[
+            ["Businesses using this template", usage.businesses],
+            ["Stores using this template", usage.stores],
+            ["Last real usage update", usage.lastUsedAt ? new Date(usage.lastUsedAt).toLocaleString() : "-"],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#CBD5E1]">{nextStep}</p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        {readiness.createStoreSelectable ? (
+          <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
+            Create Store with Template
+          </Link>
+        ) : (
+          <DisabledPillButton label="Create Store with Template - Coming soon" />
+        )}
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">
+          {c.viewBusiness}
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">
+          {c.viewStores}
+        </Link>
+        <DisabledPillButton label="Enable Template - Coming soon" />
+        <DisabledPillButton label="Edit Template - Coming soon" />
+        <DisabledPillButton label="Validate Provisioning - Coming soon" />
+      </div>
+      <AdvancedDetails
+        sections={[
+          { title: "Template keys", value: { displayKey: template.key, provisioningKey: readiness.provisioningKey } },
+          { title: "Provisioning config", value: { enabled: readiness.createStoreSelectable, features: readiness.provisioningFeatures, status: readiness.status } },
+          { title: "Template definition", value: { defaultPermissions: template.defaultPermissions, features: template.features, planLocks: template.planLocks, reports: template.reports, settingsDefaults: template.settingsDefaults } },
+        ]}
+      />
     </div>
   );
 }
@@ -8272,12 +8492,12 @@ function DrawerContent({
   }
   if (drawer === "templates") {
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.POS_TEMPLATE_VIEW)) return <AccessDeniedPanel />;
-    return <TemplateList businesses={data.businesses} onAction={onAction} />;
+    return <TemplateReadinessList businesses={data.businesses} onAction={onAction} />;
   }
   if (drawer === "pos-template-detail") {
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.POS_TEMPLATE_VIEW)) return <AccessDeniedPanel />;
     const template = getPosTemplate(selected);
-    return template ? <PosTemplateDetail onAction={onAction} template={template} /> : <TemplateList businesses={data.businesses} onAction={onAction} />;
+    return template ? <PosTemplateDetail businesses={data.businesses} onAction={onAction} template={template} /> : <TemplateReadinessList businesses={data.businesses} onAction={onAction} />;
   }
   if (drawer === "pos-template-stores") {
     const template = getPosTemplate(selected);
@@ -9102,7 +9322,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
     if (!canViewSuperAdminSection(role, section)) return <AccessDeniedPanel />;
     if (section === "businesses") return <BusinessDirectoryPage data={data} onAction={open} />;
     if (section === "templates") {
-      return <TemplateList businesses={data.businesses} onAction={open} />;
+      return <TemplateReadinessList businesses={data.businesses} onAction={open} />;
     }
     if (section === "plans") return <PlanManagementPage data={data} onAction={open} />;
     if (section === "subscriptions") return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={open} role={role} />;
