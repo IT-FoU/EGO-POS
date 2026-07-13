@@ -18,6 +18,12 @@ export type StoreMembershipSummary = {
   storeCode: string;
 };
 
+export type StoreMembershipResolution = {
+  memberships: StoreMembershipSummary[];
+  resolvedUserId: string | null;
+  source: "session_user_id" | "session_identity";
+};
+
 function resolveRoleNames(
   isOwner: boolean,
   companyId: string,
@@ -70,6 +76,53 @@ export async function getStoreMembershipsForUser(userId: string): Promise<StoreM
       roleNames: resolveRoleNames(membership.isOwner, membership.company.id, membership.user.roles),
       storeCode: membership.company.storeCode,
     }));
+}
+
+export async function getStoreMembershipsForSessionIdentity({
+  email,
+  userId,
+  username,
+}: {
+  email?: string | null;
+  userId?: string | null;
+  username?: string | null;
+}): Promise<StoreMembershipResolution> {
+  if (userId) {
+    const memberships = await getStoreMembershipsForUser(userId);
+    if (memberships.length > 0) {
+      return { memberships, resolvedUserId: userId, source: "session_user_id" };
+    }
+  }
+
+  const trimmedUsername = username?.trim();
+  const trimmedEmail = email?.trim().toLowerCase();
+  const identityFilters = [
+    trimmedUsername ? { username: trimmedUsername } : null,
+    trimmedUsername ? { username: trimmedUsername.toLowerCase() } : null,
+    trimmedEmail ? { email: trimmedEmail } : null,
+  ].filter((filter): filter is { email: string } | { username: string } => Boolean(filter));
+
+  if (identityFilters.length === 0) {
+    return { memberships: [], resolvedUserId: userId ?? null, source: "session_user_id" };
+  }
+
+  const user = await prisma.user.findFirst({
+    select: { id: true },
+    where: {
+      OR: identityFilters,
+      status: "active",
+    },
+  });
+
+  if (!user) {
+    return { memberships: [], resolvedUserId: userId ?? null, source: "session_user_id" };
+  }
+
+  return {
+    memberships: await getStoreMembershipsForUser(user.id),
+    resolvedUserId: user.id,
+    source: "session_identity",
+  };
 }
 
 export function resolveStorePostLoginRedirect(
