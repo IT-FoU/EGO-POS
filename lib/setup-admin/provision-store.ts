@@ -49,6 +49,7 @@ export type ProvisionStoreResult =
   | { ok: false; error: string; status: number };
 
 const STORE_CODE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
+const DASHBOARD_VIEW_PERMISSION_KEY = "dashboard.view";
 
 export function normalizeStoreCode(value: string) {
   return value
@@ -73,6 +74,28 @@ function deriveReceiptPrefix(storeCode: string, storeName: string) {
     .slice(0, 4);
 
   return fromName.length >= 2 ? fromName : "INV";
+}
+
+async function ensureStoreBackOfficeDashboardAccess(
+  dbClient: any,
+  roles: Array<{ id: string }>,
+) {
+  const dashboardViewPermission = await dbClient.permission.findUnique({
+    select: { id: true },
+    where: { key: DASHBOARD_VIEW_PERMISSION_KEY },
+  });
+
+  if (!dashboardViewPermission) {
+    throw new Error("Dashboard view permission is not configured.");
+  }
+
+  await dbClient.rolePermission.createMany({
+    data: roles.map((role) => ({
+      permissionId: dashboardViewPermission.id,
+      roleId: role.id,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 export function validateProvisionStoreInput(input: ProvisionStoreInput): string | null {
@@ -322,6 +345,7 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
         tx,
         { skipCatalogEnsure: true },
       );
+      await ensureStoreBackOfficeDashboardAccess(tx, [ownerRole, managerRole]);
       await ensureDefaultApprovalRules(company.id, tx);
 
       await tx.saaSSubscription.create({
