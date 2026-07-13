@@ -101,7 +101,7 @@ export function CategoriesClient({ initialCategories, }: {
       <section className="rounded-lg border border-border bg-card p-5">
         <label className="relative block">
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"/>
-          <input className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary" placeholder="Search categories by Lao or English name" value={query} onChange={(event) => setQuery(event.target.value)}/>
+          <input className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary" placeholder="Search categories by Thai or English name" value={query} onChange={(event) => setQuery(event.target.value)}/>
         </label>
       </section>
 
