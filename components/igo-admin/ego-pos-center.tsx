@@ -20,6 +20,7 @@ import {
   Download,
   Gauge,
   LayoutDashboard,
+  LifeBuoy,
   Lock,
   Minus,
   Maximize2,
@@ -297,6 +298,7 @@ type DrawerKind =
   | "system-health-detail"
   | "integration-detail"
   | "backup-restore-detail"
+  | "support-center-detail"
   | "business-view"
   | "business-edit"
   | "business-plan"
@@ -343,7 +345,8 @@ type PlaceholderSectionKind =
   | "planAnalytics"
   | "systemHealth"
   | "integrations"
-  | "backupRestore";
+  | "backupRestore"
+  | "supportCenter";
 
 function normalizeUiPlatformRole(role: string | null | undefined) {
   const normalized = String(role ?? "").trim().toLowerCase();
@@ -413,6 +416,7 @@ function canViewNavHref(role: string | null | undefined, href: string) {
     "/super-admin/recent-activity": "audit",
     "/super-admin/roles": "roles",
     "/super-admin/settings": "settings",
+    "/super-admin/support-center": "settings",
     "/super-admin/store-performance": "businesses",
     "/super-admin/stores": "businesses",
     "/super-admin/system-health": "settings",
@@ -1049,6 +1053,7 @@ Object.assign(copy.en, {
   averageBill: "Average Bill",
   backupStatus: "Backup status",
   backupRestore: "Backup & Restore",
+  supportCenter: "Support Center",
   billCount: "Bill count",
   bills: "Bills",
   commandDashboardTitle: "EGO POS Center Dashboard",
@@ -1221,6 +1226,7 @@ Object.assign(copy.en, {
   storesBusinesses: "Stores / Businesses",
   integrations: "Integrations",
   settingsMenu: "Settings",
+  supportCenter: "Support Center",
   templates: "Templates",
 });
 
@@ -1338,6 +1344,7 @@ Object.assign(copy.th, {
   featureControl: "Feature Control",
   integrations: "การเชื่อมต่อ",
   settingsMenu: "ตั้งค่า",
+  supportCenter: "Support Center",
   templates: "เทมเพลต",
 });
 
@@ -5582,6 +5589,412 @@ function PlanAnalyticsDetail({ row }: { row: PlanManagementRow }) {
   );
 }
 
+type SupportCategoryFilter =
+  | "all"
+  | "help"
+  | "bug"
+  | "complaint"
+  | "feedback"
+  | "feature"
+  | "pos"
+  | "report"
+  | "billing"
+  | "account"
+  | "other";
+type SupportPriorityFilter = "all" | "low" | "medium" | "high" | "urgent";
+type SupportStatusFilter = "all" | "open" | "in-progress" | "waiting-customer" | "resolved" | "closed";
+type SupportSourceFilter = "all" | "store-back-office" | "pos" | "super-admin" | "system" | "manual";
+
+type SupportCategoryCard = {
+  category: SupportCategoryFilter;
+  count: number;
+  description: string;
+  examples: string[];
+  id: string;
+  name: string;
+  status: "Not connected" | "Coming soon";
+  summary: string;
+};
+
+function supportCategories(): SupportCategoryCard[] {
+  return [
+    {
+      category: "help",
+      count: 0,
+      description: "Customer asks for help using EGO POS.",
+      examples: ["How to use a module", "How to find a setting", "How to understand a workflow"],
+      id: "help-request",
+      name: "Help Request",
+      status: "Not connected",
+      summary: "General customer help requests will appear here after ticket submission is connected.",
+    },
+    {
+      category: "bug",
+      count: 0,
+      description: "Customer reports a system problem or unexpected error.",
+      examples: ["Page error", "Unexpected behavior", "Workflow does not complete"],
+      id: "bug-report",
+      name: "Bug Report",
+      status: "Not connected",
+      summary: "Bug reports will be reviewed here after the ticket backend exists.",
+    },
+    {
+      category: "complaint",
+      count: 0,
+      description: "Customer submits a complaint or dissatisfaction.",
+      examples: ["Service complaint", "Product concern", "Operational issue"],
+      id: "complaint",
+      name: "Complaint",
+      status: "Coming soon",
+      summary: "Complaint intake is planned, but workflow and notifications are not connected.",
+    },
+    {
+      category: "feedback",
+      count: 0,
+      description: "Customer gives comments or suggestions.",
+      examples: ["Usability feedback", "Screen copy feedback", "Workflow comments"],
+      id: "feedback",
+      name: "Feedback",
+      status: "Coming soon",
+      summary: "Feedback collection is read-only until support submission is connected.",
+    },
+    {
+      category: "feature",
+      count: 0,
+      description: "Customer requests a new feature.",
+      examples: ["New report request", "New integration request", "New permission behavior"],
+      id: "feature-request",
+      name: "Feature Request",
+      status: "Coming soon",
+      summary: "Feature requests will be tracked here after ticket intake exists.",
+    },
+    {
+      category: "pos",
+      count: 0,
+      description: "Customer reports POS selling/receipt/cashier issues.",
+      examples: ["Receipt issue", "Cashier issue", "Selling workflow issue"],
+      id: "pos-issue",
+      name: "POS Issue",
+      status: "Not connected",
+      summary: "POS issue reporting is not connected. POS checkout behavior is unchanged.",
+    },
+    {
+      category: "report",
+      count: 0,
+      description: "Customer reports dashboard/reporting problems.",
+      examples: ["Dashboard number question", "Report filter issue", "Export concern"],
+      id: "report-issue",
+      name: "Report Issue",
+      status: "Not connected",
+      summary: "Report issue submission is planned for a later Store Back Office phase.",
+    },
+    {
+      category: "billing",
+      count: 0,
+      description: "Customer asks about plan, payment, subscription, or add-ons.",
+      examples: ["Plan question", "Payment status question", "Offline Add-on question"],
+      id: "billing-plan-issue",
+      name: "Billing / Plan Issue",
+      status: "Not connected",
+      summary: "Billing support is read-only because billing backend is not connected.",
+    },
+    {
+      category: "account",
+      count: 0,
+      description: "Customer asks about login, owner, staff, or access.",
+      examples: ["Login help", "Staff access", "Owner account change"],
+      id: "account-issue",
+      name: "Account Issue",
+      status: "Not connected",
+      summary: "Account support intake is not connected. Super Admin access remains protected.",
+    },
+    {
+      category: "other",
+      count: 0,
+      description: "General support topic.",
+      examples: ["Uncategorized topic", "Manual note", "Future support type"],
+      id: "other",
+      name: "Other",
+      status: "Coming soon",
+      summary: "General support triage is planned for the ticket backend phase.",
+    },
+  ];
+}
+
+function SupportCenterPage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [category, setCategory] = useState<SupportCategoryFilter>("all");
+  const [priority, setPriority] = useState<SupportPriorityFilter>("all");
+  const [status, setStatus] = useState<SupportStatusFilter>("all");
+  const [source, setSource] = useState<SupportSourceFilter>("all");
+  const [search, setSearch] = useState("");
+  const categories = supportCategories();
+  const visibleCategories = categories.filter((item) => {
+    const query = search.trim().toLowerCase();
+    const matchesCategory = category === "all" || item.category === category;
+    const matchesSearch = !query || `${item.name} ${item.description} ${item.summary} ${item.status}`.toLowerCase().includes(query);
+    return matchesCategory && matchesSearch;
+  });
+  const ticketColumns = [
+    "Ticket ID",
+    "Business / Store",
+    "Category",
+    "Priority",
+    "Status",
+    "Submitted By",
+    "Message",
+    "Created At",
+    "Last Update",
+    "Actions",
+  ];
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.supportCenter}
+        subtitle="Review support requests, bug reports, complaints, feedback, and feature requests. Ticket backend is not connected yet."
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder="Search tickets" value={search} />
+            <FilterSelect
+              label="Category"
+              onChange={setCategory}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Help Request", value: "help" },
+                { label: "Bug Report", value: "bug" },
+                { label: "Complaint", value: "complaint" },
+                { label: "Feedback", value: "feedback" },
+                { label: "Feature Request", value: "feature" },
+                { label: "POS Issue", value: "pos" },
+                { label: "Report Issue", value: "report" },
+                { label: "Billing / Plan Issue", value: "billing" },
+                { label: "Account Issue", value: "account" },
+                { label: "Other", value: "other" },
+              ]}
+              value={category}
+            />
+            <FilterSelect
+              label="Priority"
+              onChange={setPriority}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Low", value: "low" },
+                { label: "Medium", value: "medium" },
+                { label: "High", value: "high" },
+                { label: "Urgent", value: "urgent" },
+              ]}
+              value={priority}
+            />
+            <FilterSelect
+              label="Status"
+              onChange={setStatus}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Open", value: "open" },
+                { label: "In Progress", value: "in-progress" },
+                { label: "Waiting Customer", value: "waiting-customer" },
+                { label: "Resolved", value: "resolved" },
+                { label: "Closed", value: "closed" },
+              ]}
+              value={status}
+            />
+            <FilterSelect
+              label="Source"
+              onChange={setSource}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Store Back Office", value: "store-back-office" },
+                { label: "POS", value: "pos" },
+                { label: "Super Admin", value: "super-admin" },
+                { label: "System", value: "system" },
+                { label: "Email / Manual", value: "manual" },
+              ]}
+              value={source}
+            />
+            <RefreshButton />
+          </>
+        }
+      />
+
+      <section className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
+        <SummaryCard helper="Ticket backend is not connected." label="Open Tickets" value={0} />
+        <SummaryCard helper="Ticket backend is not connected." label="In Progress" value={0} />
+        <SummaryCard helper="Ticket backend is not connected." label="Waiting Customer" value={0} />
+        <SummaryCard helper="Ticket backend is not connected." label="Resolved" value={0} />
+        <SummaryCard helper="Ticket backend is not connected." label="Urgent" value={0} />
+        <SummaryCard helper="No ticket writes are enabled." label="Ticket Backend" value="Not connected" />
+      </section>
+
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title="Support Categories" subtitle="Read-only support topics. Ticket routing and submission are not connected yet." />
+        <div className="mt-4 overflow-hidden rounded-lg border border-[#334155]">
+          {visibleCategories.map((item, index) => (
+            <article
+              aria-label={`Open ${item.name} support category details`}
+              className={cn(
+                "grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-[#111827] px-4 py-3 transition hover:bg-[#1E293B]",
+                index > 0 ? "border-t border-[#334155]" : "",
+              )}
+              key={item.id}
+              onClick={() => onAction("support-center-detail", item)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onAction("support-center-detail", item);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-2.5 rounded-full",
+                  item.status === "Not connected" ? "bg-[#64748B]" : "bg-[#F59E0B]",
+                )}
+              />
+              <div className="min-w-0">
+                <h2 className="truncate text-sm font-semibold text-[#F8FAFC]">{item.name}</h2>
+                <p className="mt-1 truncate text-xs text-[#94A3B8]">{item.description}</p>
+              </div>
+              <div className="flex min-w-0 items-center justify-end gap-2">
+                <span className="rounded-md border border-[#334155] bg-[#020617] px-2.5 py-1 text-xs font-semibold text-[#F8FAFC]">
+                  {item.count}
+                </span>
+                <StatusBadge value={item.status} />
+                <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-[#64748B]" />
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+      {!visibleCategories.length ? <EmptyPanel title="No support categories match this view." description="Adjust search or filters to review support readiness categories." /> : null}
+
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title="Support Tickets" subtitle="Ticket submission is not connected yet. No fake rows are shown." />
+        <div className="max-w-full overflow-hidden rounded-lg border border-[#334155]">
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[1200px] border-collapse text-sm">
+              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                <tr>
+                  {ticketColumns.map((column) => (
+                    <th className="px-4 py-3 font-semibold" key={column}>{column}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-4 py-6" colSpan={ticketColumns.length}>
+                    <EmptyPanel title="No support tickets yet." description="Support tickets will appear here after Store Back Office support submission is connected." />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <DisabledPillButton label="Create Ticket - Not connected" />
+          <DisabledPillButton label="Reply - Coming soon" />
+          <DisabledPillButton label="Assign - Coming soon" />
+          <DisabledPillButton label="Mark Resolved - Coming soon" />
+          <DisabledPillButton label="Upload Screenshot - Not connected" />
+        </div>
+      </section>
+
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title="Support Model" subtitle="Reference only. No ticket workflow is enabled yet." />
+        <div className="grid gap-4 md:grid-cols-3">
+          <DetailGrid rows={[["Priority", "Low, Medium, High, Urgent"], ["Backend", "Not connected"]]} />
+          <DetailGrid rows={[["Status", "Open, In Progress, Waiting Customer, Resolved, Closed"], ["Workflow", "Coming soon"]]} />
+          <DetailGrid rows={[["Source", "Store Back Office, POS, Super Admin, System, Email / Manual"], ["Submission", "Not connected"]]} />
+        </div>
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/action-center">View Action Center</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/recent-activity">View Recent Activity</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/audit-logs">View Audit Logs</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/settings">View Settings</Link>
+      </section>
+    </div>
+  );
+}
+
+function isSupportCategory(value: unknown): value is SupportCategoryCard {
+  return Boolean(value && typeof value === "object" && "id" in value && "examples" in value && "summary" in value);
+}
+
+function SupportCategoryDetail({ category }: { category: SupportCategoryCard }) {
+  const { c } = useCenterCopy();
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Support Category Overview" subtitle={category.summary} />
+        <DetailGrid
+          rows={[
+            ["Category", category.name],
+            [c.status, <StatusBadge key="status" value={category.status} />],
+            ["Summary", category.summary],
+            ["Current count", category.count],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">What This Will Handle</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">{category.description}</p>
+        <ul className="mt-3 grid gap-2 text-sm text-[#CBD5E1]">
+          {category.examples.map((example) => (
+            <li className="rounded-md border border-[#334155] bg-[#020617] px-3 py-2" key={example}>{example}</li>
+          ))}
+        </ul>
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Setup Status" subtitle="Ticket backend is not connected yet." />
+        <DetailGrid
+          rows={[
+            ["Ticket backend connected", "No"],
+            ["Store-side report button connected", "No"],
+            ["Attachment upload connected", "No"],
+            ["Notification backend connected", "No"],
+            ["Assignment workflow connected", "No"],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#94A3B8]">Connect ticket backend before enabling support submissions.</p>
+        <p className="mt-2 text-sm text-[#94A3B8]">Add Store Back Office report issue button in a later phase.</p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/action-center">View Action Center</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/audit-logs">View Audit Logs</Link>
+        <DisabledPillButton label="Create Ticket - Not connected" />
+        <DisabledPillButton label="Reply - Coming soon" />
+        <DisabledPillButton label="Assign - Coming soon" />
+        <DisabledPillButton label="Notify Customer - Coming soon" />
+      </div>
+      <AdvancedDetails
+        sections={[
+          {
+            title: "Safe config keys",
+            value: {
+              attachmentUploadConnected: false,
+              assignmentWorkflowConnected: false,
+              category: category.category,
+              categoryId: category.id,
+              notificationBackendConnected: false,
+              storeSideReportButtonConnected: false,
+              ticketBackendConnected: false,
+              ticketWritesEnabled: false,
+            },
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
 function buildSystemHealthServices(data: CenterData, c: CenterCopy): HealthService[] {
   const generatedAt = data.commandDashboard?.generatedAt ?? null;
   const commandConnected = data.commandDashboard?.status === "connected";
@@ -9497,6 +9910,9 @@ function DrawerContent({
   if (drawer === "backup-restore-detail") {
     return <BackupRestoreDetail area={selected as BackupRestoreArea} />;
   }
+  if (drawer === "support-center-detail") {
+    return isSupportCategory(selected) ? <SupportCategoryDetail category={selected} /> : <SupportCenterPage onAction={onAction} />;
+  }
 
   return <OperationalDrawer selected={selected} />;
 }
@@ -10032,6 +10448,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "store-performance-detail": c.storePerformance,
     "store-users": c.totalStoreUsers,
     "store-activity-detail": c.storeActivityDetail,
+    "support-center-detail": c.supportCenter,
     "subscription-detail": c.subscriptions,
     subscriptions: c.subscriptions,
     "subscription-action": c.subscriptions,
@@ -10077,6 +10494,9 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   }
   if (drawer === "feature-control-addon") {
     return "Offline Add-on";
+  }
+  if (drawer === "support-center-detail" && isSupportCategory(selected)) {
+    return selected.name;
   }
   return drawerTitle(drawer, c);
 }
@@ -10126,7 +10546,7 @@ function superAdminActiveNavGroup(pathname: string) {
   if (pathname.startsWith("/super-admin/users") || pathname.startsWith("/super-admin/roles") || pathname.startsWith("/super-admin/audit-logs")) {
     return "accessControl";
   }
-  if (pathname.startsWith("/super-admin/system-health") || pathname.startsWith("/super-admin/integrations") || pathname.startsWith("/super-admin/settings") || pathname.startsWith("/super-admin/backup-restore")) {
+  if (pathname.startsWith("/super-admin/system-health") || pathname.startsWith("/super-admin/integrations") || pathname.startsWith("/super-admin/settings") || pathname.startsWith("/super-admin/backup-restore") || pathname.startsWith("/super-admin/support-center")) {
     return "systemVault";
   }
   return "command";
@@ -10201,6 +10621,7 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
         { href: "/super-admin/integrations", icon: ClipboardList, label: c.integrations },
         { href: "/super-admin/settings", icon: Settings, label: c.settingsMenu },
         { href: "/super-admin/backup-restore", icon: Download, label: c.backupRestore },
+        { href: "/super-admin/support-center", icon: LifeBuoy, label: c.supportCenter },
       ],
     },
   ];
@@ -10634,6 +11055,8 @@ export function EgoPosCenterOperationalPage({
     body = canViewSuperAdminSection(role, "settings") ? <IntegrationsPage onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "backupRestore") {
     body = canViewSuperAdminSection(role, "settings") ? <BackupRestorePage onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "supportCenter") {
+    body = canViewSuperAdminSection(role, "settings") ? <SupportCenterPage onAction={open} /> : <AccessDeniedPanel />;
   } else {
     body = <EgoPosCenterPlaceholderPage section={section} />;
   }
@@ -10667,6 +11090,7 @@ export function EgoPosCenterPlaceholderPage({ section }: { section: PlaceholderS
     storePerformance: c.storePerformance,
     stores: c.storesNav,
     systemHealth: c.systemHealth,
+    supportCenter: c.supportCenter,
   };
 
   return (
