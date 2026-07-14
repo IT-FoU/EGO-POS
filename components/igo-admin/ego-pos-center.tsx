@@ -278,6 +278,7 @@ type DrawerKind =
   | "platform-notifications"
   | "subscription-revenue"
   | "subscriptions"
+  | "subscription-detail"
   | "pending-actions"
   | "action-center-detail"
   | "active-stores-today"
@@ -9394,7 +9395,11 @@ function DrawerContent({
   }
   if (drawer === "subscriptions") {
     if (!canViewSuperAdminSection(role, "subscriptions")) return <AccessDeniedPanel />;
-    return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={onAction} role={role} />;
+    return <SubscriptionsPanel data={data} onAction={onAction} />;
+  }
+  if (drawer === "subscription-detail") {
+    if (!canViewSuperAdminSection(role, "subscriptions")) return <AccessDeniedPanel />;
+    return isSubscriptionDirectoryRow(selected) ? <SubscriptionDetail row={selected} /> : <SubscriptionsPanel data={data} onAction={onAction} />;
   }
   if (drawer === "users") {
     if (!canViewSuperAdminSection(role, "users")) return <AccessDeniedPanel />;
@@ -9459,7 +9464,7 @@ function DrawerContent({
   }
   if (drawer === "subscription-revenue" || drawer === "subscription-action") {
     if (!canViewSuperAdminSection(role, "subscriptions")) return <AccessDeniedPanel />;
-    return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={onAction} role={role} />;
+    return <SubscriptionsPanel data={data} onAction={onAction} />;
   }
   if (drawer === "active-stores-today" || drawer === "sales-today" || drawer === "bills-today") {
     if (!canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW)) return <AccessDeniedPanel />;
@@ -9518,64 +9523,424 @@ function OperationalDrawer({ selected }: { selected: unknown }) {
   );
 }
 
+type SubscriptionPaymentStatus = "Free" | "Pending Payment" | "Paid" | "Manual Approved" | "Overdue" | "Cancelled" | "Not Connected";
+type SubscriptionStatus = "Active" | "Waiting Payment" | "Suspended" | "Expired" | "Cancelled" | "Not Connected";
+type SubscriptionFeatureUnlock = "Unlocked" | "Locked" | "Limited" | "Free Limits" | "Not Connected";
+type SubscriptionAddonStatus = "-" | "Offline Add-on Available" | "Offline Add-on Pending" | "Offline Add-on Active" | "Included in Ultra" | "Not connected";
+
+type SubscriptionDirectoryRow = {
+  addonStatus: SubscriptionAddonStatus;
+  billingCycle: string;
+  businessId: string;
+  businessName: string;
+  currentPlan: string;
+  endDate: string | null;
+  featureUnlock: SubscriptionFeatureUnlock;
+  owner: string;
+  ownerEmail: string;
+  ownerUsername: string;
+  paymentStatus: SubscriptionPaymentStatus;
+  planKey: FeatureControlPlanKey | "unknown";
+  planSource: string;
+  startDate: string | null;
+  storeCode: string;
+  storeId: string;
+  storeName: string;
+  subscription: CenterSubscription | CenterBusinessSubscription;
+  subscriptionId: string;
+  subscriptionStatus: SubscriptionStatus;
+  template: string;
+};
+
+type SubscriptionPlanFilter = "all" | FeatureControlPlanKey | "unknown";
+type SubscriptionPaymentFilter = "all" | SubscriptionPaymentStatus;
+type SubscriptionStatusFilter = "all" | SubscriptionStatus;
+type SubscriptionAddonFilter = "all" | "available" | "active" | "pending" | "included" | "none" | "not-connected";
+type SubscriptionBillingFilter = "all" | "free" | "monthly" | "yearly" | "manual" | "not-connected";
+
+function normalizeSubscriptionPlanKey(planName?: string | null): FeatureControlPlanKey | "unknown" {
+  const normalized = String(planName ?? "").trim().toLowerCase();
+  if (normalized.includes("free")) return "free";
+  if (normalized.includes("pro")) return "pro";
+  if (normalized.includes("max")) return "max";
+  if (normalized.includes("ultra")) return "ultra";
+  return "unknown";
+}
+
+function subscriptionPaymentStatus(planKey: FeatureControlPlanKey | "unknown", subscription?: CenterSubscription | CenterBusinessSubscription | null): SubscriptionPaymentStatus {
+  const status = String(subscription?.status ?? "").trim().toLowerCase();
+  if (planKey === "free") return "Free";
+  if (status.includes("manual") && status.includes("approved")) return "Manual Approved";
+  if (status.includes("paid")) return "Paid";
+  if (status.includes("overdue")) return "Overdue";
+  if (status.includes("cancel")) return "Cancelled";
+  if (status.includes("pending") || status.includes("wait")) return "Pending Payment";
+  return "Not Connected";
+}
+
+function subscriptionStatus(planKey: FeatureControlPlanKey | "unknown", subscription?: CenterSubscription | CenterBusinessSubscription | null): SubscriptionStatus {
+  const status = String(subscription?.status ?? "").trim().toLowerCase();
+  if (!subscription?.id) return "Not Connected";
+  if (status.includes("cancel")) return "Cancelled";
+  if (status.includes("suspend")) return "Suspended";
+  if (status.includes("expire")) return "Expired";
+  if (status.includes("pending") || status.includes("wait")) return "Waiting Payment";
+  if (status.includes("active") || planKey === "free") return "Active";
+  return "Not Connected";
+}
+
+function subscriptionFeatureUnlock(planKey: FeatureControlPlanKey | "unknown", payment: SubscriptionPaymentStatus, status: SubscriptionStatus): SubscriptionFeatureUnlock {
+  if (planKey === "free" && status === "Active") return "Free Limits";
+  if ((planKey === "pro" || planKey === "max" || planKey === "ultra") && status === "Active" && (payment === "Paid" || payment === "Manual Approved")) return "Unlocked";
+  if (payment === "Pending Payment" || status === "Waiting Payment") return "Locked";
+  if (planKey === "unknown") return "Not Connected";
+  return "Limited";
+}
+
+function subscriptionAddonStatus(planKey: FeatureControlPlanKey | "unknown", payment: SubscriptionPaymentStatus): SubscriptionAddonStatus {
+  if (planKey === "free") return "-";
+  if (planKey === "ultra") return "Included in Ultra";
+  if (planKey === "max") return payment === "Paid" || payment === "Manual Approved" ? "Offline Add-on Available" : "Not connected";
+  if (planKey === "pro") return payment === "Paid" || payment === "Manual Approved" ? "Offline Add-on Available" : "Not connected";
+  return "Not connected";
+}
+
+function subscriptionAddonFilterKey(status: SubscriptionAddonStatus): Exclude<SubscriptionAddonFilter, "all"> {
+  if (status === "Offline Add-on Active") return "active";
+  if (status === "Offline Add-on Pending") return "pending";
+  if (status === "Offline Add-on Available") return "available";
+  if (status === "Included in Ultra") return "included";
+  if (status === "Not connected") return "not-connected";
+  return "none";
+}
+
+function subscriptionBillingFilterKey(row: SubscriptionDirectoryRow): Exclude<SubscriptionBillingFilter, "all"> {
+  const billing = row.billingCycle.toLowerCase();
+  if (row.planKey === "free") return "free";
+  if (billing.includes("month")) return "monthly";
+  if (billing.includes("year")) return "yearly";
+  if (billing.includes("manual")) return "manual";
+  return "not-connected";
+}
+
+function firstBusinessSubscription(business: CenterBusiness, subscriptions: CenterSubscription[]) {
+  return business.subscriptions?.[0] ?? subscriptions.find((subscription) => subscription.company?.id === business.id) ?? null;
+}
+
+function buildSubscriptionRows(data: CenterData): SubscriptionDirectoryRow[] {
+  return data.businesses
+    .map((business) => {
+      const subscription = firstBusinessSubscription(business, data.subscriptions);
+      if (!subscription?.id) return null;
+      const primaryStore = business.branches?.find((branch) => branch.isMainBranch) ?? business.branches?.[0] ?? null;
+      const planName = subscription.plan?.planName ?? business.plan?.planName ?? "Free";
+      const planKey = normalizeSubscriptionPlanKey(planName);
+      const payment = subscriptionPaymentStatus(planKey, subscription);
+      const status = subscriptionStatus(planKey, subscription);
+      const owner = business.owner ?? business.members?.find((member) => member.isOwner)?.user ?? null;
+      const billingCycle = "billingCycle" in subscription && typeof subscription.billingCycle === "string" ? subscription.billingCycle : null;
+      return {
+        addonStatus: subscriptionAddonStatus(planKey, payment),
+        billingCycle: billingCycle || (planKey === "free" ? "Free" : "Not connected"),
+        businessId: business.id,
+        businessName: business.name,
+        currentPlan: planName,
+        endDate: subscription.endDate ?? null,
+        featureUnlock: subscriptionFeatureUnlock(planKey, payment, status),
+        owner: owner?.fullName ?? owner?.email ?? owner?.username ?? "-",
+        ownerEmail: owner?.email ?? "-",
+        ownerUsername: owner?.username ?? "-",
+        paymentStatus: payment,
+        planKey,
+        planSource: subscription.id ? "Company subscription" : "Business plan",
+        startDate: subscription.startDate ?? null,
+        storeCode: business.storeCode ?? "-",
+        storeId: primaryStore?.id ?? "-",
+        storeName: primaryStore?.name ?? business.name,
+        subscription,
+        subscriptionId: subscription.id,
+        subscriptionStatus: status,
+        template: business.businessTemplateKey ? normalizePosTemplateKey(business.businessTemplateKey) : "mini-mart",
+      } satisfies SubscriptionDirectoryRow;
+    })
+    .filter((row): row is SubscriptionDirectoryRow => Boolean(row));
+}
+
+function isSubscriptionDirectoryRow(value: unknown): value is SubscriptionDirectoryRow {
+  return Boolean(value && typeof value === "object" && "subscriptionId" in value && "businessName" in value && "paymentStatus" in value);
+}
+
+function formatDateOrDash(value?: string | null) {
+  return value ? new Date(value).toLocaleDateString() : "-";
+}
+
 function SubscriptionsPanel({
+  data,
   onAction,
-  role,
-  subscriptions,
 }: {
+  data: CenterData;
   onAction: (drawer: DrawerKind, selected?: unknown) => void;
-  role?: string | null;
-  subscriptions: CenterSubscription[];
 }) {
   const { c } = useCenterCopy();
-  const subscriptionActions = [
-    canUsePlatformAction(role, PLATFORM_ACTIONS.SUBSCRIPTION_UPGRADE) ? "Upgrade" : null,
-    canUsePlatformAction(role, PLATFORM_ACTIONS.SUBSCRIPTION_DOWNGRADE) ? "Downgrade" : null,
-    canUsePlatformAction(role, PLATFORM_ACTIONS.SUBSCRIPTION_EXTEND) ? "Extend plan" : null,
-    canUsePlatformAction(role, PLATFORM_ACTIONS.SUBSCRIPTION_MARK_PAID) ? "Mark paid" : null,
-    isSuperAdminRole(role) ? "Pause" : null,
-    canUsePlatformAction(role, PLATFORM_ACTIONS.SUBSCRIPTION_CANCEL) ? "Cancel" : null,
-    c.billingHistory,
-  ].filter(Boolean) as string[];
-  if (!subscriptions.length) {
-    return <EmptyState text="Manual subscription mode is ready. No subscription records exist yet." />;
-  }
+  const [search, setSearch] = useState("");
+  const [planFilter, setPlanFilter] = useState<SubscriptionPlanFilter>("all");
+  const [paymentFilter, setPaymentFilter] = useState<SubscriptionPaymentFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<SubscriptionStatusFilter>("all");
+  const [addonFilter, setAddonFilter] = useState<SubscriptionAddonFilter>("all");
+  const [billingFilter, setBillingFilter] = useState<SubscriptionBillingFilter>("all");
+  const rows = buildSubscriptionRows(data);
+  const visibleRows = rows.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const searchText = [row.businessName, row.storeName, row.storeCode, row.owner, row.ownerEmail, row.ownerUsername, row.currentPlan, row.addonStatus].join(" ").toLowerCase();
+    return (!query || searchText.includes(query))
+      && (planFilter === "all" || row.planKey === planFilter)
+      && (paymentFilter === "all" || row.paymentStatus === paymentFilter)
+      && (statusFilter === "all" || row.subscriptionStatus === statusFilter)
+      && (addonFilter === "all" || subscriptionAddonFilterKey(row.addonStatus) === addonFilter)
+      && (billingFilter === "all" || subscriptionBillingFilterKey(row) === billingFilter);
+  });
+  const freeRows = rows.filter((row) => row.planKey === "free");
+  const paidRows = rows.filter((row) => row.planKey === "pro" || row.planKey === "max" || row.planKey === "ultra");
+  const activeRows = rows.filter((row) => row.subscriptionStatus === "Active");
+  const pendingRows = rows.filter((row) => row.paymentStatus === "Pending Payment");
+  const offlineRows = rows.filter((row) => row.addonStatus !== "-");
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[#334155]">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
-          <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
-            <tr>
-              {["Business", "Plan", "Billing cycle", "Start date", "Expiry date", "Status", "Amount", "Payment status", "Actions"].map((header) => (
-                <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {subscriptions.map((subscription) => (
-              <tr className="border-t border-[#334155]" key={subscription.id}>
-                <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{subscription.company?.name ?? "-"}</td>
-                <td className="px-4 py-3">{subscription.plan?.planName ?? "-"}</td>
-                <td className="px-4 py-3">{subscription.billingCycle ?? "-"}</td>
-                <td className="px-4 py-3">{subscription.startDate ? new Date(subscription.startDate).toLocaleDateString() : "-"}</td>
-                <td className="px-4 py-3">{subscription.endDate ? new Date(subscription.endDate).toLocaleDateString() : "-"}</td>
-                <td className="px-4 py-3"><StatusBadge value={subscription.status} /></td>
-                <td className="px-4 py-3">{money(subscription.plan?.monthlyPrice)}</td>
-                <td className="px-4 py-3">Manual</td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    {subscriptionActions.map((label) => (
-                      <button className="rounded-md border border-[#334155] px-2 py-1 text-xs font-semibold" key={label} onClick={() => onAction("subscription-action", { label, subscription })} type="button">
-                        {label}
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.subscriptions}
+        subtitle="Track store plans, payment status, subscription status, and add-ons. Read-only until billing backend is connected."
+        controls={
+          <>
+            <SearchControl onChange={setSearch} placeholder="Search subscriptions" value={search} />
+            <FilterSelect
+              label={c.plan}
+              onChange={setPlanFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Free", value: "free" },
+                { label: "Pro", value: "pro" },
+                { label: "Max", value: "max" },
+                { label: "Ultra", value: "ultra" },
+                { label: "Unknown", value: "unknown" },
+              ]}
+              value={planFilter}
+            />
+            <FilterSelect
+              label="Payment"
+              onChange={setPaymentFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Free", value: "Free" },
+                { label: "Pending Payment", value: "Pending Payment" },
+                { label: "Paid", value: "Paid" },
+                { label: "Manual Approved", value: "Manual Approved" },
+                { label: "Overdue", value: "Overdue" },
+                { label: "Cancelled", value: "Cancelled" },
+                { label: "Not Connected", value: "Not Connected" },
+              ]}
+              value={paymentFilter}
+            />
+            <FilterSelect
+              label={c.status}
+              onChange={setStatusFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Active", value: "Active" },
+                { label: "Waiting Payment", value: "Waiting Payment" },
+                { label: "Suspended", value: "Suspended" },
+                { label: "Expired", value: "Expired" },
+                { label: "Cancelled", value: "Cancelled" },
+                { label: "Not Connected", value: "Not Connected" },
+              ]}
+              value={statusFilter}
+            />
+            <FilterSelect
+              label="Add-on"
+              onChange={setAddonFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Available", value: "available" },
+                { label: "Active", value: "active" },
+                { label: "Pending", value: "pending" },
+                { label: "Included", value: "included" },
+                { label: "None", value: "none" },
+                { label: "Not Connected", value: "not-connected" },
+              ]}
+              value={addonFilter}
+            />
+            <FilterSelect
+              label="Billing"
+              onChange={setBillingFilter}
+              options={[
+                { label: "All", value: "all" },
+                { label: "Free", value: "free" },
+                { label: "Monthly", value: "monthly" },
+                { label: "Yearly", value: "yearly" },
+                { label: "Manual", value: "manual" },
+                { label: "Not Connected", value: "not-connected" },
+              ]}
+              value={billingFilter}
+            />
+          </>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard helper="Real subscription records" label="Total Subscriptions" value={rows.length} />
+        <SummaryCard helper="Free plan records" label="Free Stores" value={freeRows.length} />
+        <SummaryCard helper="Pro / Max / Ultra" label="Paid Plan Stores" value={paidRows.length} />
+        <SummaryCard helper="Subscription status" label="Active Subscriptions" value={activeRows.length} />
+        <SummaryCard helper="Payment status" label="Pending Payment" value={pendingRows.length} />
+        <SummaryCard helper="Availability only" label="Offline Add-on" value={offlineRows.length} />
+      </section>
+
+      {rows.length ? (
+        <section className="overflow-hidden rounded-lg border border-[#334155] bg-[#111827]">
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[1480px] border-collapse text-sm">
+              <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                <tr>
+                  {["Business", "Store", "Store Code", "Owner", "Current Plan", "Add-on", "Payment Status", "Subscription Status", "Billing Cycle", "Start Date", "End Date / Next Due", "Feature Unlock", "Actions"].map((header) => (
+                    <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map((row) => (
+                  <tr className="cursor-pointer border-t border-[#334155] transition hover:bg-[#5EEAD4]/[0.06]" key={row.subscriptionId} onClick={() => onAction("subscription-detail", row)}>
+                    <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.businessName}</td>
+                    <td className="px-4 py-3">{row.storeName}</td>
+                    <td className="px-4 py-3">{row.storeCode}</td>
+                    <td className="px-4 py-3">{row.owner}</td>
+                    <td className="px-4 py-3"><StatusBadge value={row.currentPlan} /></td>
+                    <td className="px-4 py-3">{row.addonStatus}</td>
+                    <td className="px-4 py-3"><StatusBadge value={row.paymentStatus} /></td>
+                    <td className="px-4 py-3"><StatusBadge value={row.subscriptionStatus} /></td>
+                    <td className="px-4 py-3">{row.billingCycle}</td>
+                    <td className="px-4 py-3">{formatDateOrDash(row.startDate)}</td>
+                    <td className="px-4 py-3">{formatDateOrDash(row.endDate)}</td>
+                    <td className="px-4 py-3"><StatusBadge value={row.featureUnlock} /></td>
+                    <td className="px-4 py-3">
+                      <button className="rounded-md border border-[#5EEAD4] px-3 py-2 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" onClick={(event) => { event.stopPropagation(); onAction("subscription-detail", row); }} type="button">
+                        {c.view}
                       </button>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!visibleRows.length ? <div className="p-4"><EmptyState text="No subscriptions match this view." /></div> : null}
+        </section>
+      ) : (
+        <EmptyPanel title="No subscriptions connected yet." description="Subscriptions will appear after stores are created and assigned to a plan." />
+      )}
+
+      <section className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
+          Create Store
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">
+          View Plans
+        </Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/feature-control">
+          View Feature Control
+        </Link>
+        <DisabledPillButton label="Mark as Paid - Billing not connected" />
+        <DisabledPillButton label="Change Plan - Coming soon" />
+        <DisabledPillButton label="Enable Offline Add-on - Not connected yet" />
+      </section>
+    </div>
+  );
+}
+
+function SubscriptionDetail({ row }: { row: SubscriptionDirectoryRow }) {
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Subscription Overview" subtitle="Readable subscription state from real company subscription records." />
+        <DetailGrid
+          rows={[
+            ["Business", row.businessName],
+            ["Store", row.storeName],
+            ["Store code", row.storeCode],
+            ["Current plan", row.currentPlan],
+            ["Subscription status", <StatusBadge key="status" value={row.subscriptionStatus} />],
+            ["Payment status", <StatusBadge key="payment" value={row.paymentStatus} />],
+            ["Feature unlock", <StatusBadge key="unlock" value={row.featureUnlock} />],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Payment & Billing" subtitle="Billing backend is not connected. Paid state is shown only when real subscription data explicitly supports it." />
+        <DetailGrid
+          rows={[
+            ["Billing cycle", row.billingCycle],
+            ["Amount", row.planKey === "free" ? "Free" : "-"],
+            ["Start date", formatDateOrDash(row.startDate)],
+            ["End date / next due", formatDateOrDash(row.endDate)],
+            ["Payment method", "-"],
+            ["Payment reference", "-"],
+            ["Billing backend status", "Not connected"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Add-ons" subtitle="Offline Add-on is policy-only until add-on subscription and billing support exist." />
+        <DetailGrid
+          rows={[
+            ["Offline Add-on availability", row.addonStatus],
+            ["Offline Add-on status", row.addonStatus === "Offline Add-on Active" ? "Active" : "Not connected"],
+            ["Current plan offline rule", row.planKey === "free" ? "No offline" : row.planKey === "pro" ? "Offline Add-on available" : row.planKey === "max" ? "Offline Lite included; Offline Add-on available" : row.planKey === "ultra" ? "Full Offline Mode included" : "Not connected"],
+            ["Ultra note", row.planKey === "ultra" ? "Offline Add-on is not needed because Full Offline Mode is included." : "-"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Feature Unlock Rules" subtitle="Entitlement writes are not enabled from this page." />
+        <SimpleTemplateList
+          items={[
+            "Free unlocks Free limits only.",
+            "Pro / Max / Ultra unlock only if payment is Paid or Manual Approved and subscription is Active.",
+            "Offline Add-on unlocks only when add-on is Active.",
+            "Billing write actions are not connected yet.",
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Related Store" subtitle="Safe navigation only. Write actions are disabled." />
+        <DetailGrid
+          rows={[
+            ["Owner", row.owner],
+            ["Owner email", row.ownerEmail],
+            ["Owner username", row.ownerUsername],
+            ["Template", row.template],
+            ["Plan source", row.planSource],
+          ]}
+        />
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">View Business</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">View Store</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/users">View Owner</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">View Plan Management</Link>
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/feature-control">View Feature Control</Link>
+        <DisabledPillButton label="Mark as Paid - Billing not connected" />
+        <DisabledPillButton label="Manual Approve - Coming soon" />
+        <DisabledPillButton label="Change Plan - Coming soon" />
+        <DisabledPillButton label="Extend Subscription - Coming soon" />
+        <DisabledPillButton label="Cancel Subscription - Coming soon" />
+        <DisabledPillButton label="Enable Offline Add-on - Not connected yet" />
+        <DisabledPillButton label="View Invoice - Not connected yet" />
+        <DisabledPillButton label="Download Receipt - Not connected yet" />
       </div>
+      <AdvancedDetails
+        sections={[
+          { title: "Raw IDs", value: { businessId: row.businessId, storeId: row.storeId, subscriptionId: row.subscriptionId } },
+          { title: "Subscription metadata", value: { addonStatus: row.addonStatus, billingCycle: row.billingCycle, featureUnlock: row.featureUnlock, paymentStatus: row.paymentStatus, planKey: row.planKey, subscriptionStatus: row.subscriptionStatus } },
+        ]}
+      />
     </div>
   );
 }
@@ -9637,6 +10002,7 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "store-performance-detail": c.storePerformance,
     "store-users": c.totalStoreUsers,
     "store-activity-detail": c.storeActivityDetail,
+    "subscription-detail": c.subscriptions,
     subscriptions: c.subscriptions,
     "subscription-action": c.subscriptions,
     "subscription-revenue": c.monthlySubscriptionRevenue,
@@ -9672,6 +10038,9 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   }
   if (drawer === "setting-edit" && isPlatformSettingItem(selected)) {
     return selected.name;
+  }
+  if (drawer === "subscription-detail" && isSubscriptionDirectoryRow(selected)) {
+    return `${selected.businessName} Subscription`;
   }
   if (drawer === "feature-control-plan" && isFeatureControlPlan(selected)) {
     return `${featureControlPlanName(selected)} Feature Control`;
@@ -9721,7 +10090,7 @@ function superAdminActiveNavGroup(pathname: string) {
   if (pathname.startsWith("/super-admin/businesses") || pathname.startsWith("/super-admin/stores") || pathname.startsWith("/super-admin/store-performance")) {
     return "businessControl";
   }
-  if (pathname.startsWith("/super-admin/plans") || pathname.startsWith("/super-admin/templates") || pathname.startsWith("/super-admin/feature-control") || pathname.startsWith("/super-admin/plan-analytics")) {
+  if (pathname.startsWith("/super-admin/plans") || pathname.startsWith("/super-admin/subscriptions") || pathname.startsWith("/super-admin/templates") || pathname.startsWith("/super-admin/feature-control") || pathname.startsWith("/super-admin/plan-analytics")) {
     return "planEngine";
   }
   if (pathname.startsWith("/super-admin/users") || pathname.startsWith("/super-admin/roles") || pathname.startsWith("/super-admin/audit-logs")) {
@@ -9779,6 +10148,7 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
       label: c.planEngine,
       items: [
         { href: "/super-admin/plans", icon: BarChart3, label: c.planManagement },
+        { href: "/super-admin/subscriptions", icon: CreditCard, label: c.subscriptions },
         { href: "/super-admin/templates", icon: Sparkles, label: c.templates },
         { href: "/super-admin/feature-control", icon: Lock, label: c.featureControl },
         { href: "/super-admin/plan-analytics", icon: CreditCard, label: c.planAnalytics },
@@ -10165,7 +10535,7 @@ export function EgoPosCenterSectionPage({ data, section }: { data: CenterData; s
       return <TemplateReadinessList businesses={data.businesses} onAction={open} />;
     }
     if (section === "plans") return <PlanManagementPage data={data} onAction={open} />;
-    if (section === "subscriptions") return <SubscriptionsPanel subscriptions={data.subscriptions} onAction={open} role={role} />;
+    if (section === "subscriptions") return <SubscriptionsPanel data={data} onAction={open} />;
     if (section === "users") {
       return <UserDirectoryPage data={data} onAction={open} />;
     }
