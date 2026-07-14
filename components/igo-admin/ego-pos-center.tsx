@@ -287,6 +287,8 @@ type DrawerKind =
   | "templates"
   | "plans"
   | "plan-management-detail"
+  | "feature-control-plan"
+  | "feature-control-addon"
   | "recent-activity"
   | "recent-activity-detail"
   | "store-performance-detail"
@@ -336,6 +338,7 @@ type PlaceholderSectionKind =
   | "recentActivity"
   | "stores"
   | "storePerformance"
+  | "featureControl"
   | "planAnalytics"
   | "systemHealth"
   | "integrations"
@@ -403,6 +406,7 @@ function canViewNavHref(role: string | null | undefined, href: string) {
     "/super-admin/backup-restore": "settings",
     "/super-admin/businesses": "businesses",
     "/super-admin/integrations": "settings",
+    "/super-admin/feature-control": "plans",
     "/super-admin/plan-analytics": "plans",
     "/super-admin/plans": "plans",
     "/super-admin/recent-activity": "audit",
@@ -1212,6 +1216,7 @@ Object.assign(copy.th, {
 });
 
 Object.assign(copy.en, {
+  featureControl: "Feature Control",
   storesBusinesses: "Stores / Businesses",
   integrations: "Integrations",
   settingsMenu: "Settings",
@@ -1329,6 +1334,7 @@ Object.assign(copy.th, {
 });
 
 Object.assign(copy.th, {
+  featureControl: "Feature Control",
   integrations: "การเชื่อมต่อ",
   settingsMenu: "ตั้งค่า",
   templates: "เทมเพลต",
@@ -1960,6 +1966,144 @@ const featureRows = [
   ["Promotions", "Limited", "Enabled", "Enabled", "Custom"],
   ["Advanced Reports", "Locked", "Enabled", "Enabled", "Custom"],
   ["Export", "Locked", "Enabled", "Enabled", "Custom"],
+];
+
+type FeatureControlPlanKey = "free" | "pro" | "max" | "ultra";
+type FeatureControlSupport = "included" | "limited" | "addon" | "comingSoon" | "notAvailable" | "future";
+type FeatureControlStatus = "Ready" | "Coming soon" | "Not connected" | "Future" | "Included" | "Add-on";
+
+type FeatureControlPlan = {
+  branchLimit: string;
+  description: string;
+  key: FeatureControlPlanKey;
+  offline: string;
+  posTerminalLimit: string;
+  productLimit: string;
+  status: string;
+  userLimit: string;
+};
+
+type FeatureControlAddon = {
+  description: string;
+  key: "offline-addon";
+  name: string;
+  status: string;
+};
+
+type FeatureControlFeature = {
+  addon: FeatureControlSupport;
+  free: FeatureControlSupport;
+  group: string;
+  key: string;
+  max: FeatureControlSupport;
+  name: string;
+  pro: FeatureControlSupport;
+  status: FeatureControlStatus;
+  ultra: FeatureControlSupport;
+};
+
+const featureControlTemplates = [
+  { disabled: false, label: "Mini Mart POS", status: "Ready", value: "mini-mart" },
+  { disabled: true, label: "Restaurant POS", status: "Coming soon", value: "restaurant" },
+  { disabled: true, label: "Pharmacy POS", status: "Coming soon", value: "pharmacy" },
+  { disabled: true, label: "Clothes Shop POS", status: "Coming soon", value: "clothes-shop" },
+  { disabled: true, label: "Wholesale POS", status: "Coming soon", value: "wholesale" },
+  { disabled: true, label: "Online Seller POS", status: "Coming soon", value: "online-seller" },
+  { disabled: true, label: "Clothes Rental POS", status: "Coming soon", value: "clothes-rental" },
+  { disabled: true, label: "Event Rental POS", status: "Coming soon", value: "event-rental" },
+] as const;
+
+const featureControlPlans: FeatureControlPlan[] = [
+  {
+    branchLimit: "1",
+    description: "Limited free plan for one Mini Mart store.",
+    key: "free",
+    offline: "Not available",
+    posTerminalLimit: "1",
+    productLimit: "200",
+    status: "Ready / read-only",
+    userLimit: "2",
+  },
+  {
+    branchLimit: "More than Free",
+    description: "Paid plan for normal stores after billing is connected.",
+    key: "pro",
+    offline: "Offline Add-on available",
+    posTerminalLimit: "More than Free",
+    productLimit: "More than Free",
+    status: "Billing not connected",
+    userLimit: "More than Free",
+  },
+  {
+    branchLimit: "Advanced",
+    description: "Advanced paid plan with Offline Lite included.",
+    key: "max",
+    offline: "Offline Lite included; add-on available",
+    posTerminalLimit: "Advanced",
+    productLimit: "Advanced",
+    status: "Billing not connected",
+    userLimit: "Advanced",
+  },
+  {
+    branchLimit: "Highest plan",
+    description: "Highest plan with Full Offline Mode included.",
+    key: "ultra",
+    offline: "Full Offline Mode included",
+    posTerminalLimit: "Highest plan",
+    productLimit: "Highest plan",
+    status: "Billing not connected",
+    userLimit: "Highest plan",
+  },
+];
+
+const offlineAddon: FeatureControlAddon = {
+  description: "Optional offline add-on for Pro and Max after offline and billing backends are connected.",
+  key: "offline-addon",
+  name: "Offline Add-on",
+  status: "Planned / Not connected",
+};
+
+const featureControlMatrix: FeatureControlFeature[] = [
+  { group: "POS", key: "pos-sales", name: "POS Sales", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "POS", key: "receipt-print", name: "Receipt Print", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "POS", key: "hold-resume-bill", name: "Hold / Resume Bill", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "POS", key: "refund-void", name: "Refund / Void", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "POS", key: "cash-session", name: "Cash Session", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "POS", key: "customer-display", name: "Customer Display", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "POS", key: "offline-sales-queue", name: "Offline Sales Queue", free: "notAvailable", pro: "addon", max: "included", ultra: "included", addon: "included", status: "Add-on" },
+  { group: "POS", key: "full-offline-mode", name: "Full Offline Mode", free: "notAvailable", pro: "notAvailable", max: "addon", ultra: "included", addon: "addon", status: "Not connected" },
+  { group: "Products", key: "product-list", name: "Product List", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Products", key: "barcode-sku", name: "Barcode / SKU", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Products", key: "product-images", name: "Product Images", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Products", key: "categories", name: "Categories", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Products", key: "bulk-import", name: "Bulk Import", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Products", key: "bulk-image-upload", name: "Bulk Image Upload", free: "notAvailable", pro: "comingSoon", max: "comingSoon", ultra: "comingSoon", addon: "notAvailable", status: "Coming soon" },
+  { group: "Products", key: "price-labels", name: "Price Labels", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Inventory", key: "basic-stock-tracking", name: "Basic Stock Tracking", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Inventory", key: "stock-movement", name: "Stock Movement", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Inventory", key: "low-stock-alert", name: "Low Stock Alert", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Inventory", key: "expiry-tracking", name: "Expiry Tracking", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Inventory", key: "stock-count", name: "Stock Count", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Inventory", key: "stock-transfer", name: "Stock Transfer", free: "notAvailable", pro: "notAvailable", max: "included", ultra: "included", addon: "notAvailable", status: "Future" },
+  { group: "Inventory", key: "offline-stock-queue", name: "Offline Stock Queue", free: "notAvailable", pro: "addon", max: "addon", ultra: "included", addon: "included", status: "Not connected" },
+  { group: "Customers", key: "customer-list", name: "Customer List", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Customers", key: "membership", name: "Membership", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Customers", key: "points", name: "Points", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Customers", key: "customer-credit", name: "Customer Credit", free: "notAvailable", pro: "notAvailable", max: "included", ultra: "included", addon: "notAvailable", status: "Future" },
+  { group: "Growth", key: "promotions", name: "Promotions", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Growth", key: "coupons", name: "Coupons", free: "notAvailable", pro: "comingSoon", max: "comingSoon", ultra: "comingSoon", addon: "notAvailable", status: "Coming soon" },
+  { group: "Growth", key: "member-only-promotions", name: "Member-only Promotions", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Reports", key: "basic-sales-report", name: "Basic Sales Report", free: "included", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Reports", key: "profit-report", name: "Profit Report", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Reports", key: "inventory-report", name: "Inventory Report", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "Reports", key: "staff-report", name: "Staff Report", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "Reports", key: "advanced-analytics", name: "Advanced Analytics", free: "notAvailable", pro: "notAvailable", max: "included", ultra: "included", addon: "notAvailable", status: "Future" },
+  { group: "System", key: "staff-roles", name: "Staff Roles", free: "limited", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Ready" },
+  { group: "System", key: "advanced-permissions", name: "Advanced Permissions", free: "notAvailable", pro: "included", max: "included", ultra: "included", addon: "notAvailable", status: "Coming soon" },
+  { group: "System", key: "backup-restore", name: "Backup & Restore", free: "notAvailable", pro: "notAvailable", max: "comingSoon", ultra: "comingSoon", addon: "notAvailable", status: "Not connected" },
+  { group: "System", key: "priority-support", name: "Priority Support", free: "notAvailable", pro: "notAvailable", max: "included", ultra: "included", addon: "notAvailable", status: "Future" },
+  { group: "System", key: "integrations", name: "Integrations", free: "notAvailable", pro: "comingSoon", max: "comingSoon", ultra: "comingSoon", addon: "notAvailable", status: "Not connected" },
+  { group: "System", key: "system-health", name: "System Health", free: "notAvailable", pro: "notAvailable", max: "included", ultra: "included", addon: "notAvailable", status: "Not connected" },
 ];
 
 type PlatformSettingCategory = "platform" | "access" | "templates" | "billing" | "security" | "system" | "localization";
@@ -8046,6 +8190,355 @@ function PlansMatrix({ onAction, role }: { onAction: (drawer: DrawerKind, select
   );
 }
 
+type FeatureControlPlanFilter = "all" | FeatureControlPlanKey | "offline-addon";
+type FeatureControlStatusFilter = "all" | FeatureControlStatus;
+
+function featureControlPlanName(plan: FeatureControlPlan | FeatureControlPlanKey) {
+  const key = typeof plan === "string" ? plan : plan.key;
+  const map: Record<FeatureControlPlanKey, string> = {
+    free: "Free",
+    max: "Max",
+    pro: "Pro",
+    ultra: "Ultra",
+  };
+  return map[key];
+}
+
+function featureSupportLabel(support: FeatureControlSupport) {
+  const map: Record<FeatureControlSupport, string> = {
+    addon: "Add-on",
+    comingSoon: "Coming soon",
+    future: "Future",
+    included: "Included",
+    limited: "Limited",
+    notAvailable: "Not available",
+  };
+  return map[support];
+}
+
+function featureSupportChecked(support: FeatureControlSupport) {
+  return support === "included" || support === "limited" || support === "addon";
+}
+
+function FeatureSupportCell({ support }: { support: FeatureControlSupport }) {
+  const checked = featureSupportChecked(support);
+  return (
+    <span className={cn(
+      "inline-flex min-w-[7.5rem] items-center gap-2 rounded-md border px-2 py-1 text-xs font-semibold",
+      checked ? "border-[#5EEAD4]/40 bg-[#5EEAD4]/10 text-[#F8FAFC]" : "border-[#334155] bg-[#020617] text-[#94A3B8]",
+    )}>
+      <input
+        checked={checked}
+        className="size-3.5 accent-[#5EEAD4]"
+        disabled
+        readOnly
+        type="checkbox"
+      />
+      {featureSupportLabel(support)}
+    </span>
+  );
+}
+
+function isFeatureControlPlan(value: unknown): value is FeatureControlPlan {
+  return Boolean(value && typeof value === "object" && "key" in value && ["free", "pro", "max", "ultra"].includes(String((value as { key?: unknown }).key)));
+}
+
+function FeatureControlPage({ onAction }: { onAction: (drawer: DrawerKind, selected?: unknown) => void }) {
+  const { c } = useCenterCopy();
+  const [template, setTemplate] = useState("mini-mart");
+  const [search, setSearch] = useState("");
+  const [planFilter, setPlanFilter] = useState<FeatureControlPlanFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<FeatureControlStatusFilter>("all");
+  const statusOptions: Array<{ label: string; value: FeatureControlStatusFilter }> = [
+    { label: "All", value: "all" },
+    ...Array.from(new Set(featureControlMatrix.map((row) => row.status))).map((status) => ({ label: status, value: status })),
+  ];
+  const planOptions: Array<{ label: string; value: FeatureControlPlanFilter }> = [
+    { label: "All", value: "all" },
+    { label: "Free", value: "free" },
+    { label: "Pro", value: "pro" },
+    { label: "Max", value: "max" },
+    { label: "Ultra", value: "ultra" },
+    { label: "Offline Add-on", value: "offline-addon" },
+  ];
+  const visibleFeatures = featureControlMatrix.filter((row) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [row.group, row.name, row.status].join(" ").toLowerCase().includes(query);
+    const matchesPlan =
+      planFilter === "all"
+      || (planFilter === "offline-addon" ? row.addon !== "notAvailable" : row[planFilter] !== "notAvailable");
+    const matchesStatus = statusFilter === "all" || row.status === statusFilter;
+    return matchesSearch && matchesPlan && matchesStatus;
+  });
+  const groupedFeatures = Array.from(new Set(visibleFeatures.map((row) => row.group))).map((group) => ({
+    group,
+    rows: visibleFeatures.filter((row) => row.group === group),
+  }));
+  const readyFeatures = featureControlMatrix.filter((row) => row.status === "Ready").length;
+  const paidFeatureCount = featureControlMatrix.filter((row) => row.pro !== "notAvailable" || row.max !== "notAvailable" || row.ultra !== "notAvailable").length;
+
+  return (
+    <div className="grid w-full min-w-0 max-w-full gap-6 overflow-x-hidden">
+      <PageHeader
+        title={c.featureControl}
+        subtitle="Manage plan features and limits by business template. Read-only until entitlement backend is connected."
+        controls={
+          <>
+            <label className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-[#334155] bg-[#020617] px-3 text-sm text-[#CBD5E1]">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#94A3B8]">Template</span>
+              <select className="min-w-0 bg-transparent text-[#F8FAFC] outline-none" onChange={(event) => setTemplate(event.target.value)} value={template}>
+                {featureControlTemplates.map((option) => (
+                  <option className="bg-[#111827]" disabled={option.disabled} key={option.value} value={option.value}>
+                    {option.label} - {option.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <SearchControl onChange={setSearch} placeholder="Search features" value={search} />
+            <FilterSelect label={c.plan} onChange={setPlanFilter} options={planOptions} value={planFilter} />
+            <FilterSelect label={c.status} onChange={setStatusFilter} options={statusOptions} value={statusFilter} />
+            <RefreshButton />
+          </>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard helper="Free, Pro, Max, Ultra" label="Total Plans" value={featureControlPlans.length} />
+        <SummaryCard helper="Offline Add-on" label="Add-ons" value={1} />
+        <SummaryCard helper="Read-only matrix" label="Ready Features" value={readyFeatures} />
+        <SummaryCard helper="Paid plan columns" label="Pro / Max / Ultra Features" value={paidFeatureCount} />
+        <SummaryCard helper="No offline backend writes" label="Offline Status" value="Not connected" />
+        <SummaryCard helper="No save action" label="Editing Status" value="Not connected" />
+      </section>
+
+      <section className="grid gap-3 lg:grid-cols-4">
+        {featureControlPlans.map((plan) => (
+          <button
+            className="min-w-0 rounded-lg border border-[#334155] bg-[#111827] p-4 text-left transition hover:border-[#5EEAD4] hover:bg-[#5EEAD4]/[0.08]"
+            key={plan.key}
+            onClick={() => onAction("feature-control-plan", plan)}
+            type="button"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-[#F8FAFC]">{featureControlPlanName(plan)}</h2>
+              <StatusBadge value={plan.status} />
+            </div>
+            <p className="mt-2 text-sm text-[#94A3B8]">{plan.description}</p>
+            <div className="mt-4 grid gap-2 text-xs text-[#CBD5E1]">
+              <span><span className="text-[#64748B]">Products:</span> {plan.productLimit}</span>
+              <span><span className="text-[#64748B]">Users:</span> {plan.userLimit}</span>
+              <span><span className="text-[#64748B]">Branches:</span> {plan.branchLimit}</span>
+              <span><span className="text-[#64748B]">POS terminals:</span> {plan.posTerminalLimit}</span>
+              <span><span className="text-[#64748B]">Offline:</span> {plan.offline}</span>
+            </div>
+            <span className="mt-4 inline-flex rounded-md border border-[#5EEAD4] px-3 py-2 text-xs font-semibold text-[#5EEAD4]">
+              View features
+            </span>
+          </button>
+        ))}
+      </section>
+
+      <section className={dashboardPanelClass()}>
+        <CommandSectionTitle title={offlineAddon.name} subtitle={offlineAddon.description} />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <DetailGrid
+            rows={[
+              ["Free", "Not available"],
+              ["Pro", "Available when backend is connected"],
+              ["Max", "Available when backend is connected"],
+              ["Ultra", "Already included"],
+              ["Status", <StatusBadge key="status" value={offlineAddon.status} />],
+              ["Billing", "Not connected"],
+            ]}
+          />
+          <button
+            className="inline-flex h-10 items-center justify-center rounded-md border border-[#5EEAD4] px-4 text-sm font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10"
+            onClick={() => onAction("feature-control-addon", offlineAddon)}
+            type="button"
+          >
+            View add-on details
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-[#F8FAFC]">Mini Mart POS Feature Matrix</h2>
+            <p className="mt-1 text-sm text-[#94A3B8]">Feature editing is not connected yet. This page is a read-only plan feature matrix.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">
+              View Plan Management
+            </Link>
+            <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/templates">
+              View Templates
+            </Link>
+            <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plan-analytics">
+              View Plan Analytics
+            </Link>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <DisabledPillButton label="Edit Features - Not connected yet" />
+          <DisabledPillButton label="Save Changes - Not connected yet" />
+          <DisabledPillButton label="Change Limits - Not connected yet" />
+          <DisabledPillButton label="Enable Offline Add-on - Billing not connected" />
+          <DisabledPillButton label="Sync Feature Entitlements - Coming soon" />
+        </div>
+      </section>
+
+      <section className="grid gap-4">
+        {groupedFeatures.length ? groupedFeatures.map(({ group, rows }) => (
+          <section className="overflow-hidden rounded-lg border border-[#334155] bg-[#111827]" key={group}>
+            <div className="border-b border-[#334155] px-4 py-3">
+              <h3 className="font-semibold text-[#F8FAFC]">{group}</h3>
+            </div>
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full min-w-[1040px] border-collapse text-sm">
+                <thead className="bg-[#1E293B] text-left text-[#94A3B8]">
+                  <tr>
+                    {["Feature", "Free", "Pro", "Max", "Ultra", "Offline Add-on", "Status"].map((header) => (
+                      <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr className="border-t border-[#334155]" key={row.key}>
+                      <td className="px-4 py-3 font-semibold text-[#F8FAFC]">{row.name}</td>
+                      <td className="px-4 py-3"><FeatureSupportCell support={row.free} /></td>
+                      <td className="px-4 py-3"><FeatureSupportCell support={row.pro} /></td>
+                      <td className="px-4 py-3"><FeatureSupportCell support={row.max} /></td>
+                      <td className="px-4 py-3"><FeatureSupportCell support={row.ultra} /></td>
+                      <td className="px-4 py-3"><FeatureSupportCell support={row.addon} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={row.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )) : (
+          <EmptyPanel title="No features match this view." description="Adjust search, plan, or status filters to review the read-only matrix." />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function FeatureControlPlanDetail({ plan }: { plan: FeatureControlPlan }) {
+  const includedFeatures = featureControlMatrix.filter((feature) => feature[plan.key] !== "notAvailable");
+  const visibleFeatureNames = includedFeatures.slice(0, 18).map((feature) => `${feature.group}: ${feature.name} (${featureSupportLabel(feature[plan.key])})`);
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Plan Overview" subtitle={plan.description} />
+        <DetailGrid
+          rows={[
+            ["Plan", featureControlPlanName(plan)],
+            ["Status", <StatusBadge key="status" value={plan.status} />],
+            ["Billing", "Not connected"],
+            ["Feature editing", "Not connected"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Limits" subtitle="Limits are read-only plan policy notes, not live entitlement settings." />
+        <DetailGrid
+          rows={[
+            ["Products", plan.productLimit],
+            ["Users", plan.userLimit],
+            ["POS terminals", plan.posTerminalLimit],
+            ["Branches", plan.branchLimit],
+            ["Customer display", plan.key === "free" ? "Standard only" : "Included"],
+            ["Public signup", "Disabled"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Included Features" subtitle="Feature controls are disabled until entitlement backend is connected." />
+        <SimpleTemplateList items={visibleFeatureNames.length ? visibleFeatureNames : ["No features connected yet."]} />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Offline Rules" subtitle="Offline behavior is policy-only here. No offline backend is enabled." />
+        <DetailGrid
+          rows={[
+            ["Free", "No offline"],
+            ["Pro", "Offline Add-on available"],
+            ["Max", "Offline Lite included; Offline Add-on available"],
+            ["Ultra", "Full Offline Mode included"],
+            ["This plan", plan.offline],
+          ]}
+        />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Upgrade Notes</h3>
+        <p className="mt-2 text-sm text-[#CBD5E1]">
+          Billing is not connected. Plan upgrades, limit changes, feature edits, and offline add-on activation are disabled.
+        </p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">
+          View Plan Management
+        </Link>
+        <DisabledPillButton label="Edit Features - Not connected yet" />
+        <DisabledPillButton label="Configure Billing - Billing not connected" />
+        <DisabledPillButton label="Enable Template Feature - Coming soon" />
+      </div>
+      <AdvancedDetails sections={[{ title: "Plan policy", value: plan }, { title: "Feature keys", value: includedFeatures.map((feature) => ({ key: feature.key, support: feature[plan.key], status: feature.status })) }]} />
+    </div>
+  );
+}
+
+function FeatureControlAddonDetail({ addon }: { addon: FeatureControlAddon }) {
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Add-on Overview" subtitle={addon.description} />
+        <DetailGrid
+          rows={[
+            ["Add-on", addon.name],
+            ["Status", <StatusBadge key="status" value={addon.status} />],
+            ["Backend", "Not connected"],
+            ["Billing", "Not connected"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Available Plans" subtitle="Offline Add-on is policy-only until billing and offline services are connected." />
+        <DetailGrid
+          rows={[
+            ["Free", "Not available"],
+            ["Pro", "Available"],
+            ["Max", "Available"],
+            ["Ultra", "Already included"],
+          ]}
+        />
+      </section>
+      <section className="grid gap-3">
+        <CommandSectionTitle title="Offline Features" subtitle="No offline runtime or queue backend is enabled from this page." />
+        <SimpleTemplateList items={["Offline Sales Queue", "Offline Stock Queue", "Full Offline Mode policy", "Conflict resolution - Coming soon", "Sync Feature Entitlements - Coming soon"]} />
+      </section>
+      <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+        <h3 className="text-sm font-semibold text-[#F8FAFC]">Recommended Next Step</h3>
+        <p className="mt-2 text-sm text-[#CBD5E1]">
+          Connect billing, offline queue services, conflict resolution, and entitlement sync before enabling this add-on.
+        </p>
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">
+          View Plan Management
+        </Link>
+        <DisabledPillButton label="Enable Offline Add-on - Billing not connected" />
+        <DisabledPillButton label="Save Credentials - Not connected yet" />
+        <DisabledPillButton label="Test Offline Sync - Coming soon" />
+      </div>
+      <AdvancedDetails sections={[{ title: "Add-on policy", value: addon }, { title: "Plan availability", value: { free: "not_available", pro: "available", max: "available", ultra: "included" } }]} />
+    </div>
+  );
+}
+
 function buildUserDirectoryRows(data: CenterData, c: CenterCopy): UserDirectoryRow[] {
   return data.users.map((user) => {
     const assignment = user.companies?.[0] ?? null;
@@ -8874,6 +9367,14 @@ function DrawerContent({
     }
     return <OperationalDrawer selected={selected} />;
   }
+  if (drawer === "feature-control-plan") {
+    if (!canViewSuperAdminSection(role, "plans")) return <AccessDeniedPanel />;
+    return isFeatureControlPlan(selected) ? <FeatureControlPlanDetail plan={selected} /> : <FeatureControlPage onAction={onAction} />;
+  }
+  if (drawer === "feature-control-addon") {
+    if (!canViewSuperAdminSection(role, "plans")) return <AccessDeniedPanel />;
+    return <FeatureControlAddonDetail addon={offlineAddon} />;
+  }
   if (drawer === "recent-activity") {
     if (!canViewPlatformAudit(role)) return <AccessDeniedPanel />;
     return <LogsTable logs={data.auditLogs} onOpen={(log) => onAction("audit-details", log)} />;
@@ -9114,6 +9615,8 @@ function drawerTitle(drawer: DrawerKind, c: CenterCopy) {
     "businesses-trial": c.expiringSoon,
     "create-business": c.createBusiness,
     "feature-edit": "Edit Feature",
+    "feature-control-addon": "Offline Add-on",
+    "feature-control-plan": c.featureControl,
     "pending-actions": c.pendingActions,
     "plan-analytics-detail": c.planAnalytics,
     "plan-management-detail": c.planDetails,
@@ -9170,6 +9673,12 @@ function drawerTitleForSelected(drawer: DrawerKind, c: CenterCopy, selected: unk
   if (drawer === "setting-edit" && isPlatformSettingItem(selected)) {
     return selected.name;
   }
+  if (drawer === "feature-control-plan" && isFeatureControlPlan(selected)) {
+    return `${featureControlPlanName(selected)} Feature Control`;
+  }
+  if (drawer === "feature-control-addon") {
+    return "Offline Add-on";
+  }
   return drawerTitle(drawer, c);
 }
 
@@ -9212,7 +9721,7 @@ function superAdminActiveNavGroup(pathname: string) {
   if (pathname.startsWith("/super-admin/businesses") || pathname.startsWith("/super-admin/stores") || pathname.startsWith("/super-admin/store-performance")) {
     return "businessControl";
   }
-  if (pathname.startsWith("/super-admin/plans") || pathname.startsWith("/super-admin/templates") || pathname.startsWith("/super-admin/plan-analytics")) {
+  if (pathname.startsWith("/super-admin/plans") || pathname.startsWith("/super-admin/templates") || pathname.startsWith("/super-admin/feature-control") || pathname.startsWith("/super-admin/plan-analytics")) {
     return "planEngine";
   }
   if (pathname.startsWith("/super-admin/users") || pathname.startsWith("/super-admin/roles") || pathname.startsWith("/super-admin/audit-logs")) {
@@ -9271,6 +9780,7 @@ export function EgoPosCenterShell({ children, role }: { children: React.ReactNod
       items: [
         { href: "/super-admin/plans", icon: BarChart3, label: c.planManagement },
         { href: "/super-admin/templates", icon: Sparkles, label: c.templates },
+        { href: "/super-admin/feature-control", icon: Lock, label: c.featureControl },
         { href: "/super-admin/plan-analytics", icon: CreditCard, label: c.planAnalytics },
       ],
     },
@@ -9714,6 +10224,8 @@ export function EgoPosCenterOperationalPage({
     body = canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW) ? <StoresPage data={data} onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "storePerformance") {
     body = canUsePlatformAction(role, PLATFORM_ACTIONS.BUSINESS_VIEW) ? <StorePerformancePage data={data} onAction={open} /> : <AccessDeniedPanel />;
+  } else if (section === "featureControl") {
+    body = canViewSuperAdminSection(role, "plans") ? <FeatureControlPage onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "planAnalytics") {
     body = canViewSuperAdminSection(role, "plans") ? <PlanAnalyticsPage data={data} onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "systemHealth") {
@@ -9748,6 +10260,7 @@ export function EgoPosCenterPlaceholderPage({ section }: { section: PlaceholderS
   const titleMap: Record<PlaceholderSectionKind, string> = {
     actionCenter: c.actionCenter,
     backupRestore: c.backupRestore,
+    featureControl: c.featureControl,
     integrations: c.integrations,
     planAnalytics: c.planAnalytics,
     recentActivity: c.recentActivity,
