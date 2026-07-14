@@ -9674,6 +9674,47 @@ function formatDateOrDash(value?: string | null) {
   return value ? new Date(value).toLocaleDateString() : "-";
 }
 
+const disabledSubscriptionActions = [
+  { badge: "Disabled", label: "Mark as Paid", reason: "Billing not connected" },
+  { badge: "Disabled", label: "Manual Approve", reason: "Manual payment control not connected" },
+  { badge: "Disabled", label: "Change Plan", reason: "Coming soon" },
+  { badge: "Disabled", label: "Extend Subscription", reason: "Subscription control not connected" },
+  { badge: "Disabled", label: "Cancel Subscription", reason: "Subscription control not connected" },
+  { badge: "Disabled", label: "Enable Offline Add-on", reason: "Offline Add-on backend not connected" },
+  { badge: "Disabled", label: "View Invoice", reason: "Billing not connected" },
+  { badge: "Disabled", label: "Download Receipt", reason: "Receipt generation not connected" },
+];
+
+function SubscriptionActionsSection({ children }: { children?: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border border-[#334155] bg-[#111827] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-[#F8FAFC]">Subscription Actions</h3>
+          <p className="mt-1 text-sm text-[#94A3B8]">These actions are read-only until billing and subscription control are connected.</p>
+        </div>
+        {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {disabledSubscriptionActions.map((action) => (
+          <button
+            className="min-w-0 cursor-not-allowed rounded-lg border border-[#334155] bg-[#020617] p-3 text-left opacity-80"
+            disabled
+            key={action.label}
+            type="button"
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-[#CBD5E1]">{action.label}</span>
+              <span className="rounded-md border border-[#475569] bg-[#334155]/40 px-2 py-0.5 text-[11px] font-semibold text-[#94A3B8]">{action.badge}</span>
+            </span>
+            <span className="mt-2 block text-xs text-[#64748B]">Reason: {action.reason}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SubscriptionsPanel({
   data,
   onAction,
@@ -9837,7 +9878,7 @@ function SubscriptionsPanel({
         <EmptyPanel title="No subscriptions connected yet." description="Subscriptions will appear after stores are created and assigned to a plan." />
       )}
 
-      <section className="flex flex-wrap gap-2">
+      <SubscriptionActionsSection>
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores/new">
           Create Store
         </Link>
@@ -9847,10 +9888,7 @@ function SubscriptionsPanel({
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/feature-control">
           View Feature Control
         </Link>
-        <DisabledPillButton label="Mark as Paid - Billing not connected" />
-        <DisabledPillButton label="Change Plan - Coming soon" />
-        <DisabledPillButton label="Enable Offline Add-on - Not connected yet" />
-      </section>
+      </SubscriptionActionsSection>
     </div>
   );
 }
@@ -9920,21 +9958,13 @@ function SubscriptionDetail({ row }: { row: SubscriptionDirectoryRow }) {
           ]}
         />
       </section>
-      <div className="flex flex-wrap gap-2">
+      <SubscriptionActionsSection>
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/businesses">View Business</Link>
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/stores">View Store</Link>
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/users">View Owner</Link>
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/plans">View Plan Management</Link>
         <Link className="inline-flex h-9 items-center rounded-md border border-[#5EEAD4] px-3 text-xs font-semibold text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10" href="/super-admin/feature-control">View Feature Control</Link>
-        <DisabledPillButton label="Mark as Paid - Billing not connected" />
-        <DisabledPillButton label="Manual Approve - Coming soon" />
-        <DisabledPillButton label="Change Plan - Coming soon" />
-        <DisabledPillButton label="Extend Subscription - Coming soon" />
-        <DisabledPillButton label="Cancel Subscription - Coming soon" />
-        <DisabledPillButton label="Enable Offline Add-on - Not connected yet" />
-        <DisabledPillButton label="View Invoice - Not connected yet" />
-        <DisabledPillButton label="Download Receipt - Not connected yet" />
-      </div>
+      </SubscriptionActionsSection>
       <AdvancedDetails
         sections={[
           { title: "Raw IDs", value: { businessId: row.businessId, storeId: row.storeId, subscriptionId: row.subscriptionId } },
