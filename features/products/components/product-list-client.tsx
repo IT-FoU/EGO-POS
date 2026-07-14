@@ -181,6 +181,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
                 applyInsightFilter(card.filter);
             }} onViewAll={() => applyInsightFilter(card.filter)}/>))}
       </section>
+      <ProductsVisualShell products={products} categories={categories}/>
       {expandedInsight ? (<InsightPanel emptyText={summaryCards.find((card) => card.filter === expandedInsight)?.emptyText ?? t("ui.no.products.found")} filter={expandedInsight} products={insightProducts[expandedInsight]} onSelectProduct={(product) => {
                 setQuery(product.nameEn || product.nameLo);
                 applyInsightFilter(expandedInsight);
@@ -355,6 +356,89 @@ function ActionMenuButton({ icon: Icon, label, onClick }: {
       <Icon className="size-4 text-primary" aria-hidden="true"/>
       {label}
     </button>);
+}
+function ProductsVisualShell({ categories, products }: { categories: Category[]; products: Product[] }) {
+    const activeProducts = products.filter((product) => product.status === "active").length;
+    const missingBarcode = products.filter((product) => !product.barcode && product.units.every((unit) => !unit.barcode)).length;
+    const missingImage = products.filter((product) => !isRenderableImage(product.imageUrl) && product.units.every((unit) => !isRenderableImage(unit.imageUrl))).length;
+    const topics = [
+        { description: "Review product records, prices, stock signals, and images.", icon: Boxes, label: "Product list" },
+        { description: "Organize products by category before editing category records.", icon: Tags, label: "Categories" },
+        { description: "Check barcode and SKU readiness before printing or importing.", icon: Search, label: "Barcode / SKU" },
+        { description: "Review image coverage without changing product images.", icon: ImageIcon, label: "Product images" },
+        { description: "Printing and bulk tools stay in the existing actions menu.", icon: Printer, label: "Labels and bulk tools" },
+    ];
+
+    return (
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Products workspace</p>
+            <h2 className="mt-1 text-xl font-semibold">Product management overview</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              A read-only workspace summary for product records, categories, barcodes, and image readiness.
+            </p>
+          </div>
+          <span className="w-fit rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-muted-foreground">
+            Read-only shell
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ProductShellMetric icon={Boxes} label="Total products" value={products.length}/>
+          <ProductShellMetric icon={Package} label="Active products" value={activeProducts}/>
+          <ProductShellMetric icon={Tags} label="Categories" value={categories.length}/>
+          <ProductShellMetric icon={AlertCircle} label="Missing barcode" value={missingBarcode}/>
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          {topics.map((topic) => (
+            <ProductShellTopic description={topic.description} icon={topic.icon} key={topic.label} label={topic.label}/>
+          ))}
+        </div>
+
+        {products.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+            No products are available yet. Create real products through the existing product workflow when ready.
+          </div>
+        ) : missingImage > 0 ? (
+          <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+            {missingImage} product{missingImage === 1 ? "" : "s"} missing image coverage.
+          </div>
+        ) : null}
+      </section>
+    );
+}
+
+function ProductShellMetric({ icon: Icon, label, value }: { icon: typeof Boxes; label: string; value: number }) {
+    return (
+      <div className="rounded-lg border border-border bg-background p-3">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <Icon aria-hidden="true" className="size-4 text-primary"/>
+          {label}
+        </div>
+        <div className="mt-2 text-2xl font-semibold">{value.toLocaleString("en-US")}</div>
+      </div>
+    );
+}
+
+function ProductShellTopic({ description, icon: Icon, label }: { description: string; icon: typeof Boxes; label: string }) {
+    return (
+      <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-card text-primary">
+            <Icon aria-hidden="true" className="size-4"/>
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold">{label}</div>
+            <div className="truncate text-xs text-muted-foreground">{description}</div>
+          </div>
+        </div>
+        <span className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+          Read-only
+        </span>
+      </div>
+    );
 }
 function SummaryCard({ active, color, count, expanded = false, icon: Icon, label, onExpand, onViewAll, }: {
     active: boolean;
