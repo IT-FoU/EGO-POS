@@ -24,9 +24,10 @@ import type {
 
 const db = prisma as any;
 
-function logPrismaQueryFailure(functionName: string, queryName: string, error: unknown) {
+function logPrismaQueryFailure(functionName: string, queryName: string, error: unknown, critical: boolean) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[${functionName}] ${queryName} failed: ${message}`);
+  const log = critical ? console.error : console.warn;
+  log(`[${functionName}] ${queryName} failed: ${message}`);
 }
 
 type ReportQueryResult<T> =
@@ -41,7 +42,7 @@ async function settleReportQuery<T>(
   try {
     return { critical, ok: true, scope, value: await queryFn() };
   } catch (error) {
-    logPrismaQueryFailure("getPrismaReportsSnapshot", scope, error);
+    logPrismaQueryFailure("getPrismaReportsSnapshot", scope, error, critical);
     return {
       critical,
       ok: false,
@@ -56,6 +57,10 @@ async function settleReportQuery<T>(
       },
     };
   }
+}
+
+function settledReportValue<T>(scope: string, critical: boolean, value: T): ReportQueryResult<T> {
+  return { critical, ok: true, scope, value };
 }
 
 function resultOrFallback<T>(result: ReportQueryResult<unknown>, fallbackValue: T): T {
@@ -295,8 +300,16 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   const trendStart = new Date(now);
   trendStart.setDate(trendStart.getDate() - 6);
 
+  const salesAggregateResult = await settleReportQuery("salesAggregate", true, () => db.sale.aggregate({
+    _count: { id: true },
+    _sum: { profitAmount: true, taxAmount: true, totalAmount: true },
+    where: saleFilter,
+  }));
+  const hasCompletedSales = salesAggregateResult.ok
+    ? amount((salesAggregateResult.value as any)._count?.id) > 0
+    : true;
+
   const [
-    salesAggregateResult,
     salesByPeriodResult,
     saleItemsResult,
     saleItemsSoldResult,
@@ -310,44 +323,47 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     inventoryResult,
     suppliersResult,
   ] = await Promise.all([
-    settleReportQuery("salesAggregate", true, () => db.sale.aggregate({
-      _count: { id: true },
-      _sum: { profitAmount: true, taxAmount: true, totalAmount: true },
-      where: saleFilter,
-    })),
     settleReportQuery("salesByPeriod", false, () => db.sale.findMany({
       orderBy: { createdAt: "asc" },
       select: { createdAt: true, profitAmount: true, taxAmount: true, totalAmount: true },
       where: saleFilter,
     })),
-    settleReportQuery("saleItems", false, () => db.saleItem.findMany({
-      select: {
-        profitAmount: true,
-        quantity: true,
-        totalAmount: true,
-        product: {
+    hasCompletedSales
+      ? settleReportQuery("saleItems", false, () => db.saleItem.findMany({
           select: {
-            category: { select: { nameEn: true, nameLo: true } },
+            profitAmount: true,
+            quantity: true,
+            totalAmount: true,
+            product: {
+              select: {
+                category: { select: { nameEn: true, nameLo: true } },
+              },
+            },
           },
-        },
-      },
-      where: saleItemFilter,
-    })),
-    settleReportQuery("saleItemsSold", true, () => db.saleItem.aggregate({
-      _sum: { quantity: true },
-      where: saleItemFilter,
-    })),
-    settleReportQuery("saleItemCostRows", true, () => db.saleItem.findMany({
-      select: { costPrice: true, quantity: true },
-      where: saleItemFilter,
-    })),
-    settleReportQuery("productGroups", false, () => db.saleItem.groupBy({
-      by: ["productId"],
-      _sum: { profitAmount: true, quantity: true, totalAmount: true },
-      orderBy: { _sum: { totalAmount: "desc" } },
-      take: 20,
-      where: saleItemFilter,
-    })),
+          where: saleItemFilter,
+        }))
+      : Promise.resolve(settledReportValue("saleItems", false, [])),
+    hasCompletedSales
+      ? settleReportQuery("saleItemsSold", true, () => db.saleItem.aggregate({
+          _sum: { quantity: true },
+          where: saleItemFilter,
+        }))
+      : Promise.resolve(settledReportValue("saleItemsSold", true, { _sum: { quantity: 0 } })),
+    hasCompletedSales
+      ? settleReportQuery("saleItemCostRows", true, () => db.saleItem.findMany({
+          select: { costPrice: true, quantity: true },
+          where: saleItemFilter,
+        }))
+      : Promise.resolve(settledReportValue("saleItemCostRows", true, [])),
+    hasCompletedSales
+      ? settleReportQuery("productGroups", false, () => db.saleItem.groupBy({
+          by: ["productId"],
+          _sum: { profitAmount: true, quantity: true, totalAmount: true },
+          orderBy: { _sum: { totalAmount: "desc" } },
+          take: 20,
+          where: saleItemFilter,
+        }))
+      : Promise.resolve(settledReportValue("productGroups", false, [])),
     settleReportQuery("purchasesByPeriod", false, () => db.purchase.findMany({
       orderBy: { purchaseDate: "asc" },
       select: { purchaseDate: true, totalAmount: true },
