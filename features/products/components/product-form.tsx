@@ -21,6 +21,32 @@ type CategoryDialogState = {
     mode: "add" | "edit" | "delete";
     categoryId?: string;
 } | null;
+type InitialStockPreviewValue = {
+    addOpeningStock: boolean;
+    receiveUnitId: string;
+    quantityReceived: number;
+    lotNumber: string;
+    expiryDate: string;
+    receiveDate: string;
+    supplier: string;
+    costLak: number;
+    note: string;
+};
+type ProductPreviewSnapshot = {
+    basic: {
+        productName: string;
+        productCode: string;
+        sku: string;
+        category: string;
+        supplierName: string;
+        brandName: string;
+        description: string;
+    };
+    images: ProductFormImage[];
+    selectedImageId?: string;
+    initialStock: InitialStockPreviewValue;
+    units: ProductUnit[];
+};
 const emptyUnit: ProductUnit = {
     addAmountLak: 0,
     allowManualUnitSelect: true,
@@ -69,6 +95,18 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
     const [unitsShareStock, setUnitsShareStock] = useState(true);
+    const [initialStockPreview, setInitialStockPreview] = useState<InitialStockPreviewValue>({
+        addOpeningStock: false,
+        receiveUnitId: "unit-base",
+        quantityReceived: 0,
+        lotNumber: "",
+        expiryDate: "",
+        receiveDate: "",
+        supplier: "",
+        costLak: 0,
+        note: "",
+    });
+    const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
     const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? [
         {
             ...emptyUnit,
@@ -99,6 +137,17 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
     useEffect(() => {
         setLocalCategories(categories);
     }, [categories]);
+    useEffect(() => {
+        if (!previewSnapshot)
+            return;
+        function handleKeyDown(event: KeyboardEvent) {
+            if (event.key === "Escape") {
+                setPreviewSnapshot(null);
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [previewSnapshot]);
     function updateUnit(unitId: string, patch: Partial<ProductUnit>) {
         setUnits((current) => current.map((unit) => {
             if (unit.id !== unitId) {
@@ -171,6 +220,31 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             setSelectedImageId(undefined);
         }
         setUnits((current) => current.map((unit) => unit.imageUrl === imageUrl ? { ...unit, imageUrl: undefined } : unit));
+    }
+    function categoryLabel(categoryId: string) {
+        const category = localCategories.find((item) => item.id === categoryId);
+        return category ? `${category.nameEn} / ${category.nameLo}` : "—";
+    }
+    function openProductPreview(form: HTMLFormElement | null) {
+        if (!form)
+            return;
+        const formData = new FormData(form);
+        const previewUnits = units.filter((unit) => unit.unitName.trim().length > 0);
+        setPreviewSnapshot({
+            basic: {
+                productName,
+                productCode,
+                sku,
+                category: categoryLabel(String(formData.get("categoryId") ?? "")),
+                supplierName: String(formData.get("supplierId") ?? "").trim() || "—",
+                brandName: String(formData.get("brandId") ?? "").trim() || "—",
+                description: String(formData.get("description") ?? "").trim() || "—",
+            },
+            images: productImages,
+            selectedImageId,
+            initialStock: initialStockPreview,
+            units: previewUnits,
+        });
     }
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -368,6 +442,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
           {message}
         </div>) : null}
       {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} snapshot={previewSnapshot}/>) : null}
       <input type="hidden" name="status" value={product?.status ?? "active"}/>
       <input type="hidden" name="minStock" value={product?.minStock ?? 0}/>
       <input type="hidden" name="stockDisplayMode" value={product?.stockDisplayMode ?? "base_unit_only"}/>
@@ -465,10 +540,10 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                 </div>
                 <ProductUnitsTable productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
-              <InitialStockPreview units={units}/>
+              <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
             </>) : (<>
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <h2 className="text-lg font-semibold">Basic Product Information</h2>
@@ -553,23 +628,181 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("ui.changing.conversion.values.on.products.with.")}</p>
             <ProductUnitsTable productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <InitialStockPreview units={units}/>
+          <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
           {product ? <ProductHistorySection product={product}/> : null}
           </>)}
         </div>
       </div>
     </form>);
 }
-function InitialStockPreview({ units }: {
-    units: ProductUnit[];
+function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
+    isPending: boolean;
+    onClose: () => void;
+    snapshot: ProductPreviewSnapshot;
 }) {
-    const receiveUnit = units.find((unit) => unit.isPurchaseUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
-    const previewQuantity = 1;
-    const previewBaseQuantity = previewQuantity * Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
-    const previewCost = Number(receiveUnit?.costPriceLak ?? 0);
+    const baseUnit = snapshot.units.find((unit) => unit.isBaseUnit) ?? snapshot.units[0];
+    const receiveUnit = snapshot.units.find((unit) => unit.id === snapshot.initialStock.receiveUnitId) ?? snapshot.units.find((unit) => unit.isPurchaseUnit) ?? baseUnit;
+    const convertedBaseQuantity = Math.max(Number(snapshot.initialStock.quantityReceived) || 0, 0) * Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
+    const selectedImage = snapshot.images.find((image) => image.url === snapshot.selectedImageId) ?? snapshot.images[0];
+    const readiness = [
+        { label: "Product name", ok: snapshot.basic.productName.trim().length > 0 },
+        { label: "Product Code", ok: snapshot.basic.productCode.trim().length > 0 },
+        { label: "SKU", ok: snapshot.basic.sku.trim().length > 0 },
+        { label: "At least one unit row", ok: snapshot.units.length > 0 },
+        { label: "Default sale unit", ok: snapshot.units.some((unit) => unit.isDefaultSaleUnit) },
+        { label: "Default receiving unit", ok: snapshot.units.some((unit) => unit.isPurchaseUnit) },
+        { label: "Barcode optional", ok: true },
+    ];
+    return (<div className="fixed inset-0 z-50 bg-black/50 md:left-72">
+      <aside className="ml-auto flex h-full w-full flex-col border-l border-border bg-background shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-xl font-semibold">Product Preview</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Review the product before saving. Inventory receiving is preview-only in this phase.</p>
+          </div>
+          <button className="grid size-10 shrink-0 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose} aria-label="Close product preview">
+            <X aria-hidden="true" className="size-4"/>
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="grid gap-5">
+            <PreviewSection title="Basic Product Information">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <PreviewField label="Product Name" value={snapshot.basic.productName || "—"}/>
+                <PreviewField label="Product Code" value={snapshot.basic.productCode || "—"}/>
+                <PreviewField label="SKU" value={snapshot.basic.sku || "—"}/>
+                <PreviewField label="Category" value={snapshot.basic.category || "—"}/>
+                <PreviewField label="Supplier Name" value={snapshot.basic.supplierName || "—"}/>
+                <PreviewField label="Brand Name" value={snapshot.basic.brandName || "—"}/>
+                <div className="md:col-span-2 xl:col-span-3">
+                  <PreviewField label="Description / Staff Notes" value={snapshot.basic.description || "—"}/>
+                </div>
+              </div>
+            </PreviewSection>
+
+            <PreviewSection title="Selling Units & Barcodes">
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full min-w-[980px] text-left text-sm">
+                  <thead className="border-b border-border text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-3">Unit</th>
+                      <th className="px-3 py-3">Qty in Base</th>
+                      <th className="px-3 py-3">Barcode</th>
+                      <th className="px-3 py-3">Cost LAK</th>
+                      <th className="px-3 py-3">Price LAK</th>
+                      <th className="px-3 py-3">Base</th>
+                      <th className="px-3 py-3">Default Sale</th>
+                      <th className="px-3 py-3">Default Receiving</th>
+                      <th className="px-3 py-3">Manual</th>
+                      <th className="px-3 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshot.units.length === 0 ? (<tr><td className="px-3 py-5 text-muted-foreground" colSpan={10}>No unit rows yet.</td></tr>) : snapshot.units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
+                        <td className="px-3 py-3 font-semibold">{unit.unitName || "Unnamed unit"}</td>
+                        <td className="px-3 py-3">{formatMoney(unit.conversionQty)}</td>
+                        <td className="px-3 py-3 font-mono">{unit.barcode || "—"}</td>
+                        <td className="px-3 py-3">{formatMoney(unit.costPriceLak ?? 0)}</td>
+                        <td className="px-3 py-3">{formatMoney(unit.sellingPriceLak)}</td>
+                        <td className="px-3 py-3">{unit.isBaseUnit ? "Yes" : "No"}</td>
+                        <td className="px-3 py-3">{unit.isDefaultSaleUnit ? "Yes" : "No"}</td>
+                        <td className="px-3 py-3">{unit.isPurchaseUnit ? "Yes" : "No"}</td>
+                        <td className="px-3 py-3">{unit.allowManualUnitSelect ?? true ? "Yes" : "No"}</td>
+                        <td className="px-3 py-3">{unit.status ?? "active"}</td>
+                      </tr>))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
+                Additional barcodes / alias support will be added in a later phase.
+              </p>
+            </PreviewSection>
+
+            <PreviewSection title="Product Images">
+              {snapshot.images.length === 0 ? (<p className="rounded-md border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">No images selected. Images can be managed in the Product Images section.</p>) : (<div className="grid gap-4 md:grid-cols-[160px_minmax(0,1fr)]">
+                  <div className="grid aspect-square place-items-center overflow-hidden rounded-lg border border-border bg-background">
+                    {selectedImage && isRenderableImage(selectedImage.url) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img alt={selectedImage.label} className="size-full object-cover" src={selectedImage.url}/>) : (<span className="text-sm text-muted-foreground">No preview</span>)}
+                  </div>
+                  <div className="grid content-start gap-3">
+                    <PreviewField label="Image count" value={String(snapshot.images.length)}/>
+                    <PreviewField label="Main image" value={selectedImage?.label ?? "—"}/>
+                  </div>
+                </div>)}
+            </PreviewSection>
+
+            <PreviewSection title="Initial Stock & Lot Tracking">
+              <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
+                This preview does not create real stock yet. Saving the product now will not add stock, lots, balances, or stock movements.
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <PreviewField label="Add opening stock now" value={snapshot.initialStock.addOpeningStock ? "Yes" : "No"}/>
+                <PreviewField label="Receive unit" value={receiveUnit?.unitName ?? "—"}/>
+                <PreviewField label="Quantity received" value={formatMoney(snapshot.initialStock.quantityReceived)}/>
+                <PreviewField label="Converted base quantity preview" value={`${formatMoney(convertedBaseQuantity)} ${baseUnit?.unitName ?? "base units"}`}/>
+                <PreviewField label="Lot number" value={snapshot.initialStock.lotNumber || "—"}/>
+                <PreviewField label="Expiry date" value={snapshot.initialStock.expiryDate || "—"}/>
+                <PreviewField label="Receive date" value={snapshot.initialStock.receiveDate || "—"}/>
+                <PreviewField label="Supplier" value={snapshot.initialStock.supplier || "—"}/>
+                <PreviewField label="Cost LAK" value={formatMoney(snapshot.initialStock.costLak)}/>
+                <div className="md:col-span-2 xl:col-span-3">
+                  <PreviewField label="Note" value={snapshot.initialStock.note || "—"}/>
+                </div>
+              </div>
+            </PreviewSection>
+
+            <PreviewSection title="Validation / Readiness Summary">
+              <div className="grid gap-2 md:grid-cols-2">
+                {readiness.map((item) => (<ReadinessRow key={item.label} label={item.label} ok={item.ok}/>))}
+              </div>
+            </PreviewSection>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-border px-5 py-4 sm:flex-row sm:justify-end">
+          <button className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
+            Close / Back to Edit
+          </button>
+          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="submit" disabled={isPending}>
+            <Save aria-hidden="true"/>
+            Save Product
+          </button>
+        </div>
+      </aside>
+    </div>);
+}
+
+function PreviewSection({ children, title }: { children: React.ReactNode; title: string }) {
+    return (<section className="rounded-lg border border-border bg-card p-4">
+      <h3 className="text-base font-semibold">{title}</h3>
+      <div className="mt-4">{children}</div>
+    </section>);
+}
+
+function ReadinessRow({ label, ok }: { label: string; ok: boolean }) {
+    return (<div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-sm">
+      <span>{label}</span>
+      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${ok ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning"}`}>
+        {ok ? "Ready" : "Missing"}
+      </span>
+    </div>);
+}
+
+function InitialStockPreview({ onChange, units, value }: {
+    onChange: (nextValue: InitialStockPreviewValue) => void;
+    units: ProductUnit[];
+    value: InitialStockPreviewValue;
+}) {
+    const receiveUnit = units.find((unit) => unit.id === value.receiveUnitId) ?? units.find((unit) => unit.isPurchaseUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
+    const previewQuantity = Math.max(Number(value.quantityReceived) || 0, 0);
+    const conversionQty = Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
+    const previewBaseQuantity = previewQuantity * conversionQty;
+    function update(patch: Partial<InitialStockPreviewValue>) {
+        onChange({ ...value, ...patch });
+    }
     return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-dashed border-warning/50 bg-warning/5 p-5">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
@@ -580,18 +813,42 @@ function InitialStockPreview({ units }: {
       </div>
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-background px-3 text-sm font-semibold">
-          <input type="checkbox" checked={false} disabled/>
+          <input type="checkbox" checked={value.addOpeningStock} onChange={(event) => update({ addOpeningStock: event.target.checked })}/>
           Add opening stock now
         </label>
-        <PreviewField label="Receive unit" value={receiveUnit?.unitName ?? "Piece"}/>
-        <PreviewField label="Quantity received" value="1"/>
-        <PreviewField label="Lot number" value="Will be entered in Inventory Receiving"/>
-        <PreviewField label="Expiry date" value="Handled per receiving lot"/>
-        <PreviewField label="Receive date" value="Handled in Inventory Receiving"/>
-        <PreviewField label="Supplier" value="Uses selected supplier later"/>
-        <PreviewField label="Cost LAK" value={formatMoney(previewCost)}/>
+        <Field label="Receive unit">
+          <select className="field-input" value={receiveUnit?.id ?? ""} onChange={(event) => update({ receiveUnitId: event.target.value })}>
+            {units.map((unit) => (<option key={unit.id} value={unit.id}>{unit.unitName || "Unnamed unit"}</option>))}
+          </select>
+        </Field>
+        <Field label="Quantity received">
+          <input className="field-input" min="0" type="number" value={value.quantityReceived} onChange={(event) => update({ quantityReceived: Number(event.target.value) })}/>
+        </Field>
+        <Field label="Lot number">
+          <input className="field-input" value={value.lotNumber} onChange={(event) => update({ lotNumber: event.target.value })} placeholder="Preview lot number"/>
+        </Field>
+        <Field label="Expiry date">
+          <input className="field-input" type="date" value={value.expiryDate} onChange={(event) => update({ expiryDate: event.target.value })}/>
+        </Field>
+        <Field label="Receive date">
+          <input className="field-input" type="date" value={value.receiveDate} onChange={(event) => update({ receiveDate: event.target.value })}/>
+        </Field>
+        <Field label="Supplier">
+          <input className="field-input" value={value.supplier} onChange={(event) => update({ supplier: event.target.value })} placeholder="Preview supplier"/>
+        </Field>
+        <Field label="Cost LAK">
+          <MoneyInput className="h-11" value={value.costLak} onValueChange={(costLak) => update({ costLak })}/>
+        </Field>
         <PreviewField label="Converted base quantity preview" value={`${formatMoney(previewBaseQuantity)} ${units.find((unit) => unit.isBaseUnit)?.unitName ?? "base units"}`}/>
+        <div className="md:col-span-3">
+          <Field label="Note">
+            <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={value.note} onChange={(event) => update({ note: event.target.value })} placeholder="Preview note for the future receiving workflow"/>
+          </Field>
+        </div>
       </div>
+      <p className="mt-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
+        Preview only. Real stock receiving will be connected to Inventory in a later phase. Saving the product now will not add stock yet.
+      </p>
     </section>);
 }
 
@@ -857,8 +1114,9 @@ function CategoryField({ categories, defaultValue, onAction, }: {
       </div>
     </div>);
 }
-function ProductImagesSection({ barcode, onRemove, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, selectedImageId, units, updateUnit, }: {
+function ProductImagesSection({ barcode, onPreview, onRemove, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, selectedImageId, units, updateUnit, }: {
     barcode: string;
+    onPreview: (form: HTMLFormElement | null) => void;
     onRemove: () => void;
     onSearchMessage: (message: string) => void;
     onSetMainImage: (imageUrl: string) => void;
@@ -966,6 +1224,9 @@ function ProductImagesSection({ barcode, onRemove, onSearchMessage, onSetMainIma
             <Link className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" href="/products">
               Cancel
             </Link>
+            <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10" type="button" onClick={(event) => onPreview(event.currentTarget.form)}>
+              Preview Product
+            </button>
             <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="submit">
               <Save aria-hidden="true"/>
               Save
