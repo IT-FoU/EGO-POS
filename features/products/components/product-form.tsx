@@ -32,6 +32,7 @@ type InitialStockPreviewValue = {
     costLak: number;
     note: string;
 };
+type BarcodeAliasState = Record<string, string[]>;
 type ProductPreviewSnapshot = {
     basic: {
         productName: string;
@@ -45,6 +46,7 @@ type ProductPreviewSnapshot = {
     images: ProductFormImage[];
     selectedImageId?: string;
     initialStock: InitialStockPreviewValue;
+    barcodeAliases: BarcodeAliasState;
     units: ProductUnit[];
 };
 const emptyUnit: ProductUnit = {
@@ -94,6 +96,9 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
+    const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
+    const [aliasDrawerUnitId, setAliasDrawerUnitId] = useState<string | null>(null);
+    const [aliasInput, setAliasInput] = useState("");
     const [unitsShareStock, setUnitsShareStock] = useState(true);
     const [initialStockPreview, setInitialStockPreview] = useState<InitialStockPreviewValue>({
         addOpeningStock: false,
@@ -148,6 +153,17 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [previewSnapshot]);
+    useEffect(() => {
+        if (!aliasDrawerUnitId)
+            return;
+        function handleKeyDown(event: KeyboardEvent) {
+            if (event.key === "Escape") {
+                setAliasDrawerUnitId(null);
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [aliasDrawerUnitId]);
     function updateUnit(unitId: string, patch: Partial<ProductUnit>) {
         setUnits((current) => current.map((unit) => {
             if (unit.id !== unitId) {
@@ -221,6 +237,22 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
         }
         setUnits((current) => current.map((unit) => unit.imageUrl === imageUrl ? { ...unit, imageUrl: undefined } : unit));
     }
+    function addBarcodeAlias(unitId: string) {
+        const nextAlias = aliasInput.trim();
+        if (!nextAlias)
+            return;
+        setBarcodeAliases((current) => {
+            const currentAliases = current[unitId] ?? [];
+            return { ...current, [unitId]: [...currentAliases, nextAlias] };
+        });
+        setAliasInput("");
+    }
+    function removeBarcodeAlias(unitId: string, aliasIndex: number) {
+        setBarcodeAliases((current) => {
+            const nextAliases = (current[unitId] ?? []).filter((_, index) => index !== aliasIndex);
+            return { ...current, [unitId]: nextAliases };
+        });
+    }
     function categoryLabel(categoryId: string) {
         const category = localCategories.find((item) => item.id === categoryId);
         return category ? `${category.nameEn} / ${category.nameLo}` : "—";
@@ -243,6 +275,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             images: productImages,
             selectedImageId,
             initialStock: initialStockPreview,
+            barcodeAliases,
             units: previewUnits,
         });
     }
@@ -443,6 +476,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
         </div>) : null}
       {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
       {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} snapshot={previewSnapshot}/>) : null}
+      {aliasDrawerUnitId ? (<BarcodeAliasDrawer aliasInput={aliasInput} aliases={barcodeAliases[aliasDrawerUnitId] ?? []} onAddAlias={() => addBarcodeAlias(aliasDrawerUnitId)} onAliasInputChange={setAliasInput} onClose={() => setAliasDrawerUnitId(null)} onRemoveAlias={(aliasIndex) => removeBarcodeAlias(aliasDrawerUnitId, aliasIndex)} onUpdateMainBarcode={(barcodeValue) => updateUnit(aliasDrawerUnitId, { barcode: barcodeValue })} unit={units.find((unit) => unit.id === aliasDrawerUnitId)}/>) : null}
       <input type="hidden" name="status" value={product?.status ?? "active"}/>
       <input type="hidden" name="minStock" value={product?.minStock ?? 0}/>
       <input type="hidden" name="stockDisplayMode" value={product?.stockDisplayMode ?? "base_unit_only"}/>
@@ -538,7 +572,10 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     </button>
                   </div>
                 </div>
-                <ProductUnitsTable productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+                <ProductUnitsTable barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
+                    setAliasInput("");
+                    setAliasDrawerUnitId(unitId);
+                }} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
@@ -626,7 +663,10 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
               </div>
             </div>
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("ui.changing.conversion.values.on.products.with.")}</p>
-            <ProductUnitsTable productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+            <ProductUnitsTable barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
+                setAliasInput("");
+                setAliasDrawerUnitId(unitId);
+            }} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
           <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
@@ -638,6 +678,82 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
       </div>
     </form>);
 }
+function BarcodeAliasDrawer({ aliasInput, aliases, onAddAlias, onAliasInputChange, onClose, onRemoveAlias, onUpdateMainBarcode, unit, }: {
+    aliasInput: string;
+    aliases: string[];
+    onAddAlias: () => void;
+    onAliasInputChange: (value: string) => void;
+    onClose: () => void;
+    onRemoveAlias: (aliasIndex: number) => void;
+    onUpdateMainBarcode: (barcodeValue: string) => void;
+    unit?: ProductUnit;
+}) {
+    const unitName = unit?.unitName?.trim() || "Unit";
+    return (<div className="fixed inset-0 z-50 bg-black/50 md:left-72">
+      <aside className="ml-auto flex h-full w-full flex-col border-l border-border bg-background shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-xl font-semibold">Manage Barcode Aliases - {unitName}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Barcode aliases are for old/new package barcodes of the same product unit.</p>
+          </div>
+          <button className="grid size-10 shrink-0 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose} aria-label="Close barcode aliases">
+            <X aria-hidden="true" className="size-4"/>
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="grid gap-5">
+            <section className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-base font-semibold">Main Barcode</h3>
+              <p className="mt-1 text-sm text-muted-foreground">This updates the visible main barcode for the unit row only.</p>
+              <input className="field-input mt-4 font-mono" value={unit?.barcode ?? ""} onChange={(event) => onUpdateMainBarcode(event.target.value)} placeholder="Main unit barcode"/>
+            </section>
+
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold">Additional Barcode Aliases</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Alias values are preview-only and are not saved yet.</p>
+                </div>
+                <span className="rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold">{aliases.length} aliases</span>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {aliases.length === 0 ? (<div className="rounded-md border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">No barcode aliases added yet.</div>) : aliases.map((alias, index) => (<div className="flex items-center gap-2 rounded-md border border-border bg-background p-2" key={`${alias}-${index}`}>
+                    <span className="min-w-0 flex-1 truncate font-mono text-sm">{alias}</span>
+                    <button className="inline-flex h-9 items-center justify-center rounded-md border border-danger px-3 text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => onRemoveAlias(index)}>
+                      Remove
+                    </button>
+                  </div>))}
+              </div>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <input className="field-input font-mono sm:flex-1" value={aliasInput} onChange={(event) => onAliasInputChange(event.target.value)} onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        onAddAlias();
+                    }
+                }} placeholder="Add alias barcode"/>
+                <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-4 text-sm font-semibold text-primary transition hover:bg-primary/10" type="button" onClick={onAddAlias}>
+                  Add alias
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm leading-6 text-warning">
+              One barcode can belong to only one product unit. Duplicate validation will be connected later.
+            </section>
+            <section className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
+              Alias saving and POS lookup will be connected in a later phase. This drawer does not add schema, server actions, or POS barcode lookup behavior.
+            </section>
+          </div>
+        </div>
+        <div className="flex justify-end border-t border-border px-5 py-4">
+          <button className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </aside>
+    </div>);
+}
+
 function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
     isPending: boolean;
     onClose: () => void;
@@ -691,6 +807,7 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
                       <th className="px-3 py-3">Unit</th>
                       <th className="px-3 py-3">Qty in Base</th>
                       <th className="px-3 py-3">Barcode</th>
+                      <th className="px-3 py-3">Barcode Aliases</th>
                       <th className="px-3 py-3">Cost LAK</th>
                       <th className="px-3 py-3">Price LAK</th>
                       <th className="px-3 py-3">Base</th>
@@ -701,10 +818,11 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
                     </tr>
                   </thead>
                   <tbody>
-                    {snapshot.units.length === 0 ? (<tr><td className="px-3 py-5 text-muted-foreground" colSpan={10}>No unit rows yet.</td></tr>) : snapshot.units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
+                    {snapshot.units.length === 0 ? (<tr><td className="px-3 py-5 text-muted-foreground" colSpan={11}>No unit rows yet.</td></tr>) : snapshot.units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
                         <td className="px-3 py-3 font-semibold">{unit.unitName || "Unnamed unit"}</td>
                         <td className="px-3 py-3">{formatMoney(unit.conversionQty)}</td>
                         <td className="px-3 py-3 font-mono">{unit.barcode || "—"}</td>
+                        <td className="px-3 py-3 font-mono">{(snapshot.barcodeAliases[unit.id] ?? []).length > 0 ? snapshot.barcodeAliases[unit.id].join(", ") : "—"}</td>
                         <td className="px-3 py-3">{formatMoney(unit.costPriceLak ?? 0)}</td>
                         <td className="px-3 py-3">{formatMoney(unit.sellingPriceLak)}</td>
                         <td className="px-3 py-3">{unit.isBaseUnit ? "Yes" : "No"}</td>
@@ -717,7 +835,7 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
                 </table>
               </div>
               <p className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
-                Additional barcodes / alias support will be added in a later phase.
+                Alias saving and POS lookup will be connected in a later phase. One barcode can belong to only one product unit; duplicate validation will be connected later.
               </p>
             </PreviewSection>
 
@@ -859,7 +977,9 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ productImages, removeUnit, units, updateUnit, }: {
+function ProductUnitsTable({ barcodeAliases, onOpenAlias, productImages, removeUnit, units, updateUnit, }: {
+    barcodeAliases: BarcodeAliasState;
+    onOpenAlias: (unitId: string) => void;
     productImages: ProductFormImage[];
     removeUnit: (unitId: string) => void;
     units: ProductUnit[];
@@ -905,7 +1025,13 @@ function ProductUnitsTable({ productImages, removeUnit, units, updateUnit, }: {
                 <input className="field-input h-10 min-w-24" type="number" min="1" value={unit.conversionQty} disabled={unit.isBaseUnit} onChange={(event) => updateUnit(unit.id, { conversionQty: Number(event.target.value) })}/>
               </td>
               <td className="px-3 py-3">
-                <input className="field-input h-10 min-w-40 font-mono" value={unit.barcode} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })}/>
+                <div className="flex min-w-56 items-center gap-2">
+                  <input className="field-input h-10 min-w-36 font-mono" value={unit.barcode} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder="Main barcode"/>
+                  <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
+                    + Alias
+                  </button>
+                  {(barcodeAliases[unit.id]?.length ?? 0) > 0 ? (<span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{barcodeAliases[unit.id]?.length ?? 0}</span>) : null}
+                </div>
               </td>
               <td className="px-3 py-3">
                 <MoneyInput className="h-10 min-w-28" value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
