@@ -4,15 +4,16 @@ import { t } from "@/lib/i18n/ui";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Barcode, Camera, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
+import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, } from "@/features/products/actions";
 const QUICK_UNIT_NAMES = [
     "Piece",
     "Pack",
     "Box",
-    "Custom",
 ];
+type CurrencyCode = "LAK" | "THB" | "USD";
+type UnitCurrencyChoice = "default" | CurrencyCode;
 type ProductFormImage = {
     id: string;
     label: string;
@@ -49,7 +50,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [barcode, setBarcode] = useState(product?.barcode ?? "");
+    const [barcode] = useState(product?.barcode ?? "");
     const [sku, setSku] = useState(product?.sku ?? "");
     const [productCode, setProductCode] = useState(product?.productCode ?? "");
     const [productName, setProductName] = useState(product?.nameEn || product?.nameLo || "");
@@ -69,7 +70,10 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
-    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [defaultPurchaseCurrency, setDefaultPurchaseCurrency] = useState<CurrencyCode>("LAK");
+    const [thbToLakRate, setThbToLakRate] = useState(650);
+    const [usdToLakRate, setUsdToLakRate] = useState(21500);
+    const [unitsShareStock, setUnitsShareStock] = useState(true);
     const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? [
         {
             ...emptyUnit,
@@ -79,6 +83,20 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             isDefaultSaleUnit: true,
             isPurchaseUnit: true,
             sortOrder: 0,
+        },
+        {
+            ...emptyUnit,
+            id: "unit-pack",
+            unitName: "Pack",
+            conversionQty: 12,
+            sortOrder: 1,
+        },
+        {
+            ...emptyUnit,
+            id: "unit-box",
+            unitName: "Box",
+            conversionQty: 24,
+            sortOrder: 2,
         },
     ]);
     const [message, setMessage] = useState<string | null>(null);
@@ -120,19 +138,14 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
         setCustomUnitName("");
     }
     function generateSku() {
-        const timestamp = Date.now().toString().slice(-5);
-        setSku(`IGO-${timestamp}`);
+        const baseName = productName.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const prefix = (baseName || "SKU").slice(0, 12);
+        const timestamp = Date.now().toString().slice(-4);
+        setSku(`${prefix}-${timestamp}`);
     }
     function generateProductCode() {
         const timestamp = Date.now().toString().slice(-4);
         setProductCode(`P-${timestamp}`);
-    }
-    function simulateCameraScan() {
-        const scannedBarcode = `885${Date.now().toString().slice(-10)}`;
-        setBarcode(scannedBarcode);
-        setUnits((current) => current.map((unit) => unit.isBaseUnit ? { ...unit, barcode: scannedBarcode } : unit));
-        setIsScannerOpen(false);
-        setMessage("Camera scan simulated. Barcode was added to the base selling unit.");
     }
     function removeUnit(unitId: string) {
         setUnits((current) => current.filter((unit) => unit.id !== unitId || unit.isBaseUnit));
@@ -332,13 +345,13 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
         units.find((unit) => unit.barcode.trim().length > 0)?.barcode ||
         barcode).trim();
     return (<form className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit}>
-      <div className="sticky top-[73px] z-20 -mx-1 flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-background/95 px-1 py-3 backdrop-blur md:flex-row md:items-center md:justify-between">
+      <div className="sticky top-2 z-20 -mx-1 flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-background/95 px-2 py-2 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/products">
             <ArrowLeft aria-hidden="true"/>
             Back to products
           </Link>
-          <h1 className={isCreate ? "mt-2 text-2xl font-semibold" : "mt-3 text-3xl font-semibold"}>
+          <h1 className={isCreate ? "mt-1 text-2xl font-semibold" : "mt-2 text-3xl font-semibold"}>
             {mode === "create" ? "Create product" : "Edit product"}
           </h1>
           {!isCreate ? (<p className="mt-2 text-sm text-muted-foreground">{t("ui.lao.and.english.names.barcode.sku.lak.pricin")}</p>) : null}
@@ -356,18 +369,20 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
           </div>) : null}
       </div>
 
-      {isScannerOpen ? (<BarcodeScannerModal onClose={() => setIsScannerOpen(false)} onScan={simulateCameraScan}/>) : null}
-
       {message ? (<div className="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
           {message}
         </div>) : null}
       {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      <input type="hidden" name="status" value={product?.status ?? "active"}/>
+      <input type="hidden" name="minStock" value={product?.minStock ?? 0}/>
+      <input type="hidden" name="stockDisplayMode" value={product?.stockDisplayMode ?? "base_unit_only"}/>
+      <input type="hidden" name="tags" value={product?.tags?.join(", ") ?? ""}/>
 
       <div className="grid min-w-0 max-w-full gap-4 overflow-x-hidden">
         <div className="flex min-w-0 max-w-full flex-col gap-4 overflow-x-hidden">
           {isCreate ? (<>
               <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
-                <h2 className="text-base font-semibold">Product information</h2>
+                <h2 className="text-base font-semibold">Basic Product Information</h2>
                 <div className="mt-4 grid gap-3 lg:grid-cols-6">
                   <div className="lg:col-span-6">
                     <Field label="Product Name">
@@ -383,6 +398,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                           <RefreshCw aria-hidden="true"/>
                         </button>
                       </div>
+                      <span className="text-xs text-muted-foreground">Auto-generated, editable. Example: P-0001</span>
                     </Field>
                   </div>
 
@@ -394,6 +410,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                           <RefreshCw aria-hidden="true"/>
                         </button>
                       </div>
+                      <span className="text-xs text-muted-foreground">Generated from product name, editable. Example: PEPSI-0001</span>
                     </Field>
                   </div>
 
@@ -401,56 +418,24 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     <CategoryField categories={localCategories} defaultValue={localCategories[0]?.id} onAction={openCategoryDialog}/>
                   </div>
                   <div className="lg:col-span-3">
-                    <Field label="Status">
-                      <select className="field-input" name="status" defaultValue="active">
-                        <option value="active">Active</option>
-                        <option value="draft">Draft</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                    </Field>
-                  </div>
-
-                  <div className="lg:col-span-3">
                     <Field label="Supplier Name">
                       <input className="field-input" name="supplierId" placeholder="Supplier name"/>
                     </Field>
                   </div>
                   <div className="lg:col-span-3">
-                    <Field label="Brand">
+                    <Field label="Brand Name">
                       <input className="field-input" name="brandId" placeholder="Brand ID"/>
                     </Field>
                   </div>
-
-                  <div className="lg:col-span-2">
-                    <Field label="Low Stock Alert">
-                      <input className="field-input" name="minStock" type="number" min="0" defaultValue={0}/>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-3">
-                    <Field label="Stock Display Mode">
-                      <select className="field-input" name="stockDisplayMode" defaultValue="base_unit_only">
-                        <option value="base_unit_only">Base Unit Only</option>
-                        <option value="breakdown">Breakdown</option>
-                      </select>
-                    </Field>
-                  </div>
                   <div className="lg:col-span-6">
-                    <div className="rounded-md border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
-                      Opening stock, stock-in lots, and expiry dates are handled through Inventory Receiving after the product is saved.
-                    </div>
-                  </div>
-                  <div className="lg:col-span-3">
-                    <Field label="Product tags">
-                      <input className="field-input" name="tags" placeholder={t("ui.drink.cold.can")}/>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-6">
-                    <Field label="Internal Notes">
+                    <Field label="Description / Staff Notes">
                       <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" placeholder="Staff notes only"/>
                     </Field>
                   </div>
                 </div>
               </section>
+
+              <CostCurrencySetting defaultPurchaseCurrency={defaultPurchaseCurrency} onDefaultPurchaseCurrencyChange={setDefaultPurchaseCurrency} thbToLakRate={thbToLakRate} onThbToLakRateChange={setThbToLakRate} usdToLakRate={usdToLakRate} onUsdToLakRateChange={setUsdToLakRate}/>
 
               <details className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4" open>
                 <summary className="cursor-pointer text-sm font-semibold">Selling Units & Barcodes</summary>
@@ -458,21 +443,26 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                 <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
                   Use Piece for the base unit, then add Pack or Box when this product can be sold or received in larger quantities. Barcodes are optional per unit.
                 </div>
+                <label className="mt-4 flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold">
+                  <input className="mt-1" type="checkbox" checked={unitsShareStock} onChange={(event) => setUnitsShareStock(event.target.checked)}/>
+                  <span>
+                    Units share the same stock
+                    <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+                      Piece, Pack, Box, and custom units deduct from the same base stock using conversion quantity.
+                    </span>
+                  </span>
+                </label>
                 <div className="mt-4 space-y-3">
                   <div className="flex flex-wrap gap-2">
                     {QUICK_UNIT_NAMES.map((unitName) => (<button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" key={unitName} type="button" onClick={() => addNamedUnit(unitName)}>
                         {unitName}
                       </button>))}
-                    <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setIsScannerOpen(true)}>
-                      <Camera aria-hidden="true" className="size-4"/>
-                      Scan to base unit
-                    </button>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder="Custom unit name"/>
+                    <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder="Named custom unit"/>
                     <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addCustomUnit}>
                       <Plus aria-hidden="true"/>
-                      Add custom unit
+                      Custom +
                     </button>
                     <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addUnit}>
                       <Plus aria-hidden="true"/>
@@ -480,14 +470,15 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     </button>
                   </div>
                 </div>
-                <ProductUnitsTable units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+                <ProductUnitsTable defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
+              <InitialStockPreview defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
             </>) : (<>
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">General</h2>
+            <h2 className="text-lg font-semibold">Basic Product Information</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
               <Field label="Product Name">
@@ -502,6 +493,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     Generate
                   </button>
                 </div>
+                <span className="text-xs text-muted-foreground">Auto-generated, editable. Example: P-0001</span>
               </Field>
               <Field label="SKU">
                 <div className="flex gap-2">
@@ -511,43 +503,24 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     Auto-generate SKU
                   </button>
                 </div>
+                <span className="text-xs text-muted-foreground">Generated from product name, editable. Example: PEPSI-0001</span>
               </Field>
                     <CategoryField categories={localCategories} defaultValue={product?.categoryId ?? localCategories[0]?.id} onAction={openCategoryDialog}/>
-              <Field label="Product status">
-                <select className="field-input" name="status" defaultValue={product?.status ?? "active"}>
-                  <option value="active">Active</option>
-                  <option value="draft">Draft</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </Field>
-              <Field label="Brand">
-                <input className="field-input" name="brandId" placeholder="Brand ID"/>
-              </Field>
               <Field label="Supplier Name">
                 <input className="field-input" name="supplierId" placeholder="Supplier name"/>
               </Field>
-              <Field label="Product tags">
-                <input className="field-input" name="tags" defaultValue={product?.tags?.join(", ")} placeholder={t("ui.drink.cold.can")}/>
+              <Field label="Brand Name">
+                <input className="field-input" name="brandId" placeholder="Brand ID"/>
               </Field>
-              <Field label="Minimum stock level">
-                <input className="field-input" name="minStock" type="number" min="0" defaultValue={product?.minStock ?? 0}/>
-              </Field>
-              <Field label="Stock display mode">
-                <select className="field-input" name="stockDisplayMode" defaultValue={product?.stockDisplayMode ?? "base_unit_only"}>
-                  <option value="base_unit_only">Base Unit Only</option>
-                  <option value="breakdown">Breakdown</option>
-                </select>
-              </Field>
-              <div className="md:col-span-2 rounded-md border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
-                Opening stock, stock-in lots, and expiry dates are handled through Inventory Receiving after the product is saved.
-              </div>
               <div className="md:col-span-2">
-                <Field label="Internal Notes">
+                <Field label="Description / Staff Notes">
                   <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" defaultValue={product?.description} placeholder="Staff notes only"/>
                 </Field>
               </div>
             </div>
           </section>
+
+          <CostCurrencySetting defaultPurchaseCurrency={defaultPurchaseCurrency} onDefaultPurchaseCurrencyChange={setDefaultPurchaseCurrency} thbToLakRate={thbToLakRate} onThbToLakRateChange={setThbToLakRate} usdToLakRate={usdToLakRate} onUsdToLakRateChange={setUsdToLakRate}/>
 
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -559,21 +532,26 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
               Use Piece for the base unit, then add Pack or Box when this product can be sold or received in larger quantities. Barcodes are optional per unit.
             </div>
+            <label className="mt-4 flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold">
+              <input className="mt-1" type="checkbox" checked={unitsShareStock} onChange={(event) => setUnitsShareStock(event.target.checked)}/>
+              <span>
+                Units share the same stock
+                <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+                  Piece, Pack, Box, and custom units deduct from the same base stock using conversion quantity.
+                </span>
+              </span>
+            </label>
             <div className="mt-4 space-y-3">
               <div className="flex flex-wrap gap-2">
                 {QUICK_UNIT_NAMES.map((unitName) => (<button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" key={unitName} type="button" onClick={() => addNamedUnit(unitName)}>
                     {unitName}
                   </button>))}
-                <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setIsScannerOpen(true)}>
-                  <Camera aria-hidden="true" className="size-4"/>
-                  Scan to base unit
-                </button>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder="Custom unit name"/>
+                <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder="Named custom unit"/>
                 <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addCustomUnit}>
                   <Plus aria-hidden="true"/>
-                  Add custom unit
+                  Custom +
                 </button>
                 <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addUnit}>
                   <Plus aria-hidden="true"/>
@@ -582,8 +560,9 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
               </div>
             </div>
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("ui.changing.conversion.values.on.products.with.")}</p>
-            <ProductUnitsTable units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+            <ProductUnitsTable defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
+          <InitialStockPreview defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -593,43 +572,144 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
       </div>
     </form>);
 }
-function ProductUnitsTable({ removeUnit, units, updateUnit, }: {
+function CostCurrencySetting({
+    defaultPurchaseCurrency,
+    onDefaultPurchaseCurrencyChange,
+    onThbToLakRateChange,
+    onUsdToLakRateChange,
+    thbToLakRate,
+    usdToLakRate,
+}: {
+    defaultPurchaseCurrency: CurrencyCode;
+    onDefaultPurchaseCurrencyChange: (currency: CurrencyCode) => void;
+    onThbToLakRateChange: (rate: number) => void;
+    onUsdToLakRateChange: (rate: number) => void;
+    thbToLakRate: number;
+    usdToLakRate: number;
+}) {
+    return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
+      <h2 className="text-lg font-semibold">Cost Currency Setting</h2>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">Purchase costs can be entered in LAK, THB, or USD. Converted cost is stored/displayed in LAK. Selling price remains LAK.</p>
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <Field label="Default Purchase Currency">
+          <select className="field-input" value={defaultPurchaseCurrency} onChange={(event) => onDefaultPurchaseCurrencyChange(event.target.value as CurrencyCode)}>
+            <option value="LAK">LAK</option>
+            <option value="THB">THB</option>
+            <option value="USD">USD</option>
+          </select>
+        </Field>
+        <Field label="THB to LAK rate">
+          <MoneyInput className="h-11" disabled={defaultPurchaseCurrency === "LAK"} value={defaultPurchaseCurrency === "LAK" ? 1 : thbToLakRate} onValueChange={onThbToLakRateChange}/>
+        </Field>
+        <Field label="USD to LAK rate">
+          <MoneyInput className="h-11" disabled={defaultPurchaseCurrency === "LAK"} value={defaultPurchaseCurrency === "LAK" ? 1 : usdToLakRate} onValueChange={onUsdToLakRateChange}/>
+        </Field>
+      </div>
+      {defaultPurchaseCurrency === "LAK" ? (<div className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">LAK is selected, so the effective exchange rate is 1.</div>) : null}
+    </section>);
+}
+
+function InitialStockPreview({ defaultPurchaseCurrency, thbToLakRate, units, usdToLakRate, }: {
+    defaultPurchaseCurrency: CurrencyCode;
+    thbToLakRate: number;
+    units: ProductUnit[];
+    usdToLakRate: number;
+}) {
+    const receiveUnit = units.find((unit) => unit.isPurchaseUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
+    const previewQuantity = 1;
+    const previewBaseQuantity = previewQuantity * Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
+    const previewCost = Number(receiveUnit?.costPriceLak ?? 0);
+    const currencyRate = getCurrencyRate(defaultPurchaseCurrency, thbToLakRate, usdToLakRate);
+    const previewCostInCurrency = currencyRate > 0 ? previewCost / currencyRate : previewCost;
+    return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-dashed border-warning/50 bg-warning/5 p-5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Initial Stock & Lot Tracking</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">Preview / will be connected to Inventory later. This section does not create stock movements, inventory lots, or inventory balances.</p>
+        </div>
+        <span className="rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-semibold text-warning">Preview only</span>
+      </div>
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-background px-3 text-sm font-semibold">
+          <input type="checkbox" checked={false} disabled/>
+          Add opening stock now
+        </label>
+        <PreviewField label="Receive unit" value={receiveUnit?.unitName ?? "Piece"}/>
+        <PreviewField label="Quantity received" value="1"/>
+        <PreviewField label="Lot number" value="Will be entered in Inventory Receiving"/>
+        <PreviewField label="Expiry date" value="Handled per receiving lot"/>
+        <PreviewField label="Receive date" value="Handled in Inventory Receiving"/>
+        <PreviewField label="Supplier" value="Uses selected supplier later"/>
+        <PreviewField label="Purchase currency" value={defaultPurchaseCurrency}/>
+        <PreviewField label="Cost" value={`${formatMoney(previewCostInCurrency)} ${defaultPurchaseCurrency}`}/>
+        <PreviewField label="Converted base quantity preview" value={`${formatMoney(previewBaseQuantity)} ${units.find((unit) => unit.isBaseUnit)?.unitName ?? "base units"}`}/>
+      </div>
+    </section>);
+}
+
+function PreviewField({ label, value }: { label: string; value: string }) {
+    return (<div className="rounded-md border border-border bg-background p-3">
+      <div className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>
+      <div className="mt-2 text-sm font-semibold">{value}</div>
+    </div>);
+}
+
+function getCurrencyRate(currency: CurrencyCode, thbToLakRate: number, usdToLakRate: number) {
+    if (currency === "THB") return Math.max(thbToLakRate, 0);
+    if (currency === "USD") return Math.max(usdToLakRate, 0);
+    return 1;
+}
+
+function ProductUnitsTable({ defaultPurchaseCurrency, removeUnit, thbToLakRate, units, updateUnit, usdToLakRate, }: {
+    defaultPurchaseCurrency: CurrencyCode;
     removeUnit: (unitId: string) => void;
+    thbToLakRate: number;
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
+    usdToLakRate: number;
 }) {
-    function updatePricing(unit: ProductUnit, patch: Partial<ProductUnit>) {
-        const nextUnit = { ...unit, ...patch };
-        const shouldCalculate = patch.costPriceLak !== undefined ||
-            patch.markupPercent !== undefined ||
-            patch.addAmountLak !== undefined ||
-            patch.pricingMode !== undefined ||
-            patch.roundingLak !== undefined;
-        if (shouldCalculate && nextUnit.pricingMode !== "manual") {
-            patch.sellingPriceLak = calculateSellingPrice(nextUnit);
-        }
-        updateUnit(unit.id, patch);
+    const [unitCurrencyChoices, setUnitCurrencyChoices] = useState<Record<string, UnitCurrencyChoice>>({});
+    const [unitCostInputs, setUnitCostInputs] = useState<Record<string, number>>({});
+    function unitCurrency(unit: ProductUnit): CurrencyCode {
+        const choice = unitCurrencyChoices[unit.id] ?? "default";
+        return choice === "default" ? defaultPurchaseCurrency : choice;
+    }
+    function unitCurrencyRate(unit: ProductUnit) {
+        return getCurrencyRate(unitCurrency(unit), thbToLakRate, usdToLakRate);
+    }
+    function unitCostInput(unit: ProductUnit) {
+        const savedInput = unitCostInputs[unit.id];
+        if (savedInput !== undefined) return savedInput;
+        const rate = unitCurrencyRate(unit);
+        return rate > 0 ? Number(unit.costPriceLak ?? 0) / rate : Number(unit.costPriceLak ?? 0);
+    }
+    function updateUnitCurrency(unit: ProductUnit, choice: UnitCurrencyChoice) {
+        setUnitCurrencyChoices((current) => ({ ...current, [unit.id]: choice }));
+        setUnitCostInputs((current) => {
+            const next = { ...current };
+            delete next[unit.id];
+            return next;
+        });
+    }
+    function updateCostInCurrency(unit: ProductUnit, value: number) {
+        const rate = unitCurrencyRate(unit);
+        setUnitCostInputs((current) => ({ ...current, [unit.id]: value }));
+        updateUnit(unit.id, { costPriceLak: value * rate });
     }
     return (<>
     <div className="mt-4 overflow-x-auto">
-      <table className="w-full min-w-[1420px] text-left text-sm">
+      <table className="w-full min-w-[1180px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
             <th className="px-3 py-3">Unit</th>
             <th className="px-3 py-3">Qty in Base</th>
-            <th className="px-3 py-3">Barcode</th>
-            <th className="px-3 py-3">Cost LAK</th>
-            <th className="px-3 py-3">Pricing Mode</th>
-            <th className="px-3 py-3">{t("ui.markup")}</th>
-            <th className="px-3 py-3">Add Amount LAK</th>
-            <th className="px-3 py-3">Rounding</th>
-            <th className="px-3 py-3">Price LAK</th>
-            <th className="px-3 py-3">Unit Image</th>
-            <th className="px-3 py-3">Base</th>
+            <th className="px-3 py-3">Barcode optional</th>
+            <th className="px-3 py-3">Purchase currency</th>
+            <th className="px-3 py-3">Cost in selected currency</th>
+            <th className="px-3 py-3">Converted cost LAK</th>
+            <th className="px-3 py-3">Selling price LAK</th>
             <th className="px-3 py-3">Default Sale</th>
             <th className="px-3 py-3">Default Receiving</th>
-            <th className="px-3 py-3">Manual</th>
-            <th className="px-3 py-3">Status</th>
             <th className="px-3 py-3 text-right">Action</th>
           </tr>
         </thead>
@@ -645,56 +725,27 @@ function ProductUnitsTable({ removeUnit, units, updateUnit, }: {
                 <input className="field-input h-10 min-w-40 font-mono" value={unit.barcode} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" value={unit.costPriceLak ?? 0} onValueChange={(value) => updatePricing(unit, { costPriceLak: value })}/>
-              </td>
-              <td className="px-3 py-3">
-                <select className="field-input h-10 min-w-36" value={unit.pricingMode ?? "manual"} onChange={(event) => updatePricing(unit, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
-                  <option value="manual">Manual</option>
-                  <option value="cost_plus_percent">{t("ui.cost")}</option>
-                  <option value="cost_plus_amount">{t("ui.cost.amount")}</option>
+                <select className="field-input h-10 min-w-32" value={unitCurrencyChoices[unit.id] ?? "default"} onChange={(event) => updateUnitCurrency(unit, event.target.value as UnitCurrencyChoice)}>
+                  <option value="default">Default</option>
+                  <option value="LAK">LAK</option>
+                  <option value="THB">THB</option>
+                  <option value="USD">USD</option>
                 </select>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 w-24" value={unit.markupPercent ?? 0} onValueChange={(value) => updatePricing(unit, { markupPercent: value })}/>
+                <MoneyInput className="h-10 min-w-28" value={unitCostInput(unit)} onValueChange={(value) => updateCostInCurrency(unit, value)}/>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 w-32" value={unit.addAmountLak ?? 0} onValueChange={(value) => updatePricing(unit, { addAmountLak: value })}/>
-              </td>
-              <td className="px-3 py-3">
-                <select className="field-input h-10 min-w-36" value={unit.roundingLak ?? 0} onChange={(event) => updatePricing(unit, { roundingLak: Number(event.target.value) })}>
-                  <option value={0}>No rounding</option>
-                  <option value={500}>Nearest 500</option>
-                  <option value={1000}>{t("ui.nearest.1.000")}</option>
-                  <option value={5000}>{t("ui.nearest.5.000")}</option>
-                </select>
+                <div className="min-w-28 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm font-semibold">{formatMoney(unit.costPriceLak ?? 0)}</div>
               </td>
               <td className="px-3 py-3">
                 <MoneyInput className="h-10 min-w-28" value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
-              </td>
-              <td className="px-3 py-3">
-                <div className="grid size-10 place-items-center overflow-hidden rounded-md border border-border bg-background">
-                  {isRenderableImage(unit.imageUrl) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt={`${unit.unitName} image`} className="size-full object-cover" src={unit.imageUrl}/>) : (<ImagePlus aria-hidden="true" className="size-4 text-muted-foreground"/>)}
-                </div>
-              </td>
-              <td className="px-3 py-3">
-                <input type="radio" checked={unit.isBaseUnit} onChange={() => updateUnit(unit.id, { conversionQty: 1, isBaseUnit: true })} name="baseUnit"/>
               </td>
               <td className="px-3 py-3">
                 <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
               </td>
               <td className="px-3 py-3">
                 <input type="checkbox" checked={Boolean(unit.isPurchaseUnit)} onChange={(event) => updateUnit(unit.id, { isPurchaseUnit: event.target.checked })}/>
-              </td>
-              <td className="px-3 py-3">
-                <input type="checkbox" checked={unit.allowManualUnitSelect ?? true} onChange={(event) => updateUnit(unit.id, { allowManualUnitSelect: event.target.checked })}/>
-              </td>
-              <td className="px-3 py-3">
-                <select className="field-input h-10" value={unit.status ?? "active"} onChange={(event) => updateUnit(unit.id, { status: event.target.value as "active" | "inactive" })}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
               </td>
               <td className="px-3 py-3 text-right">
                 <button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-danger transition hover:border-danger disabled:cursor-not-allowed disabled:opacity-40" type="button" onClick={() => removeUnit(unit.id)} disabled={unit.isBaseUnit} aria-label="Remove unit">
@@ -707,19 +758,6 @@ function ProductUnitsTable({ removeUnit, units, updateUnit, }: {
     </div>
     </>);
 }
-function calculateSellingPrice(unit: ProductUnit) {
-    const cost = Number(unit.costPriceLak ?? 0);
-    const rawPrice = unit.pricingMode === "cost_plus_percent"
-        ? cost + cost * (Number(unit.markupPercent ?? 0) / 100)
-        : unit.pricingMode === "cost_plus_amount"
-            ? cost + Number(unit.addAmountLak ?? 0)
-            : Number(unit.sellingPriceLak ?? 0);
-    const rounding = Number(unit.roundingLak ?? 0);
-    if (rounding <= 0) {
-        return Math.max(0, Math.round(rawPrice));
-    }
-    return Math.max(0, Math.round(rawPrice / rounding) * rounding);
-}
 function parseMoney(value: unknown) {
     if (typeof value === "number")
         return Number.isFinite(value) ? value : 0;
@@ -728,9 +766,10 @@ function parseMoney(value: unknown) {
 function formatMoney(value: unknown) {
     return parseMoney(value).toLocaleString("en-US");
 }
-function MoneyInput({ className = "", defaultValue, name, onValueChange, required, value, }: {
+function MoneyInput({ className = "", defaultValue, disabled, name, onValueChange, required, value, }: {
     className?: string;
     defaultValue?: number;
+    disabled?: boolean;
     name?: string;
     onValueChange?: (value: number) => void;
     required?: boolean;
@@ -753,7 +792,7 @@ function MoneyInput({ className = "", defaultValue, name, onValueChange, require
             : formatMoney(value);
     return (<>
       {name ? <input name={name} type="hidden" value={numericValue}/> : null}
-      <input className={`field-input ${className}`} inputMode="decimal" required={required} value={displayValue} onChange={(event) => update(event.target.value)} onFocus={() => {
+      <input className={`field-input ${className}`} disabled={disabled} inputMode="decimal" required={required} value={displayValue} onChange={(event) => update(event.target.value)} onFocus={() => {
             setIsFocused(true);
             if (parseMoney(displayValue) === 0) {
                 setLocalValue("");
@@ -1037,42 +1076,6 @@ function formatHistoryDate(value: string) {
         month: "short",
         year: "numeric",
     }).format(new Date(value));
-}
-function BarcodeScannerModal({ onClose, onScan, }: {
-    onClose: () => void;
-    onScan: () => void;
-}) {
-    return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">Camera barcode scanner</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("ui.mock.scanner.ui.camera.permissions.and.real.")}</p>
-          </div>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close scanner">
-            <X aria-hidden="true"/>
-          </button>
-        </div>
-        <div className="mt-5 overflow-hidden rounded-md border border-border bg-background">
-          <div className="relative grid aspect-video place-items-center">
-            <div className="absolute inset-x-10 top-1/2 h-0.5 bg-danger shadow-[0_0_18px_var(--danger)]"/>
-            <div className="h-28 w-72 rounded-md border-2 border-primary/70"/>
-            <span className="absolute bottom-4 text-xs text-muted-foreground">
-              Align barcode inside the frame
-            </span>
-          </div>
-        </div>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button className="h-11 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={onScan}>
-            <Barcode aria-hidden="true"/>
-            Simulate scan
-          </button>
-        </div>
-      </div>
-    </div>);
 }
 function Field({ children, label, }: {
     children: React.ReactNode;
