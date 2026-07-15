@@ -68,6 +68,9 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
         })
             .slice(0, 20);
     }, [items, query]);
+    const searchedValue = query.trim();
+    const showProductNotFound = searchedValue.length > 0 && filteredItems.length === 0;
+    const createProductHref = `/products/new?barcode=${encodeURIComponent(searchedValue)}&from=inventory`;
     const selectedItem = items.find((item) => item.id === selectedItemId);
     const receivingUnits = useMemo(() => (selectedItem?.units ?? []).filter((unit) => unit.status === "active"), [selectedItem]);
     const selectedUnit = receivingUnits.find((unit) => unit.id === selectedUnitId);
@@ -203,6 +206,14 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
             <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder={t("ui.search.barcode.unit.barcode.sku.product.name")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </div>
           <div className="mt-4 grid max-h-[430px] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
+            {showProductNotFound ? (<div className="rounded-lg border border-dashed border-warning/40 bg-warning/10 p-4 md:col-span-2">
+                <div className="text-sm font-semibold text-foreground">Product not found</div>
+                <div className="mt-1 font-mono text-sm text-warning">{searchedValue}</div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">Create this product first, then return to Inventory to receive stock.</p>
+                <Link className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href={createProductHref}>
+                  Create Product
+                </Link>
+              </div>) : null}
             {filteredItems.map((item) => (<button className={`flex items-center gap-3 rounded-lg border p-3 text-left transition hover:border-primary ${selectedItemId === item.id ? "border-primary bg-primary/10" : "border-border bg-background"}`} key={item.id} type="button" onClick={() => selectItem(item)}>
                 <InventoryImage imageKey={item.imageKey} label={item.productNameEn}/>
                 <div className="min-w-0">

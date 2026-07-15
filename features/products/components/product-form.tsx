@@ -68,15 +68,19 @@ const emptyUnit: ProductUnit = {
     sortOrder: 0,
     status: "active",
 };
-export function ProductForm({ mode, product, categories, images: _images, }: {
+export function ProductForm({ mode, product, categories, images: _images, initialBarcode, sourceFlow, }: {
     mode: "create" | "edit";
     product?: Product;
     categories: Category[];
     images: MockProductImage[];
+    initialBarcode?: string;
+    sourceFlow?: string;
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [barcode] = useState(product?.barcode ?? "");
+    const inventoryHandoffBarcode = mode === "create" && sourceFlow === "inventory" ? (initialBarcode ?? "").trim() : "";
+    const hasInventoryHandoffBarcode = inventoryHandoffBarcode.length > 0;
     const [sku, setSku] = useState(product?.sku ?? "");
     const [productCode, setProductCode] = useState(product?.productCode ?? "");
     const [productName, setProductName] = useState(product?.nameEn || product?.nameLo || "");
@@ -117,6 +121,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             ...emptyUnit,
             id: "unit-base",
             unitName: "Piece",
+            barcode: inventoryHandoffBarcode,
             isBaseUnit: true,
             isDefaultSaleUnit: true,
             isPurchaseUnit: true,
@@ -542,6 +547,9 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
               <details className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4" open>
                 <summary className="cursor-pointer text-sm font-semibold">Selling Units & Barcodes</summary>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">Set how this product is sold. Each unit can have its own optional barcode.</p>
+                {hasInventoryHandoffBarcode ? (<div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-primary">
+                  Barcode from Inventory was added to the default unit. You can move or edit it before saving.
+                </div>) : null}
                 <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
                   Use Piece for the base unit, then add Pack or Box when this product can be sold or received in larger quantities. Barcodes are optional per unit.
                 </div>
