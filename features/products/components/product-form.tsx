@@ -12,8 +12,6 @@ const QUICK_UNIT_NAMES = [
     "Pack",
     "Box",
 ];
-type CurrencyCode = "LAK" | "THB" | "USD";
-type UnitCurrencyChoice = "default" | CurrencyCode;
 type ProductFormImage = {
     id: string;
     label: string;
@@ -70,9 +68,6 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
-    const [defaultPurchaseCurrency, setDefaultPurchaseCurrency] = useState<CurrencyCode>("LAK");
-    const [thbToLakRate, setThbToLakRate] = useState(650);
-    const [usdToLakRate, setUsdToLakRate] = useState(21500);
     const [unitsShareStock, setUnitsShareStock] = useState(true);
     const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? [
         {
@@ -435,8 +430,6 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                 </div>
               </section>
 
-              <CostCurrencySetting defaultPurchaseCurrency={defaultPurchaseCurrency} onDefaultPurchaseCurrencyChange={setDefaultPurchaseCurrency} thbToLakRate={thbToLakRate} onThbToLakRateChange={setThbToLakRate} usdToLakRate={usdToLakRate} onUsdToLakRateChange={setUsdToLakRate}/>
-
               <details className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4" open>
                 <summary className="cursor-pointer text-sm font-semibold">Selling Units & Barcodes</summary>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">Set how this product is sold. Each unit can have its own optional barcode.</p>
@@ -470,9 +463,9 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     </button>
                   </div>
                 </div>
-                <ProductUnitsTable defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+                <ProductUnitsTable productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
-              <InitialStockPreview defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units}/>
+              <InitialStockPreview units={units}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -520,8 +513,6 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             </div>
           </section>
 
-          <CostCurrencySetting defaultPurchaseCurrency={defaultPurchaseCurrency} onDefaultPurchaseCurrencyChange={setDefaultPurchaseCurrency} thbToLakRate={thbToLakRate} onThbToLakRateChange={setThbToLakRate} usdToLakRate={usdToLakRate} onUsdToLakRateChange={setUsdToLakRate}/>
-
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -560,9 +551,9 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
               </div>
             </div>
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("ui.changing.conversion.values.on.products.with.")}</p>
-            <ProductUnitsTable defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+            <ProductUnitsTable productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <InitialStockPreview defaultPurchaseCurrency={defaultPurchaseCurrency} thbToLakRate={thbToLakRate} usdToLakRate={usdToLakRate} units={units}/>
+          <InitialStockPreview units={units}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -572,55 +563,13 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
       </div>
     </form>);
 }
-function CostCurrencySetting({
-    defaultPurchaseCurrency,
-    onDefaultPurchaseCurrencyChange,
-    onThbToLakRateChange,
-    onUsdToLakRateChange,
-    thbToLakRate,
-    usdToLakRate,
-}: {
-    defaultPurchaseCurrency: CurrencyCode;
-    onDefaultPurchaseCurrencyChange: (currency: CurrencyCode) => void;
-    onThbToLakRateChange: (rate: number) => void;
-    onUsdToLakRateChange: (rate: number) => void;
-    thbToLakRate: number;
-    usdToLakRate: number;
-}) {
-    return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">Cost Currency Setting</h2>
-      <p className="mt-1 text-sm leading-6 text-muted-foreground">Purchase costs can be entered in LAK, THB, or USD. Converted cost is stored/displayed in LAK. Selling price remains LAK.</p>
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
-        <Field label="Default Purchase Currency">
-          <select className="field-input" value={defaultPurchaseCurrency} onChange={(event) => onDefaultPurchaseCurrencyChange(event.target.value as CurrencyCode)}>
-            <option value="LAK">LAK</option>
-            <option value="THB">THB</option>
-            <option value="USD">USD</option>
-          </select>
-        </Field>
-        <Field label="THB to LAK rate">
-          <MoneyInput className="h-11" disabled={defaultPurchaseCurrency === "LAK"} value={defaultPurchaseCurrency === "LAK" ? 1 : thbToLakRate} onValueChange={onThbToLakRateChange}/>
-        </Field>
-        <Field label="USD to LAK rate">
-          <MoneyInput className="h-11" disabled={defaultPurchaseCurrency === "LAK"} value={defaultPurchaseCurrency === "LAK" ? 1 : usdToLakRate} onValueChange={onUsdToLakRateChange}/>
-        </Field>
-      </div>
-      {defaultPurchaseCurrency === "LAK" ? (<div className="mt-3 rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">LAK is selected, so the effective exchange rate is 1.</div>) : null}
-    </section>);
-}
-
-function InitialStockPreview({ defaultPurchaseCurrency, thbToLakRate, units, usdToLakRate, }: {
-    defaultPurchaseCurrency: CurrencyCode;
-    thbToLakRate: number;
+function InitialStockPreview({ units }: {
     units: ProductUnit[];
-    usdToLakRate: number;
 }) {
     const receiveUnit = units.find((unit) => unit.isPurchaseUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
     const previewQuantity = 1;
     const previewBaseQuantity = previewQuantity * Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
     const previewCost = Number(receiveUnit?.costPriceLak ?? 0);
-    const currencyRate = getCurrencyRate(defaultPurchaseCurrency, thbToLakRate, usdToLakRate);
-    const previewCostInCurrency = currencyRate > 0 ? previewCost / currencyRate : previewCost;
     return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-dashed border-warning/50 bg-warning/5 p-5">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
@@ -640,8 +589,7 @@ function InitialStockPreview({ defaultPurchaseCurrency, thbToLakRate, units, usd
         <PreviewField label="Expiry date" value="Handled per receiving lot"/>
         <PreviewField label="Receive date" value="Handled in Inventory Receiving"/>
         <PreviewField label="Supplier" value="Uses selected supplier later"/>
-        <PreviewField label="Purchase currency" value={defaultPurchaseCurrency}/>
-        <PreviewField label="Cost" value={`${formatMoney(previewCostInCurrency)} ${defaultPurchaseCurrency}`}/>
+        <PreviewField label="Cost LAK" value={formatMoney(previewCost)}/>
         <PreviewField label="Converted base quantity preview" value={`${formatMoney(previewBaseQuantity)} ${units.find((unit) => unit.isBaseUnit)?.unitName ?? "base units"}`}/>
       </div>
     </section>);
@@ -654,67 +602,45 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function getCurrencyRate(currency: CurrencyCode, thbToLakRate: number, usdToLakRate: number) {
-    if (currency === "THB") return Math.max(thbToLakRate, 0);
-    if (currency === "USD") return Math.max(usdToLakRate, 0);
-    return 1;
-}
-
-function ProductUnitsTable({ defaultPurchaseCurrency, removeUnit, thbToLakRate, units, updateUnit, usdToLakRate, }: {
-    defaultPurchaseCurrency: CurrencyCode;
+function ProductUnitsTable({ productImages, removeUnit, units, updateUnit, }: {
+    productImages: ProductFormImage[];
     removeUnit: (unitId: string) => void;
-    thbToLakRate: number;
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
-    usdToLakRate: number;
 }) {
-    const [unitCurrencyChoices, setUnitCurrencyChoices] = useState<Record<string, UnitCurrencyChoice>>({});
-    const [unitCostInputs, setUnitCostInputs] = useState<Record<string, number>>({});
-    function unitCurrency(unit: ProductUnit): CurrencyCode {
-        const choice = unitCurrencyChoices[unit.id] ?? "default";
-        return choice === "default" ? defaultPurchaseCurrency : choice;
-    }
-    function unitCurrencyRate(unit: ProductUnit) {
-        return getCurrencyRate(unitCurrency(unit), thbToLakRate, usdToLakRate);
-    }
-    function unitCostInput(unit: ProductUnit) {
-        const savedInput = unitCostInputs[unit.id];
-        if (savedInput !== undefined) return savedInput;
-        const rate = unitCurrencyRate(unit);
-        return rate > 0 ? Number(unit.costPriceLak ?? 0) / rate : Number(unit.costPriceLak ?? 0);
-    }
-    function updateUnitCurrency(unit: ProductUnit, choice: UnitCurrencyChoice) {
-        setUnitCurrencyChoices((current) => ({ ...current, [unit.id]: choice }));
-        setUnitCostInputs((current) => {
-            const next = { ...current };
-            delete next[unit.id];
-            return next;
-        });
-    }
-    function updateCostInCurrency(unit: ProductUnit, value: number) {
-        const rate = unitCurrencyRate(unit);
-        setUnitCostInputs((current) => ({ ...current, [unit.id]: value }));
-        updateUnit(unit.id, { costPriceLak: value * rate });
+    const [selectedUnitIds, setSelectedUnitIds] = useState<Record<string, boolean>>({});
+    function toggleSelected(unitId: string, checked: boolean) {
+        setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
     }
     return (<>
-    <div className="mt-4 overflow-x-auto">
-      <table className="w-full min-w-[1180px] text-left text-sm">
+    <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
+      <table className="w-full min-w-[1840px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
+            <th className="px-3 py-3">Select</th>
             <th className="px-3 py-3">Unit</th>
             <th className="px-3 py-3">Qty in Base</th>
-            <th className="px-3 py-3">Barcode optional</th>
-            <th className="px-3 py-3">Purchase currency</th>
-            <th className="px-3 py-3">Cost in selected currency</th>
-            <th className="px-3 py-3">Converted cost LAK</th>
-            <th className="px-3 py-3">Selling price LAK</th>
+            <th className="px-3 py-3">Barcode</th>
+            <th className="px-3 py-3">Cost LAK</th>
+            <th className="px-3 py-3">Pricing Mode</th>
+            <th className="px-3 py-3">Markup %</th>
+            <th className="px-3 py-3">Add Amount LAK</th>
+            <th className="px-3 py-3">Rounding</th>
+            <th className="px-3 py-3">Price LAK</th>
+            <th className="px-3 py-3">Unit Image</th>
+            <th className="px-3 py-3">Base</th>
             <th className="px-3 py-3">Default Sale</th>
             <th className="px-3 py-3">Default Receiving</th>
+            <th className="px-3 py-3">Manual</th>
+            <th className="px-3 py-3">Status</th>
             <th className="px-3 py-3 text-right">Action</th>
           </tr>
         </thead>
         <tbody>
           {units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
+              <td className="px-3 py-3">
+                <input aria-label={`Select ${unit.unitName || "unit"}`} type="checkbox" checked={Boolean(selectedUnitIds[unit.id])} onChange={(event) => toggleSelected(unit.id, event.target.checked)}/>
+              </td>
               <td className="px-3 py-3">
                 <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
@@ -725,27 +651,50 @@ function ProductUnitsTable({ defaultPurchaseCurrency, removeUnit, thbToLakRate, 
                 <input className="field-input h-10 min-w-40 font-mono" value={unit.barcode} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                <select className="field-input h-10 min-w-32" value={unitCurrencyChoices[unit.id] ?? "default"} onChange={(event) => updateUnitCurrency(unit, event.target.value as UnitCurrencyChoice)}>
-                  <option value="default">Default</option>
-                  <option value="LAK">LAK</option>
-                  <option value="THB">THB</option>
-                  <option value="USD">USD</option>
+                <MoneyInput className="h-10 min-w-28" value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <select className="field-input h-10 min-w-40" value={unit.pricingMode ?? "manual"} onChange={(event) => updateUnit(unit.id, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
+                  <option value="manual">Manual</option>
+                  <option value="cost_plus_percent">Cost + %</option>
+                  <option value="cost_plus_amount">Cost + amount</option>
                 </select>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" value={unitCostInput(unit)} onValueChange={(value) => updateCostInCurrency(unit, value)}/>
+                <MoneyInput className="h-10 min-w-24" value={unit.markupPercent ?? 0} onValueChange={(value) => updateUnit(unit.id, { markupPercent: value })}/>
               </td>
               <td className="px-3 py-3">
-                <div className="min-w-28 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm font-semibold">{formatMoney(unit.costPriceLak ?? 0)}</div>
+                <MoneyInput className="h-10 min-w-28" value={unit.addAmountLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { addAmountLak: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <MoneyInput className="h-10 min-w-24" value={unit.roundingLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { roundingLak: value })}/>
               </td>
               <td className="px-3 py-3">
                 <MoneyInput className="h-10 min-w-28" value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <select className="field-input h-10 min-w-44" value={unit.imageUrl ?? ""} onChange={(event) => updateUnit(unit.id, { imageUrl: event.target.value || undefined })}>
+                  <option value="">Not assigned</option>
+                  {productImages.map((image) => (<option key={image.id} value={image.url}>{image.label}</option>))}
+                </select>
+              </td>
+              <td className="px-3 py-3">
+                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, conversionQty: 1, isPurchaseUnit: true })} name="baseUnit"/>
               </td>
               <td className="px-3 py-3">
                 <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
               </td>
               <td className="px-3 py-3">
                 <input type="checkbox" checked={Boolean(unit.isPurchaseUnit)} onChange={(event) => updateUnit(unit.id, { isPurchaseUnit: event.target.checked })}/>
+              </td>
+              <td className="px-3 py-3">
+                <input type="checkbox" checked={unit.allowManualUnitSelect ?? true} onChange={(event) => updateUnit(unit.id, { allowManualUnitSelect: event.target.checked })}/>
+              </td>
+              <td className="px-3 py-3">
+                <select className="field-input h-10 min-w-28" value={unit.status ?? "active"} onChange={(event) => updateUnit(unit.id, { status: event.target.value as ProductUnit["status"] })}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </td>
               <td className="px-3 py-3 text-right">
                 <button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-danger transition hover:border-danger disabled:cursor-not-allowed disabled:opacity-40" type="button" onClick={() => removeUnit(unit.id)} disabled={unit.isBaseUnit} aria-label="Remove unit">
