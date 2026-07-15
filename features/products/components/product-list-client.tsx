@@ -32,6 +32,15 @@ type ProductsModal = "import" | "export" | "barcode" | "audit" | "shelf" | "bulk
 type ExpiryStatus = "normal" | "near_expiry" | "expired" | "no_expiry";
 type InsightFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "missing_barcode" | "no_image";
 type SummaryInsight = Exclude<InsightFilter, "missing_barcode" | "no_image">;
+type ProductShellDrawerKey = "total" | "active" | "missing_images" | "missing_barcode" | "product_health" | "product_list" | "categories" | "barcode_sku" | "images" | "labels";
+type ProductShellStats = ReturnType<typeof getProductShellStats>;
+type ProductShellDrawerContent = {
+    actions: Array<{ label: string; reason: string }>;
+    description: string;
+    sections: Array<{ rows: Array<{ label: string; value: string }>; title: string }>;
+    summaries: Array<{ label: string; value: string }>;
+    title: string;
+};
 const pageSizeOptions = [25, 50, 100, 200] as const;
 export function ProductListClient({ products: initialProducts, categories: initialCategories, }: {
     products: Product[];
@@ -51,6 +60,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
     const [actionMenuOpen, setActionMenuOpen] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
     const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
+    const [shellDrawer, setShellDrawer] = useState<ProductShellDrawerKey | null>(null);
     const [message, setMessage] = useState<string | null>(null);
     const [isPending, startTransition] = useTransition();
     useEffect(() => {
@@ -61,12 +71,13 @@ export function ProductListClient({ products: initialProducts, categories: initi
     }, [initialCategories]);
     const productInsights = useMemo(() => getProductInsights(products), [products]);
     const insightProducts = useMemo(() => getInsightProducts(products), [products]);
+    const productShellStats = useMemo(() => getProductShellStats(products, categories), [categories, products]);
     const summaryCards = useMemo(() => ([
-        { color: "blue" as const, count: productInsights.total, emptyText: t("ui.no.products.found"), filter: "all" as SummaryInsight, icon: Boxes, label: "Total Products" },
-        { color: "red" as const, count: productInsights.outOfStock, emptyText: t("ui.no.out.of.stock.products"), filter: "out_of_stock" as SummaryInsight, icon: AlertCircle, label: "Out of Stock" },
-        { color: "orange" as const, count: productInsights.lowStock, emptyText: t("ui.no.low.stock.items"), filter: "low_stock" as SummaryInsight, icon: Package, label: "Low Stock" },
-        { color: "yellow" as const, count: productInsights.nearExpiry, emptyText: t("ui.no.products.near.expiry"), filter: "near_expiry" as SummaryInsight, icon: Clock, label: "Near Expiry" },
-        { color: "purple" as const, count: productInsights.deadStock, emptyText: t("ui.no.dead.stock.products"), filter: "dead_stock" as SummaryInsight, icon: Archive, label: "Dead Stock" },
+        { color: "blue" as const, count: productInsights.total, drawerKey: "total" as ProductShellDrawerKey, emptyText: t("ui.no.products.found"), filter: "all" as SummaryInsight, icon: Boxes, label: "Total Products" },
+        { color: "red" as const, count: productInsights.outOfStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.out.of.stock.products"), filter: "out_of_stock" as SummaryInsight, icon: AlertCircle, label: "Out of Stock" },
+        { color: "orange" as const, count: productInsights.lowStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.low.stock.items"), filter: "low_stock" as SummaryInsight, icon: Package, label: "Low Stock" },
+        { color: "yellow" as const, count: productInsights.nearExpiry, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.products.near.expiry"), filter: "near_expiry" as SummaryInsight, icon: Clock, label: "Near Expiry" },
+        { color: "purple" as const, count: productInsights.deadStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.dead.stock.products"), filter: "dead_stock" as SummaryInsight, icon: Archive, label: "Dead Stock" },
     ]), [productInsights]);
     const filteredProducts = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
@@ -179,9 +190,9 @@ export function ProductListClient({ products: initialProducts, categories: initi
         {summaryCards.map((card) => (<SummaryCard active={insightFilter === card.filter} color={card.color} count={card.count} expanded={expandedInsight === card.filter} icon={card.icon} key={card.filter} label={card.label} onExpand={() => {
                 setExpandedInsight((current) => current === card.filter ? null : card.filter);
                 applyInsightFilter(card.filter);
-            }} onViewAll={() => applyInsightFilter(card.filter)}/>))}
+            }} onViewAll={() => setShellDrawer(card.drawerKey)}/>))}
       </section>
-      <ProductsVisualShell products={products} categories={categories}/>
+      <ProductsVisualShell stats={productShellStats} onOpenDrawer={setShellDrawer}/>
       {expandedInsight ? (<InsightPanel emptyText={summaryCards.find((card) => card.filter === expandedInsight)?.emptyText ?? t("ui.no.products.found")} filter={expandedInsight} products={insightProducts[expandedInsight]} onSelectProduct={(product) => {
                 setQuery(product.nameEn || product.nameLo);
                 applyInsightFilter(expandedInsight);
@@ -345,6 +356,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
       {activeModal === "shelf" ? <LabelPreviewModal kind="shelf" onClose={closeModal} products={operationProducts}/> : null}
       {activeModal === "bulk" ? (<BulkUpdateModal categories={categories} filteredProducts={filteredProducts} isPending={isPending} onClose={closeModal} onDone={(text) => { setMessage(text); router.refresh(); }} products={products} selectedProducts={selectedProducts} startTransition={startTransition}/>) : null}
       {activeModal === "image" && previewProduct ? <ImagePreviewModal product={previewProduct} onClose={closeModal}/> : null}
+      <ProductShellDrawer drawerKey={shellDrawer} stats={productShellStats} onClose={() => setShellDrawer(null)}/>
     </div>);
 }
 function ActionMenuButton({ icon: Icon, label, onClick }: {
@@ -357,16 +369,17 @@ function ActionMenuButton({ icon: Icon, label, onClick }: {
       {label}
     </button>);
 }
-function ProductsVisualShell({ categories, products }: { categories: Category[]; products: Product[] }) {
-    const activeProducts = products.filter((product) => product.status === "active").length;
-    const missingBarcode = products.filter((product) => !product.barcode && product.units.every((unit) => !unit.barcode)).length;
-    const missingImage = products.filter((product) => !isRenderableImage(product.imageUrl) && product.units.every((unit) => !isRenderableImage(unit.imageUrl))).length;
+function ProductsVisualShell({ onOpenDrawer, stats }: {
+    onOpenDrawer: (drawerKey: ProductShellDrawerKey) => void;
+    stats: ProductShellStats;
+}) {
     const topics = [
-        { description: "Review product records, prices, stock signals, and images.", icon: Boxes, label: "Product list" },
-        { description: "Organize products by category before editing category records.", icon: Tags, label: "Categories" },
-        { description: "Check barcode and SKU readiness before printing or importing.", icon: Search, label: "Barcode / SKU" },
-        { description: "Review image coverage without changing product images.", icon: ImageIcon, label: "Product images" },
-        { description: "Printing and bulk tools stay in the existing actions menu.", icon: Printer, label: "Labels and bulk tools" },
+        { description: "Review product records, prices, stock signals, and images.", drawerKey: "product_list" as ProductShellDrawerKey, icon: Boxes, label: "Product list" },
+        { description: "Organize products by category before editing category records.", drawerKey: "categories" as ProductShellDrawerKey, icon: Tags, label: "Categories" },
+        { description: "Check barcode and SKU readiness before printing or importing.", drawerKey: "barcode_sku" as ProductShellDrawerKey, icon: Search, label: "Barcode / SKU" },
+        { description: "Review image coverage without changing product images.", drawerKey: "images" as ProductShellDrawerKey, icon: ImageIcon, label: "Product images" },
+        { description: "Review price label and barcode label readiness.", drawerKey: "labels" as ProductShellDrawerKey, icon: Printer, label: "Labels" },
+        { description: "Review product data quality signals without changing records.", drawerKey: "product_health" as ProductShellDrawerKey, icon: AlertCircle, label: "Product Health" },
     ];
 
     return (
@@ -384,47 +397,49 @@ function ProductsVisualShell({ categories, products }: { categories: Category[];
           </span>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <ProductShellMetric icon={Boxes} label="Total products" value={products.length}/>
-          <ProductShellMetric icon={Package} label="Active products" value={activeProducts}/>
-          <ProductShellMetric icon={Tags} label="Categories" value={categories.length}/>
-          <ProductShellMetric icon={AlertCircle} label="Missing barcode" value={missingBarcode}/>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <ProductShellMetric icon={Boxes} label="Total products" value={stats.totalProducts} onClick={() => onOpenDrawer("total")}/>
+          <ProductShellMetric icon={Package} label="Active products" value={stats.activeProducts} onClick={() => onOpenDrawer("active")}/>
+          <ProductShellMetric icon={ImageIcon} label="Missing images" value={stats.missingImages} onClick={() => onOpenDrawer("missing_images")}/>
+          <ProductShellMetric icon={Search} label="Missing barcode" value={stats.missingBarcode} onClick={() => onOpenDrawer("missing_barcode")}/>
+          <ProductShellMetric icon={AlertCircle} label="Product Health" value={stats.healthIssueCount} onClick={() => onOpenDrawer("product_health")}/>
         </div>
 
         <div className="mt-4 grid gap-2">
           {topics.map((topic) => (
-            <ProductShellTopic description={topic.description} icon={topic.icon} key={topic.label} label={topic.label}/>
+            <ProductShellTopic description={topic.description} icon={topic.icon} key={topic.label} label={topic.label} onClick={() => onOpenDrawer(topic.drawerKey)}/>
           ))}
         </div>
 
-        {products.length === 0 ? (
+        {stats.totalProducts === 0 ? (
           <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
             No products are available yet. Create real products through the existing product workflow when ready.
           </div>
-        ) : missingImage > 0 ? (
+        ) : stats.missingImages > 0 ? (
           <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-            {missingImage} product{missingImage === 1 ? "" : "s"} missing image coverage.
+            {stats.missingImages} product{stats.missingImages === 1 ? "" : "s"} missing image coverage.
           </div>
         ) : null}
       </section>
     );
 }
 
-function ProductShellMetric({ icon: Icon, label, value }: { icon: typeof Boxes; label: string; value: number }) {
+function ProductShellMetric({ icon: Icon, label, onClick, value }: { icon: typeof Boxes; label: string; onClick: () => void; value: number }) {
     return (
-      <div className="rounded-lg border border-border bg-background p-3">
+      <button className="rounded-lg border border-border bg-background p-3 text-left transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40" type="button" onClick={onClick}>
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <Icon aria-hidden="true" className="size-4 text-primary"/>
           {label}
         </div>
         <div className="mt-2 text-2xl font-semibold">{value.toLocaleString("en-US")}</div>
-      </div>
+        <div className="mt-1 text-xs font-semibold text-primary">View details</div>
+      </button>
     );
 }
 
-function ProductShellTopic({ description, icon: Icon, label }: { description: string; icon: typeof Boxes; label: string }) {
+function ProductShellTopic({ description, icon: Icon, label, onClick }: { description: string; icon: typeof Boxes; label: string; onClick: () => void }) {
     return (
-      <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+      <button className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40" type="button" onClick={onClick}>
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-card text-primary">
             <Icon aria-hidden="true" className="size-4"/>
@@ -435,8 +450,104 @@ function ProductShellTopic({ description, icon: Icon, label }: { description: st
           </div>
         </div>
         <span className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-          Read-only
+          Open drawer
         </span>
+      </button>
+    );
+}
+
+function ProductShellDrawer({ drawerKey, onClose, stats }: {
+    drawerKey: ProductShellDrawerKey | null;
+    onClose: () => void;
+    stats: ProductShellStats;
+}) {
+    useEffect(() => {
+        if (!drawerKey)
+            return;
+        function handleKeyDown(event: KeyboardEvent) {
+            if (event.key === "Escape") {
+                onClose();
+            }
+        }
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [drawerKey, onClose]);
+    if (!drawerKey)
+        return null;
+    const content = getProductShellDrawerContent(drawerKey, stats);
+    return (
+      <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-[var(--dashboard-sidebar-width,5rem)]">
+        <section className="flex h-full w-full max-w-none flex-col overflow-x-hidden border-l border-border bg-card shadow-2xl">
+          <header className="sticky top-0 z-20 border-b border-border bg-card p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-primary">Products detail</p>
+                <h2 className="mt-1 text-2xl font-semibold">{content.title}</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{content.description}</p>
+              </div>
+              <button aria-label="Close drawer" className="grid size-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition hover:text-foreground" type="button" onClick={onClose}>
+                <X className="size-5" aria-hidden="true"/>
+              </button>
+            </div>
+          </header>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {content.summaries.map((summary) => (
+                <ProductShellDrawerSummary key={summary.label} label={summary.label} value={summary.value}/>
+              ))}
+            </div>
+            <div className="mt-5 grid gap-4">
+              {content.sections.map((section) => (
+                <section className="rounded-lg border border-border bg-background p-4" key={section.title}>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{section.title}</h3>
+                  <div className="mt-3 grid gap-2">
+                    {section.rows.map((row) => (
+                      <ProductShellStatusRow key={row.label} label={row.label} value={row.value}/>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <section className="mt-5 rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Disabled Actions</h3>
+              <p className="mt-2 text-sm text-muted-foreground">These controls are read-only until the product workflow connection is approved.</p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {content.actions.map((action) => (
+                  <button className="flex cursor-not-allowed items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-left opacity-70" disabled key={action.label} type="button">
+                    <span className="font-semibold">{action.label}</span>
+                    <span className="shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{action.reason}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <details className="mt-5 rounded-lg border border-border bg-background p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Advanced Details</summary>
+              <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
+                <ProductShellStatusRow label="Source" value="Loaded Products page data"/>
+                <ProductShellStatusRow label="Backend writes" value="Not connected from this shell"/>
+                <ProductShellStatusRow label="Raw metadata" value="Hidden"/>
+              </div>
+            </details>
+          </div>
+        </section>
+      </div>
+    );
+}
+
+function ProductShellDrawerSummary({ label, value }: { label: string; value: string }) {
+    return (
+      <div className="rounded-lg border border-border bg-background p-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className="mt-2 text-2xl font-semibold">{value}</div>
+      </div>
+    );
+}
+
+function ProductShellStatusRow({ label, value }: { label: string; value: string }) {
+    return (
+      <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2">
+        <span className="min-w-0 text-sm text-muted-foreground">{label}</span>
+        <span className="shrink-0 text-right text-sm font-semibold">{value}</span>
       </div>
     );
 }
@@ -857,6 +968,264 @@ function getProductInsights(products: Product[]) {
         outOfStock: products.filter((product) => getProductStock(product) === 0).length,
         total: products.length,
     };
+}
+function getProductShellStats(products: Product[], categories: Category[]) {
+    const barcodeAudit = getBarcodeAudit(products);
+    const missingBarcode = products.filter((product) => !product.barcode && product.units.every((unit) => !unit.barcode)).length;
+    const missingImages = products.filter((product) => !isRenderableImage(product.imageUrl) && product.units.every((unit) => !isRenderableImage(unit.imageUrl))).length;
+    const missingCost = products.filter((product) => Number(product.costPriceLak ?? 0) <= 0 && product.units.every((unit) => Number(unit.costPriceLak ?? 0) <= 0)).length;
+    const lowMargin = products.filter((product) => Number(product.sellingPriceLak ?? 0) > 0 && Number(product.sellingPriceLak ?? 0) <= Number(product.costPriceLak ?? 0)).length;
+    const inactiveProducts = products.filter((product) => product.status !== "active").length;
+    const outOfStock = products.filter((product) => getProductStock(product) === 0).length;
+    const lowStock = products.filter((product) => {
+        const stock = getProductStock(product);
+        return stock > 0 && stock <= product.minStock;
+    }).length;
+    const nearExpiry = products.filter((product) => getExpiryStatus(product) === "near_expiry").length;
+    const deadStock = products.filter(isDeadStock).length;
+    return {
+        activeProducts: products.filter((product) => product.status === "active").length,
+        categories: categories.length,
+        deadStock,
+        duplicateBarcode: barcodeAudit.duplicates.length,
+        healthIssueCount: missingBarcode + missingImages + missingCost + lowMargin + inactiveProducts + barcodeAudit.duplicates.length,
+        inactiveProducts,
+        invalidBarcode: barcodeAudit.invalid.length,
+        lowMargin,
+        lowStock,
+        missingBarcode,
+        missingCost,
+        missingImages,
+        nearExpiry,
+        outOfStock,
+        totalProducts: products.length,
+        withBarcode: products.length - missingBarcode,
+        withImages: products.length - missingImages,
+    };
+}
+function getProductShellDrawerContent(drawerKey: ProductShellDrawerKey, stats: ProductShellStats): ProductShellDrawerContent {
+    const readOnlyAction = { label: "Open filtered list", reason: "Read-only" };
+    const productWorkflowActions = [
+        { label: "Add product", reason: "Requires product workflow connection" },
+        { label: "Edit product", reason: "Requires product workflow connection" },
+        { label: "Delete product", reason: "Disabled here" },
+    ];
+    const imageActions = [
+        { label: "Upload image", reason: "Not connected yet" },
+        { label: "Bulk image upload", reason: "Coming soon" },
+        { label: "Delete image", reason: "Disabled here" },
+    ];
+    const barcodeActions = [
+        { label: "Generate barcode", reason: "Not connected yet" },
+        { label: "Print labels", reason: "Disabled here" },
+        { label: "Run duplicate scan", reason: "Read-only" },
+    ];
+    if (drawerKey === "total") {
+        return {
+            actions: [readOnlyAction, ...productWorkflowActions],
+            description: "Read-only overview of all loaded product records.",
+            sections: [
+                { title: "Product Counts", rows: [
+                    { label: "Total products", value: formatShellCount(stats.totalProducts) },
+                    { label: "Active products", value: formatShellCount(stats.activeProducts) },
+                    { label: "Inactive or draft products", value: formatShellCount(stats.inactiveProducts) },
+                    { label: "Categories", value: formatShellCount(stats.categories) },
+                ] },
+                { title: "Readiness", rows: [
+                    { label: "Products with barcode", value: formatShellCount(stats.withBarcode) },
+                    { label: "Products with image", value: formatShellCount(stats.withImages) },
+                    { label: "Product Health", value: stats.healthIssueCount > 0 ? `${formatShellCount(stats.healthIssueCount)} signals` : "No signals" },
+                ] },
+            ],
+            summaries: [
+                { label: "Total", value: formatShellCount(stats.totalProducts) },
+                { label: "Active", value: formatShellCount(stats.activeProducts) },
+                { label: "Categories", value: formatShellCount(stats.categories) },
+                { label: "Health Signals", value: formatShellCount(stats.healthIssueCount) },
+            ],
+            title: "Total Products",
+        };
+    }
+    if (drawerKey === "active") {
+        return {
+            actions: [readOnlyAction, ...productWorkflowActions],
+            description: "Read-only status for products currently marked active or inactive.",
+            sections: [
+                { title: "Status Split", rows: [
+                    { label: "Active products", value: formatShellCount(stats.activeProducts) },
+                    { label: "Inactive or draft products", value: formatShellCount(stats.inactiveProducts) },
+                    { label: "Total products", value: formatShellCount(stats.totalProducts) },
+                ] },
+                { title: "Notes", rows: [
+                    { label: "Filtered list shortcut", value: "Coming soon" },
+                    { label: "Status edits", value: "Disabled here" },
+                ] },
+            ],
+            summaries: [
+                { label: "Active", value: formatShellCount(stats.activeProducts) },
+                { label: "Inactive/Draft", value: formatShellCount(stats.inactiveProducts) },
+                { label: "Total", value: formatShellCount(stats.totalProducts) },
+            ],
+            title: "Active Products",
+        };
+    }
+    if (drawerKey === "missing_images" || drawerKey === "images") {
+        return {
+            actions: imageActions,
+            description: "Read-only image coverage status for loaded product records.",
+            sections: [
+                { title: "Image Coverage", rows: [
+                    { label: "Products with image", value: formatShellCount(stats.withImages) },
+                    { label: "Products missing image", value: formatShellCount(stats.missingImages) },
+                    { label: "Bulk image workflow", value: "Not connected yet" },
+                ] },
+                { title: "Disabled Image Actions", rows: [
+                    { label: "Upload/change image", value: "Disabled" },
+                    { label: "Delete image", value: "Disabled" },
+                    { label: "ZIP image import/export", value: "Not enabled" },
+                ] },
+            ],
+            summaries: [
+                { label: "With Image", value: formatShellCount(stats.withImages) },
+                { label: "Missing Image", value: formatShellCount(stats.missingImages) },
+                { label: "Total", value: formatShellCount(stats.totalProducts) },
+            ],
+            title: drawerKey === "images" ? "Product Images" : "Missing Images",
+        };
+    }
+    if (drawerKey === "missing_barcode" || drawerKey === "barcode_sku") {
+        return {
+            actions: barcodeActions,
+            description: "Read-only barcode and SKU readiness for loaded products and units.",
+            sections: [
+                { title: "Barcode Readiness", rows: [
+                    { label: "Products with barcode", value: formatShellCount(stats.withBarcode) },
+                    { label: "Products missing barcode", value: formatShellCount(stats.missingBarcode) },
+                    { label: "Duplicate barcode entries", value: formatShellCount(stats.duplicateBarcode) },
+                    { label: "Invalid barcode entries", value: formatShellCount(stats.invalidBarcode) },
+                ] },
+                { title: "Scanner / Label Notes", rows: [
+                    { label: "Scanner support", value: "Uses existing product workflow" },
+                    { label: "Barcode generation", value: "Not connected yet" },
+                    { label: "Label print", value: "Disabled from this shell" },
+                ] },
+            ],
+            summaries: [
+                { label: "With Barcode", value: formatShellCount(stats.withBarcode) },
+                { label: "Missing Barcode", value: formatShellCount(stats.missingBarcode) },
+                { label: "Duplicate Entries", value: formatShellCount(stats.duplicateBarcode) },
+                { label: "Invalid Entries", value: formatShellCount(stats.invalidBarcode) },
+            ],
+            title: drawerKey === "barcode_sku" ? "Barcode / SKU" : "Missing Barcode",
+        };
+    }
+    if (drawerKey === "categories") {
+        return {
+            actions: [
+                { label: "Add category", reason: "Requires category workflow connection" },
+                { label: "Edit category", reason: "Coming soon" },
+                { label: "Delete category", reason: "Disabled here" },
+            ],
+            description: "Read-only category management status for the loaded product workspace.",
+            sections: [
+                { title: "Category Status", rows: [
+                    { label: "Categories", value: formatShellCount(stats.categories) },
+                    { label: "Category assignment check", value: "Uses loaded product data" },
+                    { label: "Category management", value: "Existing workflow unchanged" },
+                ] },
+            ],
+            summaries: [
+                { label: "Categories", value: formatShellCount(stats.categories) },
+                { label: "Products", value: formatShellCount(stats.totalProducts) },
+            ],
+            title: "Categories",
+        };
+    }
+    if (drawerKey === "labels") {
+        return {
+            actions: [
+                { label: "Print barcode label", reason: "Disabled here" },
+                { label: "Print price label", reason: "Disabled here" },
+                { label: "Save print history", reason: "Not connected yet" },
+            ],
+            description: "Read-only label readiness for price labels and barcode labels.",
+            sections: [
+                { title: "Label Readiness", rows: [
+                    { label: "Products with barcode", value: formatShellCount(stats.withBarcode) },
+                    { label: "Products missing barcode", value: formatShellCount(stats.missingBarcode) },
+                    { label: "Print backend", value: "Not connected from this shell" },
+                ] },
+                { title: "Safe Status", rows: [
+                    { label: "Browser print call", value: "Not enabled here" },
+                    { label: "Print history", value: "Not connected" },
+                ] },
+            ],
+            summaries: [
+                { label: "Ready for Labels", value: formatShellCount(stats.withBarcode) },
+                { label: "Needs Barcode", value: formatShellCount(stats.missingBarcode) },
+            ],
+            title: "Labels",
+        };
+    }
+    if (drawerKey === "product_list") {
+        return {
+            actions: [readOnlyAction, ...productWorkflowActions],
+            description: "Read-only status for the product list, search, filters, and table shell.",
+            sections: [
+                { title: "List Readiness", rows: [
+                    { label: "Loaded products", value: formatShellCount(stats.totalProducts) },
+                    { label: "Search and filters", value: "Available" },
+                    { label: "Table shell", value: "Available" },
+                    { label: "Pagination", value: "Available" },
+                ] },
+                { title: "Write Actions", rows: [
+                    { label: "Add product", value: "Disabled from this shell" },
+                    { label: "Edit product", value: "Disabled from this shell" },
+                    { label: "Delete product", value: "Disabled from this shell" },
+                ] },
+            ],
+            summaries: [
+                { label: "Products", value: formatShellCount(stats.totalProducts) },
+                { label: "Active", value: formatShellCount(stats.activeProducts) },
+                { label: "Health Signals", value: formatShellCount(stats.healthIssueCount) },
+            ],
+            title: "Products List",
+        };
+    }
+    return {
+        actions: [
+            { label: "Resolve product issues", reason: "Coming soon" },
+            { label: "Run full product audit", reason: "Not connected yet" },
+            { label: "Export health report", reason: "Disabled here" },
+        ],
+        description: "Read-only product health status using only the currently loaded Products page data.",
+        sections: [
+            { title: "Health Checks", rows: [
+                { label: "Missing image", value: formatShellCount(stats.missingImages) },
+                { label: "Missing barcode", value: formatShellCount(stats.missingBarcode) },
+                { label: "Missing cost", value: formatShellCount(stats.missingCost) },
+                { label: "Low margin", value: formatShellCount(stats.lowMargin) },
+                { label: "Inactive products", value: formatShellCount(stats.inactiveProducts) },
+                { label: "Duplicate SKU/barcode", value: stats.duplicateBarcode > 0 ? formatShellCount(stats.duplicateBarcode) : "Not connected for SKU / 0 barcode duplicates" },
+            ] },
+            { title: "Stock / Expiry Signals", rows: [
+                { label: "Out of stock", value: formatShellCount(stats.outOfStock) },
+                { label: "Low stock", value: formatShellCount(stats.lowStock) },
+                { label: "Near expiry", value: formatShellCount(stats.nearExpiry) },
+                { label: "Dead stock", value: formatShellCount(stats.deadStock) },
+            ] },
+        ],
+        summaries: [
+            { label: "Health Signals", value: formatShellCount(stats.healthIssueCount) },
+            { label: "Missing Image", value: formatShellCount(stats.missingImages) },
+            { label: "Missing Barcode", value: formatShellCount(stats.missingBarcode) },
+            { label: "Inactive", value: formatShellCount(stats.inactiveProducts) },
+        ],
+        title: "Product Health",
+    };
+}
+function formatShellCount(value: number) {
+    return value.toLocaleString("en-US");
 }
 function getInsightProducts(products: Product[]): Record<SummaryInsight, Product[]> {
     return {
