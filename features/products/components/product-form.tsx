@@ -4,20 +4,14 @@ import { t } from "@/lib/i18n/ui";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Barcode, Camera, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, Usb, X, } from "lucide-react";
+import { ArrowLeft, Barcode, Camera, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, } from "@/features/products/actions";
 const QUICK_UNIT_NAMES = [
     "Piece",
-    "Bottle",
-    "Can",
-    "Bag",
     "Pack",
-    "Carton",
     "Box",
-    "Tray",
-    "Bundle",
-    "Case",
+    "Custom",
 ];
 type ProductFormImage = {
     id: string;
@@ -138,7 +132,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
         setBarcode(scannedBarcode);
         setUnits((current) => current.map((unit) => unit.isBaseUnit ? { ...unit, barcode: scannedBarcode } : unit));
         setIsScannerOpen(false);
-        setMessage(t("ui.camera.scan.simulated.barcode.field.was.auto"));
+        setMessage("Camera scan simulated. Barcode was added to the base selling unit.");
     }
     function removeUnit(unitId: string) {
         setUnits((current) => current.filter((unit) => unit.id !== unitId || unit.isBaseUnit));
@@ -177,17 +171,25 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             .split(",")
             .map((tag) => tag.trim())
             .filter(Boolean);
-        const costPriceLak = parseMoney(formData.get("costPriceLak"));
-        const sellingPriceLak = parseMoney(formData.get("sellingPriceLak"));
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
-        const hasBaseUnit = visibleUnits.some((unit) => unit.isBaseUnit);
-        const productUnits = (visibleUnits.length > 0 ? visibleUnits : [{
+        const sourceUnits = visibleUnits.length > 0 ? visibleUnits : [{
                 ...emptyUnit,
                 barcode,
+                costPriceLak: product?.costPriceLak ?? 0,
                 isBaseUnit: true,
-                sellingPriceLak,
+                isDefaultSaleUnit: true,
+                isPurchaseUnit: true,
+                sellingPriceLak: product?.sellingPriceLak ?? 0,
                 unitName: "Piece",
-            }]).map((unit, index) => {
+            }];
+        const baseUnit = sourceUnits.find((unit) => unit.isBaseUnit) ?? sourceUnits[0];
+        const defaultSaleUnit = sourceUnits.find((unit) => unit.isDefaultSaleUnit) ?? baseUnit;
+        const firstBarcodeUnit = sourceUnits.find((unit) => unit.barcode.trim().length > 0);
+        const derivedBarcode = (defaultSaleUnit?.barcode || firstBarcodeUnit?.barcode || barcode).trim();
+        const costPriceLak = parseMoney(baseUnit?.costPriceLak ?? product?.costPriceLak ?? 0);
+        const sellingPriceLak = parseMoney(defaultSaleUnit?.sellingPriceLak ?? product?.sellingPriceLak ?? 0);
+        const hasBaseUnit = visibleUnits.some((unit) => unit.isBaseUnit);
+        const productUnits = sourceUnits.map((unit, index) => {
             const conversionQty = Math.max(Number(unit.conversionQty) || 1, 1);
             const isBaseUnit = hasBaseUnit ? unit.isBaseUnit : index === 0;
             const unitPrice = Number(unit.sellingPriceLak) || (isBaseUnit ? sellingPriceLak : sellingPriceLak * conversionQty);
@@ -212,7 +214,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             };
         });
         const payload = {
-            barcode,
+            barcode: derivedBarcode,
             brandId: String(formData.get("brandId") ?? "").trim() || undefined,
             categoryId: String(formData.get("categoryId") ?? "").trim() || undefined,
             costPriceLak,
@@ -325,6 +327,10 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             router.push("/products");
         });
     }
+    const barcodeForImageSearch = (units.find((unit) => unit.isDefaultSaleUnit)?.barcode ||
+        units.find((unit) => unit.isBaseUnit)?.barcode ||
+        units.find((unit) => unit.barcode.trim().length > 0)?.barcode ||
+        barcode).trim();
     return (<form className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit}>
       <div className="sticky top-[73px] z-20 -mx-1 flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-background/95 px-1 py-3 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
@@ -381,20 +387,6 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                   </div>
 
                   <div className="lg:col-span-2">
-                    <Field label="Barcode">
-                      <div className="flex gap-2">
-                        <div className="relative min-w-0 flex-1">
-                          <Barcode aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"/>
-                          <input className="field-input pl-10" name="barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Scan or type"/>
-                        </div>
-                        <button className="inline-flex h-11 shrink-0 items-center justify-center rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setIsScannerOpen(true)} aria-label="Scan barcode">
-                          <Camera aria-hidden="true"/>
-                        </button>
-                      </div>
-                    </Field>
-                  </div>
-
-                  <div className="lg:col-span-2">
                     <Field label="SKU">
                       <div className="flex gap-2">
                         <input className="field-input font-mono" name="sku" value={sku} onChange={(event) => setSku(event.target.value)} required/>
@@ -430,39 +422,10 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                   </div>
 
                   <div className="lg:col-span-2">
-                    <Field label="Cost Price">
-                      <MoneyInput name="costPriceLak" defaultValue={0} required/>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-2">
-                    <Field label="Selling Price">
-                      <MoneyInput name="sellingPriceLak" defaultValue={0} required/>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-2">
-                    <Field label="Unit">
-                      <input className="field-input" value={units.find((unit) => unit.isBaseUnit)?.unitName ?? "Piece"} onChange={(event) => {
-                const baseUnit = units.find((unit) => unit.isBaseUnit);
-                if (baseUnit)
-                    updateUnit(baseUnit.id, { unitName: event.target.value });
-            }}/>
-                    </Field>
-                  </div>
-
-                  <div className="lg:col-span-2">
-                    <Field label="Stock">
-                      <input className="field-input" name="openingStock" type="number" min="0" placeholder="Stock-in after save"/>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-2">
                     <Field label="Low Stock Alert">
                       <input className="field-input" name="minStock" type="number" min="0" defaultValue={0}/>
                     </Field>
                   </div>
-                  <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-background px-3 text-sm font-semibold lg:col-span-2 lg:self-end">
-                    <input name="expiryEnabled" type="checkbox"/>
-                    Expiry Enabled
-                  </label>
                   <div className="lg:col-span-3">
                     <Field label="Stock Display Mode">
                       <select className="field-input" name="stockDisplayMode" defaultValue="base_unit_only">
@@ -471,33 +434,39 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                       </select>
                     </Field>
                   </div>
-                </div>
-              </section>
-
-              <details className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
-                <summary className="cursor-pointer text-sm font-semibold">Advanced product details</summary>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <Field label="Expiry Date">
-                    <input className="field-input" name="expiryDate" type="date"/>
-                  </Field>
-                  <Field label="Product tags">
-                    <input className="field-input" name="tags" placeholder={t("ui.drink.cold.can")}/>
-                  </Field>
-                  <div className="md:col-span-2">
+                  <div className="lg:col-span-6">
+                    <div className="rounded-md border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
+                      Opening stock, stock-in lots, and expiry dates are handled through Inventory Receiving after the product is saved.
+                    </div>
+                  </div>
+                  <div className="lg:col-span-3">
+                    <Field label="Product tags">
+                      <input className="field-input" name="tags" placeholder={t("ui.drink.cold.can")}/>
+                    </Field>
+                  </div>
+                  <div className="lg:col-span-6">
                     <Field label="Internal Notes">
                       <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" placeholder="Staff notes only"/>
                     </Field>
                   </div>
                 </div>
-              </details>
+              </section>
 
               <details className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4" open>
-                <summary className="cursor-pointer text-sm font-semibold">Product units</summary>
+                <summary className="cursor-pointer text-sm font-semibold">Selling Units & Barcodes</summary>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">Set how this product is sold. Each unit can have its own optional barcode.</p>
+                <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
+                  Use Piece for the base unit, then add Pack or Box when this product can be sold or received in larger quantities. Barcodes are optional per unit.
+                </div>
                 <div className="mt-4 space-y-3">
                   <div className="flex flex-wrap gap-2">
                     {QUICK_UNIT_NAMES.map((unitName) => (<button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" key={unitName} type="button" onClick={() => addNamedUnit(unitName)}>
                         {unitName}
                       </button>))}
+                    <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setIsScannerOpen(true)}>
+                      <Camera aria-hidden="true" className="size-4"/>
+                      Scan to base unit
+                    </button>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder="Custom unit name"/>
@@ -505,15 +474,15 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                       <Plus aria-hidden="true"/>
                       Add custom unit
                     </button>
+                    <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addUnit}>
+                      <Plus aria-hidden="true"/>
+                      Add blank unit
+                    </button>
                   </div>
-                  <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addUnit}>
-                    <Plus aria-hidden="true"/>
-                    Add blank unit
-                  </button>
                 </div>
                 <ProductUnitsTable units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
-              <ProductImagesSection barcode={barcode} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
+              <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
             </>) : (<>
@@ -533,20 +502,6 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                     Generate
                   </button>
                 </div>
-              </Field>
-              <Field label="Barcode">
-                <div className="flex gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <Barcode aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"/>
-                    <input className="field-input pl-10" name="barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} placeholder="Scan or type barcode" required/>
-                  </div>
-                  <button className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setIsScannerOpen(true)}>
-                    <Camera aria-hidden="true"/>
-                    Scan
-                  </button>
-                </div>
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Usb aria-hidden="true"/>{t("ui.usb.scanners.are.supported.by.focusing.this.")}</div>
               </Field>
               <Field label="SKU">
                 <div className="flex gap-2">
@@ -583,6 +538,9 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
                   <option value="breakdown">Breakdown</option>
                 </select>
               </Field>
+              <div className="md:col-span-2 rounded-md border border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
+                Opening stock, stock-in lots, and expiry dates are handled through Inventory Receiving after the product is saved.
+              </div>
               <div className="md:col-span-2">
                 <Field label="Internal Notes">
                   <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" defaultValue={product?.description} placeholder="Staff notes only"/>
@@ -592,45 +550,24 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
           </section>
 
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Pricing</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <Field label="Cost price LAK">
-                <MoneyInput name="costPriceLak" defaultValue={product?.costPriceLak ?? 0} required/>
-              </Field>
-              <Field label="Selling price LAK">
-                <MoneyInput name="sellingPriceLak" defaultValue={product?.sellingPriceLak ?? 0} required/>
-              </Field>
-            </div>
-          </section>
-
-          <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Stock and expiry setup</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <Field label="Opening stock">
-                <input className="field-input" name="openingStock" type="number" min="0" placeholder="Handled by stock-in after save"/>
-              </Field>
-              <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-background px-3 text-sm font-semibold">
-                <input name="expiryEnabled" type="checkbox"/>
-                Expiry enabled
-              </label>
-              <Field label="Expiry date">
-                <input className="field-input" name="expiryDate" type="date"/>
-              </Field>
-            </div>
-          </section>
-
-          <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Product units</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{t("ui.base.unit.plus.pack.carton.conversions.for.b")}</p>
+                <h2 className="text-lg font-semibold">Selling Units & Barcodes</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Set how this product is sold. Each unit can have its own optional barcode.</p>
               </div>
+            </div>
+            <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
+              Use Piece for the base unit, then add Pack or Box when this product can be sold or received in larger quantities. Barcodes are optional per unit.
             </div>
             <div className="mt-4 space-y-3">
               <div className="flex flex-wrap gap-2">
                 {QUICK_UNIT_NAMES.map((unitName) => (<button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" key={unitName} type="button" onClick={() => addNamedUnit(unitName)}>
                     {unitName}
                   </button>))}
+                <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setIsScannerOpen(true)}>
+                  <Camera aria-hidden="true" className="size-4"/>
+                  Scan to base unit
+                </button>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder="Custom unit name"/>
@@ -647,7 +584,7 @@ export function ProductForm({ mode, product, categories, images: _images, }: {
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("ui.changing.conversion.values.on.products.with.")}</p>
             <ProductUnitsTable units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <ProductImagesSection barcode={barcode} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
+          <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
           {product ? <ProductHistorySection product={product}/> : null}
@@ -661,12 +598,6 @@ function ProductUnitsTable({ removeUnit, units, updateUnit, }: {
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
-    const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
-    const [templateMode, setTemplateMode] = useState<"cost_plus_percent" | "cost_plus_amount">("cost_plus_percent");
-    const [templateMarkupPercent, setTemplateMarkupPercent] = useState(30);
-    const [templateAddAmountLak, setTemplateAddAmountLak] = useState(0);
-    const [templateRoundingLak, setTemplateRoundingLak] = useState(0);
-    const [templateTarget, setTemplateTarget] = useState<"all" | "selected">("all");
     function updatePricing(unit: ProductUnit, patch: Partial<ProductUnit>) {
         const nextUnit = { ...unit, ...patch };
         const shouldCalculate = patch.costPriceLak !== undefined ||
@@ -679,94 +610,11 @@ function ProductUnitsTable({ removeUnit, units, updateUnit, }: {
         }
         updateUnit(unit.id, patch);
     }
-    function toggleSelectedUnit(unitId: string) {
-        setSelectedUnitIds((current) => current.includes(unitId)
-            ? current.filter((id) => id !== unitId)
-            : [...current, unitId]);
-    }
-    function applyPriceTemplate() {
-        const targetUnits = units.filter((unit) => templateTarget === "all"
-            ? unit.status !== "inactive"
-            : selectedUnitIds.includes(unit.id));
-        for (const unit of targetUnits) {
-            const patch: Partial<ProductUnit> = {
-                addAmountLak: templateMode === "cost_plus_amount" ? templateAddAmountLak : unit.addAmountLak,
-                markupPercent: templateMode === "cost_plus_percent" ? templateMarkupPercent : unit.markupPercent,
-                pricingMode: templateMode,
-                roundingLak: templateRoundingLak,
-            };
-            patch.sellingPriceLak = calculateSellingPrice({ ...unit, ...patch });
-            updateUnit(unit.id, patch);
-        }
-    }
-    const previewUnits = units
-        .filter((unit) => templateTarget === "all" ? unit.status !== "inactive" : selectedUnitIds.includes(unit.id))
-        .slice(0, 6)
-        .map((unit) => {
-        const patch: Partial<ProductUnit> = {
-            addAmountLak: templateMode === "cost_plus_amount" ? templateAddAmountLak : unit.addAmountLak,
-            markupPercent: templateMode === "cost_plus_percent" ? templateMarkupPercent : unit.markupPercent,
-            pricingMode: templateMode,
-            roundingLak: templateRoundingLak,
-        };
-        return {
-            nextPrice: calculateSellingPrice({ ...unit, ...patch }),
-            unit,
-        };
-    });
     return (<>
-    <section className="mt-4 rounded-lg border border-border bg-background p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold">Price Template</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{t("ui.quickly.calculate.selling.prices.for.all.act")}</p>
-        </div>
-        <Field label="Template Mode">
-          <select className="field-input h-10 min-w-40" value={templateMode} onChange={(event) => setTemplateMode(event.target.value as typeof templateMode)}>
-            <option value="cost_plus_percent">{t("ui.cost")}</option>
-            <option value="cost_plus_amount">{t("ui.cost.amount")}</option>
-          </select>
-        </Field>
-        {templateMode === "cost_plus_percent" ? (<Field label={t("ui.markup")}>
-            <MoneyInput className="h-10 w-28" value={templateMarkupPercent} onValueChange={setTemplateMarkupPercent}/>
-          </Field>) : (<Field label="Add Amount LAK">
-            <MoneyInput className="h-10 w-36" value={templateAddAmountLak} onValueChange={setTemplateAddAmountLak}/>
-          </Field>)}
-        <Field label="Rounding">
-          <select className="field-input h-10 min-w-44" value={templateRoundingLak} onChange={(event) => setTemplateRoundingLak(Number(event.target.value))}>
-            <option value={0}>No rounding</option>
-            <option value={500}>Nearest 500 LAK</option>
-            <option value={1000}>{t("ui.nearest.1.000.lak")}</option>
-            <option value={5000}>{t("ui.nearest.5.000.lak")}</option>
-          </select>
-        </Field>
-        <Field label="Apply Target">
-          <select className="field-input h-10 min-w-44" value={templateTarget} onChange={(event) => setTemplateTarget(event.target.value as typeof templateTarget)}>
-            <option value="all">Apply to all units</option>
-            <option value="selected">Apply to selected units only</option>
-          </select>
-        </Field>
-        <button className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={applyPriceTemplate}>
-          Apply
-        </button>
-      </div>
-      <div className="mt-3 rounded-md border border-border bg-card p-3">
-        <div className="text-xs font-semibold uppercase text-muted-foreground">Preview Calculation</div>
-        {previewUnits.length > 0 ? (<div className="mt-2 grid gap-2 md:grid-cols-3">
-            {previewUnits.map(({ nextPrice, unit }) => (<div className="rounded-md border border-border bg-background p-2 text-xs" key={unit.id}>
-                <div className="font-semibold">{unit.unitName || "Unnamed unit"}</div>
-                <div className="mt-1 text-muted-foreground">
-                  {formatMoney(unit.costPriceLak ?? 0)} → <span className="font-semibold text-foreground">{formatMoney(nextPrice)}</span>
-                </div>
-              </div>))}
-          </div>) : (<div className="mt-2 text-xs text-muted-foreground">{t("ui.select.units.to.preview.calculation")}</div>)}
-      </div>
-    </section>
     <div className="mt-4 overflow-x-auto">
       <table className="w-full min-w-[1420px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
-            <th className="px-3 py-3">Select</th>
             <th className="px-3 py-3">Unit</th>
             <th className="px-3 py-3">Qty in Base</th>
             <th className="px-3 py-3">Barcode</th>
@@ -787,9 +635,6 @@ function ProductUnitsTable({ removeUnit, units, updateUnit, }: {
         </thead>
         <tbody>
           {units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
-              <td className="px-3 py-3">
-                <input aria-label={`Select ${unit.unitName || "unit"}`} checked={selectedUnitIds.includes(unit.id)} type="checkbox" onChange={() => toggleSelectedUnit(unit.id)}/>
-              </td>
               <td className="px-3 py-3">
                 <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
