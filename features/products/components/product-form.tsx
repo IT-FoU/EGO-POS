@@ -881,6 +881,9 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
           </div>
         </div>
         <div className="flex flex-col gap-2 border-t border-border px-5 py-4 sm:flex-row sm:justify-end">
+          <p className="text-xs leading-5 text-muted-foreground sm:mr-auto sm:max-w-md">
+            Product saves product data only. Initial stock and lot preview will not be posted until Inventory is connected.
+          </p>
           <button className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
             Close / Back to Edit
           </button>
@@ -990,6 +993,7 @@ function ProductUnitsTable({ barcodeAliases, onOpenAlias, productImages, removeU
         setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
     }
     return (<>
+    <p className="mt-4 text-xs text-muted-foreground">This table scrolls horizontally for more unit settings.</p>
     <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
       <table className="w-full min-w-[1840px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
@@ -1030,7 +1034,7 @@ function ProductUnitsTable({ barcodeAliases, onOpenAlias, productImages, removeU
                   <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
                     + Alias
                   </button>
-                  {(barcodeAliases[unit.id]?.length ?? 0) > 0 ? (<span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{barcodeAliases[unit.id]?.length ?? 0}</span>) : null}
+                  {(barcodeAliases[unit.id]?.length ?? 0) > 0 ? (<span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{barcodeAliases[unit.id]?.length ?? 0} {(barcodeAliases[unit.id]?.length ?? 0) === 1 ? "alias" : "aliases"}</span>) : null}
                 </div>
               </td>
               <td className="px-3 py-3">
