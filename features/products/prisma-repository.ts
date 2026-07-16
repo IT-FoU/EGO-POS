@@ -408,7 +408,7 @@ export async function createPrismaProduct(input: ProductWriteInput, tenant: Tena
         sellingPriceLak: input.sellingPriceLak,
       });
 
-      return tx.product.create({
+      const createdProduct = await tx.product.create({
         data: {
           barcode: optionalString(input.barcode),
           branchId: scope.branchId,
@@ -434,6 +434,8 @@ export async function createPrismaProduct(input: ProductWriteInput, tenant: Tena
         },
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
       });
+
+      return mapPrismaProduct(createdProduct);
     },
   });
 }
@@ -585,10 +587,12 @@ export async function updatePrismaProduct(productId: string, input: Partial<Prod
         });
       }
 
-      return tx.product.findUniqueOrThrow({
+      const updatedProduct = await tx.product.findUniqueOrThrow({
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
         where: { id: existing.id },
       });
+
+      return mapPrismaProduct(updatedProduct);
     },
   });
 }
@@ -607,7 +611,7 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
       });
       const timestamp = Date.now().toString().slice(-6);
 
-      return tx.product.create({
+      const duplicatedProduct = await tx.product.create({
         data: {
           barcode: null,
           branchId: scope.branchId,
@@ -650,6 +654,8 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
         },
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
       });
+
+      return mapPrismaProduct(duplicatedProduct);
     },
   });
 }
@@ -782,10 +788,12 @@ export async function archivePrismaProduct(productId: string, tenant: TenantCont
       const existing = await tx.product.findFirstOrThrow({
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
-      return tx.product.update({
+      const archivedProduct = await tx.product.update({
         data: { isActive: false, status: "deleted" },
         where: { id: existing.id },
       });
+
+      return mapPrismaProduct(archivedProduct);
     },
   });
 }
@@ -820,13 +828,17 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
       );
 
       if (referenceCount > 0) {
-        return tx.product.update({
+        const archivedProduct = await tx.product.update({
           data: { isActive: false, status: "deleted" },
           where: { id: existing.id },
         });
+
+        return mapPrismaProduct(archivedProduct);
       }
 
-      return tx.product.delete({ where: { id: existing.id } });
+      const deletedProduct = await tx.product.delete({ where: { id: existing.id } });
+
+      return mapPrismaProduct(deletedProduct);
     },
   });
 }
