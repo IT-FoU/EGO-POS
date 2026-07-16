@@ -1,7 +1,7 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Camera, CheckCircle2, FileDown, Printer, Search } from "lucide-react";
 import { stockInAction } from "@/features/inventory/actions";
@@ -21,11 +21,18 @@ function generateClientStockInNo() {
     const sequence = String((now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) % 10000).padStart(4, "0");
     return `SI-${datePart}-${sequence}`;
 }
+function readBarcodeQueryParam() {
+    if (typeof window === "undefined") {
+        return "";
+    }
+    return new URLSearchParams(window.location.search).get("barcode")?.trim() ?? "";
+}
 export function QuickStockInForm({ items, suppliers, warehouses, }: {
     items: InventoryItem[];
     suppliers: Supplier[];
     warehouses: Warehouse[];
 }) {
+    const [barcodeQuery, setBarcodeQuery] = useState("");
     const [query, setQuery] = useState("");
     const [selectedItemId, setSelectedItemId] = useState("");
     const [selectedUnitId, setSelectedUnitId] = useState("");
@@ -45,6 +52,16 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     const [isPending, startTransition] = useTransition();
+    useEffect(() => {
+        const nextBarcodeQuery = readBarcodeQueryParam();
+        if (!nextBarcodeQuery)
+            return;
+        setBarcodeQuery(nextBarcodeQuery);
+        setQuery(nextBarcodeQuery);
+        setSelectedItemId("");
+        setSelectedUnitId("");
+        setIsConfirming(false);
+    }, []);
     const filteredItems = useMemo(() => {
         const term = query.trim().toLowerCase();
         if (!term) {
@@ -205,6 +222,7 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
             <Search className="size-4 text-muted-foreground" aria-hidden="true"/>
             <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder={t("ui.search.barcode.unit.barcode.sku.product.name")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </div>
+          {barcodeQuery ? (<p className="mt-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">Received from Create Product. Review the matched product before adding stock.</p>) : null}
           <div className="mt-4 grid max-h-[430px] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
             {showProductNotFound ? (<div className="rounded-lg border border-dashed border-warning/40 bg-warning/10 p-4 md:col-span-2">
                 <div className="text-sm font-semibold text-foreground">Product not found</div>
