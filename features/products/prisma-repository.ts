@@ -84,6 +84,59 @@ export async function getPrismaProductImages() {
   return [];
 }
 
+export type ProductBarcodeLookupResult = {
+  matchedBarcode: string;
+  matchedUnitId?: string;
+  matchedUnitName?: string;
+  productCode?: string;
+  productId: string;
+  productName: string;
+  sku: string;
+};
+
+export async function findPrismaProductByBarcode(barcode: string, tenant: TenantContext): Promise<ProductBarcodeLookupResult | null> {
+  const normalized = normalizeBarcode(barcode);
+  if (!normalized) {
+    return null;
+  }
+
+  const scope = await resolveTenantScope(tenant);
+  const product = await db.product.findFirst({
+    include: {
+      units: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          barcode: true,
+          id: true,
+          unitName: true,
+        },
+      },
+    },
+    where: {
+      companyId: scope.companyId,
+      OR: [
+        { barcode: normalized },
+        { units: { some: { barcode: normalized } } },
+      ],
+    },
+  });
+
+  if (!product) {
+    return null;
+  }
+
+  const matchedUnit = product.units.find((unit: Record<string, any>) => unit.barcode === normalized);
+  return {
+    matchedBarcode: normalized,
+    matchedUnitId: matchedUnit?.id,
+    matchedUnitName: matchedUnit?.unitName,
+    productCode: product.productCode ?? undefined,
+    productId: product.id,
+    productName: product.nameEn || product.nameLo || "Existing product",
+    sku: product.sku ?? "",
+  };
+}
+
 export type ProductWriteInput = {
   barcode?: string;
   brandId?: string;

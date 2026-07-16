@@ -1,7 +1,7 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
@@ -33,6 +33,16 @@ type InitialStockPreviewValue = {
     note: string;
 };
 type BarcodeAliasState = Record<string, string[]>;
+type DuplicateBarcodeMatch = {
+    matchedBarcode: string;
+    matchedUnitId?: string;
+    matchedUnitName?: string;
+    productCode?: string;
+    productId: string;
+    productName: string;
+    sku: string;
+    unitId: string;
+};
 type ProductPreviewSnapshot = {
     basic: {
         productName: string;
@@ -78,6 +88,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const duplicateBarcodeRequestRef = useRef(0);
     const [barcode] = useState(product?.barcode ?? "");
     const inventoryHandoffBarcode = mode === "create" && sourceFlow === "inventory" ? (initialBarcode ?? "").trim() : "";
     const hasInventoryHandoffBarcode = inventoryHandoffBarcode.length > 0;
@@ -101,6 +112,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
     const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
+    const [duplicateBarcodeMatch, setDuplicateBarcodeMatch] = useState<DuplicateBarcodeMatch | null>(null);
+    const [checkingBarcodeUnitId, setCheckingBarcodeUnitId] = useState<string | null>(null);
     const [aliasDrawerUnitId, setAliasDrawerUnitId] = useState<string | null>(null);
     const [aliasInput, setAliasInput] = useState("");
     const [unitsShareStock, setUnitsShareStock] = useState(true);
@@ -170,6 +183,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [aliasDrawerUnitId]);
     function updateUnit(unitId: string, patch: Partial<ProductUnit>) {
+        if (patch.barcode !== undefined) {
+            const nextBarcode = patch.barcode.trim();
+            setDuplicateBarcodeMatch((current) => current?.unitId === unitId && current.matchedBarcode !== nextBarcode ? null : current);
+        }
         setUnits((current) => current.map((unit) => {
             if (unit.id !== unitId) {
                 return {
@@ -180,6 +197,39 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             }
             return { ...unit, ...patch };
         }));
+    }
+    async function checkDuplicateUnitBarcode(unitId: string, value: string) {
+        const normalized = value.trim();
+        if (!isCreate || normalized.length < 4) {
+            setDuplicateBarcodeMatch((current) => current?.unitId === unitId ? null : current);
+            return;
+        }
+        const requestId = duplicateBarcodeRequestRef.current + 1;
+        duplicateBarcodeRequestRef.current = requestId;
+        setCheckingBarcodeUnitId(unitId);
+        try {
+            const response = await fetch(`/api/products/barcode-lookup?barcode=${encodeURIComponent(normalized)}`);
+            const result = await response.json().catch(() => null);
+            if (duplicateBarcodeRequestRef.current !== requestId) {
+                return;
+            }
+            if (response.ok && result?.ok && result.data) {
+                setDuplicateBarcodeMatch({
+                    ...result.data,
+                    unitId,
+                });
+                return;
+            }
+            setDuplicateBarcodeMatch((current) => current?.unitId === unitId ? null : current);
+        } catch {
+            if (duplicateBarcodeRequestRef.current === requestId) {
+                setDuplicateBarcodeMatch((current) => current?.unitId === unitId ? null : current);
+            }
+        } finally {
+            if (duplicateBarcodeRequestRef.current === requestId) {
+                setCheckingBarcodeUnitId(null);
+            }
+        }
     }
     function addUnit() {
         addNamedUnit("");
@@ -553,6 +603,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
                   Use Piece for the base unit, then add Pack or Box when this product can be sold or received in larger quantities. Barcodes are optional per unit.
                 </div>
+                {checkingBarcodeUnitId ? (<p className="mt-3 text-xs font-semibold text-muted-foreground">Checking barcode...</p>) : null}
+                {duplicateBarcodeMatch ? (<DuplicateBarcodePanel match={duplicateBarcodeMatch} onDismiss={() => setDuplicateBarcodeMatch(null)}/>) : null}
                 <label className="mt-4 flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold">
                   <input className="mt-1" type="checkbox" checked={unitsShareStock} onChange={(event) => setUnitsShareStock(event.target.checked)}/>
                   <span>
@@ -583,7 +635,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 <ProductUnitsTable barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
                     setAliasInput("");
                     setAliasDrawerUnitId(unitId);
-                }} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+                }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
@@ -674,7 +726,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             <ProductUnitsTable barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
                 setAliasInput("");
                 setAliasDrawerUnitId(unitId);
-            }} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+            }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
           <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
@@ -685,6 +737,42 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         </div>
       </div>
     </form>);
+}
+function DuplicateBarcodePanel({ match, onDismiss }: {
+    match: DuplicateBarcodeMatch;
+    onDismiss: () => void;
+}) {
+    const receivedGoodsHref = `/inventory/quick-stock-in?barcode=${encodeURIComponent(match.matchedBarcode)}`;
+    return (
+      <div className="mt-4 rounded-lg border border-warning/40 bg-warning/10 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-foreground">Product already exists</h3>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+              This barcode already belongs to an existing product. Use Received Goods if you want to add stock instead of creating a duplicate product.
+            </p>
+          </div>
+          <button className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-background transition hover:border-primary" type="button" onClick={onDismiss} aria-label="Dismiss duplicate barcode preview">
+            <X className="size-4" aria-hidden="true"/>
+          </button>
+        </div>
+        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-5">
+          <PreviewField label="Product" value={match.productName || "Existing product"}/>
+          <PreviewField label="Product Code" value={match.productCode || "—"}/>
+          <PreviewField label="SKU" value={match.sku || "—"}/>
+          <PreviewField label="Matched Unit" value={match.matchedUnitName || "Product barcode"}/>
+          <PreviewField label="Matched Barcode" value={match.matchedBarcode}/>
+        </dl>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-semibold transition hover:border-primary" href={`/products/${match.productId}/edit`}>
+            View Product
+          </Link>
+          <Link className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href={receivedGoodsHref}>
+            Received Goods
+          </Link>
+        </div>
+      </div>
+    );
 }
 function BarcodeAliasDrawer({ aliasInput, aliases, onAddAlias, onAliasInputChange, onClose, onRemoveAlias, onUpdateMainBarcode, unit, }: {
     aliasInput: string;
@@ -988,8 +1076,9 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ barcodeAliases, onOpenAlias, productImages, removeUnit, units, updateUnit, }: {
+function ProductUnitsTable({ barcodeAliases, onCheckBarcode, onOpenAlias, productImages, removeUnit, units, updateUnit, }: {
     barcodeAliases: BarcodeAliasState;
+    onCheckBarcode?: (unitId: string, barcode: string) => void;
     onOpenAlias: (unitId: string) => void;
     productImages: ProductFormImage[];
     removeUnit: (unitId: string) => void;
@@ -1038,7 +1127,7 @@ function ProductUnitsTable({ barcodeAliases, onOpenAlias, productImages, removeU
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
-                  <input className="field-input h-10 min-w-36 font-mono" value={unit.barcode} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder="Main barcode"/>
+                  <input className="field-input h-10 min-w-36 font-mono" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder="Main barcode"/>
                   <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
                     + Alias
                   </button>
