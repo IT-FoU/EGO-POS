@@ -99,6 +99,29 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     const cost = Number(unitCost) || 0;
     const totalCost = enteredQty * cost;
     const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+    function getMatchContext(item: InventoryItem) {
+        const term = searchedValue.toLowerCase();
+        if (!term) {
+            return null;
+        }
+        const matchingUnit = (item.units ?? []).find((unit) => unit.barcode?.toLowerCase() === term || unit.unitName?.toLowerCase() === term);
+        if (matchingUnit?.barcode?.toLowerCase() === term) {
+            return { label: "Matched unit barcode", value: `${matchingUnit.unitName}: ${matchingUnit.barcode}` };
+        }
+        if (matchingUnit) {
+            return { label: "Matched unit", value: matchingUnit.unitName };
+        }
+        if (item.barcode?.toLowerCase() === term) {
+            return { label: "Matched main barcode", value: item.barcode };
+        }
+        if (item.productCode?.toLowerCase() === term) {
+            return { label: "Matched product code", value: item.productCode };
+        }
+        if (item.sku?.toLowerCase() === term) {
+            return { label: "Matched SKU", value: item.sku };
+        }
+        return { label: "Receiving check", value: "Check the unit before receiving stock." };
+    }
     function selectItem(item: InventoryItem) {
         setSelectedItemId(item.id);
         setSelectedUnitId("");
@@ -202,13 +225,13 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
             {message}
           </div>
           <div className="flex gap-2">
-            <button className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-semibold" type="button" onClick={() => setMessage(t("ui.receiving.slip.print.will.be.connected.later"))}>
+            <button className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-semibold opacity-60" type="button" disabled>
               <Printer className="size-4" aria-hidden="true"/>
-              Print
+              Print - Coming soon
             </button>
-            <button className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-semibold" type="button" onClick={() => setMessage(t("ui.receiving.slip.pdf.will.be.connected.later"))}>
+            <button className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-semibold opacity-60" type="button" disabled>
               <FileDown className="size-4" aria-hidden="true"/>
-              Download PDF
+              Download PDF - Coming soon
             </button>
           </div>
         </div>) : null}
@@ -217,36 +240,43 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
         <section className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Find Product</h2>
+          <h2 className="text-lg font-semibold">Scan or Search Product</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Search by barcode, product code, SKU, product name, or unit barcode.</p>
           <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3">
             <Search className="size-4 text-muted-foreground" aria-hidden="true"/>
             <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder={t("ui.search.barcode.unit.barcode.sku.product.name")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </div>
           {barcodeQuery ? (<p className="mt-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">Received from Create Product. Review the matched product before adding stock.</p>) : null}
+          <div className="mt-4 text-sm font-semibold">Product Match / Product Not Found</div>
           <div className="mt-4 grid max-h-[430px] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
             {showProductNotFound ? (<div className="rounded-lg border border-dashed border-warning/40 bg-warning/10 p-4 md:col-span-2">
                 <div className="text-sm font-semibold text-foreground">Product not found</div>
                 <div className="mt-1 font-mono text-sm text-warning">{searchedValue}</div>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">Create this product first, then return to Inventory to receive stock.</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">No stock can be received until this product exists. Create it first, then return to Inventory to receive stock.</p>
                 <Link className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href={createProductHref}>
                   Create Product
                 </Link>
               </div>) : null}
-            {filteredItems.map((item) => (<button className={`flex items-center gap-3 rounded-lg border p-3 text-left transition hover:border-primary ${selectedItemId === item.id ? "border-primary bg-primary/10" : "border-border bg-background"}`} key={item.id} type="button" onClick={() => selectItem(item)}>
+            {filteredItems.map((item) => {
+            const matchContext = getMatchContext(item);
+            return (<button className={`flex items-center gap-3 rounded-lg border p-3 text-left transition hover:border-primary ${selectedItemId === item.id ? "border-primary bg-primary/10" : "border-border bg-background"}`} key={item.id} type="button" onClick={() => selectItem(item)}>
                 <InventoryImage imageKey={item.imageKey} label={item.productNameEn}/>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">{item.productNameEn || item.productNameLo}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{item.sku || item.productCode || item.barcode}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Code: {item.productCode || "-"} - SKU: {item.sku || "-"} - Barcode: {item.barcode || "-"}</div>
+                  {matchContext ? (<div className="mt-1 text-xs text-muted-foreground">{matchContext.label}: <span className="font-semibold text-foreground">{matchContext.value}</span></div>) : null}
                   <div className="mt-1 text-xs font-semibold text-primary">
                     {formatQuantity(item.quantity, item.baseUnit)}
                   </div>
                 </div>
-              </button>))}
+              </button>);
+        })}
           </div>
         </section>
 
         <section className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Receiving Details</h2>
+          <h2 className="text-lg font-semibold">Receive Details</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Select a product, choose the receiving unit, then review the conversion before confirming stock in.</p>
           {selectedItem ? (<div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-background p-3">
               <InventoryImage imageKey={selectedItem.imageKey} label={selectedItem.productNameEn}/>
               <div>
@@ -255,81 +285,112 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
                   Current stock: {formatQuantity(selectedItem.quantity, selectedItem.baseUnit)}
                 </div>
               </div>
-            </div>) : (<div className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{t("ui.select.a.product.to.continue")}</div>)}
+            </div>) : (<div className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Select a product before entering receiving details.</div>)}
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="text-sm font-semibold">
-              Warehouse
-              <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
-                {warehouses.map((warehouse) => (<option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold">
-              Receiving Unit
-              <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={selectedUnitId} onChange={(event) => selectUnit(event.target.value)}>
-                <option value="">Select unit every time</option>
-                {receivingUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.unitName}</option>))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold">
-              Quantity
-              <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0"/>
-            </label>
-            <label className="text-sm font-semibold">
-              Unit Cost
-              <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" inputMode="decimal" value={unitCost} onChange={(event) => setUnitCost(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0"/>
-            </label>
-            <label className="text-sm font-semibold">
-              Supplier
-              <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
-                <option value="">No supplier</option>
-                {suppliers.map((supplier) => (<option key={supplier.id} value={supplier.id}>{supplier.companyName}</option>))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold">
-              Payment Status
-              <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value as "paid" | "credit")}>
-                <option value="paid">Paid</option>
-                <option value="credit">Credit</option>
-              </select>
-            </label>
-            <label className="text-sm font-semibold">{t("ui.invoice.no")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} placeholder="INV-2026-0618-001"/>
-            </label>
-            <label className="text-sm font-semibold">{t("ui.stock.in.no")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 font-mono text-sm" value={stockInNo} onChange={(event) => setStockInNo(event.target.value)}/>
-            </label>
-            <label className="text-sm font-semibold">
-              Lot Number
-              <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={lotNumber} onChange={(event) => setLotNumber(event.target.value)} placeholder="ABC240618"/>
-            </label>
-            <label className="text-sm font-semibold">
-              Expiry Date
-              <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" type="date" value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)}/>
-            </label>
-          </div>
-
-          <label className="mt-4 flex items-center gap-2 text-sm font-semibold">
-            <input className="size-4" type="checkbox" checked={updateProductCost} onChange={(event) => setUpdateProductCost(event.target.checked)}/>
-            Update Product Cost
-          </label>
-
-          <div className="mt-4 grid gap-3 rounded-lg border border-border bg-background p-4 md:grid-cols-2">
-            <div>
-              <div className="text-xs text-muted-foreground">Conversion</div>
-              <div className="mt-1 font-semibold">
-                {enteredQty || 0} x {conversionQty || 0} = {formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? "Base")}
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Receive Details</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">Choose the warehouse, receiving unit, and quantity. Nothing is saved until Confirm Stock In.</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <label className="text-sm font-semibold">
+                  Warehouse
+                  <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
+                    {warehouses.map((warehouse) => (<option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>))}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">
+                  Receiving Unit
+                  <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={selectedUnitId} onChange={(event) => selectUnit(event.target.value)}>
+                    <option value="">Select unit every time</option>
+                    {receivingUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.unitName}</option>))}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">
+                  Quantity
+                  <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0"/>
+                </label>
               </div>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Total Cost</div>
-              <div className="mt-1 font-semibold">{formatLak(totalCost)}</div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Supplier & Cost</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">Unit cost is used for this receiving record. Changing product cost is optional.</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="text-sm font-semibold">
+                  Supplier
+                  <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+                    <option value="">No supplier</option>
+                    {suppliers.map((supplier) => (<option key={supplier.id} value={supplier.id}>{supplier.companyName}</option>))}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">
+                  Unit Cost
+                  <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" inputMode="decimal" value={unitCost} onChange={(event) => setUnitCost(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0"/>
+                </label>
+                <label className="text-sm font-semibold">
+                  Payment Status
+                  <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value as "paid" | "credit")}>
+                    <option value="paid">Paid</option>
+                    <option value="credit">Credit</option>
+                  </select>
+                </label>
+                <label className="text-sm font-semibold">{t("ui.invoice.no")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} placeholder="INV-2026-0618-001"/>
+                </label>
+                <label className="text-sm font-semibold md:col-span-2">{t("ui.stock.in.no")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 font-mono text-sm" value={stockInNo} onChange={(event) => setStockInNo(event.target.value)}/>
+                </label>
+              </div>
+              <label className="mt-3 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm font-semibold text-warning">
+                <input className="mt-1 size-4" type="checkbox" checked={updateProductCost} onChange={(event) => setUpdateProductCost(event.target.checked)}/>
+                <span>
+                  Update Product Cost
+                  <span className="mt-1 block text-xs font-normal leading-5">If enabled, this will update the saved product/unit cost after confirmation.</span>
+                </span>
+              </label>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Current Stock</div>
-              <div className="mt-1 font-semibold">{formatQuantity(currentStock, selectedItem?.baseUnit ?? "Base")}</div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Lot & Expiry</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">Lot and expiry are used to track product batches. Some products may require lot number and expiry date before receiving.</p>
+              {selectedItem?.expiryTrackingEnabled ? (<p className="mt-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">This product requires lot number and expiry date.</p>) : null}
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="text-sm font-semibold">
+                  Lot Number
+                  <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={lotNumber} onChange={(event) => setLotNumber(event.target.value)} placeholder="ABC240618"/>
+                </label>
+                <label className="text-sm font-semibold">
+                  Expiry Date
+                  <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" type="date" value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)}/>
+                </label>
+              </div>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">After Stock</div>
-              <div className="mt-1 text-xl font-bold text-success">{formatQuantity(afterStock, selectedItem?.baseUnit ?? "Base")}</div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Conversion Preview</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Receiving {enteredQty || 0} {selectedUnit?.unitName ?? "units"} x {conversionQty || 0} = {formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? "Base")} added to base stock.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div>
+                  <div className="text-xs text-muted-foreground">Received Quantity</div>
+                  <div className="mt-1 font-semibold">{enteredQty || 0} {selectedUnit?.unitName ?? "units"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Converted Base Quantity</div>
+                  <div className="mt-1 font-semibold">{formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? "Base")}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Current Stock</div>
+                  <div className="mt-1 font-semibold">{formatQuantity(currentStock, selectedItem?.baseUnit ?? "Base")}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">After Stock</div>
+                  <div className="mt-1 text-xl font-bold text-success">{formatQuantity(afterStock, selectedItem?.baseUnit ?? "Base")}</div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="text-xs text-muted-foreground">Total Cost</div>
+                  <div className="mt-1 font-semibold">{formatLak(totalCost)}</div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -357,31 +418,54 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
         </section>
       </div>
 
-      {isConfirming && selectedItem && selectedUnit ? (<section className="rounded-lg border border-primary/30 bg-card p-5">
-          <h2 className="text-lg font-semibold">Confirm Quick Stock In</h2>
-          <div className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
-            {[
-                [t("ui.stock.in.no"), stockInNo],
-                ["Product", selectedItem.productNameEn || selectedItem.productNameLo],
-                ["Supplier", selectedSupplier?.companyName ?? "No supplier"],
-                ["Payment Status", paymentStatus],
-                [t("ui.invoice.no"), invoiceNo || "-"],
-                ["Receiving Unit", selectedUnit.unitName],
-                ["Entered Quantity", enteredQty.toLocaleString("en-US")],
-                ["Conversion", `${enteredQty} x ${conversionQty}`],
-                ["Base Quantity Added", formatQuantity(baseQtyAdded, selectedItem.baseUnit)],
-                ["Current Stock", formatQuantity(currentStock, selectedItem.baseUnit)],
-                ["After Stock", formatQuantity(afterStock, selectedItem.baseUnit)],
-                ["Unit Cost", formatLak(cost)],
-                ["Total Cost", formatLak(totalCost)],
-                ["Lot Number", lotNumber || "-"],
-                ["Expiry Date", expiryDate || "-"],
-                ["Photos Count", String(photoNames.length)],
-                ["Note", note || "-"],
-            ].map(([label, value]) => (<div className="rounded-md border border-border bg-background p-3" key={label}>
-                <div className="text-xs text-muted-foreground">{label}</div>
-                <div className="mt-1 font-semibold">{value}</div>
-              </div>))}
+      {isConfirming && selectedItem && selectedUnit ? (<section className="rounded-lg border border-primary/30 bg-card p-5 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Preview Confirmation</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Review these details before running Confirm Stock In. Nothing has been saved yet.</p>
+            </div>
+            <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">Manual confirmation required</div>
+          </div>
+          {updateProductCost ? (<p className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">Update Product Cost is enabled. This will update product/unit cost after confirmation.</p>) : null}
+          <div className="mt-4 grid gap-4 text-sm xl:grid-cols-2">
+            <div className="rounded-md border border-border bg-background p-3">
+              <h3 className="text-sm font-semibold">Product</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <SummaryField label="Product" value={selectedItem.productNameEn || selectedItem.productNameLo}/>
+                <SummaryField label={t("ui.stock.in.no")} value={stockInNo}/>
+                <SummaryField label="Warehouse" value={warehouses.find((warehouse) => warehouse.id === warehouseId)?.name ?? "-"}/>
+                <SummaryField label="Receiving Unit" value={selectedUnit.unitName}/>
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <h3 className="text-sm font-semibold">Quantity & Conversion</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <SummaryField label="Entered Quantity" value={enteredQty.toLocaleString("en-US")}/>
+                <SummaryField label="Conversion" value={`${enteredQty} x ${conversionQty}`}/>
+                <SummaryField label="Base Quantity Added" value={formatQuantity(baseQtyAdded, selectedItem.baseUnit)}/>
+                <SummaryField label="After Stock" value={formatQuantity(afterStock, selectedItem.baseUnit)}/>
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <h3 className="text-sm font-semibold">Supplier & Cost</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <SummaryField label="Supplier" value={selectedSupplier?.companyName ?? "No supplier"}/>
+                <SummaryField label="Payment Status" value={paymentStatus}/>
+                <SummaryField label={t("ui.invoice.no")} value={invoiceNo || "-"}/>
+                <SummaryField label="Unit Cost" value={formatLak(cost)}/>
+                <SummaryField label="Total Cost" value={formatLak(totalCost)}/>
+                <SummaryField label="Update Product Cost" value={updateProductCost ? "Yes" : "No"}/>
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <h3 className="text-sm font-semibold">Lot & Expiry</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <SummaryField label="Lot Number" value={lotNumber || "-"}/>
+                <SummaryField label="Expiry Date" value={expiryDate || "-"}/>
+                <SummaryField label="Photos Count" value={String(photoNames.length)}/>
+                <SummaryField label="Note" value={note || "-"}/>
+              </div>
+            </div>
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <button className="inline-flex h-11 items-center rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setIsConfirming(false)}>Cancel</button>
@@ -390,5 +474,12 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
             </button>
           </div>
         </section>) : null}
+    </div>);
+}
+
+function SummaryField({ label, value }: { label: string; value: string }) {
+    return (<div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 font-semibold">{value}</div>
     </div>);
 }
