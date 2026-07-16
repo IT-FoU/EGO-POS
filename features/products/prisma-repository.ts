@@ -341,17 +341,17 @@ async function assertUniqueBarcodes(
   input: Partial<ProductWriteInput>,
   productId?: string,
 ) {
-  const barcodes = [
-    normalizeBarcode(input.barcode),
-    ...((input.units ?? []).map((unit) => normalizeBarcode(unit.barcode))),
-  ].filter(Boolean) as string[];
-  const uniqueBarcodes = Array.from(new Set(barcodes));
+  const productBarcode = normalizeBarcode(input.barcode);
+  const unitBarcodes = ((input.units ?? []).map((unit) => normalizeBarcode(unit.barcode))).filter(Boolean) as string[];
+  const uniqueUnitBarcodes = Array.from(new Set(unitBarcodes));
 
-  if (uniqueBarcodes.length !== barcodes.length) {
+  if (uniqueUnitBarcodes.length !== unitBarcodes.length) {
     throw new Error("Barcode already exists.");
   }
 
-  for (const barcode of uniqueBarcodes) {
+  const lookupBarcodes = Array.from(new Set([productBarcode, ...uniqueUnitBarcodes].filter(Boolean) as string[]));
+
+  for (const barcode of lookupBarcodes) {
     const productConflict = await client.product.findFirst({
       where: {
         barcode,

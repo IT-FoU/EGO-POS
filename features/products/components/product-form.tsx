@@ -325,8 +325,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 productCode,
                 sku,
                 category: categoryLabel(String(formData.get("categoryId") ?? "")),
-                supplierName: String(formData.get("supplierId") ?? "").trim() || "—",
-                brandName: String(formData.get("brandId") ?? "").trim() || "—",
+                supplierName: String(formData.get("supplierName") ?? "").trim() || "—",
+                brandName: String(formData.get("brandName") ?? "").trim() || "—",
                 description: String(formData.get("description") ?? "").trim() || "—",
             },
             images: productImages,
@@ -387,7 +387,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         });
         const payload = {
             barcode: derivedBarcode,
-            brandId: String(formData.get("brandId") ?? "").trim() || undefined,
+            brandId: undefined,
             categoryId: String(formData.get("categoryId") ?? "").trim() || undefined,
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
@@ -400,7 +400,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             sku,
             status: String(formData.get("status") ?? "active"),
             stockDisplayMode: String(formData.get("stockDisplayMode") ?? "base_unit_only") as "base_unit_only" | "breakdown",
-            supplierId: String(formData.get("supplierId") ?? "").trim() || undefined,
+            supplierId: undefined,
             tags,
             units: productUnits,
         };
@@ -584,12 +584,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                   </div>
                   <div className="lg:col-span-3">
                     <Field label="Supplier Name">
-                      <input className="field-input" name="supplierId" placeholder="Supplier name"/>
+                      <input className="field-input" name="supplierName" placeholder="Supplier name"/>
                     </Field>
                   </div>
                   <div className="lg:col-span-3">
                     <Field label="Brand Name">
-                      <input className="field-input" name="brandId" placeholder="Brand ID"/>
+                      <input className="field-input" name="brandName" placeholder="Brand name"/>
                     </Field>
                   </div>
                   <div className="lg:col-span-6">
@@ -678,10 +678,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
               </Field>
                     <CategoryField categories={localCategories} defaultValue={product?.categoryId ?? localCategories[0]?.id} onAction={openCategoryDialog}/>
               <Field label="Supplier Name">
-                <input className="field-input" name="supplierId" placeholder="Supplier name"/>
+                <input className="field-input" name="supplierName" placeholder="Supplier name"/>
               </Field>
               <Field label="Brand Name">
-                <input className="field-input" name="brandId" placeholder="Brand ID"/>
+                <input className="field-input" name="brandName" placeholder="Brand name"/>
               </Field>
               <div className="md:col-span-2">
                 <Field label="Description / Staff Notes">
