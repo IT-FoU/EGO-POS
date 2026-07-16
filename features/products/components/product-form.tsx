@@ -33,6 +33,7 @@ type InitialStockPreviewValue = {
     note: string;
 };
 type BarcodeAliasState = Record<string, string[]>;
+type PostSaveReceiveAction = "products" | "quick_stock_in";
 type DuplicateBarcodeMatch = {
     matchedBarcode: string;
     matchedUnitId?: string;
@@ -128,6 +129,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         costLak: 0,
         note: "",
     });
+    const [postSaveReceiveAction, setPostSaveReceiveAction] = useState<PostSaveReceiveAction>("quick_stock_in");
     const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
     const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? [
         {
@@ -411,6 +413,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 }
                 setMessage(t("ui.product.saved.successfully"));
                 router.refresh();
+                if (initialStockPreview.addOpeningStock && postSaveReceiveAction === "quick_stock_in" && derivedBarcode) {
+                    router.push(`/inventory/quick-stock-in?barcode=${encodeURIComponent(derivedBarcode)}`);
+                    return;
+                }
                 router.push("/products");
             });
             return;
@@ -637,7 +643,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     setAliasDrawerUnitId(unitId);
                 }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
-              <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
+              <InitialStockPreview onChange={setInitialStockPreview} onPostSaveReceiveActionChange={setPostSaveReceiveAction} postSaveReceiveAction={postSaveReceiveAction} showPostSaveReceiveOption={isCreate} units={units} value={initialStockPreview}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -728,7 +734,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 setAliasDrawerUnitId(unitId);
             }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
+          <InitialStockPreview onChange={setInitialStockPreview} onPostSaveReceiveActionChange={setPostSaveReceiveAction} postSaveReceiveAction={postSaveReceiveAction} showPostSaveReceiveOption={isCreate} units={units} value={initialStockPreview}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -1008,8 +1014,11 @@ function ReadinessRow({ label, ok }: { label: string; ok: boolean }) {
     </div>);
 }
 
-function InitialStockPreview({ onChange, units, value }: {
+function InitialStockPreview({ onChange, onPostSaveReceiveActionChange, postSaveReceiveAction, showPostSaveReceiveOption, units, value }: {
     onChange: (nextValue: InitialStockPreviewValue) => void;
+    onPostSaveReceiveActionChange: (nextValue: PostSaveReceiveAction) => void;
+    postSaveReceiveAction: PostSaveReceiveAction;
+    showPostSaveReceiveOption: boolean;
     units: ProductUnit[];
     value: InitialStockPreviewValue;
 }) {
@@ -1062,6 +1071,26 @@ function InitialStockPreview({ onChange, units, value }: {
             <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={value.note} onChange={(event) => update({ note: event.target.value })} placeholder="Preview note for the future receiving workflow"/>
           </Field>
         </div>
+        {showPostSaveReceiveOption && value.addOpeningStock ? (<div className="md:col-span-3 rounded-md border border-primary/25 bg-primary/5 p-4">
+            <div className="text-sm font-semibold">After saving product</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">Product will be saved first. Stock will still be added manually in Quick Stock In.</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold">
+                <input className="mt-1" type="radio" name="postSaveReceiveAction" checked={postSaveReceiveAction === "products"} onChange={() => onPostSaveReceiveActionChange("products")}/>
+                <span>
+                  Stay on Products
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">Save product data only and return to the Products page.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-md border border-primary/30 bg-primary/10 p-3 text-sm font-semibold">
+                <input className="mt-1" type="radio" name="postSaveReceiveAction" checked={postSaveReceiveAction === "quick_stock_in"} onChange={() => onPostSaveReceiveActionChange("quick_stock_in")}/>
+                <span>
+                  Go to Quick Stock In to receive stock
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">Open Inventory with this product barcode ready for manual receiving.</span>
+                </span>
+              </label>
+            </div>
+          </div>) : null}
       </div>
       <p className="mt-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
         Preview only. Real stock receiving will be connected to Inventory in a later phase. Saving the product now will not add stock yet.
