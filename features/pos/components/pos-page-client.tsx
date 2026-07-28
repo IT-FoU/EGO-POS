@@ -7,7 +7,8 @@ import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, 
 import type { LucideIcon } from "lucide-react";
 import type { HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
-import { OwnShiftReportDrawer } from "@/features/pos/components/own-shift-report-drawer";
+import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
+import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import { formatLak } from "@/features/pos/format";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
@@ -139,6 +140,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [productQuery, setProductQuery] = useState("");
     const [membershipQuery, setMembershipQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    const [cashShiftCountOpen, setCashShiftCountOpen] = useState(false);
+    const [heldBillsOpen, setHeldBillsOpen] = useState(false);
+    const [memberSearchOpen, setMemberSearchOpen] = useState(false);
     const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
     const [unitSelectionProduct, setUnitSelectionProduct] = useState<PosProduct | null>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(null);
@@ -860,6 +865,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     appendSaleTimeline(sale.saleNo, "Reprinted");
                 }
             }
+            setRecentSalesOpen(false);
             setLastReceipt(receipt);
             setReceiptAutoPrint(autoPrint);
             setReceiptOpen(true);
@@ -950,6 +956,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setMessage(`${sale.saleNo} voided. Stock restored.`);
     }
     function openManagerApprovalRequest(action: ManagerApprovalRequest["action"], sale: DemoSaleRecord) {
+        setRecentSalesOpen(false);
         setManagerApprovalRequest({ action, sale });
         setManagerApprovalPin("");
         setManagerApprovalReason(`${action === "refund" ? "Refund" : "Void"} ${sale.saleNo}`);
@@ -1383,13 +1390,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-semibold">Payment</h2>
               <div className="flex items-center gap-3">
-                <button className="text-xs font-semibold text-primary" type="button" onClick={() => {
-            if (enforcePosAction("view_recent_sales")) {
-                refreshRecentSales();
-                setRecentSalesOpen(true);
-            }
-        }}>
-                  Recent Sales
+                <button className="text-xs font-semibold text-primary" type="button" onClick={() => setMoreMenuOpen(true)}>
+                  More
                 </button>
                 <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
                   Mixed popup
@@ -1410,7 +1412,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               <PaymentButton active={paymentMode === "mixed"} icon={ReceiptText} label="Mixed" onClick={() => selectPaymentMode("mixed")}/>
             </div>
 
-            <PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} mode={paymentMode} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>
+            <PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => setHeldBillsOpen(true)} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>
 
             <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
               <Metric label="Paid" value={`${formatLak(paidAmount)} LAK`}/>
@@ -1451,6 +1453,96 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       {mixedPaymentOpen ? (<MixedPaymentModal cardAmount={cardAmount} cashAmount={cashAmount} onClose={() => setMixedPaymentOpen(false)} qrAmount={qrAmount} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setPaymentMode={setPaymentMode} setQrAmount={setQrAmount} setTransferAmount={setTransferAmount} totalAmount={totalAmount} transferAmount={transferAmount}/>) : null}
 
+      {moreMenuOpen ? (<PosModal title="More" onClose={() => setMoreMenuOpen(false)}>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MoreMenuButton label="Recent Sales" onClick={() => {
+            if (enforcePosAction("view_recent_sales")) {
+              refreshRecentSales();
+              setRecentSalesOpen(true);
+              setMoreMenuOpen(false);
+            }
+          }}/>
+          <MoreMenuButton label="Hold Bills / Resume Bills" onClick={() => {
+            setHeldBillsOpen(true);
+            setMoreMenuOpen(false);
+          }}/>
+          <MoreMenuButton label="Cash Shift Count" onClick={() => {
+            setCashShiftCountOpen(true);
+            setMoreMenuOpen(false);
+          }}/>
+          <MoreMenuButton label={uiLocale === "th" ? "Own Shift Report" : "Own Shift Report"} onClick={() => {
+            setOwnShiftReportOpen(true);
+            setMoreMenuOpen(false);
+          }}/>
+          <MoreMenuButton label="Member Search" onClick={() => {
+            setMemberSearchOpen(true);
+            setMoreMenuOpen(false);
+          }}/>
+          <MoreMenuButton label="Refund / Void" onClick={() => {
+            if (enforcePosAction("view_recent_sales")) {
+              refreshRecentSales();
+              setRecentSalesOpen(true);
+              setMoreMenuOpen(false);
+            }
+          }}/>
+          <MoreMenuButton label="Cash In / Cash Out" onClick={() => {
+            setCashShiftCountOpen(true);
+            setMoreMenuOpen(false);
+          }}/>
+          <MoreMenuButton label="Print / Reprint Receipt" onClick={() => {
+            if (lastReceipt) {
+              setReceiptAutoPrint(false);
+              setReceiptOpen(true);
+            } else if (enforcePosAction("view_recent_sales")) {
+              refreshRecentSales();
+              setRecentSalesOpen(true);
+            }
+            setMoreMenuOpen(false);
+          }}/>
+        </div>
+      </PosModal>) : null}
+
+      {heldBillsOpen ? (<PosModal title="Hold Bills / Resume Bills" onClose={() => setHeldBillsOpen(false)}>
+        <div className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <ActionButton icon={RotateCcw} label="Resume Bills" onClick={() => {
+              resumeSale();
+              setHeldBillsOpen(false);
+            }}/>
+            <ActionButton icon={ReceiptText} label="Hold Bill" onClick={() => {
+              holdSale();
+              setHeldBillsOpen(false);
+            }}/>
+          </div>
+          <select className="field-input h-11 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
+            <option value="">Held bills</option>
+            {heldSales.map((sale) => (<option key={sale.id} value={sale.id}>{sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items</option>))}
+          </select>
+          <button className="h-11 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={deleteHeldSale}>
+            Delete Held Bill
+          </button>
+        </div>
+      </PosModal>) : null}
+
+      {memberSearchOpen ? (<PosModal title="Member Search" onClose={() => setMemberSearchOpen(false)}>
+        <div className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <input className="field-input h-11 text-sm" placeholder={t("ui.phone.name.or.member.no")} value={membershipQuery} onChange={(event) => setMembershipQuery(event.target.value)} onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                searchMembership();
+              }
+            }}/>
+            <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={searchMembership}>Find Member</button>
+          </div>
+          <CustomerCard customer={selectedCustomer} loyaltyEnabled={loyaltySettings.loyaltyEnabled} maxRedeemPoints={maxRedeemablePoints} minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints} redeemPoints={effectiveRedeemPoints} onRedeemPointsChange={setRedeemPoints} redeemDiscountLak={loyaltyRedeemDiscount}/>
+        </div>
+      </PosModal>) : null}
+
+      {cashShiftCountOpen ? (<PosModal title="Cash Shift Count" onClose={() => setCashShiftCountOpen(false)}>
+        <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
+      </PosModal>) : null}
+
       {unitSelectionProduct ? (<UnitSelectorModal product={unitSelectionProduct} onClose={() => setUnitSelectionProduct(null)} onSelect={(unit) => addToCart(unitSelectionProduct, unit)}/>) : null}
 
       {saleCompletedReceipt ? (<SaleCompletedModal receipt={saleCompletedReceipt} printMode={receiptPrintMode} onClose={() => setSaleCompletedReceipt(null)} onNewSale={() => setSaleCompletedReceipt(null)} onPrint={() => {
@@ -1466,7 +1558,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
-      {ownShiftReportOpen ? <OwnShiftReportDrawer locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
+      {ownShiftReportOpen ? <OwnShiftReportModal locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
             setReceiptOpen(false);
@@ -1479,6 +1571,19 @@ function Panel({ children, className }: {
     className?: string;
 }) {
     return <section className={cn("min-w-0 rounded-lg border border-border bg-card", className)}>{children}</section>;
+}
+function PosModal({ children, onClose, title }: {
+    children: React.ReactNode;
+    onClose: () => void;
+    title: string;
+}) {
+    return <PosWorkspaceModal onClose={onClose} title={title}>{children}</PosWorkspaceModal>;
+}
+function MoreMenuButton({ label, onClick }: {
+    label: string;
+    onClick: () => void;
+}) {
+    return <button className="flex min-h-14 w-full items-center rounded-xl border border-border bg-background px-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary/10 hover:text-primary" type="button" onClick={onClick}>{label}</button>;
 }
 function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, minRedeemPoints = 1, onRedeemPointsChange, redeemDiscountLak = 0, redeemPoints = 0, }: {
     customer: PosCustomer | null;
@@ -1608,11 +1713,15 @@ function Field({ children, label }: {
       {children}
     </label>);
 }
-function PaymentFields({ availableQrBanks, cardAmount, cashAmount, mode, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
+function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount, holdDisabled, mode, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
     availableQrBanks: QrBank[];
     cardAmount: number;
     cashAmount: number;
+    heldBillCount: number;
+    holdDisabled: boolean;
     mode: PaymentMode;
+    onHoldBill: () => void;
+    onResumeBills: () => void;
     qrAmount: number;
     selectedQrBankId: string;
     setCardAmount: (value: number) => void;
@@ -1623,9 +1732,16 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, mode, qrAmoun
     transferAmount: number;
 }) {
     return (<div className="mt-3 grid gap-2 sm:grid-cols-2">
-      {(mode === "cash" || mode === "mixed") ? (<Field label="Cash Amount">
-          <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
-        </Field>) : null}
+      {(mode === "cash" || mode === "mixed") ? (<div className="grid gap-1 text-xs font-semibold sm:col-span-2">
+          <span>Cash Amount</span>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
+            <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>Hold Bill</button>
+            <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={heldBillCount === 0}>
+              Resume Bills{heldBillCount > 0 ? ` (${heldBillCount})` : ""}
+            </button>
+          </div>
+        </div>) : null}
       {(mode === "qr" || mode === "mixed") ? (<>
           <Field label="QR Bank">
             <select className="field-input" value={selectedQrBankId} onChange={(event) => setSelectedQrBankId(event.target.value)}>
@@ -2171,17 +2287,8 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
         { label: "This Month", value: "month" },
         { label: "Custom", value: "custom" },
     ];
-    return (<div className="fixed inset-0 z-40 flex justify-end bg-black/60">
-      <div className="h-full w-full max-w-5xl overflow-y-auto border-l border-border bg-card p-5 shadow-2xl">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Recent Sales</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Search, view receipts, reprint, refund, void, duplicate, or soft-delete bills.</p>
-          </div>
-          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    return (<PosWorkspaceModal onClose={onClose} title="Recent Sales">
+        <p className="text-sm text-muted-foreground">Search, view receipts, reprint, refund, void, duplicate, or soft-delete bills.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
@@ -2248,8 +2355,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
               </div>
             </div>))}
         </div>
-      </div>
-    </div>);
+    </PosWorkspaceModal>);
 }
 function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
     autoPrint?: boolean;
@@ -2286,13 +2392,8 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     }, [autoPrint, autoPrintStarted, onReprint]);
     const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
     const receiptFooter = receiptSettings.receiptFooter || "Thank you";
-    return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-center justify-between gap-3 print:hidden">
-          <h2 className="text-lg font-semibold">Receipt preview</h2>
-          <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
-        </div>
-        <div className="mt-4 rounded-md border border-border bg-background p-5 font-mono text-sm">
+    return (<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title="Receipt preview">
+        <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
           <div className="text-center">
             <div className="text-lg font-bold">{receiptTitle}</div>
             <div>{branchName}</div>
@@ -2330,8 +2431,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
           <Printer aria-hidden="true"/>
           Print receipt
         </button>
-      </div>
-    </div>);
+    </PosWorkspaceModal>);
 }
 function ReceiptRow({ label, strong = false, value }: {
     label: string;

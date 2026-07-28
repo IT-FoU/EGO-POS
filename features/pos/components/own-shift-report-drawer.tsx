@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { formatLak } from "@/features/pos/format";
+import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import type { OwnShiftReport } from "@/features/reports/own-shift-report-service";
 import { cn } from "@/lib/utils";
 
@@ -203,7 +204,7 @@ function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
   );
 }
 
-export function OwnShiftReportDrawer({ locale = "en", onClose }: OwnShiftReportDrawerProps) {
+export function OwnShiftReportModal({ locale = "en", onClose }: OwnShiftReportDrawerProps) {
   const [detectedLocale, setDetectedLocale] = useState<"en" | "th">(locale);
   const c = copy(detectedLocale);
   const [report, setReport] = useState<OwnShiftReport | null>(null);
@@ -236,34 +237,24 @@ export function OwnShiftReportDrawer({ locale = "en", onClose }: OwnShiftReportD
   }, []);
 
   return (
-    <div className="pointer-events-none fixed inset-y-0 right-0 z-[60] flex w-full justify-end">
-      <aside className="pointer-events-auto flex h-full w-full max-w-[calc(100vw-4rem)] flex-col border-l border-border bg-background shadow-2xl xl:max-w-[calc(100vw-17rem)]">
-        <header className="flex items-start justify-between gap-4 border-b border-border bg-card p-5">
-          <div className="min-w-0">
-            <button className="mb-2 text-sm font-semibold text-primary" type="button" onClick={onClose}>{c.back}</button>
-            <h2 className="truncate text-xl font-semibold">{c.ownShiftReport}</h2>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button className="grid size-10 place-items-center rounded-md border border-border" type="button" onClick={loadReport} aria-label={c.refresh}>
-              <RefreshCw className={cn("size-4", isLoading && "animate-spin")} aria-hidden="true" />
-            </button>
-            <button className="grid size-10 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close">
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {error ? (
-            <div className="rounded-md border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{error}</div>
-          ) : isLoading ? (
-            <div className="rounded-md border border-border p-6 text-center text-sm text-muted-foreground">Loading...</div>
-          ) : report ? (
-            <ReportContent c={c} report={report} />
-          ) : (
-            <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{c.noReport}</div>
-          )}
-        </div>
-      </aside>
-    </div>
+    <PosWorkspaceModal
+      headerActions={(
+        <button className="grid size-10 place-items-center rounded-md border border-border" type="button" onClick={loadReport} aria-label={c.refresh}>
+          <RefreshCw className={cn("size-4", isLoading && "animate-spin")} aria-hidden="true" />
+        </button>
+      )}
+      onClose={onClose}
+      title={c.ownShiftReport}
+    >
+      {error ? (
+        <div className="rounded-md border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{error}</div>
+      ) : isLoading ? (
+        <div className="rounded-md border border-border p-6 text-center text-sm text-muted-foreground">Loading...</div>
+      ) : report ? (
+        <ReportContent c={c} report={report} />
+      ) : (
+        <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{c.noReport}</div>
+      )}
+    </PosWorkspaceModal>
   );
 }
