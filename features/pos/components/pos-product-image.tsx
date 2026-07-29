@@ -17,19 +17,23 @@ const imageStyles: Record<string, string> = {
 };
 
 export function PosProductImage({
+  className,
   imageKey,
   imageUrl,
+  imageClassName,
   label,
 }: {
+  className?: string;
   imageKey: string;
   imageUrl?: string;
+  imageClassName?: string;
   label: string;
 }) {
   if (isRenderableImage(imageUrl)) {
     return (
-      <div className="h-24 overflow-hidden rounded-md border border-border bg-background">
+      <div className={cn("h-24 overflow-hidden rounded-md border border-border bg-background", className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt={label} className="size-full object-cover" src={imageUrl} />
+        <img alt={label} className={cn("size-full object-cover", imageClassName)} src={imageUrl} />
       </div>
     );
   }
@@ -39,6 +43,7 @@ export function PosProductImage({
       className={cn(
         "grid h-24 place-items-center rounded-md bg-gradient-to-br p-2 text-center text-xs font-semibold text-white shadow-inner",
         imageStyles[imageKey] ?? "from-slate-400 to-slate-700",
+        className,
       )}
     >
       {label}

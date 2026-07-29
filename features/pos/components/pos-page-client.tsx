@@ -115,6 +115,8 @@ type ResolvedPayment = {
     qrAmount: number;
     transferAmount: number;
 };
+const POS_PRODUCT_GRID_VISIBILITY_KEY = "ego.pos.productGridVisible";
+
 export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
     branchId: string;
     branchName: string;
@@ -136,14 +138,16 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [barcodeQuery, setBarcodeQuery] = useState("");
     const [productQuery, setProductQuery] = useState("");
     const [membershipQuery, setMembershipQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
+    const [productGridVisible, setProductGridVisible] = useState(true);
+    const [favoritesOpen, setFavoritesOpen] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const [cashShiftCountOpen, setCashShiftCountOpen] = useState(false);
     const [heldBillsOpen, setHeldBillsOpen] = useState(false);
     const [memberSearchOpen, setMemberSearchOpen] = useState(false);
+    const [cartCollapsed, setCartCollapsed] = useState(false);
     const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
     const [unitSelectionProduct, setUnitSelectionProduct] = useState<PosProduct | null>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(null);
@@ -263,6 +267,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             window.setTimeout(() => {
                 document.getElementById("staff-control")?.scrollIntoView({ block: "center" });
             }, 250);
+        }
+    }, []);
+    useEffect(() => {
+        const stored = window.localStorage.getItem(POS_PRODUCT_GRID_VISIBILITY_KEY);
+        if (stored === "hidden") {
+            setProductGridVisible(false);
+        }
+        if (stored === "visible") {
+            setProductGridVisible(true);
         }
     }, []);
     const categories = useMemo(() => ["All", ...Array.from(new Set(visibleProducts.map((product) => product.categoryName)))], [visibleProducts]);
@@ -502,7 +515,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setUnitSelectionProduct(matchedUnit ? productWithSortedMatchedUnit(product, matchedUnit) : product);
     }
     function scanBarcode() {
-        const normalized = barcodeQuery.trim();
+        const normalized = productQuery.trim();
         if (!normalized) {
             setMessage(t("ui.scan.or.enter.barcode.sku.or.internal.code.f"));
             return;
@@ -517,7 +530,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         const matchedUnit = product.units?.find((unit) => unit.barcode === normalized);
         selectProductForSale(product, matchedUnit);
-        setBarcodeQuery("");
+        setProductQuery("");
+    }
+    function toggleProductGrid() {
+        setProductGridVisible((current) => {
+            const next = !current;
+            window.localStorage.setItem(POS_PRODUCT_GRID_VISIBILITY_KEY, next ? "visible" : "hidden");
+            return next;
+        });
     }
     function searchMembership() {
         const query = membershipQuery.trim().toLowerCase();
@@ -728,7 +748,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             const assignedSaleNo = result.data?.saleNo ?? saleNo;
             const receipt = buildReceiptSnapshot(payment, assignedSaleNo);
             setLastReceipt(receipt);
-            setReceiptOpen(true);
+            setSaleCompletedReceipt(receipt);
             setMessage(`${assignedSaleNo} completed and saved.`);
             setCustomerDisplayMode("thank_you");
             clearSale();
@@ -803,15 +823,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
     }
     function handleReceiptPrintModeAfterSale(receipt: ReceiptSnapshot) {
-        if (receiptPrintMode === "auto_print") {
-            setLastReceipt(receipt);
-            setReceiptAutoPrint(true);
-            setReceiptOpen(true);
-            return;
-        }
-        if (receiptPrintMode === "no_auto_print") {
-            return;
-        }
         setSaleCompletedReceipt(receipt);
     }
     function receiptFromSale(sale: DemoSaleRecord): ReceiptSnapshot {
@@ -1261,49 +1272,39 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           {message}
         </div>) : null}
 
-      <section className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_390px] 2xl:grid-cols-[minmax(0,1fr)_430px]">
-        <main className="flex min-w-0 flex-col gap-3">
-          <Panel className="p-3">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto]">
+      <section className={cn("min-w-0 gap-4", productGridVisible ? "grid xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : "flex flex-col")}>
+        <main className={cn("min-w-0", productGridVisible && cartCollapsed ? "contents" : "flex flex-col gap-3")}>
+          <Panel className={cn("overflow-hidden p-3 shadow-sm", productGridVisible && cartCollapsed && "xl:col-start-1 xl:row-start-1")}>
+            <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <label className="relative">
-                <Barcode className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-primary" aria-hidden="true"/>
-                <input autoFocus className="h-14 w-full rounded-md border border-primary/40 bg-background pl-12 pr-4 text-lg font-semibold outline-none transition focus:border-primary" placeholder="Scan barcode / SKU / code" value={barcodeQuery} onChange={(event) => setBarcodeQuery(event.target.value)} onKeyDown={(event) => {
+                <Barcode className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary" aria-hidden="true"/>
+                <input autoFocus className="h-[60px] w-full rounded-xl border border-primary/35 bg-background pl-12 pr-4 text-lg font-bold shadow-inner outline-none transition placeholder:text-sm placeholder:font-medium focus:border-primary focus:ring-4 focus:ring-primary/10" placeholder={t("ui.search.or.scan.barcode.sku.product.name")} value={productQuery} onChange={(event) => setProductQuery(event.target.value)} onKeyDown={(event) => {
             if (event.key === "Enter") {
                 event.preventDefault();
                 scanBarcode();
             }
         }}/>
               </label>
-              <label className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
-                <input className="field-input h-14 pl-10" placeholder={t("ui.search.product.sku.code")} value={productQuery} onChange={(event) => setProductQuery(event.target.value)}/>
-              </label>
-              <button className="h-14 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground" type="button" onClick={scanBarcode}>
-                Scan Barcode
+              <button className="h-[60px] rounded-xl border border-primary/25 bg-primary/10 px-4 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setFavoritesOpen(true)}>
+                {t("ui.favorites")}
               </button>
+              <button className="h-[60px] rounded-xl border border-border bg-background px-4 text-sm font-bold transition hover:border-primary hover:text-primary" type="button" onClick={toggleProductGrid}>
+                {productGridVisible ? t("ui.hide.products") : t("ui.show.products")}
+              </button>
+              <div>
+                <button className="h-[60px] rounded-xl border border-border bg-background px-5 text-sm font-bold transition hover:border-primary hover:text-primary" type="button" onClick={() => setMoreMenuOpen(true)}>
+                  {t("ui.more")}
+                </button>
+              </div>
             </div>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
               {categories.map((category) => (<button className={cn("h-10 shrink-0 rounded-md border px-4 text-sm font-semibold transition", selectedCategory === category
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-background text-muted-foreground hover:border-primary hover:text-foreground")} key={category} type="button" onClick={() => setSelectedCategory(category)}>
-                  {category}
+                  <span className="block max-w-36 truncate">{category}</span>
                 </button>))}
             </div>
-            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-              {favoriteProducts.slice(0, 16).map((product, index) => {
-            const warning = getStockWarning(product, stockReferenceDate);
-            return (<button className="grid h-16 w-36 shrink-0 rounded-md border border-border bg-background p-2 text-left text-xs font-semibold transition hover:border-primary" key={productKey(product, index)} type="button" onClick={() => addToCart(product)}>
-                    <span className="line-clamp-1">{product.nameEn}</span>
-                    <span className="flex items-center justify-between gap-1 self-end">
-                      <span className="text-primary">{formatLak(product.priceLak)}</span>
-                      <span className={cn("rounded px-1 py-0.5 text-[10px]", warning ? warningBadgeClass(warning.tone) : "bg-primary/10 text-primary")}>
-                        {warning?.label ?? product.stockQty}
-                      </span>
-                    </span>
-                  </button>);
-        })}
-            </div>
-            <div className="mt-2 flex gap-2 overflow-x-auto">
+            <div className="mt-2 flex gap-2 overflow-x-auto [scrollbar-width:thin]">
               {promotionBanners.map((banner) => (<div className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 text-xs font-semibold text-primary" key={banner}>
                   <BadgePercent className="size-4" aria-hidden="true"/>
                   {banner}
@@ -1311,235 +1312,225 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             </div>
           </Panel>
 
-          <section className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
+          {productGridVisible ? (<section className={cn("grid min-w-0 gap-3 overflow-x-hidden overflow-y-auto pr-1 [scrollbar-width:thin]", cartCollapsed ? "max-h-[812px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))] xl:col-span-2 xl:row-start-2" : "max-h-[610px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))]")}>
             {filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)}/>))}
-          </section>
+          </section>) : null}
         </main>
 
-        <aside className="flex min-w-0 flex-col gap-3">
-          <Panel>
-            <div className="flex items-center justify-between gap-3 border-b border-border p-3">
-              <div className="min-w-0">
-                <h2 className="font-semibold">Shopping Cart</h2>
-                <p className="text-xs text-muted-foreground">{cartItems.length} lines</p>
+        <aside className={cn("flex min-w-0 flex-col gap-3", productGridVisible && cartCollapsed && "self-stretch xl:col-start-2 xl:row-start-1")}>
+          <Panel className={cn("flex flex-col overflow-hidden shadow-lg", productGridVisible && cartCollapsed ? "h-full min-h-[96px]" : productGridVisible ? "h-full min-h-[420px]" : cartCollapsed ? "min-h-0" : "min-h-[420px]")}>
+            {cartCollapsed ? (<div className="flex h-full min-h-[84px] items-center justify-between gap-3 bg-primary/5 p-4">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-muted-foreground">
+                <h2 className="max-w-full truncate text-lg font-black tracking-tight text-foreground">{t("ui.shopping.cart")}</h2>
+                <span className="shrink-0">{t("ui.bill")}: {billNo}</span>
+                <span className="shrink-0">{t("ui.time")}: {currentTime}</span>
+                <span className="shrink-0">{cartItems.length} {t("ui.items")}</span>
+                <span className="min-w-0 truncate text-xl font-black text-[#FACC15]">{formatLak(totalAmount)} LAK</span>
               </div>
-              <ShoppingCart className="text-primary" aria-hidden="true"/>
+              <button className="grid size-11 shrink-0 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setCartCollapsed(false)} aria-label={t("ui.expand.cart")}>
+                <ChevronDown className="size-5" aria-hidden="true"/>
+              </button>
+            </div>) : (<>
+            <div className="flex items-center justify-between gap-3 border-b border-border bg-primary/5 p-4">
+              <div className="min-w-0">
+                <h2 className="text-2xl font-black tracking-tight">{t("ui.shopping.cart")}</h2>
+                <p className="mt-1 text-sm font-semibold text-muted-foreground">{cartItems.length} {t("ui.items")} - {formatLak(totalAmount)} LAK</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="hidden text-right text-lg font-black text-[#FACC15] sm:block">{formatLak(totalAmount)} LAK</div>
+                <button className="grid size-11 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setCartCollapsed((current) => !current)} aria-label={cartCollapsed ? t("ui.expand.cart") : t("ui.collapse.cart")}>
+                  {cartCollapsed ? <ChevronDown className="size-5" aria-hidden="true"/> : <ChevronUp className="size-5" aria-hidden="true"/>}
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-b border-border bg-background/50 px-3 py-2 text-xs">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-xs">
               <CartMeta label={t("ui.bill.no")} value={billNo}/>
-              <CartMeta label="Customer" value={selectedCustomer?.name ?? "Guest"}/>
-              <CartMeta label="Cashier" value={cashierName || "Current User"}/>
-              <CartMeta label="Time" value={currentTime}/>
+              <CartMeta label={t("ui.customer")} value={selectedCustomer?.name ?? t("ui.guest")}/>
+              <CartMeta label={t("ui.cashier")} value={cashierName || t("ui.current.user")}/>
+              <CartMeta label={t("ui.time")} value={currentTime}/>
             </div>
-            <div className="max-h-[350px] overflow-y-auto p-3">
-              {cartItems.length === 0 ? (<div className="grid min-h-36 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{t("ui.scan.barcode.or.tap.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-2">
-                  {cartItems.map((item, index) => (<div className="rounded-md border border-border bg-background p-2" key={cartLineKey(item, index)}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="line-clamp-1 text-sm font-semibold">{item.nameEn}</div>
-                          <div className="font-mono text-[11px] text-muted-foreground">{item.sku} / {item.unitName}</div>
-                          {item.stockWarning ? (<div className={cn("mt-1 text-xs font-semibold", warningTextClass(item.stockWarning.tone))}>
+            <div className={cn("flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px]" : "max-h-[54vh]")}>
+              {cartItems.length === 0 ? (<div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
+                  {cartItems.map((item, index) => (<div className="rounded-xl border border-border bg-background p-3 shadow-sm" key={cartLineKey(item, index)}>
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="size-14 shrink-0 overflow-hidden rounded-xl border border-border bg-background/70">
+                          <PosProductImage className="size-full rounded-none border-0" imageClassName="object-cover" imageKey={item.imageKey} imageUrl={item.unitImageUrl} label={item.nameEn}/>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="line-clamp-1 text-base font-bold" title={item.nameEn}>{item.nameEn}</div>
+                          <div className="truncate font-mono text-[11px] text-muted-foreground" title={`${item.sku} / ${item.unitName}`}>{item.sku} / {item.unitName}</div>
+                          {item.stockWarning ? (<div className={cn("mt-1 truncate text-xs font-semibold", warningTextClass(item.stockWarning.tone))} title={item.stockWarning.label}>
                               {item.stockWarning.label}
                             </div>) : null}
-                          {item.pricingNote ? (<div className="mt-1 text-xs font-semibold text-primary">{item.pricingNote}</div>) : null}
+                          {item.pricingNote ? (<div className="mt-1 truncate text-xs font-semibold text-primary" title={item.pricingNote}>{item.pricingNote}</div>) : null}
                         </div>
-                        <button className="grid size-8 shrink-0 place-items-center rounded-md border border-border text-danger" type="button" onClick={() => removeItem(item.id, item.unitId)} aria-label="Remove item">
-                          <Trash2 aria-hidden="true"/>
+                        <button className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-danger transition hover:border-danger/50 hover:bg-danger/10" type="button" onClick={() => removeItem(item.id, item.unitId)} aria-label="Remove item">
+                          <Trash2 className="size-4" aria-hidden="true"/>
                         </button>
                       </div>
-                      <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="mt-3 flex items-center justify-between gap-2">
                         <QuantityStepper item={item} onChange={updateQuantity}/>
                         <div className="text-right">
-                          <div className="font-semibold">{formatLak(item.priceLak * item.quantity)} LAK</div>
+                          <div className="text-lg font-black text-primary">{formatLak(item.priceLak * item.quantity)} LAK</div>
                           <div className="text-xs text-muted-foreground">{formatLak(item.priceLak)} / {item.unitName}</div>
                         </div>
                       </div>
                     </div>))}
                 </div>)}
             </div>
-          </Panel>
-
-          <Panel className="p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <UserRoundSearch className="text-primary" aria-hidden="true"/>
-              <h2 className="text-sm font-semibold">Membership Search</h2>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <input className="field-input h-10 text-sm" placeholder={t("ui.phone.name.or.member.no")} value={membershipQuery} onChange={(event) => setMembershipQuery(event.target.value)} onKeyDown={(event) => {
-            if (event.key === "Enter") {
-                event.preventDefault();
-                searchMembership();
-            }
-        }}/>
-              <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={searchMembership}>
-                Find Member
+            <div className="border-t border-border p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-black">{t("ui.payment")}</h2>
+              <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
+                {t("ui.split.payment")}
               </button>
             </div>
-            <CustomerCard
-              customer={selectedCustomer}
-              loyaltyEnabled={loyaltySettings.loyaltyEnabled}
-              maxRedeemPoints={maxRedeemablePoints}
-              minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints}
-              redeemPoints={effectiveRedeemPoints}
-              onRedeemPointsChange={setRedeemPoints}
-              redeemDiscountLak={loyaltyRedeemDiscount}
-            />
-          </Panel>
-
-          <Panel className="p-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold">Payment</h2>
-              <div className="flex items-center gap-3">
-                <button className="text-xs font-semibold text-primary" type="button" onClick={() => setMoreMenuOpen(true)}>
-                  More
-                </button>
-                <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
-                  Mixed popup
-                </button>
-              </div>
-            </div>
             <dl className="mt-3">
-              <div className="flex items-center justify-between rounded-md border border-primary/25 bg-primary/10 px-3 py-3 text-xl font-semibold">
-                <dt>Total</dt>
-                <dd>{formatLak(totalAmount)} LAK</dd>
+              <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-4 py-4 text-2xl font-black">
+                <dt>{t("ui.total")}</dt>
+                <dd className="text-[#FACC15]">{formatLak(totalAmount)} LAK</dd>
               </div>
             </dl>
             <div className="mt-3 grid grid-cols-5 gap-1">
-              <PaymentButton active={paymentMode === "cash"} icon={Banknote} label="Cash" onClick={() => selectPaymentMode("cash")}/>
+              <PaymentButton active={paymentMode === "cash"} icon={Banknote} label={t("ui.cash")} onClick={() => selectPaymentMode("cash")}/>
               <PaymentButton active={paymentMode === "qr"} icon={QrCode} label="QR" onClick={() => selectPaymentMode("qr")}/>
-              <PaymentButton active={paymentMode === "transfer"} icon={WalletCards} label="Bank" onClick={() => selectPaymentMode("transfer")}/>
-              <PaymentButton active={paymentMode === "card"} icon={CreditCard} label="Card" onClick={() => selectPaymentMode("card")}/>
-              <PaymentButton active={paymentMode === "mixed"} icon={ReceiptText} label="Mixed" onClick={() => selectPaymentMode("mixed")}/>
+              <PaymentButton active={paymentMode === "transfer"} icon={WalletCards} label={t("ui.bank")} onClick={() => selectPaymentMode("transfer")}/>
+              <PaymentButton active={paymentMode === "card"} icon={CreditCard} label={t("ui.card")} onClick={() => selectPaymentMode("card")}/>
+              <PaymentButton active={paymentMode === "mixed"} emphasis icon={ReceiptText} label={t("ui.mixed")} onClick={() => selectPaymentMode("mixed")}/>
             </div>
 
-            <PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => setHeldBillsOpen(true)} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>
+            {paymentMode === "mixed" ? (<div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3 text-sm font-semibold text-success">
+              {t("ui.mixed.payment.configured")} - {formatLak(paidAmount)} LAK
+            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => setHeldBillsOpen(true)} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>) }
 
             <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
-              <Metric label="Paid" value={`${formatLak(paidAmount)} LAK`}/>
-              <Metric label="Due" value={`${formatLak(dueAmount)} LAK`}/>
-              <Metric label="Change" value={`${formatLak(changeAmount)} LAK`}/>
+              <Metric label={t("ui.paid")} value={`${formatLak(paidAmount)} LAK`}/>
+              <Metric label={t("ui.due")} value={`${formatLak(dueAmount)} LAK`}/>
+              <Metric label={t("ui.change")} value={`${formatLak(changeAmount)} LAK`}/>
             </dl>
-            <button className="mt-3 h-12 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending}>
-              {isPending ? t("ui.completing") : "Pay"}
+            <button className="mt-4 h-16 w-full rounded-xl bg-primary text-[40px] font-black leading-none text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-105 disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending}>
+              {isPending ? t("ui.completing") : t("ui.pay")}
             </button>
-
-            <div className="mt-3 grid gap-3">
-              <div className="rounded-md border border-border bg-background p-2">
-                <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
-                  <ActionButton icon={RotateCcw} label="Resume Bill" onClick={resumeSale}/>
-                  <ActionButton icon={ReceiptText} label="Hold Bill" onClick={holdSale}/>
-                  <ActionButton icon={CalendarDays} label={uiLocale === "th" ? "รายงานกะของฉัน" : "Own Shift Report"} onClick={() => setOwnShiftReportOpen(true)}/>
-                </div>
-                <div className="mt-2 grid gap-2">
-                  <select className="field-input h-10 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
-                    <option value="">Held bills</option>
-                    {heldSales.map((sale) => (<option key={sale.id} value={sale.id}>
-                        {sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items
-                      </option>))}
-                  </select>
-                  <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={deleteHeldSale}>
-                    Delete Held Bill
-                  </button>
-                </div>
-              </div>
             </div>
+            </>)}
           </Panel>
 
           {demoMode && devDebug ? (<PosPermissionPanel auditEntries={auditEntries} pendingApprovals={pendingApprovals} policy={posPermissionPolicy} onApprove={(requestId) => resolvePendingApproval(requestId, "approved")} onReject={(requestId) => resolvePendingApproval(requestId, "rejected")} onTestAction={runControlledPosAction}/>) : null}
 
-          <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
         </aside>
       </section>
 
       {mixedPaymentOpen ? (<MixedPaymentModal cardAmount={cardAmount} cashAmount={cashAmount} onClose={() => setMixedPaymentOpen(false)} qrAmount={qrAmount} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setPaymentMode={setPaymentMode} setQrAmount={setQrAmount} setTransferAmount={setTransferAmount} totalAmount={totalAmount} transferAmount={transferAmount}/>) : null}
 
-      {moreMenuOpen ? (<PosModal title="More" onClose={() => setMoreMenuOpen(false)}>
+      {moreMenuOpen ? (<PosModal title={t("ui.more")} onClose={() => setMoreMenuOpen(false)}>
         <div className="grid gap-2 sm:grid-cols-2">
-          <MoreMenuButton label="Recent Sales" onClick={() => {
+          <MoreMenuButton label={t("ui.recent.sales")} onClick={() => {
             if (enforcePosAction("view_recent_sales")) {
-              refreshRecentSales();
-              setRecentSalesOpen(true);
-              setMoreMenuOpen(false);
+                refreshRecentSales();
+                setRecentSalesOpen(true);
+                setMoreMenuOpen(false);
             }
-          }}/>
-          <MoreMenuButton label="Hold Bills / Resume Bills" onClick={() => {
+        }}/>
+          <MoreMenuButton label={t("ui.hold.bills.resume.bills")} onClick={() => {
             setHeldBillsOpen(true);
             setMoreMenuOpen(false);
-          }}/>
-          <MoreMenuButton label="Cash Shift Count" onClick={() => {
+        }}/>
+          <MoreMenuButton label={t("ui.cash.shift.count")} onClick={() => {
             setCashShiftCountOpen(true);
             setMoreMenuOpen(false);
-          }}/>
-          <MoreMenuButton label={uiLocale === "th" ? "Own Shift Report" : "Own Shift Report"} onClick={() => {
+        }}/>
+          <MoreMenuButton label={uiLocale === "th" ? "รายงานกะของฉัน" : "Own Shift Report"} onClick={() => {
             setOwnShiftReportOpen(true);
             setMoreMenuOpen(false);
-          }}/>
-          <MoreMenuButton label="Member Search" onClick={() => {
+        }}/>
+          <MoreMenuButton label={t("ui.member.search")} onClick={() => {
             setMemberSearchOpen(true);
             setMoreMenuOpen(false);
-          }}/>
-          <MoreMenuButton label="Refund / Void" onClick={() => {
+        }}/>
+          <MoreMenuButton label={t("ui.refund.void")} onClick={() => {
             if (enforcePosAction("view_recent_sales")) {
-              refreshRecentSales();
-              setRecentSalesOpen(true);
-              setMoreMenuOpen(false);
+                refreshRecentSales();
+                setRecentSalesOpen(true);
+                setMoreMenuOpen(false);
             }
-          }}/>
-          <MoreMenuButton label="Cash In / Cash Out" onClick={() => {
+        }}/>
+          <MoreMenuButton label={t("ui.cash.in.cash.out")} onClick={() => {
             setCashShiftCountOpen(true);
             setMoreMenuOpen(false);
-          }}/>
-          <MoreMenuButton label="Print / Reprint Receipt" onClick={() => {
+        }}/>
+          <MoreMenuButton label={t("ui.print.reprint.receipt")} onClick={() => {
             if (lastReceipt) {
-              setReceiptAutoPrint(false);
-              setReceiptOpen(true);
-            } else if (enforcePosAction("view_recent_sales")) {
-              refreshRecentSales();
-              setRecentSalesOpen(true);
+                setReceiptAutoPrint(false);
+                setReceiptOpen(true);
+            }
+            else if (enforcePosAction("view_recent_sales")) {
+                refreshRecentSales();
+                setRecentSalesOpen(true);
             }
             setMoreMenuOpen(false);
-          }}/>
+        }}/>
         </div>
       </PosModal>) : null}
 
-      {heldBillsOpen ? (<PosModal title="Hold Bills / Resume Bills" onClose={() => setHeldBillsOpen(false)}>
+      {favoritesOpen ? (<PosModal title={t("ui.favorites")} onClose={() => setFavoritesOpen(false)}>
+        {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => {
+            addToCart(product);
+            setFavoritesOpen(false);
+        }}/>))}
+        </div>)}
+      </PosModal>) : null}
+
+      {heldBillsOpen ? (<PosModal title={t("ui.hold.bills.resume.bills")} onClose={() => setHeldBillsOpen(false)}>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-2">
-            <ActionButton icon={RotateCcw} label="Resume Bills" onClick={() => {
-              resumeSale();
-              setHeldBillsOpen(false);
-            }}/>
-            <ActionButton icon={ReceiptText} label="Hold Bill" onClick={() => {
-              holdSale();
-              setHeldBillsOpen(false);
-            }}/>
+            <ActionButton icon={RotateCcw} label={t("ui.resume.bills")} onClick={() => {
+            resumeSale();
+            setHeldBillsOpen(false);
+        }}/>
+            <ActionButton icon={ReceiptText} label={t("ui.hold.bills")} onClick={() => {
+            holdSale();
+            setHeldBillsOpen(false);
+        }}/>
           </div>
           <select className="field-input h-11 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
-            <option value="">Held bills</option>
-            {heldSales.map((sale) => (<option key={sale.id} value={sale.id}>{sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items</option>))}
+            <option value="">{t("ui.held.bills")}</option>
+            {heldSales.map((sale) => (<option key={sale.id} value={sale.id}>
+                {sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items
+              </option>))}
           </select>
           <button className="h-11 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={deleteHeldSale}>
-            Delete Held Bill
+            {t("ui.delete.held.bill")}
           </button>
         </div>
       </PosModal>) : null}
 
-      {memberSearchOpen ? (<PosModal title="Member Search" onClose={() => setMemberSearchOpen(false)}>
+      {memberSearchOpen ? (<PosModal title={t("ui.member.search")} onClose={() => setMemberSearchOpen(false)}>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <input className="field-input h-11 text-sm" placeholder={t("ui.phone.name.or.member.no")} value={membershipQuery} onChange={(event) => setMembershipQuery(event.target.value)} onKeyDown={(event) => {
-              if (event.key === "Enter") {
+            if (event.key === "Enter") {
                 event.preventDefault();
                 searchMembership();
-              }
-            }}/>
-            <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={searchMembership}>Find Member</button>
+            }
+        }}/>
+            <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={searchMembership}>
+              {t("ui.find.member")}
+            </button>
           </div>
-          <CustomerCard customer={selectedCustomer} loyaltyEnabled={loyaltySettings.loyaltyEnabled} maxRedeemPoints={maxRedeemablePoints} minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints} redeemPoints={effectiveRedeemPoints} onRedeemPointsChange={setRedeemPoints} redeemDiscountLak={loyaltyRedeemDiscount}/>
+          <CustomerCard
+            customer={selectedCustomer}
+            loyaltyEnabled={loyaltySettings.loyaltyEnabled}
+            maxRedeemPoints={maxRedeemablePoints}
+            minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints}
+            redeemPoints={effectiveRedeemPoints}
+            onRedeemPointsChange={setRedeemPoints}
+            redeemDiscountLak={loyaltyRedeemDiscount}
+          />
         </div>
       </PosModal>) : null}
 
-      {cashShiftCountOpen ? (<PosModal title="Cash Shift Count" onClose={() => setCashShiftCountOpen(false)}>
+      {cashShiftCountOpen ? (<PosModal title={t("ui.cash.shift.count")} onClose={() => setCashShiftCountOpen(false)}>
         <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
       </PosModal>) : null}
 
@@ -1549,10 +1540,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setLastReceipt(saleCompletedReceipt);
             setReceiptAutoPrint(true);
             setReceiptOpen(true);
+            setSaleCompletedReceipt(null);
         }} onView={() => {
             setLastReceipt(saleCompletedReceipt);
             setReceiptAutoPrint(false);
             setReceiptOpen(true);
+            setSaleCompletedReceipt(null);
         }}/>) : null}
 
       {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
@@ -1583,7 +1576,9 @@ function MoreMenuButton({ label, onClick }: {
     label: string;
     onClick: () => void;
 }) {
-    return <button className="flex min-h-14 w-full items-center rounded-xl border border-border bg-background px-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary/10 hover:text-primary" type="button" onClick={onClick}>{label}</button>;
+    return (<button className="flex min-h-14 w-full items-center rounded-xl border border-border bg-background px-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary/10 hover:text-primary" type="button" onClick={onClick}>
+      {label}
+    </button>);
 }
 function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, minRedeemPoints = 1, onRedeemPointsChange, redeemDiscountLak = 0, redeemPoints = 0, }: {
     customer: PosCustomer | null;
@@ -1655,18 +1650,18 @@ function ProductGridItem({ onClick, product, stockReferenceDate, }: {
     stockReferenceDate: Date;
 }) {
     return (<>
-      <button className="min-h-[176px] rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary hover:shadow-sm" type="button" onClick={onClick}>
-        <PosProductImage imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={product.nameEn}/>
-        <div className="mt-3 min-h-12">
-          <div className="line-clamp-1 text-sm font-semibold">{product.nameEn}</div>
-          <div className="line-clamp-1 text-xs text-muted-foreground">{product.sku}</div>
-        </div>
-        <div className="mt-3 flex items-end justify-between gap-2">
-          <div>
-            <div className="text-base font-semibold">{formatLak(product.priceLak)}</div>
-            <div className="text-xs text-muted-foreground">LAK / {product.unitName}</div>
+      <button className="group relative min-h-[190px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${product.nameEn} / ${product.sku}`}>
+        <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={product.nameEn}/>
+        <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/90 via-black/75 to-black/10 p-3 pt-8 text-white backdrop-blur-[2px]">
+          <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={product.nameEn}>{product.nameEn}</div>
+          <div className="mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/70" title={product.sku}>{product.sku}</div>
+          <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
+            <div className="min-w-0 overflow-hidden">
+              <div className="truncate text-[16px] font-black leading-none text-primary" title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-white/75" title={product.unitName}>{product.unitName}</div>
+            </div>
+            <StockBadge product={product} stockReferenceDate={stockReferenceDate}/>
           </div>
-          <StockBadge product={product} stockReferenceDate={stockReferenceDate}/>
         </div>
       </button>
     </>);
@@ -1685,7 +1680,7 @@ function StockBadge({ product, stockReferenceDate }: {
     stockReferenceDate: Date;
 }) {
     const warning = getStockWarning(product, stockReferenceDate);
-    return (<span className={cn("rounded-md px-2 py-1 text-xs font-semibold", warning ? warningBadgeClass(warning.tone) : "bg-primary/10 text-primary")}>
+    return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warning ? warningBadgeClass(warning.tone) : "bg-primary/20 text-primary")} title={warning ? warning.label : `${product.stockQty} left`}>
       {warning ? warning.label : `${product.stockQty} left`}
     </span>);
 }
@@ -1694,12 +1689,12 @@ function QuantityStepper({ item, onChange }: {
     onChange: (productId: string, quantity: number, unitId?: string) => void;
 }) {
     const maxSaleQty = Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1)));
-    return (<div className="inline-flex h-10 items-center rounded-md border border-border">
-      <button className="grid size-10 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity - 1, item.unitId)} aria-label="Decrease quantity">
+    return (<div className="inline-flex h-11 items-center rounded-xl border border-border bg-card">
+      <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity - 1, item.unitId)} aria-label="Decrease quantity">
         <Minus aria-hidden="true"/>
       </button>
-      <PosNumberInput className="h-10 w-14 border-x border-border bg-transparent text-center text-sm font-semibold outline-none" max={maxSaleQty} min={1} value={item.quantity} onValueChange={(value) => onChange(item.id, value, item.unitId)}/>
-      <button className="grid size-10 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity + 1, item.unitId)} aria-label="Increase quantity">
+      <PosNumberInput className="h-11 w-16 border-x border-border bg-transparent text-center text-base font-bold outline-none" max={maxSaleQty} min={1} value={item.quantity} onValueChange={(value) => onChange(item.id, value, item.unitId)}/>
+      <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity + 1, item.unitId)} aria-label="Increase quantity">
         <Plus aria-hidden="true"/>
       </button>
     </div>);
@@ -1736,7 +1731,9 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount
           <span>Cash Amount</span>
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
-            <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>Hold Bill</button>
+            <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>
+              Hold Bill
+            </button>
             <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={heldBillCount === 0}>
               Resume Bills{heldBillCount > 0 ? ` (${heldBillCount})` : ""}
             </button>
@@ -1807,7 +1804,7 @@ function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSal
           <CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true"/>
           <div className="min-w-0 text-xs">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <h3 className="text-sm font-semibold">Staff Control</h3>
+              <h3 className="text-sm font-semibold">{t("ui.cash.shift.count")}</h3>
               <span className="text-muted-foreground">|</span>
               <span className="text-muted-foreground">{businessDate}</span>
               <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", staffStatusClassName(staffStatus))}>{staffStatus}</span>
@@ -1965,21 +1962,22 @@ function PosNumberInput({ className, max, min = 0, onValueChange, value, }: {
                 setDraft("");
         }}/>);
 }
-function PaymentButton({ active, icon: Icon, label, onClick }: {
+function PaymentButton({ active, emphasis = false, icon: Icon, label, onClick }: {
     active: boolean;
+    emphasis?: boolean;
     icon: typeof Banknote;
     label: string;
     onClick: () => void;
 }) {
-    const isMixed = label === "Mixed";
-    return (<button className={cn("flex min-h-12 flex-col items-center justify-center gap-1 rounded-md border px-1 text-[11px] font-semibold transition", active
+    const isMixed = emphasis;
+    return (<button className={cn("flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-bold transition", active
             ? isMixed
                 ? "border-success bg-success text-white shadow-sm"
                 : "border-primary bg-primary text-primary-foreground"
             : isMixed
                 ? "border-success/50 bg-success/10 text-success hover:bg-success hover:text-white"
                 : "border-border text-muted-foreground hover:border-primary hover:text-foreground")} type="button" onClick={onClick}>
-      <Icon className="size-4" aria-hidden="true"/>
+      <Icon className="size-5" aria-hidden="true"/>
       {label}
     </button>);
 }
@@ -2178,13 +2176,13 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
     receipt: ReceiptSnapshot;
 }) {
     return (<div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-2xl">
+      <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-2xl" data-print-mode={printMode}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Sale completed</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{receipt.saleNo} saved successfully.</p>
+            <h2 className="text-lg font-semibold">{t("ui.payment.completed")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("ui.do.you.want.to.print.receipt")}</p>
           </div>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close sale completed modal">
+          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("ui.close")}>
             <X className="size-4" aria-hidden="true"/>
           </button>
         </div>
@@ -2196,14 +2194,14 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
           <InfoLine label="Date/time" value={formatReceiptDateTime(receipt.createdAt)}/>
         </dl>
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {printMode !== "no_auto_print" ? (<button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={onPrint}>
-              Print Receipt
-            </button>) : null}
-          {printMode !== "no_auto_print" ? (<button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onView}>
-              View Receipt
-            </button>) : null}
+          <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={onPrint}>
+            {t("ui.print.receipt")}
+          </button>
+          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onView}>
+            {t("ui.view.receipt")}
+          </button>
           <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onNewSale}>
-            New Sale
+            {t("ui.save.and.new.sale")}
           </button>
         </div>
       </div>
@@ -2226,7 +2224,7 @@ function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, on
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-mono text-sm font-semibold">{sale.saleNo}</p>
-              <p className="text-xs text-muted-foreground">{sale.customerName || "Guest"} - {formatReceiptDateTime(sale.createdAt)}</p>
+              <p className="text-xs text-muted-foreground">{sale.customerName || "Guest"} · {formatReceiptDateTime(sale.createdAt)}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-muted-foreground">Total</p>
