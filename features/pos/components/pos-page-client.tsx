@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosReceiptSettings, QrBank, } from "@/features/pos/types";
+import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
@@ -25,6 +25,7 @@ import {
   reprintSaleReceipt,
   voidSaleRequest,
 } from "@/features/pos/post-sale-client";
+import { cancelHeldBill, createHeldBill, fetchHeldBills, resumeHeldBill } from "@/features/pos/held-bills-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
 import { readReceiptPrintModePreference } from "@/features/settings/receipt-print-mode";
@@ -162,6 +163,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [cardAmount, setCardAmount] = useState(0);
     const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
     const [selectedHeldSaleId, setSelectedHeldSaleId] = useState("");
+    const [heldBillsBusy, setHeldBillsBusy] = useState(false);
+    const [heldBillConflict, setHeldBillConflict] = useState<HeldSale | null>(null);
     const [selectedStaffName, setSelectedStaffName] = useState(cashierName || "Current User");
     const [activeCashSession, setActiveCashSession] = useState<PosCashSessionContext>(cashSession);
     const [staffStatus, setStaffStatus] = useState(cashSession.status === "open" ? "Working" : "Not Started");
@@ -232,11 +235,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
         setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
         void refreshRecentSalesFromServer();
+        void refreshHeldBillsFromServer();
         setReceiptPrintMode(readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"));
     }, []);
     useEffect(() => {
         function refreshOnFocus() {
             void refreshRecentSalesFromServer();
+            void refreshHeldBillsFromServer();
             setReceiptPrintMode(readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"));
         }
         window.addEventListener("focus", refreshOnFocus);
@@ -568,52 +573,182 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         setCartItems((current) => current.filter((item) => !(item.id === productId && item.unitId === unitId)));
     }
-    function holdSale() {
-        if (!enforcePosAction("hold_bill")) {
+    async function refreshHeldBillsFromServer() {
+        if (demoMode) {
             return;
+        }
+        try {
+            setHeldSales(await fetchHeldBills());
+        }
+        catch (error) {
+            setMessage(error instanceof Error ? error.message : "Unable to load held bills.");
+        }
+    }
+    function buildHeldBillSnapshot(): HeldBillCartSnapshot {
+        return {
+            appliedPromotions,
+            cardAmount,
+            cashAmount,
+            cartItems,
+            customer: selectedCustomer,
+            discountAmount,
+            discountPercent,
+            membershipDiscountLak: membershipSavings,
+            paymentMode,
+            qrAmount,
+            redeemPoints: effectiveRedeemPoints,
+            taxAmount,
+            taxEnabled,
+            taxRatePercent,
+            transferAmount,
+        };
+    }
+    function restoreHeldBill(sale: HeldSale) {
+        const snapshot = sale.snapshot;
+        const restoredCustomer = snapshot?.customer
+            ? customers.find((customer) => customer.id === snapshot.customer?.id) ?? snapshot.customer
+            : null;
+        setCartItems((snapshot?.cartItems ?? sale.items).map((item, index) => ({
+            ...item,
+            cartLineId: `${item.id}:${item.unitId ?? "default"}:held-${sale.id}-${index}`,
+        })));
+        setSelectedCustomer(restoredCustomer);
+        setDiscountAmount(snapshot?.discountAmount ?? 0);
+        setDiscountPercent(snapshot?.discountPercent ?? 0);
+        setRedeemPoints(snapshot?.redeemPoints ?? 0);
+        setTaxEnabled(snapshot?.taxEnabled ?? true);
+        setPaymentMode(snapshot?.paymentMode ?? "cash");
+        setCashAmount(snapshot?.cashAmount ?? 0);
+        setQrAmount(snapshot?.qrAmount ?? 0);
+        setTransferAmount(snapshot?.transferAmount ?? 0);
+        setCardAmount(snapshot?.cardAmount ?? 0);
+        setCustomerDisplayMode("checkout");
+    }
+    async function holdSale() {
+        if (!enforcePosAction("hold_bill")) {
+            return false;
         }
         if (cartItems.length === 0) {
             setMessage(t("ui.cart.is.empty.add.items.before.holding.a.bil"));
-            return;
+            return false;
         }
-        const heldSale: HeldSale = {
-            id: `hold-${Date.now()}`,
-            saleNo: nextHoldName(heldSales.length),
-            createdAt: new Date().toLocaleString("en-GB"),
-            itemCount: cartItems.reduce((total, item) => total + item.quantity, 0),
-            totalLak: totalAmount,
-            items: cartItems,
-        };
-        setHeldSales((current) => [heldSale, ...current]);
-        clearSale();
-        setMessage(`Bill ${heldSale.saleNo} held.`);
+        if (demoMode) {
+            const heldSale: HeldSale = {
+                id: `hold-${Date.now()}`,
+                saleNo: nextHoldName(heldSales.length),
+                createdAt: new Date().toLocaleString("en-GB"),
+                itemCount: cartItems.reduce((total, item) => total + item.quantity, 0),
+                items: cartItems,
+                snapshot: buildHeldBillSnapshot(),
+                totalLak: totalAmount,
+            };
+            setHeldSales((current) => [heldSale, ...current]);
+            clearSale();
+            setSelectedCustomer(null);
+            setMessage(`Bill ${heldSale.saleNo} held.`);
+            return true;
+        }
+        setHeldBillsBusy(true);
+        try {
+            const heldSale = await createHeldBill(buildHeldBillSnapshot(), activeCashSession.sessionId);
+            setHeldSales((current) => [heldSale, ...current]);
+            clearSale();
+            setSelectedCustomer(null);
+            setMessage(`Bill ${heldSale.saleNo} held.`);
+            return true;
+        }
+        catch (error) {
+            setMessage(error instanceof Error ? error.message : "Unable to hold this bill.");
+            return false;
+        }
+        finally {
+            setHeldBillsBusy(false);
+        }
     }
-    function resumeSale() {
+    async function resumeSale() {
         if (!enforcePosAction("resume_bill")) {
-            return;
+            return false;
         }
         const heldSale = heldSales.find((sale) => sale.id === selectedHeldSaleId);
         if (!heldSale) {
             setMessage(t("ui.select.a.held.bill.to.resume"));
-            return;
+            return false;
         }
-        setCartItems(heldSale.items);
-        setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
-        setSelectedHeldSaleId("");
-        setMessage(`Bill ${heldSale.saleNo} resumed.`);
+        if (cartItems.length > 0) {
+            setHeldBillConflict(heldSale);
+            return false;
+        }
+        return resumeHeldBillToCart(heldSale);
     }
-    function deleteHeldSale() {
+    async function resumeHeldBillToCart(heldSale: HeldSale) {
+        if (demoMode) {
+            restoreHeldBill(heldSale);
+            setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
+            setSelectedHeldSaleId("");
+            setMessage(`Bill ${heldSale.saleNo} resumed.`);
+            return true;
+        }
+        setHeldBillsBusy(true);
+        try {
+            const result = await resumeHeldBill(heldSale.id);
+            restoreHeldBill(result.sale);
+            setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
+            setSelectedHeldSaleId("");
+            setMessage(result.availabilityWarnings.length > 0
+                ? `${heldSale.saleNo} resumed with stock warnings: ${result.availabilityWarnings.join(" ")}`
+                : `Bill ${heldSale.saleNo} resumed.`);
+            return true;
+        }
+        catch (error) {
+            setMessage(error instanceof Error ? error.message : "Unable to resume this held bill.");
+            return false;
+        }
+        finally {
+            setHeldBillsBusy(false);
+        }
+    }
+    async function holdCurrentAndResume() {
+        const heldSale = heldBillConflict;
+        if (!heldSale) return;
+        const held = await holdSale();
+        if (!held) return;
+        setHeldBillConflict(null);
+        const resumed = await resumeHeldBillToCart(heldSale);
+        if (resumed) {
+            setHeldBillsOpen(false);
+        }
+    }
+    async function deleteHeldSale() {
         if (!enforcePosAction("void_bill")) {
-            return;
+            return false;
         }
         if (!selectedHeldSaleId) {
             setMessage(t("ui.select.a.held.bill.to.delete"));
-            return;
+            return false;
         }
         const sale = heldSales.find((item) => item.id === selectedHeldSaleId);
-        setHeldSales((current) => current.filter((item) => item.id !== selectedHeldSaleId));
-        setSelectedHeldSaleId("");
-        setMessage(`Bill ${sale?.saleNo ?? ""} deleted.`);
+        if (!sale) return false;
+        if (demoMode) {
+            setHeldSales((current) => current.filter((item) => item.id !== selectedHeldSaleId));
+            setSelectedHeldSaleId("");
+            setMessage(`Bill ${sale.saleNo} cancelled.`);
+            return true;
+        }
+        setHeldBillsBusy(true);
+        try {
+            await cancelHeldBill(sale.id);
+            setHeldSales((current) => current.filter((item) => item.id !== sale.id));
+            setSelectedHeldSaleId("");
+            setMessage(`Bill ${sale.saleNo} cancelled.`);
+            return true;
+        }
+        catch (error) {
+            setMessage(error instanceof Error ? error.message : "Unable to cancel this held bill.");
+            return false;
+        }
+        finally {
+            setHeldBillsBusy(false);
+        }
     }
     function resolvePaymentForCompletion(): ResolvedPayment | null {
         if (!paymentMode) {
@@ -1484,13 +1619,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       {heldBillsOpen ? (<PosModal title={t("ui.hold.bills.resume.bills")} onClose={() => setHeldBillsOpen(false)}>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-2">
-            <ActionButton icon={RotateCcw} label={t("ui.resume.bills")} onClick={() => {
-            resumeSale();
-            setHeldBillsOpen(false);
+            <ActionButton icon={RotateCcw} label={heldBillsBusy ? "Loading..." : t("ui.resume.bills")} onClick={() => {
+            void resumeSale().then((resumed) => {
+                if (resumed) setHeldBillsOpen(false);
+            });
         }}/>
-            <ActionButton icon={ReceiptText} label={t("ui.hold.bills")} onClick={() => {
-            holdSale();
-            setHeldBillsOpen(false);
+            <ActionButton icon={ReceiptText} label={heldBillsBusy ? "Saving..." : t("ui.hold.bills")} onClick={() => {
+            void holdSale().then((held) => {
+                if (held) setHeldBillsOpen(false);
+            });
         }}/>
           </div>
           <select className="field-input h-11 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
@@ -1499,8 +1636,23 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 {sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items
               </option>))}
           </select>
-          <button className="h-11 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={deleteHeldSale}>
+          <button className="h-11 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={heldBillsBusy || !selectedHeldSaleId} onClick={() => void deleteHeldSale()}>
             {t("ui.delete.held.bill")}
+          </button>
+        </div>
+      </PosModal>) : null}
+
+      {heldBillConflict ? (<PosModal title="Current cart has items" onClose={() => setHeldBillConflict(null)}>
+        <div className="grid gap-3 text-sm">
+          <p className="text-muted-foreground">Hold the current cart before restoring {heldBillConflict.saleNo}, or keep working on the current bill.</p>
+          <button className="h-11 rounded-md bg-primary px-3 font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={heldBillsBusy} onClick={() => void holdCurrentAndResume()}>
+            {heldBillsBusy ? "Saving current bill..." : "Hold Current Bill & Resume"}
+          </button>
+          <button className="h-11 rounded-md border border-border px-3 font-semibold" type="button" onClick={() => setHeldBillConflict(null)}>
+            Continue Current Bill
+          </button>
+          <button className="h-11 rounded-md border border-danger/40 px-3 font-semibold text-danger" type="button" onClick={() => setHeldBillConflict(null)}>
+            Cancel
           </button>
         </div>
       </PosModal>) : null}
