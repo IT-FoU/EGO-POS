@@ -59,6 +59,26 @@ export type HeldSale = {
   itemCount: number;
   totalLak: number;
   items: PosCartItem[];
+  snapshot?: HeldBillCartSnapshot;
+};
+
+export type HeldBillCartSnapshot = {
+  appliedPromotions: string[];
+  cardAmount: number;
+  cashAmount: number;
+  cartItems: PosCartItem[];
+  customer: PosCustomer | null;
+  discountAmount: number;
+  discountPercent: number;
+  membershipDiscountLak: number;
+  note?: string;
+  paymentMode: PaymentMode;
+  qrAmount: number;
+  redeemPoints: number;
+  taxAmount: number;
+  taxEnabled: boolean;
+  taxRatePercent: number;
+  transferAmount: number;
 };
 
 export type PaymentMode = "cash" | "qr" | "transfer" | "card" | "mixed";
