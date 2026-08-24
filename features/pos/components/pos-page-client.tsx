@@ -9,6 +9,7 @@ import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashS
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
+import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/components/return-exchange-void-modal";
 import { formatLak } from "@/features/pos/format";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
@@ -70,7 +71,7 @@ type ReceiptSnapshot = {
     taxAmount: number;
     totalAmount: number;
 };
-type DemoSaleStatus = "paid" | "refunded" | "partial_refunded" | "voided" | "deleted";
+type DemoSaleStatus = "completed" | "paid" | "adjusted" | "exchanged" | "partial_refund" | "partial_refunded" | "refunded" | "voided" | "deleted";
 type DemoSaleTimelineEvent = {
     at: string;
     label: string;
@@ -186,6 +187,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     );
     const [saleCompletedReceipt, setSaleCompletedReceipt] = useState<ReceiptSnapshot | null>(null);
     const [recentSalesOpen, setRecentSalesOpen] = useState(false);
+    const [returnExchangeOpen, setReturnExchangeOpen] = useState(false);
+    const [returnExchangeTab, setReturnExchangeTab] = useState<ReturnExchangeTab>("return");
+    const [returnExchangeSaleId, setReturnExchangeSaleId] = useState<string | undefined>();
     const [recentSales, setRecentSales] = useState<DemoSaleRecord[]>([]);
     const [recentSalesFilter, setRecentSalesFilter] = useState<"today" | "yesterday" | "week" | "month" | "custom">("today");
     const [recentSalesSearch, setRecentSalesSearch] = useState("");
@@ -1034,31 +1038,16 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }));
         setRecentSales(nextSales);
     }
+    function openReturnExchange(tab: ReturnExchangeTab, sale?: DemoSaleRecord) {
+        setRecentSalesOpen(false);
+        setMoreMenuOpen(false);
+        setReturnExchangeTab(tab);
+        setReturnExchangeSaleId(sale?.id);
+        setReturnExchangeOpen(true);
+    }
     function refundSale(sale: DemoSaleRecord) {
-        const canRefundDirectly = canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.SALE_REFUND)
-            && canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.PAYMENT_REFUND);
-        if (!canRefundDirectly && resolveStoreUiRole(posPermissionPolicy.role) === STORE_ROLES.CASHIER && !demoMode && sale.id) {
-            openManagerApprovalRequest("refund", sale);
-            return;
-        }
-        if (!enforcePosAction("refund_bill", { amountLak: sale.totalAmount })) {
-            return;
-        }
         if (!demoMode && sale.id) {
-            void (async () => {
-                try {
-                    const result = await refundSaleRequest(sale.id!);
-                    if (result.status === "pending_approval") {
-                        setMessage(`Refund pending approval for ${sale.saleNo}.`);
-                        return;
-                    }
-                    await refreshRecentSalesFromServer();
-                    recordPosAudit("refund_bill", "allowed", "not_required", `${sale.saleNo} refunded.`);
-                    setMessage(`${sale.saleNo} refunded.`);
-                } catch (error) {
-                    setMessage(error instanceof Error ? error.message : "Refund failed.");
-                }
-            })();
+            openReturnExchange("return", sale);
             return;
         }
         updateRecentSaleStatus(sale, "refunded", "Refunded");
@@ -1584,9 +1573,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }}/>
           <MoreMenuButton label={t("ui.refund.void")} onClick={() => {
             if (enforcePosAction("view_recent_sales")) {
-                refreshRecentSales();
-                setRecentSalesOpen(true);
-                setMoreMenuOpen(false);
+                openReturnExchange("return");
             }
         }}/>
           <MoreMenuButton label={t("ui.cash.in.cash.out")} onClick={() => {
@@ -1700,7 +1687,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setSaleCompletedReceipt(null);
         }}/>) : null}
 
-      {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
+      {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onExchange={(sale) => openReturnExchange("exchange", sale)} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
+      {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onClose={() => setReturnExchangeOpen(false)} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
       {ownShiftReportOpen ? <OwnShiftReportModal locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
@@ -2403,7 +2391,7 @@ function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, on
       </div>
     </PosModal>);
 }
-function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
+function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onExchange, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
     currentRole: string;
     customEnd: string;
     customStart: string;
@@ -2413,6 +2401,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
     onCustomStart: (value: string) => void;
     onDuplicate: (sale: DemoSaleRecord) => void;
     onEditField: (sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") => void;
+    onExchange: (sale: DemoSaleRecord) => void;
     onFilter: (filter: "today" | "yesterday" | "week" | "month" | "custom") => void;
     onRefund: (sale: DemoSaleRecord) => void;
     onReprint: (sale: DemoSaleRecord) => void;
@@ -2438,7 +2427,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
         { label: "Custom", value: "custom" },
     ];
     return (<PosWorkspaceModal onClose={onClose} title="Recent Sales">
-        <p className="text-sm text-muted-foreground">Search, view receipts, reprint, refund, void, duplicate, or soft-delete bills.</p>
+        <p className="text-sm text-muted-foreground">Search, view receipts, reprint, return, exchange, or void bills.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
@@ -2464,7 +2453,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm font-semibold">{sale.saleNo}</span>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", sale.status === "paid" ? "bg-success/10 text-success" : sale.status === "deleted" || sale.status === "voided" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning")}>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", sale.status === "paid" || sale.status === "completed" ? "bg-success/10 text-success" : sale.status === "deleted" || sale.status === "voided" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning")}>
                       {sale.status}
                     </span>
                     <span className="text-xs text-muted-foreground">{formatReceiptDateTime(sale.createdAt)}</span>
@@ -2487,17 +2476,20 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:w-[360px]">
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onViewReceipt(sale)}>View Receipt</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>Reprint</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>Reprint Receipt</button>
+                  {canRefundSale || canRequestManagerApproval ? (
+                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>Return / Refund</button>
+                  ) : null}
+                  {canRefundSale || canRequestManagerApproval ? (
+                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onExchange(sale)}>Exchange</button>
+                  ) : null}
+                  {canVoidSale || canRequestManagerApproval ? (
+                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>Void Sale</button>
+                  ) : null}
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onDuplicate(sale)}>Duplicate</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>Edit Note</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>Edit Customer</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>Edit Payment</button>
-                  {canRefundSale || canRequestManagerApproval ? (
-                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>{canRefundSale ? "Refund" : "Request Refund"}</button>
-                  ) : null}
-                  {canVoidSale || canRequestManagerApproval ? (
-                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>{canVoidSale ? "Void" : "Request Void"}</button>
-                  ) : null}
                   {canDeleteSale ? (
                     <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>
                   ) : null}
