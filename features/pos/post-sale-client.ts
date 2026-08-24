@@ -6,6 +6,13 @@ import {
   voidPrismaSale,
 } from "@/features/pos/post-sale-repository";
 import type { PosRecentSaleRecord, PosReceiptSnapshot, PostSaleMutationResult } from "@/features/pos/post-sale-types";
+import type {
+  ExchangeSaleInput,
+  ReturnMutationResult,
+  ReturnReceiptSnapshot,
+  ReturnSaleInput,
+  ReturnableSaleSnapshot,
+} from "@/features/pos/return-types";
 
 export type PostSaleManagerApprovalPayload = {
   managerPin: string;
@@ -55,4 +62,57 @@ export async function refundSaleRequest(saleId: string, reason?: string, approva
     method: "POST",
   });
   return readJson<PostSaleMutationResult>(response);
+}
+
+export async function lookupReturnableSales(search = "", saleId = ""): Promise<ReturnableSaleSnapshot[]> {
+  const params = new URLSearchParams();
+  if (saleId) params.set("saleId", saleId);
+  else if (search.trim()) params.set("search", search.trim());
+  const response = await fetch(`/api/pos/sales/lookup?${params.toString()}`);
+  return readJson<ReturnableSaleSnapshot[]>(response);
+}
+
+export async function lookupExchangeProducts(search: string) {
+  const params = new URLSearchParams({ search });
+  const response = await fetch(`/api/pos/products/lookup?${params.toString()}`);
+  return readJson<Array<{
+    id: string;
+    nameEn: string;
+    nameLo: string;
+    sellingPriceLak: number;
+    sku: string;
+    unitId?: string;
+    unitName?: string;
+  }>>(response);
+}
+
+export async function returnSaleRequest(
+  saleId: string,
+  input: Omit<ReturnSaleInput, "saleId">,
+  approval?: PostSaleManagerApprovalPayload,
+) {
+  const response = await fetch(`/api/pos/sales/${saleId}/return`, {
+    body: JSON.stringify({ ...input, approval }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  return readJson<ReturnMutationResult>(response);
+}
+
+export async function exchangeSaleRequest(
+  saleId: string,
+  input: Omit<ExchangeSaleInput, "saleId">,
+  approval?: PostSaleManagerApprovalPayload,
+) {
+  const response = await fetch(`/api/pos/sales/${saleId}/exchange`, {
+    body: JSON.stringify({ ...input, approval }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  return readJson<ReturnMutationResult>(response);
+}
+
+export async function fetchReturnReceipt(refundId: string): Promise<ReturnReceiptSnapshot> {
+  const response = await fetch(`/api/pos/returns/${refundId}/receipt`);
+  return readJson<ReturnReceiptSnapshot>(response);
 }
