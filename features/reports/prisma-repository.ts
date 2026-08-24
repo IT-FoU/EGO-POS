@@ -7,6 +7,7 @@ import { buildAnalyticsHub, type CategoryBreakdownRow } from "@/features/reports
 import { buildReportAnalytics } from "@/features/reports/dto-mapper";
 import type { ReportFilterOptions, ReportFilters } from "@/features/reports/report-filters";
 import { resolveReportDateRange } from "@/features/reports/report-filters";
+import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import type { TenantContext } from "@/lib/db/write-context";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { InventoryItem } from "@/features/inventory/types";
@@ -106,6 +107,39 @@ function amount(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function netReportLifecycle(refunds: Array<Record<string, any>>, saleItems: Array<Record<string, any>>) {
+  const itemById = new Map(saleItems.map((item) => [String(item.id), item]));
+  const net = { cogsLak: 0, profitLak: 0, quantitySold: 0, revenueLak: 0 };
+  for (const refund of refunds) {
+    const kind = String(refund.kind ?? "refund");
+    const refundAmt = amount(refund.refundAmount) || (kind === "refund" ? amount(refund.totalAmount) : 0);
+    if (kind === "refund") {
+      net.revenueLak -= refundAmt;
+    } else {
+      net.revenueLak += amount(refund.paymentAmount) - refundAmt;
+    }
+    for (const row of refund.items ?? []) {
+      const qty = amount(row.quantity);
+      const item = itemById.get(String(row.saleItemId));
+      net.quantitySold -= qty;
+      if (item) {
+        net.cogsLak -= amount(item.costPrice) * qty;
+        const originalQty = amount(item.quantity) || 1;
+        net.profitLak -= amount(item.profitAmount) * (qty / originalQty);
+      }
+    }
+    for (const row of refund.exchangeItems ?? []) {
+      const qty = amount(row.quantity);
+      const lineTotal = amount(row.totalAmount);
+      const lineCost = amount(row.costPrice) * qty;
+      net.quantitySold += qty;
+      net.cogsLak += lineCost;
+      net.profitLak += lineTotal - lineCost;
+    }
+  }
+  return net;
+}
+
 function monthLabel(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -132,7 +166,7 @@ function buildSaleWhere(
   const where: Record<string, unknown> = {
     branchId: filters.branchId ?? scope.branchId,
     companyId: scope.companyId,
-    saleStatus: "completed",
+    saleStatus: { in: [...REPORT_SALE_STATUSES] },
   };
 
   if (filters.dateFrom || filters.dateTo) {
@@ -315,6 +349,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     saleItemsSoldResult,
     saleItemCostRowsResult,
     productGroupsResult,
+    refundRowsResult,
     purchasesByPeriodResult,
     paymentGroupsResult,
     payableGroupsResult,
@@ -351,7 +386,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
       : Promise.resolve(settledReportValue("saleItemsSold", true, { _sum: { quantity: 0 } })),
     hasCompletedSales
       ? settleReportQuery("saleItemCostRows", true, () => db.saleItem.findMany({
-          select: { costPrice: true, quantity: true },
+          select: { costPrice: true, id: true, profitAmount: true, quantity: true },
           where: saleItemFilter,
         }))
       : Promise.resolve(settledReportValue("saleItemCostRows", true, [])),
@@ -364,6 +399,19 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
           where: saleItemFilter,
         }))
       : Promise.resolve(settledReportValue("productGroups", false, [])),
+    hasCompletedSales
+      ? settleReportQuery("refundRows", true, () => db.refund.findMany({
+          select: {
+            exchangeItems: { select: { costPrice: true, quantity: true, totalAmount: true } },
+            items: { select: { quantity: true, saleItemId: true } },
+            kind: true,
+            paymentAmount: true,
+            refundAmount: true,
+            totalAmount: true,
+          },
+          where: { sale: saleFilter },
+        }))
+      : Promise.resolve(settledReportValue("refundRows", true, [])),
     settleReportQuery("purchasesByPeriod", false, () => db.purchase.findMany({
       orderBy: { purchaseDate: "asc" },
       select: { purchaseDate: true, totalAmount: true },
@@ -437,6 +485,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   const saleItemsSold = resultOrFallback(saleItemsSoldResult, { _sum: { quantity: 0 } });
   const saleItemCostRows: Array<Record<string, any>> = resultOrFallback(saleItemCostRowsResult, []);
   const productGroups: Array<Record<string, any>> = resultOrFallback(productGroupsResult, []);
+  const refundRows: Array<Record<string, any>> = resultOrFallback(refundRowsResult, []);
   const purchasesByPeriod: Array<Record<string, any>> = resultOrFallback(purchasesByPeriodResult, []);
   const paymentGroups: Array<Record<string, any>> = resultOrFallback(paymentGroupsResult, []);
   const payableGroups: Array<Record<string, any>> = resultOrFallback(payableGroupsResult, []);
@@ -447,6 +496,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     saleItemsSoldResult,
     saleItemCostRowsResult,
     productGroupsResult,
+    refundRowsResult,
     purchasesByPeriodResult,
     paymentGroupsResult,
     payableGroupsResult,
@@ -456,12 +506,14 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     suppliersResult,
   ]);
 
-  const totalRevenue = amount(salesAggregate._sum.totalAmount);
-  const totalProfit = amount(salesAggregate._sum.profitAmount);
+  const lifecycleNet = netReportLifecycle(refundRows, saleItemCostRows);
+  const totalRevenue = amount(salesAggregate._sum.totalAmount) + lifecycleNet.revenueLak;
+  const totalProfit = amount(salesAggregate._sum.profitAmount) + lifecycleNet.profitLak;
   const totalCogsLak = saleItemCostRows.reduce(
     (total: number, row: Record<string, any>) => total + amount(row.costPrice) * amount(row.quantity),
     0,
-  );
+  ) + lifecycleNet.cogsLak;
+  const itemsSold = amount(saleItemsSold._sum.quantity) + lifecycleNet.quantitySold;
   const productById = new Map<string, Product>(products.map((product: Product) => [product.id, product]));
 
   const payableBySupplier = new Map<string, number>(
@@ -530,7 +582,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     analytics,
     categoryBreakdown,
     inventoryItems,
-    itemsSold: amount(saleItemsSold._sum.quantity),
+    itemsSold,
     paymentBreakdown: paymentGroups.map((row: Record<string, any>) => ({
       method: String(row.paymentMethod ?? "cash"),
       value: amount(row._sum.amount),

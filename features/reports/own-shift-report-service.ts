@@ -123,7 +123,7 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
       take: 25,
       where: {
         ...saleWindow,
-        saleStatus: { in: ["completed", "cancelled", "refunded"] },
+        saleStatus: { in: ["completed", "cancelled", "refunded", "partial_refunded", "exchanged", "adjusted"] },
       },
     }),
     db.refund.findMany({
@@ -158,9 +158,12 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
       continue;
     }
 
-    if (sale.saleStatus === "completed") {
-      totalSalesLak += saleTotal;
-      totalBills += 1;
+    totalSalesLak += saleTotal;
+    totalBills += 1;
+    for (const refund of sale.refunds ?? []) {
+      if (String(refund.kind ?? "refund") === "exchange") {
+        totalSalesLak += amount(refund.paymentAmount) - amount(refund.refundAmount);
+      }
     }
 
     for (const payment of sale.payments ?? []) {
