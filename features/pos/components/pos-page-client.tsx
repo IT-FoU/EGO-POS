@@ -10,6 +10,8 @@ import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/components/return-exchange-void-modal";
+import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
+import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
@@ -1775,13 +1777,15 @@ function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, m
         </div>) : null}
     </div>);
 }
-function InfoLine({ label, value }: {
+function InfoLine({ label, muted = false, strike = false, value }: {
     label: string;
+    muted?: boolean;
+    strike?: boolean;
     value: string;
 }) {
-    return (<div>
+    return (<div className="min-w-0">
       <div className="text-muted-foreground">{label}</div>
-      <div className="font-semibold">{value}</div>
+      <div className={cn("truncate font-semibold", muted && "text-muted-foreground", strike && "line-through decoration-muted-foreground/70")}>{value}</div>
     </div>);
 }
 function ProductGridItem({ onClick, product, stockReferenceDate, }: {
@@ -2448,21 +2452,25 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
             Show deleted bills
           </label>) : null}
         <div className="mt-4 grid gap-3">
-          {sales.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No recent sales found.</div>) : sales.map((sale) => (<div className="rounded-lg border border-border bg-background p-3" key={sale.saleNo}>
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          {sales.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No recent sales found.</div>) : sales.map((sale) => {
+            const statusVisual = resolveSaleStatusVisual(sale.status);
+            return (
+            <div className="overflow-hidden rounded-lg border border-border bg-background" key={sale.saleNo}>
+              <div className="flex min-w-0">
+                <SaleStatusIndicator status={sale.status} />
+                <div className="grid min-w-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm font-semibold">{sale.saleNo}</span>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", sale.status === "paid" || sale.status === "completed" ? "bg-success/10 text-success" : sale.status === "deleted" || sale.status === "voided" ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning")}>
-                      {sale.status}
-                    </span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">{t("ui.receipt.number")} {sale.receiptNo || sale.saleNo}</span>
+                    <SaleStatusBadge status={sale.status} />
                     <span className="text-xs text-muted-foreground">{formatReceiptDateTime(sale.createdAt)}</span>
                   </div>
-                  <div className="mt-2 grid gap-2 text-sm md:grid-cols-4">
-                    <InfoLine label="Customer" value={sale.customerName || "Guest"}/>
-                    <InfoLine label="Cashier" value={sale.cashierName}/>
-                    <InfoLine label="Total" value={`${formatLak(sale.totalAmount)} LAK`}/>
-                    <InfoLine label="Payment" value={sale.paymentMode.toUpperCase()}/>
+                  <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                    <InfoLine label={t("ui.customer")} value={sale.customerName || "Guest"}/>
+                    <InfoLine label={t("ui.cashier")} value={sale.cashierName}/>
+                    <InfoLine label={t("ui.sale.items")} value={String((sale.items ?? []).length)}/>
+                    <InfoLine label={t("ui.total")} value={`${formatLak(sale.totalAmount)} LAK`} muted={statusVisual.isVoided} strike={statusVisual.isVoided}/>
+                    <InfoLine label={t("ui.payment")} value={sale.paymentMode.toUpperCase()} muted={statusVisual.isVoided}/>
                   </div>
                   <details className="mt-2 text-xs text-muted-foreground">
                     <summary className="cursor-pointer font-semibold text-foreground">Sale Timeline</summary>
@@ -2474,7 +2482,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                     </div>
                   </details>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:w-[360px]">
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:max-w-[360px]">
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onViewReceipt(sale)}>View Receipt</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>Reprint Receipt</button>
                   {canRefundSale || canRequestManagerApproval ? (
@@ -2494,8 +2502,11 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                     <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>
                   ) : null}
                 </div>
+                </div>
               </div>
-            </div>))}
+            </div>
+            );
+          })}
         </div>
     </PosWorkspaceModal>);
 }

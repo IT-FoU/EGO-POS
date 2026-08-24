@@ -27,12 +27,15 @@ export function inferPaymentMode(payments: Array<{ paymentMethod: string }>): Pa
 }
 
 export function mapDbSaleStatus(status: string): PosRecentSaleRecord["status"] {
-  if (status === "cancelled") return "voided";
+  if (status === "cancelled" || status === "voided") return "voided";
   if (status === "refunded") return "refunded";
   if (status === "exchanged") return "exchanged";
   if (status === "adjusted") return "adjusted";
-  if (status === "partial_refunded") return "partial_refund";
-  return "completed";
+  if (status === "partial_refunded" || status === "partial_refund") return "partial_refunded";
+  if (status === "completed") return "completed";
+  if (status === "paid") return "paid";
+  if (status === "deleted") return "deleted";
+  return status as PosRecentSaleRecord["status"];
 }
 
 export async function resolveCashierName(tx: Record<string, any>, userId: string | null | undefined) {
