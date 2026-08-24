@@ -3,10 +3,10 @@ import {
   buildCashSessionTotals,
   calculateExpectedCash,
   calculateVariance,
-  computeCashRefundLak,
   sumCashTransactions,
   summarizeSalePayments,
 } from "@/features/cash-sessions/cash-session-calculator";
+import { CASH_SESSION_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import type {
   CashMovementInput,
   CashSessionSummary,
@@ -70,7 +70,7 @@ async function loadSessionTotals(
       where: {
         sale: {
           ...saleWindow,
-          saleStatus: "completed",
+          saleStatus: { in: [...CASH_SESSION_SALE_STATUSES] },
         },
       },
     }),
@@ -87,23 +87,29 @@ async function loadSessionTotals(
   const paymentTotals = summarizeSalePayments(payments);
   const cashInLak = sumCashTransactions(session.transactions ?? [], "cash_in");
   const cashOutLak = sumCashTransactions(session.transactions ?? [], "cash_out");
-  const refundLak = Math.round(
-    refundRows.reduce((total: number, refund: Record<string, any>) => {
-      const sale = refund.sale ?? {};
-      // Full refunds move the sale out of completed cash sales; only partial refunds
-      // on still-completed sales should reduce expected drawer cash here.
-      if (String(sale.saleStatus) !== "completed") {
-        return total;
-      }
-      return total + computeCashRefundLak(sale.payments ?? [], amount(sale.totalAmount), amount(refund.totalAmount));
-    }, 0),
-  );
+  let refundLak = 0;
+  let exchangeCashInLak = 0;
+  for (const refund of refundRows as Array<Record<string, any>>) {
+    const sale = refund.sale ?? {};
+    const saleStatus = String(sale.saleStatus);
+    const method = String(refund.refundMethod ?? "cash");
+    const refundAmount = amount(refund.refundAmount) || (String(refund.kind ?? "refund") === "refund" ? amount(refund.totalAmount) : 0);
+    const paymentAmount = amount(refund.paymentAmount);
+    if (!CASH_SESSION_SALE_STATUSES.includes(saleStatus as (typeof CASH_SESSION_SALE_STATUSES)[number])) {
+      continue;
+    }
+    if (method === "cash") {
+      refundLak += refundAmount;
+      exchangeCashInLak += paymentAmount;
+    }
+  }
+  refundLak = Math.round(refundLak);
   const voidCashLak = 0;
 
   return buildCashSessionTotals({
     cashInLak,
     cashOutLak,
-    cashSalesLak: paymentTotals.cashSalesLak,
+    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak),
     nonCashSalesLak: paymentTotals.nonCashSalesLak,
     openingCashLak: amount(session.openingCash),
     refundLak,

@@ -13,105 +13,27 @@ import {
   buildPosPolicyForTenant,
 } from "@/features/pos/pos-permission-guard";
 import { evaluatePosPermission, type PosPermissionAction } from "@/features/pos/permissions";
-import type { PaymentMode } from "@/features/pos/types";
+import { returnRemainingSaleCore } from "@/features/pos/return-repository";
+import {
+  amount,
+  getPrismaSaleById,
+  loadMutableSale,
+  lockSaleForUpdate,
+  mapSaleRow,
+  postSaleInclude,
+  RECENT_SALE_STATUSES,
+  resolveCashierName,
+} from "@/features/pos/post-sale-shared";
 import { prisma } from "@/lib/db/prisma";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
 import { withTenantTransaction } from "@/lib/db/write-context";
 
+export { getPrismaSaleById, loadMutableSale, lockSaleForUpdate, mapSaleRow } from "@/features/pos/post-sale-shared";
+
 const db = prisma as any;
-
-function amount(value: unknown) {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function inferPaymentMode(payments: Array<{ paymentMethod: string }>): PaymentMode {
-  if (payments.length === 0) {
-    return "cash";
-  }
-  const methods = new Set(payments.map((payment) => payment.paymentMethod));
-  if (methods.size > 1) {
-    return "mixed";
-  }
-  const method = payments[0]?.paymentMethod;
-  if (method === "transfer") return "transfer";
-  if (method === "qr") return "qr";
-  if (method === "visa" || method === "mastercard") return "card";
-  return "cash";
-}
-
-function mapDbSaleStatus(status: string, hasPartialRefund: boolean): PosRecentSaleRecord["status"] {
-  if (status === "cancelled") return "voided";
-  if (status === "refunded") return "refunded";
-  if (hasPartialRefund) return "partial_refunded";
-  return "paid";
-}
-
-async function resolveCashierName(tx: Record<string, any>, userId: string | null | undefined) {
-  if (!userId) {
-    return "Cashier";
-  }
-  const user = await tx.user.findFirst({
-    select: { fullName: true, username: true },
-    where: { id: userId },
-  });
-  return String(user?.fullName ?? user?.username ?? "Cashier");
-}
-
-function mapSaleRow(
-  sale: Record<string, any>,
-  cashierName: string,
-  hasPartialRefund = false,
-): PosRecentSaleRecord {
-  const payments = sale.payments ?? [];
-  const paidAmount = payments.reduce((total: number, payment: Record<string, any>) => total + amount(payment.amount), 0);
-  return {
-    branchId: String(sale.branchId),
-    cashierName,
-    changeAmount: amount(sale.changeAmount),
-    createdAt: new Date(sale.createdAt).toISOString(),
-    customerId: sale.customerId ? String(sale.customerId) : undefined,
-    customerName: sale.customer?.fullName || "Guest",
-    customerPhone: sale.customer?.phone ? String(sale.customer.phone) : undefined,
-    discountAmount: amount(sale.discountAmount),
-    discountPercent: amount(sale.discountPercent),
-    id: String(sale.id),
-    items: (sale.items ?? []).map((item: Record<string, any>) => ({
-      conversionQty: amount(item.unit?.conversionQty) || 1,
-      id: String(item.productId),
-      nameEn: String(item.product?.nameEn ?? item.product?.nameLo ?? "Item"),
-      nameLo: String(item.product?.nameLo ?? item.product?.nameEn ?? "Item"),
-      priceLak: amount(item.sellingPrice),
-      quantity: amount(item.quantity),
-      unitId: item.unitId ? String(item.unitId) : undefined,
-      unitName: item.unit?.unitName ? String(item.unit.unitName) : undefined,
-    })),
-    paidAmount,
-    paymentMode: inferPaymentMode(payments),
-    receiptNo: sale.receiptNo ? String(sale.receiptNo) : `RCPT-${sale.saleNo}`,
-    saleNo: String(sale.saleNo),
-    status: mapDbSaleStatus(String(sale.saleStatus), hasPartialRefund),
-    subtotal: amount(sale.subtotal),
-    taxAmount: amount(sale.taxAmount),
-    timeline: [{ at: new Date(sale.createdAt).toISOString(), label: "Created", user: cashierName }],
-    totalAmount: amount(sale.totalAmount),
-    warehouseId: String(sale.warehouseId),
-  };
-}
-
-const saleInclude = {
-  customer: { select: { fullName: true, phone: true } },
-  items: {
-    include: {
-      product: { select: { nameEn: true, nameLo: true } },
-      unit: { select: { conversionQty: true, unitName: true } },
-    },
-  },
-  payments: true,
-  refunds: { select: { id: true, totalAmount: true } },
-};
+const saleInclude = postSaleInclude;
 
 export async function listPrismaRecentSales(
   tenant: TenantContext,
@@ -130,7 +52,7 @@ export async function listPrismaRecentSales(
     take: limit,
     where: {
       companyId: tenant.companyId,
-      saleStatus: { in: ["completed", "cancelled", "refunded"] },
+      saleStatus: { in: [...RECENT_SALE_STATUSES] },
       ...branchOwnedWhere(scope),
     },
   });
@@ -138,13 +60,7 @@ export async function listPrismaRecentSales(
   const rows: PosRecentSaleRecord[] = [];
   for (const sale of sales) {
     const cashierName = await resolveCashierName(db, sale.createdBy);
-    const refundedTotal = (sale.refunds ?? []).reduce(
-      (total: number, refund: Record<string, any>) => total + amount(refund.totalAmount),
-      0,
-    );
-    const hasPartialRefund =
-      String(sale.saleStatus) === "completed" && refundedTotal > 0 && refundedTotal < amount(sale.totalAmount);
-    const record = mapSaleRow(sale, cashierName, hasPartialRefund);
+    const record = mapSaleRow(sale, cashierName);
     if (search) {
       const haystack = [
         record.saleNo,
@@ -165,29 +81,6 @@ export async function listPrismaRecentSales(
     rows.push(record);
   }
   return rows;
-}
-
-export async function getPrismaSaleById(tenant: TenantContext, saleId: string) {
-  const scope = await resolveTenantScope(tenant);
-  const sale = await db.sale.findFirst({
-    include: saleInclude,
-    where: {
-      companyId: tenant.companyId,
-      id: saleId,
-      ...branchOwnedWhere(scope),
-    },
-  });
-  if (!sale) {
-    return null;
-  }
-  const cashierName = await resolveCashierName(db, sale.createdBy);
-  const refundedTotal = (sale.refunds ?? []).reduce(
-    (total: number, refund: Record<string, any>) => total + amount(refund.totalAmount),
-    0,
-  );
-  const hasPartialRefund =
-    String(sale.saleStatus) === "completed" && refundedTotal > 0 && refundedTotal < amount(sale.totalAmount);
-  return mapSaleRow(sale, cashierName, hasPartialRefund);
 }
 
 export async function getPrismaSaleReceipt(
@@ -239,26 +132,7 @@ export async function logPrismaReceiptReprint(tenant: TenantContext, saleId: str
   });
 }
 
-async function loadMutableSale(tx: Record<string, any>, tenant: TenantContext, saleId: string) {
-  const scope = await resolveTenantScope(tenant, tx);
-  const sale = await tx.sale.findFirst({
-    include: {
-      ...saleInclude,
-      payments: true,
-    },
-    where: {
-      companyId: tenant.companyId,
-      id: saleId,
-      ...branchOwnedWhere(scope),
-    },
-  });
-  if (!sale) {
-    throw new Error("Sale was not found.");
-  }
-  return sale;
-}
-
-function assertSaleMutable(sale: Record<string, any>) {
+function assertSaleVoidable(sale: Record<string, any>) {
   const status = String(sale.saleStatus);
   if (status === "cancelled") {
     throw new Error("Sale is already voided.");
@@ -267,7 +141,7 @@ function assertSaleMutable(sale: Record<string, any>) {
     throw new Error("Sale is already refunded.");
   }
   if (status !== "completed") {
-    throw new Error(`Sale cannot be modified while status is ${status}.`);
+    throw new Error(`Sale cannot be voided while status is ${status}.`);
   }
   if ((sale.refunds ?? []).length > 0) {
     throw new Error("Sale already has a refund record.");
@@ -340,11 +214,6 @@ async function reverseSalePromotions(tx: Record<string, any>, sale: Record<strin
   }
 }
 
-async function getNextRefundNo(tx: Record<string, any>, companyId: string) {
-  const count = await tx.refund.count({ where: { companyId } });
-  return `RFND-${Date.now()}-${count + 1}`;
-}
-
 async function assertPostSalePermission(
   tenant: TenantContext,
   action: Extract<PosPermissionAction, "void_bill" | "refund_bill">,
@@ -401,8 +270,9 @@ export async function voidPrismaSale(
     newData: input,
     tenant,
     write: async (tx) => {
+      await lockSaleForUpdate(tx, tenant, saleId);
       const sale = await loadMutableSale(tx, tenant, saleId);
-      assertSaleMutable(sale);
+      assertSaleVoidable(sale);
       await voidSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
       const cashierName = await resolveCashierName(tx, sale.createdBy);
       return {
@@ -456,8 +326,8 @@ export async function refundPrismaSale(
     newData: input,
     tenant,
     write: async (tx) => {
+      await lockSaleForUpdate(tx, tenant, saleId);
       const sale = await loadMutableSale(tx, tenant, saleId);
-      assertSaleMutable(sale);
       await refundSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
       const cashierName = await resolveCashierName(tx, sale.createdBy);
       return {
@@ -478,8 +348,9 @@ export async function voidSaleCore(
   reason?: string | null,
   approvedBy?: string | null,
 ) {
-  assertSaleMutable(sale);
-  await restoreSaleStock(tx, tenant, sale, `Void sale ${sale.saleNo}`);
+  assertSaleVoidable(sale);
+  await lockSaleForUpdate(tx, tenant, String(sale.id));
+  await restoreSaleStock(tx, tenant, sale, `Void sale ${sale.saleNo}${reason ? `: ${reason}` : ""}`);
   await reverseSaleLoyalty(tx, sale);
   await reverseSalePromotions(tx, sale);
 
@@ -501,42 +372,7 @@ export async function refundSaleCore(
   reason?: string | null,
   approvedBy?: string | null,
 ) {
-  assertSaleMutable(sale);
-  const refundNo = await getNextRefundNo(tx, tenant.companyId);
-  const totalAmount = amount(sale.totalAmount);
-
-  await tx.refund.create({
-    data: {
-      approvedBy: approvedBy ?? tenant.userId,
-      companyId: tenant.companyId,
-      createdBy: tenant.userId,
-      items: {
-        create: (sale.items ?? []).map((item: Record<string, any>) => ({
-          amount: amount(item.totalAmount),
-          productId: String(item.productId),
-          quantity: amount(item.quantity),
-        })),
-      },
-      reason: reason ?? null,
-      refundNo,
-      saleId: sale.id,
-      totalAmount,
-    },
-  });
-
-  await restoreSaleStock(tx, tenant, sale, `Refund sale ${sale.saleNo}`);
-  await reverseSaleLoyalty(tx, sale);
-  await reverseSalePromotions(tx, sale);
-
-  await tx.sale.update({
-    data: {
-      paymentStatus: "refunded",
-      saleStatus: "refunded",
-    },
-    where: { id: sale.id },
-  });
-
-  return tx.sale.findFirstOrThrow({ include: saleInclude, where: { id: sale.id } });
+  return returnRemainingSaleCore(tx, tenant, sale, reason, approvedBy);
 }
 
 export function computeCashRefundLakForSale(sale: Record<string, any>, refundAmountLak: number) {

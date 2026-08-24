@@ -172,6 +172,21 @@ enum SaleStatus {
   completed
   cancelled
   refunded
+  partial_refunded
+  exchanged
+  adjusted
+}
+
+enum RefundKind {
+  refund
+  exchange
+}
+
+enum ReturnItemCondition {
+  sellable
+  damaged
+  expired
+  opened_used
 }
 
 enum PromotionType {
@@ -1177,31 +1192,69 @@ model HoldBillItem {
 }
 
 model Refund {
-  id          String       @id @default(cuid())
-  companyId   String       @map("company_id")
-  saleId      String       @map("sale_id")
-  refundNo    String       @map("refund_no")
-  reason      String?
-  totalAmount Decimal      @map("total_amount") @db.Decimal(18, 2)
-  approvedBy  String?      @map("approved_by")
-  createdBy   String?      @map("created_by")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  sale        Sale         @relation(fields: [saleId], references: [id])
-  items       RefundItem[]
+  id                 String            @id @default(cuid())
+  companyId          String            @map("company_id")
+  saleId             String            @map("sale_id")
+  refundNo           String            @map("refund_no")
+  reason             String?
+  totalAmount        Decimal           @map("total_amount") @db.Decimal(18, 2)
+  approvedBy         String?           @map("approved_by")
+  createdBy          String?           @map("created_by")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  branchId           String?           @map("branch_id")
+  warehouseId        String?           @map("warehouse_id")
+  cashSessionId      String?           @map("cash_session_id")
+  kind               RefundKind        @default(refund)
+  refundMethod       PaymentMethod     @default(cash) @map("refund_method")
+  differenceAmount   Decimal           @default(0) @map("difference_amount") @db.Decimal(18, 2)
+  paymentAmount      Decimal           @default(0) @map("payment_amount") @db.Decimal(18, 2)
+  refundAmount       Decimal           @default(0) @map("refund_amount") @db.Decimal(18, 2)
+  exchangeReceiptNo  String?           @map("exchange_receipt_no")
+  sale               Sale              @relation(fields: [saleId], references: [id])
+  items              RefundItem[]
+  exchangeItems      RefundExchangeItem[]
 
   @@unique([companyId, refundNo])
+  @@index([saleId])
+  @@index([companyId, createdAt])
+  @@index([companyId, cashSessionId])
   @@map("refunds")
 }
 
 model RefundItem {
-  id        String  @id @default(cuid())
-  refundId  String  @map("refund_id")
-  productId String  @map("product_id")
-  quantity  Decimal @db.Decimal(18, 3)
-  amount    Decimal @db.Decimal(18, 2)
-  refund    Refund  @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  id         String               @id @default(cuid())
+  refundId   String               @map("refund_id")
+  productId  String               @map("product_id")
+  quantity   Decimal              @db.Decimal(18, 3)
+  amount     Decimal              @db.Decimal(18, 2)
+  saleItemId String?              @map("sale_item_id")
+  unitId     String?              @map("unit_id")
+  condition  ReturnItemCondition  @default(sellable)
+  reason     String?
+  refund     Refund               @relation(fields: [refundId], references: [id], onDelete: Cascade)
 
+  @@index([refundId])
+  @@index([saleItemId])
   @@map("refund_items")
+}
+
+model RefundExchangeItem {
+  id                String   @id @default(cuid())
+  refundId          String   @map("refund_id")
+  productId         String   @map("product_id")
+  unitId            String?  @map("unit_id")
+  quantity          Decimal  @db.Decimal(18, 3)
+  costPrice         Decimal  @default(0) @map("cost_price") @db.Decimal(18, 2)
+  sellingPrice      Decimal  @map("selling_price") @db.Decimal(18, 2)
+  discountAmount    Decimal  @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  promotionId       String?  @map("promotion_id")
+  promotionDiscount Decimal  @default(0) @map("promotion_discount") @db.Decimal(18, 2)
+  totalAmount       Decimal  @map("total_amount") @db.Decimal(18, 2)
+  refund            Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+
+  @@index([refundId])
+  @@index([productId])
+  @@map("refund_exchange_items")
 }
 
 model CashSession {

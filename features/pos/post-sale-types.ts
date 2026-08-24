@@ -1,6 +1,15 @@
 import type { PaymentMode } from "@/features/pos/types";
 
-export type PosRecentSaleStatus = "paid" | "refunded" | "partial_refunded" | "voided" | "deleted";
+export type PosRecentSaleStatus =
+  | "completed"
+  | "paid"
+  | "adjusted"
+  | "exchanged"
+  | "partial_refund"
+  | "partial_refunded"
+  | "refunded"
+  | "voided"
+  | "deleted";
 
 export type PosRecentSaleTimelineEvent = {
   at: string;
@@ -35,6 +44,8 @@ export type PosRecentSaleRecord = {
   paidAmount: number;
   paymentMode: PaymentMode;
   receiptNo: string;
+  remainingRefundableLak?: number;
+  refundedAmountLak?: number;
   saleNo: string;
   status: PosRecentSaleStatus;
   subtotal: number;

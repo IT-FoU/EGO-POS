@@ -136,23 +136,16 @@ export async function recomputeMembershipTier(tx: Record<string, any>, companyId
   return customer.membershipLevelId ? String(customer.membershipLevelId) : null;
 }
 
-export async function reverseSaleLoyalty(tx: Record<string, any>, sale: Record<string, any>) {
+export async function reverseSaleLoyaltyPortion(
+  tx: Record<string, any>,
+  sale: Record<string, any>,
+  input: { fullyReturned: boolean; refundedAmountLak: number },
+) {
   if (!sale.customerId) {
     return;
   }
 
-  const existingReversal = await tx.loyaltyPointLedger.findFirst({
-    where: {
-      companyId: sale.companyId,
-      pointType: "adjust",
-      saleId: sale.id,
-      note: { startsWith: "Reversed" },
-    },
-  });
-  if (existingReversal) {
-    throw new Error("Loyalty impact was already reversed for this sale.");
-  }
-
+  const originalTotal = amount(sale.totalAmount);
   const ledgerRows = await tx.loyaltyPointLedger.findMany({
     where: { companyId: sale.companyId, pointType: { in: ["earn", "redeem"] }, saleId: sale.id },
   });
@@ -160,61 +153,150 @@ export async function reverseSaleLoyalty(tx: Record<string, any>, sale: Record<s
     return;
   }
 
-  let earnedPoints = 0;
-  let redeemedPoints = 0;
-  let totalSpentDelta = 0;
+  const adjustRows = await tx.loyaltyPointLedger.findMany({
+    where: {
+      companyId: sale.companyId,
+      pointType: "adjust",
+      saleId: sale.id,
+      note: { startsWith: "Reversed" },
+    },
+  });
 
+  let originalEarn = 0;
+  let originalRedeem = 0;
+  let originalEarnAmount = 0;
   for (const row of ledgerRows) {
     const points = amount(row.points);
     if (String(row.pointType) === "earn") {
-      earnedPoints += points;
-      totalSpentDelta += amount(row.amountLak);
-      await tx.loyaltyPointLedger.create({
-        data: {
-          amountLak: -amount(row.amountLak),
-          companyId: sale.companyId,
-          customerId: sale.customerId,
-          note: `Reversed earn from sale ${sale.saleNo}`,
-          pointType: "adjust",
-          points: -points,
-          saleId: sale.id,
-        },
-      });
+      originalEarn += points;
+      originalEarnAmount += amount(row.amountLak);
     }
     if (String(row.pointType) === "redeem") {
-      redeemedPoints += Math.abs(points);
-      await tx.loyaltyPointLedger.create({
-        data: {
-          amountLak: amount(row.amountLak),
-          companyId: sale.companyId,
-          customerId: sale.customerId,
-          note: `Reversed redeem from sale ${sale.saleNo}`,
-          pointType: "adjust",
-          points: Math.abs(points),
-          saleId: sale.id,
-        },
-      });
+      originalRedeem += Math.abs(points);
     }
+  }
+
+  let reversedEarn = 0;
+  let reversedRedeem = 0;
+  let reversedEarnAmount = 0;
+  for (const row of adjustRows) {
+    const note = String(row.note ?? "");
+    if (note.startsWith("Reversed earn")) {
+      reversedEarn += Math.abs(amount(row.points));
+      reversedEarnAmount += Math.abs(amount(row.amountLak));
+    }
+    if (note.startsWith("Reversed redeem")) {
+      reversedRedeem += Math.abs(amount(row.points));
+    }
+  }
+
+  if (input.fullyReturned && reversedEarn >= originalEarn && reversedRedeem >= originalRedeem) {
+    throw new Error("Loyalty impact was already reversed for this sale.");
+  }
+
+  const ratio = originalTotal > 0 ? Math.min(Math.max(amount(input.refundedAmountLak) / originalTotal, 0), 1) : 0;
+  const targetEarn = input.fullyReturned ? originalEarn : Math.floor(originalEarn * ratio);
+  const targetEarnAmount = input.fullyReturned ? originalEarnAmount : Math.round(originalEarnAmount * ratio);
+  const targetRedeem = input.fullyReturned ? originalRedeem : 0;
+
+  const deltaEarn = Math.max(targetEarn - reversedEarn, 0);
+  const deltaEarnAmount = Math.max(targetEarnAmount - reversedEarnAmount, 0);
+  const deltaRedeem = Math.max(targetRedeem - reversedRedeem, 0);
+  if (deltaEarn === 0 && deltaRedeem === 0) {
+    return;
+  }
+
+  if (deltaEarn > 0) {
+    await tx.loyaltyPointLedger.create({
+      data: {
+        amountLak: -deltaEarnAmount,
+        companyId: sale.companyId,
+        customerId: sale.customerId,
+        note: `Reversed earn from sale ${sale.saleNo}`,
+        pointType: "adjust",
+        points: -deltaEarn,
+        saleId: sale.id,
+      },
+    });
+  }
+  if (deltaRedeem > 0) {
+    await tx.loyaltyPointLedger.create({
+      data: {
+        amountLak: 0,
+        companyId: sale.companyId,
+        customerId: sale.customerId,
+        note: `Reversed redeem from sale ${sale.saleNo}`,
+        pointType: "adjust",
+        points: deltaRedeem,
+        saleId: sale.id,
+      },
+    });
   }
 
   const customer = await tx.customer.findFirst({
     select: { pointsBalance: true },
     where: { id: sale.customerId },
   });
-  const nextBalance = amount(customer?.pointsBalance) + redeemedPoints - earnedPoints;
+  const nextBalance = amount(customer?.pointsBalance) + deltaRedeem - deltaEarn;
   if (nextBalance < 0) {
     throw new Error("Loyalty reversal would make point balance negative.");
   }
 
   await tx.customer.update({
     data: {
-      pointsBalance: { increment: redeemedPoints - earnedPoints },
-      totalSpent: { decrement: totalSpentDelta },
+      pointsBalance: { increment: deltaRedeem - deltaEarn },
+      totalSpent: { decrement: deltaEarnAmount },
     },
     where: { id: sale.customerId },
   });
 
   await recomputeMembershipTier(tx, sale.companyId, sale.customerId);
+}
+
+export async function applyExchangeLoyaltyEarn(
+  tx: Record<string, any>,
+  input: {
+    amountLak: number;
+    companyId: string;
+    customerId: string;
+    refundNo: string;
+    saleId: string;
+    spendPerPointLak: number;
+  },
+) {
+  const earnedPoints = Math.floor(Math.max(amount(input.amountLak), 0) / Math.max(input.spendPerPointLak, 1));
+  if (earnedPoints <= 0) {
+    return 0;
+  }
+
+  await tx.loyaltyPointLedger.create({
+    data: {
+      amountLak: amount(input.amountLak),
+      companyId: input.companyId,
+      customerId: input.customerId,
+      note: `Exchange earn from ${input.refundNo}`,
+      pointType: "adjust",
+      points: earnedPoints,
+      saleId: input.saleId,
+    },
+  });
+
+  await tx.customer.update({
+    data: {
+      pointsBalance: { increment: earnedPoints },
+      totalSpent: { increment: amount(input.amountLak) },
+    },
+    where: { id: input.customerId },
+  });
+  await recomputeMembershipTier(tx, input.companyId, input.customerId);
+  return earnedPoints;
+}
+
+export async function reverseSaleLoyalty(tx: Record<string, any>, sale: Record<string, any>) {
+  return reverseSaleLoyaltyPortion(tx, sale, {
+    fullyReturned: true,
+    refundedAmountLak: amount(sale.totalAmount),
+  });
 }
 
 export async function adjustCustomerLoyaltyPoints(
