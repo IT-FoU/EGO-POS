@@ -2,7 +2,11 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, withTenantTransaction } from "@/lib/db/write-context";
 import { assertWarehouseInScope, resolveTenantScope } from "@/lib/db/tenant-scope";
-import { applyAtomicStockDelta, setAtomicStockCount } from "@/features/inventory/stock-concurrency";
+import {
+  applyAtomicStockDelta,
+  lockInventoryMutationKey,
+  setAtomicStockCount,
+} from "@/features/inventory/stock-concurrency";
 import {
   mapPrismaInventoryBalance,
   mapPrismaStockMovement,
@@ -147,14 +151,15 @@ export async function createStockIn(input: StockInInput, tenant: TenantContext) 
           data.unitCostLak !== undefined ||
           data.photos?.length,
       );
+      const requestedStockInNo = optionalString(data.stockInNo);
+      if (isQuickStockIn && !requestedStockInNo) {
+        await lockInventoryMutationKey(tx, `quick-stock-in-auto:${tenant.companyId}`);
+      }
       const stockInNo = isQuickStockIn
-        ? optionalString(data.stockInNo) ?? (await generateStockInNumber(tx, tenant.companyId))
+        ? requestedStockInNo ?? (await generateStockInNumber(tx, tenant.companyId))
         : undefined;
-      const paymentStatus = data.paymentStatus ?? "paid";
-      const unitCostLak = numberValue(data.unitCostLak, numberValue(unit?.costPriceLak, 0));
-      const totalCostLak = unitCostLak * quantity;
-
       if (isQuickStockIn && stockInNo) {
+        await lockInventoryMutationKey(tx, `quick-stock-in:${tenant.companyId}:${stockInNo}`);
         const duplicate = await tx.stockMovement.findFirst({
           where: { companyId: tenant.companyId, referenceId: stockInNo, referenceType: "quick_stock_in" },
         });
@@ -162,6 +167,9 @@ export async function createStockIn(input: StockInInput, tenant: TenantContext) 
           throw new Error("Stock In Number already exists.");
         }
       }
+      const paymentStatus = data.paymentStatus ?? "paid";
+      const unitCostLak = numberValue(data.unitCostLak, numberValue(unit?.costPriceLak, 0));
+      const totalCostLak = unitCostLak * quantity;
 
       if (data.supplierId) {
         const supplier = await tx.supplier.findFirst({
@@ -306,7 +314,7 @@ export async function createStockAdjustment(input: StockAdjustmentInput, tenant:
           createdBy: tenant.userId,
           productId: data.productId,
           quantity,
-          reason: optionalString(data.reason),
+          reason: data.reason,
           warehouseId: data.warehouseId,
         },
       });
@@ -346,6 +354,10 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
         productId: data.productId,
         warehouseId: data.warehouseId,
       });
+      const quantity = balance.afterQty - balance.beforeQty;
+      if (quantity === 0) {
+        return balance;
+      }
       await tx.stockMovement.create({
         data: {
           afterQty: balance.afterQty,
@@ -355,7 +367,7 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
           movementType: "adjustment",
           note: optionalString(data.note),
           productId: data.productId,
-          quantity: balance.afterQty - balance.beforeQty,
+          quantity,
           referenceType: "stock_count",
           warehouseId: data.warehouseId,
         },

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
-import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
+import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
 import { getPrismaInventorySnapshot } from "@/features/inventory/prisma-repository";
 import { getPrismaProducts } from "@/features/products/prisma-repository";
 import {
@@ -160,6 +160,7 @@ export async function receiveGoods(input: ReceiveGoodsInput, tenant: TenantConte
     newData: data,
     tenant,
     write: async (tx) => {
+      await lockInventoryMutationKey(tx, `goods-receipt:${tenant.companyId}:${data.purchaseId}`);
       const scope = await assertWarehouseInScope(tx, tenant, data.warehouseId);
       const purchase = await tx.purchase.findFirstOrThrow({
         include: { items: true, supplier: true },

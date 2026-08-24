@@ -1,5 +1,9 @@
 import { numberValue } from "@/lib/db/write-context";
 
+export async function lockInventoryMutationKey(tx: any, key: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
 type StockBalance = {
   afterQty: number;
   beforeQty: number;

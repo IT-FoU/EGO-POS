@@ -65,9 +65,13 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
             return;
         }
         const formData = new FormData(event.currentTarget);
-        const note = String(formData.get("note") ?? "").trim() || undefined;
+        const note = String(formData.get("note") ?? "").trim();
+        if (mode === "adjustment" && !note) {
+            setMessage("Adjustment reason is required.");
+            return;
+        }
         const payload = {
-            note,
+            note: note || undefined,
             productId: selectedItem.productId,
             quantity,
             warehouseId: selectedWarehouseId,
@@ -79,7 +83,7 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
                     ? await stockAdjustmentAction({ ...payload, reason: note })
                     : await stockCountAction({
                         countedQuantity: quantity,
-                        note,
+                        note: note || undefined,
                         productId: selectedItem.productId,
                         warehouseId: selectedWarehouseId,
                     });

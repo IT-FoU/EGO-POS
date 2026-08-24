@@ -49,7 +49,7 @@ export type StockAdjustmentInput = {
   note?: string | null;
   productId: string;
   quantity: number;
-  reason?: string | null;
+  reason: string;
   warehouseId: string;
 };
 
@@ -96,7 +96,7 @@ export function parseStockAdjustmentInput(input: unknown): StockAdjustmentInput 
     note: parseString(dto, "note", { nullable: true }),
     productId: parseString(dto, "productId", { required: true })!,
     quantity,
-    reason: parseString(dto, "reason", { nullable: true }),
+    reason: parseString(dto, "reason", { min: 1, required: true })!,
     warehouseId: parseString(dto, "warehouseId", { required: true })!,
   }) as StockAdjustmentInput;
 }

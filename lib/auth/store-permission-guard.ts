@@ -5,11 +5,17 @@ import {
   STORE_ACTIONS,
   STORE_ROLES,
   canPerformStoreAction,
+  requireStorePermission,
   type CurrentStoreUser,
   type StoreAction,
+  type StoreRoleId,
 } from "@/features/permissions/store-permissions";
 import { PermissionMatrixDeniedError, type PermissionContext } from "@/features/permissions/platform-permissions";
+import { prisma } from "@/lib/db/prisma";
+import { resolveTenantMembership } from "@/lib/db/resolve-tenant-user";
 import type { TenantContext } from "@/lib/db/write-context";
+
+const db = prisma as any;
 
 function storeRoleFromSession(roles: unknown) {
   const normalizedRoles = Array.isArray(roles)
@@ -20,6 +26,31 @@ function storeRoleFromSession(roles: unknown) {
   if (normalizedRoles.includes(STORE_ROLES.MANAGER)) return STORE_ROLES.MANAGER;
   if (normalizedRoles.includes(STORE_ROLES.CASHIER)) return STORE_ROLES.CASHIER;
   return STORE_ROLES.CASHIER;
+}
+
+export async function resolveStoreRoleFromTenant(tenant: TenantContext): Promise<StoreRoleId> {
+  const membership = await resolveTenantMembership(tenant);
+  if (membership.isOwner) {
+    return STORE_ROLES.OWNER;
+  }
+
+  const roles = await db.userRole.findMany({
+    select: { role: { select: { name: true, templateKey: true } } },
+    where: { companyId: tenant.companyId, userId: membership.effectiveUserId },
+  });
+  const names = roles
+    .map((entry: { role?: { name?: string | null; templateKey?: string | null } | null }) =>
+      String(entry.role?.templateKey ?? entry.role?.name ?? "").trim().toLowerCase(),
+    )
+    .filter(Boolean);
+
+  if (names.includes(STORE_ROLES.OWNER) || names.includes("owner")) return STORE_ROLES.OWNER;
+  if (names.includes(STORE_ROLES.MANAGER) || names.includes("manager")) return STORE_ROLES.MANAGER;
+  return STORE_ROLES.CASHIER;
+}
+
+export async function assertTenantStoreAction(tenant: TenantContext, action: StoreAction) {
+  requireStorePermission({ role: await resolveStoreRoleFromTenant(tenant) }, action);
 }
 
 export function currentStoreUserFromSession(session: Session, tenant: TenantContext): CurrentStoreUser {
