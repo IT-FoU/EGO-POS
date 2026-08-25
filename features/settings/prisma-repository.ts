@@ -34,9 +34,35 @@ function normalizeCurrency(value: unknown): SettingsFormData["baseCurrency"] {
   return value === "THB" || value === "USD" ? value : "LAK";
 }
 
+function mergeSettingsInput(
+  current: SettingsFormData,
+  input: Partial<SettingsFormData>,
+): Partial<SettingsFormData> {
+  const merged: Partial<SettingsFormData> = { ...current };
+  for (const [key, value] of Object.entries(input) as Array<[keyof SettingsFormData, SettingsFormData[keyof SettingsFormData]]>) {
+    if (value !== undefined) {
+      merged[key] = value as never;
+    }
+  }
+  return merged;
+}
+
 function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormData {
-  const vatRate = Math.min(Math.max(numberValue(input.vatRate), 0), 100);
-  const decimalPlaces = Math.min(Math.max(Math.floor(numberValue(input.decimalPlaces)), 0), 4);
+  if (input.vatRate !== undefined) {
+    const vatRate = numberValue(input.vatRate);
+    if (vatRate < 0 || vatRate > 100) {
+      throw new Error("VAT rate must be between 0 and 100.");
+    }
+  }
+  if (input.decimalPlaces !== undefined) {
+    const decimalPlaces = numberValue(input.decimalPlaces);
+    if (decimalPlaces < 0 || decimalPlaces > 4 || !Number.isInteger(decimalPlaces)) {
+      throw new Error("Decimal places must be an integer between 0 and 4.");
+    }
+  }
+
+  const vatRate = Math.min(Math.max(numberValue(input.vatRate, DEFAULT_SETTINGS.vatRate), 0), 100);
+  const decimalPlaces = Math.min(Math.max(Math.floor(numberValue(input.decimalPlaces, DEFAULT_SETTINGS.decimalPlaces)), 0), 4);
   const loyaltySpendPerPointLak = Math.max(numberValue(input.loyaltySpendPerPointLak, DEFAULT_SETTINGS.loyaltySpendPerPointLak), 1);
   const loyaltyPointValueLak = Math.max(numberValue(input.loyaltyPointValueLak, DEFAULT_SETTINGS.loyaltyPointValueLak), 0);
   const loyaltyMinRedeemPoints = Math.max(Math.floor(numberValue(input.loyaltyMinRedeemPoints, DEFAULT_SETTINGS.loyaltyMinRedeemPoints)), 1);
@@ -115,7 +141,8 @@ export async function getPrismaSettings(tenant: TenantContext) {
 }
 
 export async function updatePrismaSettings(input: Partial<SettingsFormData>, tenant: TenantContext) {
-  const normalized = normalizeSettingsInput(input);
+  const current = await getPrismaSettings(tenant);
+  const normalized = normalizeSettingsInput(mergeSettingsInput(current, input));
 
   if (!normalized.companyName) {
     throw new Error("Company name is required.");

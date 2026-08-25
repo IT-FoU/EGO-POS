@@ -2549,6 +2549,10 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
         <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
           <div className="text-center">
             <div className="text-lg font-bold">{receiptTitle}</div>
+            {receiptSettings.profileAddress ? <div>{receiptSettings.profileAddress}</div> : null}
+            {receiptSettings.profilePhone ? <div>{receiptSettings.profilePhone}</div> : null}
+            {receiptSettings.profileEmail ? <div>{receiptSettings.profileEmail}</div> : null}
+            {receiptSettings.taxNumber ? <div>Tax: {receiptSettings.taxNumber}</div> : null}
             <div>{branchName}</div>
             <div>Bill: {saleNo}</div>
             <div>Receipt: {receiptNo}</div>

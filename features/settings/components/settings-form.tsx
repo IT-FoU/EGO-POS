@@ -156,7 +156,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 setMessage({ text: result.error ?? t("ui.settings.save.failed"), tone: "error" });
                 return;
             }
-            const printMode = readReceiptPrintModePreference(settings.receiptPrintMode);
+            const printMode = settings.receiptPrintMode;
             writeReceiptPrintModePreference(printMode);
             setSettings({ ...(result.data as SettingsFormData), receiptPrintMode: printMode });
             setMessage({ text: t("ui.settings.saved.successfully"), tone: "success" });

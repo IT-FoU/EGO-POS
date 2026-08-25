@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
+import { assertBranchInScope } from "@/lib/db/tenant-scope";
 import {
   mapQrPaymentAccountToPosBank,
   type QrPaymentAccountRecord,
@@ -237,6 +238,7 @@ export async function saveQrPaymentAccount(input: SaveQrPaymentAccountInput, ten
     newData: input,
     tenant,
     write: async (tx) => {
+      await assertBranchInScope(tx, tenant, branchId);
       const bank = await tx.qrPaymentBank.findFirst({
         where: { companyId: tenant.companyId, id: bankId, isActive: true },
       });
