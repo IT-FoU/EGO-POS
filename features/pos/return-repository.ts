@@ -1,4 +1,4 @@
-import { applyExchangeLoyaltyEarn, resolveMembershipDiscountPercent, reverseSaleLoyaltyPortion } from "@/features/loyalty/loyalty-service";
+import { applyExchangeLoyaltyEarn, isMembershipEligibleForBenefits, resolveMembershipDiscountPercent, reverseSaleLoyaltyPortion } from "@/features/loyalty/loyalty-service";
 import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
 import { assertOpenCashSessionForSale } from "@/features/cash-sessions/prisma-repository";
 import {
@@ -486,7 +486,9 @@ async function priceReplacementItems(
     blockBelowCostSales: true,
     categoryByProduct,
     companyId: tenant.companyId,
-    membershipLevelId: (customerRecord as Record<string, any> | null)?.membershipLevelId ?? null,
+    membershipLevelId: isMembershipEligibleForBenefits(customerRecord)
+      ? String((customerRecord as Record<string, any> | null)?.membershipLevelId ?? "") || null
+      : null,
   });
   assertPromotionProfitSafe(priced, true);
   const replacementTotalLak = roundLak(priced.reduce((total, item) => total + amount(item.totalAmount), 0));

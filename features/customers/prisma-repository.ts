@@ -3,6 +3,7 @@ import type { CustomerPayment, CustomerPurchase } from "@/features/customers/typ
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
+import { assertPermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 import {
   mapPrismaCustomer,
   mapPrismaCustomerPayment,
@@ -46,7 +47,7 @@ export async function getPrismaCustomersSnapshot(tenant: TenantContext) {
       where: { companyId: scope.companyId, customer: branchWhere },
     }),
     db.sale.findMany({
-      include: { payments: true },
+      include: { loyaltyPointLedger: true, payments: true },
       orderBy: { createdAt: "desc" },
       where: { branchId: scope.branchId, companyId: scope.companyId },
     }),
@@ -90,8 +91,31 @@ export async function getPrismaCustomerDetail(customerId: string, tenant: Tenant
   };
 }
 
+async function allocateMemberCode(tx: Record<string, any>, companyId: string) {
+  await tx.$queryRaw`
+    SELECT company_id FROM company_settings WHERE company_id = ${companyId} FOR UPDATE
+  `;
+  const rows = await tx.customer.findMany({
+    select: { customerCode: true },
+    where: { companyId, customerCode: { startsWith: "MEM-" } },
+  });
+  let max = 0;
+  for (const row of rows) {
+    const parsed = Number(String(row.customerCode ?? "").replace(/^MEM-/, ""));
+    if (Number.isFinite(parsed) && parsed > max) {
+      max = parsed;
+    }
+  }
+  return `MEM-${String(max + 1).padStart(6, "0")}`;
+}
+
 export async function createPrismaCustomer(input: CustomerCreateInput, tenant: TenantContext) {
+  await assertPermission(tenant, WRITE_PERMISSIONS.customersCreate);
   const data = parseCustomerCreateInput(input);
+  const phone = stringValue(data.phone);
+  if (!phone) {
+    throw new Error("Phone is required.");
+  }
   return withTenantTransaction({
     action: "create",
     module: "customers",
@@ -99,6 +123,8 @@ export async function createPrismaCustomer(input: CustomerCreateInput, tenant: T
     tenant,
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
+      const requestedCode = optionalString(data.customerCode);
+      const memberCode = requestedCode ?? await allocateMemberCode(tx, tenant.companyId);
       return tx.customer.create({
         data: {
           address: data.address,
@@ -106,14 +132,15 @@ export async function createPrismaCustomer(input: CustomerCreateInput, tenant: T
           branchId: scope.branchId,
           companyId: tenant.companyId,
           creditLimit: numberValue(data.creditLimit),
-          customerCode: data.customerCode,
+          customerCode: memberCode,
           email: data.email,
           fullName: stringValue(data.fullName),
           membershipLevelId: data.membershipLevelId,
           notes: data.notes,
           openingBalance: numberValue(data.openingBalance),
           outstandingBalance: numberValue(data.openingBalance),
-          phone: data.phone,
+          phone,
+          qrMemberCode: memberCode,
         },
       });
     },
@@ -121,6 +148,7 @@ export async function createPrismaCustomer(input: CustomerCreateInput, tenant: T
 }
 
 export async function updatePrismaCustomer(customerId: string, input: CustomerUpdateInput, tenant: TenantContext) {
+  await assertPermission(tenant, WRITE_PERMISSIONS.customersUpdate);
   const data = parseCustomerUpdateInput(input);
   return withTenantTransaction({
     action: "update",

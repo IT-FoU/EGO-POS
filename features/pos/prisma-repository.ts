@@ -57,6 +57,7 @@ function resolveSaleUnit(product: Record<string, any>, unitId: string | undefine
 import {
   applyLoyaltyLedger,
   calculateLoyaltyRedemption,
+  isMembershipEligibleForBenefits,
   resolveMembershipDiscountPercent,
 } from "@/features/loyalty/loyalty-service";
 import {
@@ -384,7 +385,9 @@ export async function completePrismaSale(input: {
         blockBelowCostSales: true,
         categoryByProduct,
         companyId: tenant.companyId,
-        membershipLevelId: (customerRecord as Record<string, any> | null)?.membershipLevelId ?? null,
+        membershipLevelId: isMembershipEligibleForBenefits(customerRecord)
+          ? String((customerRecord as Record<string, any> | null)?.membershipLevelId ?? "") || null
+          : null,
       });
       assertPromotionProfitSafe(saleItems, true);
       const subtotal = saleItems.reduce((total, item) => total + item.quantity * item.sellingPrice, 0);

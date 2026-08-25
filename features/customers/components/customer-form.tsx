@@ -74,7 +74,7 @@ export function CustomerForm({ levels }: {
           <h2 className="text-lg font-semibold">Customer information</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <Field label="Customer Code">
-              <input className="field-input font-mono" name="customerCode" placeholder="CUS-0005" required/>
+              <input className="field-input font-mono" name="customerCode" placeholder="Auto MEM-000001"/>
             </Field>
             <Field label="Full Name">
               <input className="field-input" name="fullName" placeholder="Customer full name" required/>

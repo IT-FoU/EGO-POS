@@ -31,11 +31,12 @@ export function mapPrismaMembershipLevel(level: Row): MembershipLevel {
 }
 
 export function mapPrismaCustomer(customer: Row): Customer {
-  const earnedPoints = (customer.loyaltyPointLedger ?? [])
-    .filter((entry: Row) => entry.pointType === "earn" || entry.pointType === "adjust")
+  const ledger = customer.loyaltyPointLedger ?? [];
+  const earnedPoints = ledger
+    .filter((entry: Row) => entry.pointType === "earn")
     .reduce((total: number, entry: Row) => total + Number(entry.points ?? 0), 0);
-  const redeemedPoints = (customer.loyaltyPointLedger ?? [])
-    .filter((entry: Row) => entry.pointType === "redeem" || entry.pointType === "expire")
+  const redeemedPoints = ledger
+    .filter((entry: Row) => entry.pointType === "redeem")
     .reduce((total: number, entry: Row) => total + Math.abs(Number(entry.points ?? 0)), 0);
 
   return {
@@ -43,7 +44,7 @@ export function mapPrismaCustomer(customer: Row): Customer {
     birthday: dateOnly(customer.birthday),
     creditLimitLak: toNumber(customer.creditLimit),
     customerCode: customer.customerCode ?? "",
-    earnedPoints: earnedPoints || customer.pointsBalance || 0,
+    earnedPoints,
     email: customer.email ?? "",
     fullName: customer.fullName,
     id: customer.id,
@@ -52,6 +53,7 @@ export function mapPrismaCustomer(customer: Row): Customer {
     openingBalanceLak: toNumber(customer.openingBalance),
     outstandingBalanceLak: toNumber(customer.outstandingBalance),
     phone: customer.phone ?? "",
+    pointsBalance: toNumber(customer.pointsBalance),
     redeemedPoints,
     status: (customer.status === "inactive" ? "inactive" : "active") as CustomerStatus,
     totalPurchasesLak: toNumber(customer.totalSpent),
@@ -59,12 +61,19 @@ export function mapPrismaCustomer(customer: Row): Customer {
 }
 
 export function mapPrismaCustomerPurchase(sale: Row, loyaltySpendPerPointLak = 10_000): CustomerPurchase {
+  const ledger = sale.loyaltyPointLedger ?? [];
+  const netEarn = ledger.reduce((total: number, entry: Row) => {
+    if (entry.pointType === "earn" || String(entry.note ?? "").startsWith("Reversed earn") || String(entry.note ?? "").startsWith("Exchange earn")) {
+      return total + Number(entry.points ?? 0);
+    }
+    return total;
+  }, 0);
   const spendPerPoint = Math.max(Number(loyaltySpendPerPointLak) || 10_000, 1);
   return {
     customerId: sale.customerId ?? "",
     id: sale.id,
     paymentType: sale.payments?.length > 1 ? "mixed" : (sale.payments?.[0]?.paymentMethod ?? "cash"),
-    pointsEarned: Math.floor(toNumber(sale.totalAmount) / spendPerPoint),
+    pointsEarned: ledger.length > 0 ? netEarn : Math.floor(toNumber(sale.totalAmount) / spendPerPoint),
     saleDate: dateOnly(sale.createdAt),
     saleNo: sale.saleNo,
     totalLak: toNumber(sale.totalAmount),

@@ -8,23 +8,35 @@ function amount(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function resolveMembershipDiscountPercent(customer: Record<string, any> | null) {
-  if (!customer || customer.status !== "active") {
-    return 0;
-  }
-  if (!customer.membershipLevelId || !customer.membershipLevel) {
-    return 0;
-  }
-
+function membershipSubscriptionValid(customer: Record<string, any>) {
   const subscriptions: Array<Record<string, any>> = customer.subscriptions ?? [];
-  if (subscriptions.length > 0) {
-    const endDate = subscriptions[0]?.endDate ? new Date(subscriptions[0].endDate).getTime() : 0;
-    if (!endDate || endDate < Date.now()) {
-      return 0;
-    }
+  if (subscriptions.length === 0) {
+    return true;
+  }
+  const endDate = subscriptions[0]?.endDate;
+  if (!endDate) {
+    return false;
+  }
+  const expiry = new Date(endDate).toISOString().slice(0, 10);
+  return new Date(`${expiry}T23:59:59`).getTime() >= Date.now();
+}
+
+export function isMembershipEligibleForBenefits(customer: Record<string, any> | null) {
+  if (!customer || customer.status !== "active") {
+    return false;
+  }
+  if (!customer.membershipLevelId && !customer.membershipLevel) {
+    return false;
+  }
+  return membershipSubscriptionValid(customer);
+}
+
+export function resolveMembershipDiscountPercent(customer: Record<string, any> | null) {
+  if (!isMembershipEligibleForBenefits(customer)) {
+    return 0;
   }
 
-  const percent = numberValue(customer.membershipLevel?.discountPercent);
+  const percent = numberValue(customer!.membershipLevel?.discountPercent);
   return percent > 0 ? Math.min(percent, 100) : 0;
 }
 
@@ -45,6 +57,15 @@ async function assertNoDuplicateLedgerEntry(
   }
 }
 
+async function lockCustomerRow(tx: Record<string, any>, companyId: string, customerId: string) {
+  const rows = await tx.$queryRaw`
+    SELECT id FROM customers WHERE id = ${customerId} AND company_id = ${companyId} FOR UPDATE
+  `;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error("Customer was not found.");
+  }
+}
+
 export async function applyLoyaltyLedger(
   tx: Record<string, any>,
   input: {
@@ -58,6 +79,7 @@ export async function applyLoyaltyLedger(
     totalAmountLak: number;
   },
 ) {
+  await lockCustomerRow(tx, input.companyId, input.customerId);
   if (input.redeemPoints > 0) {
     await assertNoDuplicateLedgerEntry(tx, input.saleId, "redeem");
     await tx.loyaltyPointLedger.create({
@@ -144,6 +166,8 @@ export async function reverseSaleLoyaltyPortion(
   if (!sale.customerId) {
     return;
   }
+
+  await lockCustomerRow(tx, sale.companyId, sale.customerId);
 
   const originalTotal = amount(sale.totalAmount);
   const ledgerRows = await tx.loyaltyPointLedger.findMany({
@@ -269,6 +293,8 @@ export async function applyExchangeLoyaltyEarn(
     return 0;
   }
 
+  await lockCustomerRow(tx, input.companyId, input.customerId);
+
   await tx.loyaltyPointLedger.create({
     data: {
       amountLak: amount(input.amountLak),
@@ -321,6 +347,7 @@ export async function adjustCustomerLoyaltyPoints(
     tenant,
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
+      await lockCustomerRow(tx, tenant.companyId, customerId);
       const customer = await tx.customer.findFirst({
         select: { id: true, pointsBalance: true },
         where: { companyId: tenant.companyId, id: customerId, ...branchOwnedWhere(scope) },
@@ -383,6 +410,7 @@ export async function calculateLoyaltyRedemption(
     return { customer: null, discountAmountLak: 0, redeemPoints: 0 };
   }
 
+  await lockCustomerRow(tx, input.companyId, input.customerId);
   const customer = await tx.customer.findFirst({
     select: { id: true, pointsBalance: true, status: true },
     where: { companyId: input.companyId, id: input.customerId, status: "active" },

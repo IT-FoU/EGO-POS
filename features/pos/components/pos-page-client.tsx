@@ -584,10 +584,46 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         });
     }
     function searchMembership() {
-        const query = membershipQuery.trim().toLowerCase();
-        const customer = customers.find((item) => item.phone.includes(query) ||
-            item.name.toLowerCase().includes(query) ||
-            item.membershipNumber.toLowerCase().includes(query));
+        const rawQuery = membershipQuery.trim();
+        if (!rawQuery) {
+            setMessage(t("ui.no.customer.or.membership.found"));
+            return;
+        }
+        const query = rawQuery.toLowerCase();
+        const compactQuery = rawQuery.replace(/\s+/g, "");
+        const digitQuery = rawQuery.replace(/\D/g, "");
+        const exact = customers.filter((item) => {
+            const phoneDigits = item.phone.replace(/\D/g, "");
+            return item.phone.replace(/\s+/g, "") === compactQuery
+                || phoneDigits.length >= 6 && phoneDigits === digitQuery
+                || item.membershipNumber.toLowerCase() === query
+                || item.customerCode.toLowerCase() === query
+                || item.id.toLowerCase() === query;
+        });
+        if (exact.length > 1) {
+            setSelectedCustomer(null);
+            setMessage("Multiple members match this lookup. Enter the exact member code or phone.");
+            return;
+        }
+        if (exact.length === 1) {
+            const customer = exact[0];
+            setSelectedCustomer(customer);
+            setRedeemPoints(0);
+            setMessage(isMembershipActive(customer)
+                ? `${customer.name} membership active.`
+                : `${customer.name} membership expired. Retail pricing applies.`);
+            return;
+        }
+        const partial = customers.filter((item) => item.phone.toLowerCase().includes(query)
+            || item.name.toLowerCase().includes(query)
+            || item.membershipNumber.toLowerCase().includes(query)
+            || item.customerCode.toLowerCase().includes(query));
+        if (partial.length > 1) {
+            setSelectedCustomer(null);
+            setMessage("Multiple members match this lookup. Enter the exact member code or phone.");
+            return;
+        }
+        const customer = partial[0];
         if (!customer) {
             setSelectedCustomer(null);
             setMessage(t("ui.no.customer.or.membership.found"));

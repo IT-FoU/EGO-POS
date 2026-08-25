@@ -24,6 +24,7 @@ export type Customer = {
   totalPurchasesLak: number;
   earnedPoints: number;
   redeemedPoints: number;
+  pointsBalance?: number;
   status: CustomerStatus;
   notes: string;
 };
