@@ -21,6 +21,7 @@ export type PosProduct = {
   productCode?: string;
   nameLo: string;
   nameEn: string;
+  categoryId?: string;
   categoryName: string;
   imageKey: string;
   unitImageUrl?: string;
@@ -92,6 +93,7 @@ export type PosCustomer = {
   membershipType: "Monthly" | "Yearly" | "Student";
   membershipStatus: "Active" | "Expired";
   membershipExpiry: string;
+  membershipLevelId?: string;
   pointsBalance: number;
   studentIdNumber?: string;
   schoolName?: string;
@@ -144,6 +146,26 @@ export type PosMembershipLevel = {
   discountPercent: number;
   id: string;
   name: string;
+};
+
+export type PosPromotion = {
+  buyQuantity?: number;
+  categories: Array<{ categoryId: string }>;
+  comboPriceLak?: number;
+  discountAmountLak?: number;
+  discountPercent?: number;
+  endDate: string;
+  getQuantity?: number;
+  id: string;
+  isActive: boolean;
+  membershipLevels: Array<{ membershipLevelId: string }>;
+  priority: number;
+  products: Array<{ productId: string }>;
+  promotionCode?: string | null;
+  promotionName: string;
+  promotionType: string;
+  startDate: string;
+  status: string;
 };
 
 export type PosDisplayState = {

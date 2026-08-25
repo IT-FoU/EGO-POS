@@ -37,6 +37,7 @@ export default async function PosPage() {
       nextSaleNo={snapshot.nextSaleNo}
       products={snapshot.products}
       promotionBanners={snapshot.promotionBanners}
+      promotions={snapshot.promotions}
       qrBanks={snapshot.qrBanks}
       receiptSettings={snapshot.receiptSettings}
       taxInclusive={snapshot.taxInclusive}

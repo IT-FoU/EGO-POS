@@ -145,9 +145,12 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       where: { companyId: scope.companyId, status: "active", ...branchWhere },
     }),
     db.promotion.findMany({
-      orderBy: [{ priority: "desc" }, { startDate: "desc" }],
-      select: { description: true, promotionName: true },
-      take: 8,
+      include: {
+        categories: { select: { categoryId: true } },
+        membershipLevels: { select: { membershipLevelId: true } },
+        products: { select: { productId: true } },
+      },
+      orderBy: [{ priority: "desc" }, { startDate: "desc" }, { id: "asc" }],
       where: {
         companyId: scope.companyId,
         endDate: { gte: now },
@@ -212,6 +215,27 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     promotionBanners: promotions
       .map((promotion: Record<string, unknown>) => String(promotion.promotionName || promotion.description || ""))
       .filter(Boolean),
+    promotions: promotions.map((promotion: Record<string, any>) => ({
+      buyQuantity: promotion.buyQuantity == null ? undefined : Number(promotion.buyQuantity),
+      categories: (promotion.categories ?? []).map((entry: { categoryId: string }) => ({ categoryId: entry.categoryId })),
+      comboPriceLak: promotion.comboPriceLak == null ? undefined : Number(promotion.comboPriceLak),
+      discountAmountLak: promotion.discountAmountLak == null ? undefined : Number(promotion.discountAmountLak),
+      discountPercent: promotion.discountPercent == null ? undefined : Number(promotion.discountPercent),
+      endDate: promotion.endDate instanceof Date ? promotion.endDate.toISOString() : String(promotion.endDate ?? ""),
+      getQuantity: promotion.getQuantity == null ? undefined : Number(promotion.getQuantity),
+      id: String(promotion.id),
+      isActive: promotion.isActive !== false,
+      membershipLevels: (promotion.membershipLevels ?? []).map((entry: { membershipLevelId: string }) => ({
+        membershipLevelId: entry.membershipLevelId,
+      })),
+      priority: Number(promotion.priority ?? 0),
+      products: (promotion.products ?? []).map((entry: { productId: string }) => ({ productId: entry.productId })),
+      promotionCode: promotion.promotionCode ?? null,
+      promotionName: String(promotion.promotionName ?? ""),
+      promotionType: String(promotion.promotionType ?? "percentage"),
+      startDate: promotion.startDate instanceof Date ? promotion.startDate.toISOString() : String(promotion.startDate ?? ""),
+      status: String(promotion.status ?? "active"),
+    })),
     qrBanks,
     receiptSettings: {
       companyName: company?.name ?? "Business",

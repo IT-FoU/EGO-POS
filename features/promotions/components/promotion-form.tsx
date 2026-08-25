@@ -80,8 +80,8 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
     const [showQr, setShowQr] = useState(false);
     const [showValidation, setShowValidation] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
-    const [codeMode, setCodeMode] = useState<"auto" | "manual">("auto");
-    const [code, setCode] = useState(initialPromotion?.promotionCode ?? "PROMO-202606-001");
+    const [codeMode, setCodeMode] = useState<"auto" | "manual">(initialPromotion?.promotionCode ? "manual" : "auto");
+    const [code, setCode] = useState(initialPromotion?.promotionCode ?? "");
     const [name, setName] = useState(initialPromotion?.promotionName ?? "");
     const [description, setDescription] = useState(initialPromotion?.description ?? "");
     const [type, setType] = useState<PromotionType>(initialPromotion?.type ?? "percentage");
@@ -94,10 +94,10 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
     const [getQty, setGetQty] = useState(initialPromotion?.getQuantity ?? 1);
     const [bundlePrice, setBundlePrice] = useState(initialPromotion?.comboPriceLak ?? 15000);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>(initialPromotion?.applicableProductIds ?? products.slice(0, 2).map((product) => product.id));
-    const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialPromotion?.applicableCategoryIds ?? categories.slice(0, 1).map((category) => category.id));
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialPromotion?.applicableCategoryIds ?? []);
     const [customerTarget, setCustomerTarget] = useState("Everyone");
-    const [startDate, setStartDate] = useState(initialPromotion?.startDate ?? "2026-06-20");
-    const [endDate, setEndDate] = useState(initialPromotion?.endDate ?? "2026-06-30");
+    const [startDate, setStartDate] = useState(initialPromotion?.startDate ?? defaultPromotionStartDate());
+    const [endDate, setEndDate] = useState(initialPromotion?.endDate ?? defaultPromotionEndDate());
     const [allDay, setAllDay] = useState(true);
     const [approvalRequired, setApprovalRequired] = useState(false);
     const [couponCode, setCouponCode] = useState("SAVE10");
@@ -215,7 +215,7 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
                     ? membershipLevels.map((level) => level.id)
                     : [],
                 priority,
-                promotionCode: code.trim() || undefined,
+                promotionCode: codeMode === "auto" ? null : code.trim() || null,
                 promotionName: name.trim(),
                 promotionType: type,
                 startDate,
@@ -870,6 +870,20 @@ function priorityLabel(priority: number) {
         label: "High Priority",
         tooltip: t("ui.high.priority.important.campaign.clearance.e"),
     };
+}
+function localIsoDate(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+function defaultPromotionStartDate() {
+    return localIsoDate(new Date());
+}
+function defaultPromotionEndDate() {
+    const end = new Date();
+    end.setDate(end.getDate() + 30);
+    return localIsoDate(end);
 }
 function daysBetween(startDate: string, endDate: string) {
     const start = new Date(`${startDate}T00:00:00`).getTime();

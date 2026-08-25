@@ -26,7 +26,7 @@ export async function getPrismaPromotionsSnapshot(tenant: TenantContext) {
         membershipLevels: { include: { membershipLevel: true } },
         products: true,
       },
-      orderBy: [{ priority: "desc" }, { startDate: "desc" }],
+      orderBy: [{ priority: "desc" }, { startDate: "desc" }, { id: "asc" }],
       where: { companyId: scope.companyId },
     }),
     getPrismaProducts(scope),
@@ -88,6 +88,18 @@ function emptyPromotionSimulation(promotion: Promotion): PromotionSimulation {
   };
 }
 
+function promotionBoundaryDate(value: string, boundary: "start" | "end") {
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const date = new Date(`${trimmed}T00:00:00`);
+    if (boundary === "end") {
+      date.setHours(23, 59, 59, 999);
+    }
+    return date;
+  }
+  return new Date(value);
+}
+
 export async function createPrismaPromotion(input: PromotionCreateInput, tenant: TenantContext) {
   await assertPermission(tenant, WRITE_PERMISSIONS.promotionsCreate);
   const data = parsePromotionCreateInput(input);
@@ -105,7 +117,7 @@ export async function createPrismaPromotion(input: PromotionCreateInput, tenant:
         description: optionalString(data.description),
         discountAmountLak: data.discountAmountLak === undefined ? undefined : numberValue(data.discountAmountLak),
         discountPercent: data.discountPercent === undefined ? undefined : numberValue(data.discountPercent),
-        endDate: new Date(data.endDate),
+        endDate: promotionBoundaryDate(data.endDate, "end"),
         getQuantity: data.getQuantity,
         isActive: data.status !== "inactive",
         membershipLevels: { create: (data.membershipLevelIds ?? []).map((membershipLevelId) => ({ membershipLevelId })) },
@@ -114,7 +126,7 @@ export async function createPrismaPromotion(input: PromotionCreateInput, tenant:
         promotionCode: optionalString(data.promotionCode),
         promotionName: stringValue(data.promotionName),
         promotionType: data.promotionType ?? "percentage",
-        startDate: new Date(data.startDate),
+        startDate: promotionBoundaryDate(data.startDate, "start"),
         status: data.status ?? "active",
       },
     }),
@@ -140,9 +152,9 @@ export async function updatePrismaPromotion(promotionId: string, input: Promotio
       const updated = await tx.promotion.update({
         data: {
           ...scalarData,
-          endDate: scalarData.endDate ? new Date(scalarData.endDate) : scalarData.endDate,
+          endDate: scalarData.endDate ? promotionBoundaryDate(scalarData.endDate, "end") : scalarData.endDate,
           isActive: scalarData.isActive ?? (scalarData.status ? scalarData.status === "active" : undefined),
-          startDate: scalarData.startDate ? new Date(scalarData.startDate) : scalarData.startDate,
+          startDate: scalarData.startDate ? promotionBoundaryDate(scalarData.startDate, "start") : scalarData.startDate,
         },
         where: { id: existing.id },
       });

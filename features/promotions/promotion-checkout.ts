@@ -1,5 +1,3 @@
-import { numberValue } from "@/lib/db/write-context";
-
 export type PromotionSaleLine = {
   baseQuantity: number;
   costPrice: number;
@@ -56,6 +54,9 @@ export function isPromotionEligibleForLine(
   membershipLevelId: string | null | undefined,
   options?: { appliedPromotionCodes?: string[] },
 ) {
+  if (!isPromotionScheduleActive(promotion)) {
+    return false;
+  }
   if (!isPromotionCouponSatisfied(promotion, options?.appliedPromotionCodes)) {
     return false;
   }
@@ -272,8 +273,16 @@ function pickBestPromotionForLine(
     const lineSubtotal = item.quantity * item.sellingPrice;
     const discount = calculatePromotionDiscount(promotion, item.quantity, item.sellingPrice, lineSubtotal);
     const priority = amount(promotion.priority);
-    if (discount > best.discount || (discount === best.discount && discount > 0 && priority > best.priority)) {
-      best = { discount, priority, promotionId: String(promotion.id) };
+    const promotionId = String(promotion.id);
+    const betterDiscount = discount > best.discount;
+    const sameDiscountHigherPriority = discount === best.discount && discount > 0 && priority > best.priority;
+    const sameDiscountSamePriorityStableId =
+      discount === best.discount &&
+      discount > 0 &&
+      priority === best.priority &&
+      promotionId < (best.promotionId ?? "\uffff");
+    if (betterDiscount || sameDiscountHigherPriority || sameDiscountSamePriorityStableId) {
+      best = { discount, priority, promotionId };
     }
   }
 
@@ -300,36 +309,18 @@ export function assertPromotionProfitSafe(items: PromotionSaleLine[], blockBelow
   }
 }
 
-export async function applyActivePromotions(
-  tx: Record<string, any>,
+export function applyLoadedPromotions(
   items: PromotionSaleLine[],
+  promotions: Array<Record<string, any>>,
   context: PromotionApplicationContext,
 ) {
-  const now = new Date();
-  const { categoryByProduct, companyId, membershipLevelId } = context;
-  const promotions = await tx.promotion.findMany({
-    include: {
-      categories: true,
-      membershipLevels: true,
-      products: true,
-    },
-    orderBy: [{ priority: "desc" }, { startDate: "desc" }],
-    where: {
-      companyId,
-      endDate: { gte: now },
-      isActive: true,
-      startDate: { lte: now },
-      status: "active",
-    },
-  });
-
   const workingItems = items.map((item) => ({ ...item }));
   const allowStacking = context.allowStacking ?? false;
 
-  applyComboSetPromotions(workingItems, promotions as Array<Record<string, any>>, context);
-  applySpendThresholdPromotions(workingItems, promotions as Array<Record<string, any>>, context);
+  applyComboSetPromotions(workingItems, promotions, context);
+  applySpendThresholdPromotions(workingItems, promotions, context);
 
-  const perLinePromotions = (promotions as Array<Record<string, any>>).filter((promotion) => {
+  const perLinePromotions = promotions.filter((promotion) => {
     if (promotion.promotionType === "combo_set") {
       return false;
     }
@@ -348,8 +339,8 @@ export async function applyActivePromotions(
     const best = pickBestPromotionForLine(
       perLinePromotions,
       item,
-      categoryByProduct.get(item.productId),
-      membershipLevelId,
+      context.categoryByProduct.get(item.productId),
+      context.membershipLevelId,
       context,
     );
     const promotionDiscount = Math.min(best.discount, lineSubtotal);
@@ -374,6 +365,31 @@ export async function applyActivePromotions(
       totalAmount,
     };
   });
+}
+
+export async function applyActivePromotions(
+  tx: Record<string, any>,
+  items: PromotionSaleLine[],
+  context: PromotionApplicationContext,
+) {
+  const now = new Date();
+  const promotions = await tx.promotion.findMany({
+    include: {
+      categories: true,
+      membershipLevels: true,
+      products: true,
+    },
+    orderBy: [{ priority: "desc" }, { startDate: "desc" }, { id: "asc" }],
+    where: {
+      companyId: context.companyId,
+      endDate: { gte: now },
+      isActive: true,
+      startDate: { lte: now },
+      status: "active",
+    },
+  });
+
+  return applyLoadedPromotions(items, promotions as Array<Record<string, any>>, context);
 }
 
 export async function recordPromotionUsage(
@@ -418,7 +434,7 @@ export function rejectClientPromotionClaims(
   items: Array<{ promotionDiscount?: number; promotionId?: string }>,
 ) {
   for (const item of items) {
-    if (item.promotionId || numberValue(item.promotionDiscount) > 0) {
+    if (item.promotionId || amount(item.promotionDiscount) > 0) {
       throw new Error("Client promotion values are not accepted. Promotions are calculated server-side.");
     }
   }

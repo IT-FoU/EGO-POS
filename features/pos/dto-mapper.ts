@@ -31,6 +31,7 @@ export function mapPrismaPosCustomer(customer: Row): PosCustomer {
     customerCode: customer.customerCode ?? "",
     discountPercent: discountPercent > 0 ? discountPercent : undefined,
     id: customer.id,
+    membershipLevelId: customer.membershipLevelId ?? customer.membershipLevel?.id ?? undefined,
     membershipExpiry,
     membershipNumber: customer.qrMemberCode ?? customer.customerCode ?? customer.id,
     membershipStatus: membershipActive ? "Active" : "Expired",
@@ -72,6 +73,7 @@ export function mapPrismaPosProduct(product: Row): PosProduct {
 
   return {
     barcode: product.barcode ?? "",
+    categoryId: product.categoryId ?? product.category?.id ?? undefined,
     categoryName: product.category?.nameEn ?? product.category?.nameLo ?? "",
     id: product.id,
     imageKey: product.imageUrl ?? "generic",

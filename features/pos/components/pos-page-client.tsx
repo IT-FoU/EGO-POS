@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosReceiptSettings, QrBank, } from "@/features/pos/types";
+import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosPromotion, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
@@ -13,6 +13,7 @@ import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
+import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
 import {
@@ -121,19 +122,20 @@ type ResolvedPayment = {
 };
 const POS_PRODUCT_GRID_VISIBILITY_KEY = "ego.pos.productGridVisible";
 
-export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
     branchId: string;
     branchName: string;
     cashierName: string;
     cashSession: PosCashSessionContext;
     customers: PosCustomer[];
     demoMode: boolean;
-    devDebug: boolean;
+    devDebug?: boolean;
     loyaltySettings: PosLoyaltySettings;
     nextSaleNo: string;
     posPermissionPolicy: PosPermissionPolicy;
     products: PosProduct[];
     promotionBanners: string[];
+    promotions?: PosPromotion[];
     qrBanks: QrBank[];
     receiptSettings: PosReceiptSettings;
     taxInclusive: boolean;
@@ -315,8 +317,37 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const otHours = calculateHours(otStartedAt, otEndedAt);
     const subtotal = cartItems.reduce((total, item) => total + item.priceLak * item.quantity, 0);
     const membershipSavings = cartItems.reduce((total, item) => total + Math.max(item.retailPriceLak - item.priceLak, 0) * item.quantity, 0);
+    const promotionDiscountTotal = useMemo(() => {
+        if (cartItems.length === 0 || promotions.length === 0) {
+            return 0;
+        }
+        const categoryByProduct = new Map(cartItems.map((item) => [item.id, item.categoryId ?? null]));
+        const previewItems = applyLoadedPromotions(
+            cartItems.map((item) => ({
+                baseQuantity: item.quantity * (item.conversionQty ?? 1),
+                costPrice: item.costPriceLak ?? 0,
+                discountAmount: 0,
+                productId: item.id,
+                profitAmount: 0,
+                promotionDiscount: 0,
+                quantity: item.quantity,
+                sellingPrice: item.priceLak,
+                totalAmount: item.priceLak * item.quantity,
+                unitId: item.unitId,
+            })),
+            promotions,
+            {
+                allowStacking: false,
+                categoryByProduct,
+                companyId: "",
+                membershipLevelId: activeCustomer?.membershipStatus === "Active" ? activeCustomer.membershipLevelId ?? null : null,
+            },
+        );
+        return Math.round(previewItems.reduce((total, item) => total + item.promotionDiscount, 0));
+    }, [activeCustomer?.membershipLevelId, activeCustomer?.membershipStatus, cartItems, promotions]);
     const percentDiscountValue = Math.round(subtotal * (discountPercent / 100));
-    const discountTotal = Math.min(subtotal, discountAmount + percentDiscountValue);
+    const manualDiscountTotal = Math.min(subtotal, discountAmount + percentDiscountValue);
+    const discountTotal = Math.min(subtotal, promotionDiscountTotal + manualDiscountTotal);
     const maxRedeemablePoints = loyaltySettings.loyaltyEnabled && selectedCustomer
         ? Math.min(
             selectedCustomer.pointsBalance,
@@ -357,12 +388,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         const labels = cartItems
             .map((item) => item.pricingNote)
             .filter((label): label is string => Boolean(label));
-        if (discountTotal > 0)
+        if (promotionDiscountTotal > 0)
+            labels.push("Promotion applied");
+        if (manualDiscountTotal > 0)
             labels.push("Manual discount applied");
         if (promotionBanners.length > 0)
             labels.push(promotionBanners[0]);
         return Array.from(new Set(labels)).slice(0, 4);
-    }, [cartItems, discountTotal, promotionBanners]);
+    }, [cartItems, manualDiscountTotal, promotionBanners, promotionDiscountTotal]);
     const filteredRecentSales = useMemo(() => {
         const query = recentSalesSearch.trim().toLowerCase();
         return recentSales
@@ -485,14 +518,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 ? `${selectedCustomer.membershipType} ${isMembershipActive(selectedCustomer) ? "Active" : "Expired"}`
                 : "Guest",
             pointsEarned,
-            promotionDiscountLak: discountTotal,
+            promotionDiscountLak: promotionDiscountTotal,
             selectedQrBank,
             storeLogoUrl: "",
             subtotalLak: subtotal,
             totalLak: totalAmount,
         };
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
-    }, [appliedPromotions, cartItems, customerDisplayMode, discountTotal, membershipSavings, pointsEarned, selectedCustomer, selectedQrBank, subtotal, totalAmount]);
+    }, [appliedPromotions, cartItems, customerDisplayMode, membershipSavings, pointsEarned, promotionDiscountTotal, selectedCustomer, selectedQrBank, subtotal, totalAmount]);
     function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
         const saleUnit = selectedUnit ?? getSaleUnits(product)[0];
         const unitProduct = saleUnit ? productWithSelectedUnit(product, saleUnit) : product;
@@ -841,10 +874,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         if (!enforcePosAction("create_sale", { amountLak: totalAmount, discountPercent })) {
             return;
         }
-        if (discountTotal > 0 && !enforcePosAction("apply_discount", {
-            amountLak: discountTotal,
+        if (manualDiscountTotal > 0 && !enforcePosAction("apply_discount", {
+            amountLak: manualDiscountTotal,
             discountPercent,
-            newValue: `${formatLak(discountTotal)} LAK / ${discountPercent}%`,
+            newValue: `${formatLak(manualDiscountTotal)} LAK / ${discountPercent}%`,
             oldValue: "0 LAK / 0%",
         })) {
             return;
