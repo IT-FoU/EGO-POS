@@ -30,7 +30,7 @@ function redirectLocalhostAlias(request: NextRequest) {
   });
 }
 
-export default function proxy(request: NextRequest, event: NextFetchEvent) {
+export default function middleware(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
   const canonicalRedirect = redirectLocalhostAlias(request);
   if (canonicalRedirect) {

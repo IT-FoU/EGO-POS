@@ -1,0 +1,6 @@
+NEXTJS_ENV=production
+IGO_DEMO_MODE=false
+NEXTAUTH_URL=http://localhost:8787
+# Set locally only. Do not commit real values.
+# DATABASE_URL=
+# NEXTAUTH_SECRET=
