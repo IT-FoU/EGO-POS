@@ -35,6 +35,7 @@ export type ReportsSnapshot = {
   products: Product[];
   productRows: ProductReportRow[];
   purchaseTrend: PurchaseTrendPoint[];
+  refundLak: number;
   revenueTrend: TrendPoint[];
   salesMetrics: SalesMetric[];
   supplierPayables: SupplierPayableSummary[];

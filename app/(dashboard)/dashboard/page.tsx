@@ -16,7 +16,16 @@ export const dynamic = "force-dynamic";
 const rangeKeys = new Set<DashboardRangeKey>(["custom", "month", "today", "week", "year"]);
 
 function dateInputValue(value: Date) {
-  return value.toISOString().slice(0, 10);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function parseLocalDateParam(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
 }
 
 function parseDateRange(params: Record<string, string | string[] | undefined>): DashboardDateRange {
@@ -24,8 +33,8 @@ function parseDateRange(params: Record<string, string | string[] | undefined>): 
   const key = rangeKeys.has(requestedRange as DashboardRangeKey)
     ? (requestedRange as DashboardRangeKey)
     : "today";
-  const start = typeof params.start === "string" ? new Date(params.start) : undefined;
-  const end = typeof params.end === "string" ? new Date(params.end) : undefined;
+  const start = typeof params.start === "string" ? parseLocalDateParam(params.start) : undefined;
+  const end = typeof params.end === "string" ? parseLocalDateParam(params.end) : undefined;
 
   return {
     end: end && Number.isFinite(end.getTime()) ? end : undefined,

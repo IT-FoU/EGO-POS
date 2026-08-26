@@ -9,7 +9,7 @@ import type { ReportFilterOptions, ReportFilters } from "@/features/reports/repo
 import { resolveReportDateRange } from "@/features/reports/report-filters";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import type { TenantContext } from "@/lib/db/write-context";
-import { resolveTenantScope } from "@/lib/db/tenant-scope";
+import { resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 import type { InventoryItem } from "@/features/inventory/types";
 import type { Product } from "@/features/products/types";
 import type { SupplierPurchaseOrder, SupplierReceiving } from "@/features/suppliers/types";
@@ -107,7 +107,7 @@ function amount(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function netReportLifecycle(refunds: Array<Record<string, any>>, saleItems: Array<Record<string, any>>) {
+export function netReportLifecycle(refunds: Array<Record<string, any>>, saleItems: Array<Record<string, any>>) {
   const itemById = new Map(saleItems.map((item) => [String(item.id), item]));
   const net = { cogsLak: 0, profitLak: 0, quantitySold: 0, revenueLak: 0 };
   for (const refund of refunds) {
@@ -140,12 +140,144 @@ function netReportLifecycle(refunds: Array<Record<string, any>>, saleItems: Arra
   return net;
 }
 
+function refundAmountOf(refund: Record<string, any>) {
+  const kind = String(refund.kind ?? "refund");
+  return amount(refund.refundAmount) || (kind === "refund" ? amount(refund.totalAmount) : 0);
+}
+
+function groupRefundsBySaleId(refunds: Array<Record<string, any>>) {
+  const grouped = new Map<string, Array<Record<string, any>>>();
+  for (const refund of refunds) {
+    const saleId = String(refund.saleId ?? "");
+    if (!saleId) continue;
+    const current = grouped.get(saleId) ?? [];
+    current.push(refund);
+    grouped.set(saleId, current);
+  }
+  return grouped;
+}
+
+function applyLifecycleToSaleRows(
+  sales: Array<Record<string, any>>,
+  refunds: Array<Record<string, any>>,
+  saleItems: Array<Record<string, any>>,
+) {
+  const refundsBySale = groupRefundsBySaleId(refunds);
+  return sales.map((row) => {
+    const net = netReportLifecycle(refundsBySale.get(String(row.id)) ?? [], saleItems);
+    return {
+      ...row,
+      profitAmount: amount(row.profitAmount) + net.profitLak,
+      totalAmount: amount(row.totalAmount) + net.revenueLak,
+    };
+  });
+}
+
+function buildNettedProductTotals(saleItems: Array<Record<string, any>>, refunds: Array<Record<string, any>>) {
+  const itemById = new Map(saleItems.map((item) => [String(item.id), item]));
+  const totals = new Map<string, { profitLak: number; quantitySold: number; revenueLak: number }>();
+  const bump = (productId: string, delta: { profitLak: number; quantitySold: number; revenueLak: number }) => {
+    if (!productId) return;
+    const current = totals.get(productId) ?? { profitLak: 0, quantitySold: 0, revenueLak: 0 };
+    current.profitLak += delta.profitLak;
+    current.quantitySold += delta.quantitySold;
+    current.revenueLak += delta.revenueLak;
+    totals.set(productId, current);
+  };
+
+  for (const item of saleItems) {
+    bump(String(item.productId ?? ""), {
+      profitLak: amount(item.profitAmount),
+      quantitySold: amount(item.quantity),
+      revenueLak: amount(item.totalAmount),
+    });
+  }
+
+  for (const refund of refunds) {
+    for (const row of refund.items ?? []) {
+      const qty = amount(row.quantity);
+      const item = itemById.get(String(row.saleItemId));
+      const originalQty = amount(item?.quantity) || 1;
+      bump(String(row.productId || item?.productId || ""), {
+        profitLak: item ? -amount(item.profitAmount) * (qty / originalQty) : 0,
+        quantitySold: -qty,
+        revenueLak: item ? -amount(item.totalAmount) * (qty / originalQty) : 0,
+      });
+    }
+    for (const row of refund.exchangeItems ?? []) {
+      const qty = amount(row.quantity);
+      const lineTotal = amount(row.totalAmount);
+      const lineCost = amount(row.costPrice) * qty;
+      bump(String(row.productId ?? ""), {
+        profitLak: lineTotal - lineCost,
+        quantitySold: qty,
+        revenueLak: lineTotal,
+      });
+    }
+  }
+
+  return totals;
+}
+
+function paymentTotalsFromRows(paymentRows: Array<Record<string, any>>) {
+  const totals = new Map<string, number>();
+  for (const row of paymentRows) {
+    const method = String(row.paymentMethod ?? "cash");
+    const net = method === "cash"
+      ? amount(row.amount) - amount(row.changeAmount)
+      : amount(row.amount);
+    totals.set(method, (totals.get(method) ?? 0) + net);
+  }
+  return Array.from(totals.entries()).map(([paymentMethod, value]) => ({
+    paymentMethod,
+    _sum: { amount: value },
+  }));
+}
+
+function netPaymentGroups(paymentGroups: Array<Record<string, any>>, refunds: Array<Record<string, any>>) {
+  const totals = new Map<string, number>();
+  for (const row of paymentGroups) {
+    const method = String(row.paymentMethod ?? "cash");
+    totals.set(method, (totals.get(method) ?? 0) + amount(row._sum?.amount));
+  }
+  for (const refund of refunds) {
+    const method = String(refund.refundMethod ?? "cash");
+    const kind = String(refund.kind ?? "refund");
+    totals.set(method, (totals.get(method) ?? 0) - refundAmountOf(refund));
+    if (kind === "exchange") {
+      totals.set(method, (totals.get(method) ?? 0) + amount(refund.paymentAmount));
+    }
+  }
+  return Array.from(totals.entries()).map(([paymentMethod, value]) => ({
+    paymentMethod,
+    _sum: { amount: value },
+  }));
+}
+
+function clampReportFilters(scope: BranchScope, filters: ReportFilters): ReportFilters {
+  const next = { ...filters };
+  if (!scope.isOwner) {
+    next.branchId = scope.branchId;
+    if (next.warehouseId && !scope.warehouseIds.includes(next.warehouseId)) {
+      next.warehouseId = scope.warehouseId;
+    }
+    return next;
+  }
+  if (next.branchId && !scope.branchIds.includes(next.branchId)) {
+    next.branchId = scope.branchId;
+  }
+  if (next.warehouseId && !scope.warehouseIds.includes(next.warehouseId)) {
+    next.warehouseId = scope.warehouseId;
+  }
+  return next;
+}
+
 function monthLabel(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function dayLabel(value: Date) {
-  return value.toISOString().slice(0, 10);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
 function resolveEffectiveFilters(filters?: ReportFilters): ReportFilters {
@@ -294,8 +426,12 @@ export async function getReportFilterOptions(tenant: TenantContext): Promise<Rep
     }),
   ]);
 
+  const scopedBranches = scope.isOwner
+    ? branches
+    : branches.filter((row: Record<string, string>) => row.id === scope.branchId);
+
   return {
-    branches: branches.map((row: Record<string, string>) => ({ id: row.id, label: row.name })),
+    branches: scopedBranches.map((row: Record<string, string>) => ({ id: row.id, label: row.name })),
     cashiers: cashiers.map((row: Record<string, string>) => ({
       id: row.id,
       label: row.fullName || row.username,
@@ -323,7 +459,7 @@ export async function getReportFilterOptions(tenant: TenantContext): Promise<Rep
 
 export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters?: ReportFilters) {
   const scope = await resolveTenantScope(tenant);
-  const filters = resolveEffectiveFilters(rawFilters);
+  const filters = clampReportFilters(scope, resolveEffectiveFilters(rawFilters));
   const saleFilter = buildSaleWhere(scope, filters);
   const saleItemFilter = buildSaleItemWhere(saleFilter, filters);
   const purchaseFilter = buildPurchaseWhere(scope, filters);
@@ -348,7 +484,6 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     saleItemsResult,
     saleItemsSoldResult,
     saleItemCostRowsResult,
-    productGroupsResult,
     refundRowsResult,
     purchasesByPeriodResult,
     paymentGroupsResult,
@@ -360,7 +495,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   ] = await Promise.all([
     settleReportQuery("salesByPeriod", false, () => db.sale.findMany({
       orderBy: { createdAt: "asc" },
-      select: { createdAt: true, profitAmount: true, taxAmount: true, totalAmount: true },
+      select: { createdAt: true, id: true, profitAmount: true, taxAmount: true, totalAmount: true },
       where: saleFilter,
     })),
     hasCompletedSales
@@ -386,27 +521,27 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
       : Promise.resolve(settledReportValue("saleItemsSold", true, { _sum: { quantity: 0 } })),
     hasCompletedSales
       ? settleReportQuery("saleItemCostRows", true, () => db.saleItem.findMany({
-          select: { costPrice: true, id: true, profitAmount: true, quantity: true },
+          select: {
+            costPrice: true,
+            id: true,
+            productId: true,
+            profitAmount: true,
+            quantity: true,
+            totalAmount: true,
+          },
           where: saleItemFilter,
         }))
       : Promise.resolve(settledReportValue("saleItemCostRows", true, [])),
     hasCompletedSales
-      ? settleReportQuery("productGroups", false, () => db.saleItem.groupBy({
-          by: ["productId"],
-          _sum: { profitAmount: true, quantity: true, totalAmount: true },
-          orderBy: { _sum: { totalAmount: "desc" } },
-          take: 20,
-          where: saleItemFilter,
-        }))
-      : Promise.resolve(settledReportValue("productGroups", false, [])),
-    hasCompletedSales
       ? settleReportQuery("refundRows", true, () => db.refund.findMany({
           select: {
-            exchangeItems: { select: { costPrice: true, quantity: true, totalAmount: true } },
-            items: { select: { quantity: true, saleItemId: true } },
+            exchangeItems: { select: { costPrice: true, productId: true, quantity: true, totalAmount: true } },
+            items: { select: { productId: true, quantity: true, saleItemId: true } },
             kind: true,
             paymentAmount: true,
             refundAmount: true,
+            refundMethod: true,
+            saleId: true,
             totalAmount: true,
           },
           where: { sale: saleFilter },
@@ -417,9 +552,8 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
       select: { purchaseDate: true, totalAmount: true },
       where: purchaseFilter,
     })),
-    settleReportQuery("paymentGroups", false, () => db.salePayment.groupBy({
-      by: ["paymentMethod"],
-      _sum: { amount: true },
+    settleReportQuery("paymentGroups", false, () => db.salePayment.findMany({
+      select: { amount: true, changeAmount: true, paymentMethod: true },
       where: { sale: saleFilter },
     })),
     settleReportQuery("payableGroups", false, () => db.supplierPayable.groupBy({
@@ -484,10 +618,9 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   const saleItems: Array<Record<string, any>> = resultOrFallback(saleItemsResult, []);
   const saleItemsSold = resultOrFallback(saleItemsSoldResult, { _sum: { quantity: 0 } });
   const saleItemCostRows: Array<Record<string, any>> = resultOrFallback(saleItemCostRowsResult, []);
-  const productGroups: Array<Record<string, any>> = resultOrFallback(productGroupsResult, []);
   const refundRows: Array<Record<string, any>> = resultOrFallback(refundRowsResult, []);
   const purchasesByPeriod: Array<Record<string, any>> = resultOrFallback(purchasesByPeriodResult, []);
-  const paymentGroups: Array<Record<string, any>> = resultOrFallback(paymentGroupsResult, []);
+  const paymentRows: Array<Record<string, any>> = resultOrFallback(paymentGroupsResult, []);
   const payableGroups: Array<Record<string, any>> = resultOrFallback(payableGroupsResult, []);
   const dataQuality = buildReportDataQuality([
     salesAggregateResult,
@@ -495,7 +628,6 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     saleItemsResult,
     saleItemsSoldResult,
     saleItemCostRowsResult,
-    productGroupsResult,
     refundRowsResult,
     purchasesByPeriodResult,
     paymentGroupsResult,
@@ -507,6 +639,9 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   ]);
 
   const lifecycleNet = netReportLifecycle(refundRows, saleItemCostRows);
+  const nettedSalesByPeriod = applyLifecycleToSaleRows(salesByPeriod, refundRows, saleItemCostRows);
+  const nettedPaymentGroups = netPaymentGroups(paymentTotalsFromRows(paymentRows), refundRows);
+  const refundLak = refundRows.reduce((total, refund) => total + refundAmountOf(refund), 0);
   const totalRevenue = amount(salesAggregate._sum.totalAmount) + lifecycleNet.revenueLak;
   const totalProfit = amount(salesAggregate._sum.profitAmount) + lifecycleNet.profitLak;
   const totalCogsLak = saleItemCostRows.reduce(
@@ -557,21 +692,24 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     transactionCount: salesAggregate._count.id ?? 0,
   });
 
-  const salesMetrics = buildSalesMetrics(salesByPeriod, { monthStart, weekStart, yearStart });
-  const revenueTrend = buildRevenueTrend(salesByPeriod);
-  const revenueProfitTrend = buildRevenueProfitTrend(salesByPeriod, trendStart);
-  const hourlySales = buildHourlySales(salesByPeriod.filter((row: Record<string, any>) => row.createdAt >= monthStart));
+  const salesMetrics = buildSalesMetrics(nettedSalesByPeriod, { monthStart, weekStart, yearStart });
+  const revenueTrend = buildRevenueTrend(nettedSalesByPeriod);
+  const revenueProfitTrend = buildRevenueProfitTrend(nettedSalesByPeriod, trendStart);
+  const hourlySales = buildHourlySales(nettedSalesByPeriod.filter((row: Record<string, any>) => row.createdAt >= monthStart));
 
-  const productRows: ProductReportRow[] = productGroups.map((row: Record<string, any>) => {
-    const product = productById.get(row.productId);
-    return {
-      categoryName: product?.categoryName ?? "Uncategorized",
-      productName: product?.nameEn || product?.nameLo || row.productId,
-      profitLak: amount(row._sum.profitAmount),
-      quantitySold: amount(row._sum.quantity),
-      revenueLak: amount(row._sum.totalAmount),
-    };
-  });
+  const productRows: ProductReportRow[] = Array.from(buildNettedProductTotals(saleItemCostRows, refundRows).entries())
+    .map(([productId, totals]) => {
+      const product = productById.get(productId);
+      return {
+        categoryName: product?.categoryName ?? "Uncategorized",
+        productName: product?.nameEn || product?.nameLo || productId,
+        profitLak: Math.round(totals.profitLak),
+        quantitySold: totals.quantitySold,
+        revenueLak: Math.round(totals.revenueLak),
+      };
+    })
+    .sort((left, right) => right.revenueLak - left.revenueLak)
+    .slice(0, 20);
 
   const purchaseTrend = buildPurchaseTrend(purchasesByPeriod);
   const supplierPurchaseOrders = filterPurchaseOrders(suppliers.purchaseOrders, filters);
@@ -583,7 +721,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     categoryBreakdown,
     inventoryItems,
     itemsSold,
-    paymentBreakdown: paymentGroups.map((row: Record<string, any>) => ({
+    paymentBreakdown: nettedPaymentGroups.map((row: Record<string, any>) => ({
       method: String(row.paymentMethod ?? "cash"),
       value: amount(row._sum.amount),
     })),
@@ -603,6 +741,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     productRows,
     products,
     purchaseTrend,
+    refundLak: Math.round(refundLak),
     revenueTrend,
     salesMetrics,
     supplierPayables,

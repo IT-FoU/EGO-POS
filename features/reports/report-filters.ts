@@ -77,6 +77,10 @@ export function resolveReportDateRange(preset: ReportDatePreset, now = new Date(
 
 function parseDate(value: string | null) {
   if (!value) return undefined;
+  const localMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (localMatch) {
+    return new Date(Number(localMatch[1]), Number(localMatch[2]) - 1, Number(localMatch[3]));
+  }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
