@@ -24,6 +24,9 @@ const datePresetLabels = {
 type TabKey = "dashboard" | "center";
 
 function buildSelectOptions(allLabel: string, options: Array<{ id: string; label: string }>) {
+    if (options.length <= 1) {
+        return options.map((option) => ({ label: option.label, value: option.id }));
+    }
     return [{ label: allLabel, value: "" }, ...options.map((option) => ({ label: option.label, value: option.id }))];
 }
 type ModalKind = "kpi" | "health" | "daily" | "hour" | "category" | "inventory" | "product" | "deadstock" | "report" | "export" | "schedule" | "favorites" | "dataSource";
@@ -39,13 +42,12 @@ function buildDataSourceStatuses(hub: ReportsAnalyticsHub): DataSourceStatus[] {
     const inventoryAlertCount = hub.inventoryAlerts.reduce((total, alert) => total + alert.count, 0);
     const lowStockCount = hub.inventoryAlerts.find((alert) => alert.key === "low_stock")?.count ?? 0;
     const deadStockCount = hub.deadStockProducts.length;
-    const promotionImpactCount = hub.categoryBreakdown.length;
     const paymentChannelCount = hub.paymentBreakdown.length;
     return [
         { count: transactions, name: "Sales", reports: ["Sales Summary", "Sales by Hour"], status: "Synced" },
         { count: inventoryAlertCount, name: "Inventory", reports: ["Current Stock", "Low Stock", "Dead Stock"], status: "Synced" },
         { count: lowStockCount, name: "Purchasing", reports: ["Purchase Orders", "Supplier Payables"], status: "Synced" },
-        { count: promotionImpactCount, name: "Promotions", reports: ["Promotion Performance"], status: "Synced" },
+        { count: 0, name: "Promotions", reports: ["Promotion Performance"], status: "Not implemented" },
         { count: customers, name: "Customers", reports: ["Customer List", "Top Customers"], status: "Synced" },
         { count: customers, name: "Membership", reports: ["Tier Analysis", "Points Activity"], status: "Synced" },
         { count: paymentChannelCount, name: "Finance", reports: ["Payment Breakdown", "Cash Drawer"], status: "Synced" },
@@ -138,7 +140,9 @@ export function ReportsAnalyticsClient({
     const [tab, setTab] = useState<TabKey>("dashboard");
     const [reportQuery, setReportQuery] = useState("");
     const [datePreset, setDatePreset] = useState(filters.datePreset);
-    const [branchId, setBranchId] = useState(filters.branchId ?? "");
+    const [branchId, setBranchId] = useState(
+        filters.branchId ?? (filterOptions.branches.length === 1 ? filterOptions.branches[0].id : ""),
+    );
     const [warehouseId, setWarehouseId] = useState(filters.warehouseId ?? "");
     const [categoryId, setCategoryId] = useState(filters.categoryId ?? "");
     const [supplierId, setSupplierId] = useState(filters.supplierId ?? "");
@@ -202,7 +206,7 @@ export function ReportsAnalyticsClient({
         router.refresh();
     }
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
-      {modal === "kpi" ? <KpiDetailModal activeKpi={activeKpi} currency={currency} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle}/> : null}
+      {modal === "kpi" ? <KpiDetailModal activeKpi={activeKpi} currency={currency} hub={hub} onClose={() => setModal(null)} title={modalTitle}/> : null}
       {modal === "health" ? <HealthModal inventoryAlerts={hub.inventoryAlerts} onClose={() => setModal(null)}/> : null}
       {modal === "daily" ? <DayDetailModal locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.dayDetail} topSellers={hub.topSellers}/> : null}
       {modal === "hour" ? <HourDetailModal locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.hourDetail} topSellers={hub.topSellers}/> : null}
@@ -685,43 +689,82 @@ function ExportMenu({ onExport }: {
         </div>) : null}
     </div>);
 }
-function KpiDetailModal({ activeKpi, currency, onClose, paymentBreakdown, title }: {
+function kpiSummaryLines(hub: ReportsAnalyticsHub, currency: ReportCurrency, key: ReportKpiKey): string[] {
+    const kpiValue = (kpiKey: ReportKpiKey) => hub.kpis.find((row) => row.key === kpiKey)?.value ?? 0;
+    const money = (value: number) => `${formatCurrency(value, currency)} ${currency}`;
+    switch (key) {
+        case "revenue":
+            return [
+                ...hub.paymentBreakdown.map((row) => `${row.label}: ${money(row.value)}`),
+                ...hub.categoryBreakdown.slice(0, 3).map((row) => `${row.category}: ${money(row.revenue)}`),
+            ];
+        case "profit":
+            return [
+                `Gross profit: ${money(kpiValue("profit"))}`,
+                `Profit margin: ${hub.profitMarginPercent}%`,
+                ...(hub.topSellers[0] ? [`Top seller: ${hub.topSellers[0].name}`] : []),
+            ];
+        case "transactions":
+            return [
+                `Transactions: ${formatNumber(kpiValue("transactions"))}`,
+                `Items sold: ${formatNumber(hub.itemsSold)}`,
+                `Average bill: ${money(hub.averageBillLak)}`,
+            ];
+        case "customers":
+            return [`Customers: ${formatNumber(kpiValue("customers"))}`];
+        case "averageBill":
+            return [
+                `Average bill: ${money(hub.averageBillLak)}`,
+                `Transactions: ${formatNumber(kpiValue("transactions"))}`,
+            ];
+        case "itemsSold":
+            return [
+                `Items sold: ${formatNumber(hub.itemsSold)}`,
+                ...(hub.topSellers[0] ? [`Top item: ${hub.topSellers[0].name} (${formatNumber(hub.topSellers[0].qty)})`] : []),
+            ];
+        case "inventoryValue":
+            return [
+                `Inventory value: ${money(hub.inventoryValueLak)}`,
+                `Dead stock items: ${formatNumber(hub.deadStockProducts.length)}`,
+                ...hub.inventoryAlerts.filter((alert) => alert.count > 0).map((alert) => `${alert.label}: ${formatNumber(alert.count)}`),
+            ];
+        case "profitMargin":
+            return [
+                `Profit margin: ${hub.profitMarginPercent}%`,
+                ...(hub.categoryBreakdown[0] ? [`Top category: ${hub.categoryBreakdown[0].category}`] : []),
+            ];
+        default:
+            return [];
+    }
+}
+
+function kpiReportHref(key: ReportKpiKey) {
+    if (key === "customers") return "/reports/customers";
+    if (key === "inventoryValue") return "/reports/inventory";
+    if (key === "itemsSold") return "/reports/products";
+    return "/reports/sales";
+}
+
+function KpiDetailModal({ activeKpi, currency, hub, onClose, title }: {
     activeKpi: ReportKpiKey;
     currency: ReportCurrency;
+    hub: ReportsAnalyticsHub;
     onClose: () => void;
-    paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
 }) {
-    const details: Record<ReportKpiKey, string[]> = {
-        averageBill: [t("ui.average.basket.size.7.4.items"), t("ui.highest.basket.825.000.lak"), t("ui.repeat.customer.bill.68.000.lak")],
-        customers: ["New customers: 128", "Returning customers: 842", "Members: 510", t("ui.top.customers.somchai.noy.kham")],
-        inventoryValue: [t("ui.current.stock.value.45.230.000.lak"), t("ui.dead.stock.value.1.836.000.lak"), "Expiring stock: 15 lots"],
-        itemsSold: ["Top item: Water 500ml", t("ui.units.sold.18.450"), "Returned items: 14"],
-        profit: [t("ui.gross.profit.33.600.000.lak"), t("ui.net.profit.28.400.000.lak"), "Most profitable product: Pepsi Can", t("ui.profit.trend.8.2")],
-        profitMargin: [t("ui.gross.margin.28.5"), "Best category: Household", "Risk category: Cold Goods"],
-        revenue: ["Revenue by payment method", "Revenue by category", "Revenue by branch", "Top revenue products"],
-        transactions: [t("ui.bills.count.2.480"), "Refund count: 14", "Void count: 8", t("ui.average.basket.size.7.4")],
-    };
-    const buttons: Record<ReportKpiKey, string[]> = {
-        averageBill: ["View Sales Report", "Export"],
-        customers: ["View Customer Report", "Export"],
-        inventoryValue: ["View Inventory Report", "Export"],
-        itemsSold: ["View Product Report", "Export"],
-        profit: ["View Profit Report", "Export"],
-        profitMargin: ["View Profit Report", "Export"],
-        revenue: ["View Sales Report", "Export"],
-        transactions: ["View Transactions", "Export"],
-    };
+    const details = kpiSummaryLines(hub, currency, activeKpi);
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-4 lg:grid-cols-2">
-        <SimpleBars title={`${title} Detail`} rows={paymentBreakdown.map((row) => ({ label: row.label, value: row.value }))} currency={currency}/>
+        <SimpleBars title={`${title} Detail`} rows={hub.paymentBreakdown.map((row) => ({ label: row.label, value: row.value }))} currency={currency}/>
         <div className="rounded-lg border border-border bg-background p-4">
           <h3 className="font-semibold">Summary</h3>
           <div className="mt-4 flex flex-col gap-3">
-            {details[activeKpi].map((detail) => <div className="rounded-md border border-border bg-card p-3 text-sm" key={detail}>{detail}</div>)}
+            {details.length > 0
+                ? details.map((detail) => <div className="rounded-md border border-border bg-card p-3 text-sm" key={detail}>{detail}</div>)
+                : <div className="rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">No additional detail is available for this KPI.</div>}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {buttons[activeKpi].map((button) => <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" key={button} type="button">{button}</button>)}
+            <Link className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-semibold" href={kpiReportHref(activeKpi)}>View report</Link>
           </div>
         </div>
       </div>
@@ -760,7 +803,7 @@ function ReportDetailModal({ categoryBreakdown, currency, onClose, productRows, 
       <div className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-4">
           <Select label="Date Range" value="this_month" onChange={() => undefined} options={[{ label: "Today", value: "today" }, { label: "This Week", value: "this_week" }, { label: "This Month", value: "this_month" }]}/>
-          <Select label="Branch" value="" onChange={() => undefined} options={[{ label: "All Branches", value: "" }, { label: "Current Branch", value: "current" }]}/>
+          <Select label="Branch" value="current" onChange={() => undefined} options={[{ label: "Current branch", value: "current" }]}/>
           <Select label="Category" value="" onChange={() => undefined} options={[{ label: "All Categories", value: "" }]}/>
           <label className="flex items-end gap-2 text-sm"><input className="size-5 accent-[var(--primary)]" type="checkbox" checked={showProfit} onChange={(event) => setShowProfit(event.target.checked)}/> Show profit column</label>
         </div>

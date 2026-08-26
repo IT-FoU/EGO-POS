@@ -615,7 +615,6 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     _sum: { profitAmount: 0, taxAmount: 0, totalAmount: 0 },
   });
   const salesByPeriod: Array<Record<string, any>> = resultOrFallback(salesByPeriodResult, []);
-  const saleItems: Array<Record<string, any>> = resultOrFallback(saleItemsResult, []);
   const saleItemsSold = resultOrFallback(saleItemsSoldResult, { _sum: { quantity: 0 } });
   const saleItemCostRows: Array<Record<string, any>> = resultOrFallback(saleItemCostRowsResult, []);
   const refundRows: Array<Record<string, any>> = resultOrFallback(refundRowsResult, []);
@@ -659,9 +658,11 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     supplierId: supplier.id,
   }));
 
+  const nettedProductTotals = buildNettedProductTotals(saleItemCostRows, refundRows);
   const categoryTotals = new Map<string, CategoryBreakdownRow>();
-  for (const item of saleItems) {
-    const category = item.product?.category?.nameEn || item.product?.category?.nameLo || "Uncategorized";
+  for (const [productId, totals] of nettedProductTotals.entries()) {
+    const product = productById.get(productId);
+    const category = product?.categoryName || "Uncategorized";
     const current = categoryTotals.get(category) ?? {
       category,
       margin: 0,
@@ -669,9 +670,9 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
       revenue: 0,
       unitsSold: 0,
     };
-    current.profit += amount(item.profitAmount);
-    current.revenue += amount(item.totalAmount);
-    current.unitsSold += amount(item.quantity);
+    current.profit += totals.profitLak;
+    current.revenue += totals.revenueLak;
+    current.unitsSold += totals.quantitySold;
     categoryTotals.set(category, current);
   }
   const categoryBreakdown = Array.from(categoryTotals.values())
@@ -697,7 +698,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   const revenueProfitTrend = buildRevenueProfitTrend(nettedSalesByPeriod, trendStart);
   const hourlySales = buildHourlySales(nettedSalesByPeriod.filter((row: Record<string, any>) => row.createdAt >= monthStart));
 
-  const productRows: ProductReportRow[] = Array.from(buildNettedProductTotals(saleItemCostRows, refundRows).entries())
+  const productRows: ProductReportRow[] = Array.from(nettedProductTotals.entries())
     .map(([productId, totals]) => {
       const product = productById.get(productId);
       return {
