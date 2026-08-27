@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ego-pos",
+  "name": "ego-pos-beta",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": [
@@ -14,7 +14,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "ego-pos"
+      "service": "ego-pos-beta"
     }
   ],
   "vars": {
@@ -23,7 +23,7 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "0e311e767c9e4dcc91cd5bcac12e40d4"
+      "id": "b8ec6fa6a71f44e5a40a6a108ffe6a85"
     }
   ]
 }

@@ -25,6 +25,11 @@ screenshots/
 
 # Source/code backup snapshots (not required to run the app)
 Backups/
+backups/
+.open-next-dry-run/
+.open-next-dry-run-min/
+.open-next-dry-run-assets/
+
 
 # Agent / remote attachment artifacts
 .codex-remote-attachments/
