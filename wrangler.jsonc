@@ -19,5 +19,11 @@
   ],
   "vars": {
     "IGO_DEMO_MODE": "false"
-  }
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "0e311e767c9e4dcc91cd5bcac12e40d4"
+    }
+  ]
 }

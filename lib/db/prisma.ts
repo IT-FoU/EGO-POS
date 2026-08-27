@@ -1,16 +1,63 @@
 import { cache } from "react";
-import { PrismaClient } from "@prisma/client";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { databaseUrl } from "@/lib/db/database-url";
+import { getDatabaseUrl } from "@/lib/db/database-url";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
+type WorkerEnv = {
+  DATABASE_URL?: string;
+  HYPERDRIVE?: {
+    connectionString?: string;
+  };
+};
+
+function hostOf(url: string) {
+  return url.split("@")[1]?.split("/")[0] ?? "missing";
+}
+
+function isCloudflareWorkerRuntime() {
+  return typeof navigator === "object" && navigator.userAgent === "Cloudflare-Workers";
+}
+
+function readWorkerEnv(): WorkerEnv | null {
+  try {
+    return getCloudflareContext().env as WorkerEnv;
+  } catch {
+    return null;
+  }
+}
+
+function readConnectionString() {
+  const workerEnv = readWorkerEnv();
+  const workerRuntime = isCloudflareWorkerRuntime();
+
+  if (workerRuntime) {
+    const connectionString = workerEnv?.HYPERDRIVE?.connectionString;
+    if (!connectionString) {
+      throw new Error("HYPERDRIVE binding is required in the Cloudflare Worker runtime");
+    }
+
+    console.log(`prisma-db-host=${hostOf(connectionString)} worker=yes transport=hyperdrive`);
+    return connectionString;
+  }
+
+  const connectionString = workerEnv?.DATABASE_URL || getDatabaseUrl();
+  console.log(`prisma-db-host=${hostOf(connectionString)} worker=no transport=database_url`);
+  return connectionString;
+}
+
 function createPrismaClient() {
+  const connectionString = readConnectionString();
+  const workerRuntime = isCloudflareWorkerRuntime();
+
   return new PrismaClient({
     adapter: new PrismaPg({
-      connectionString: databaseUrl,
+      connectionString,
+      ...(workerRuntime ? {} : { ssl: { rejectUnauthorized: false } }),
       max: 1,
       maxUses: 1,
     }),

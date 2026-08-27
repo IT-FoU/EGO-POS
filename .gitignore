@@ -12,6 +12,7 @@ dist
 !.dev.vars.example
 *.tsbuildinfo
 prisma/dev.db
+generated/prisma
 coverage
 
 # Logs (runtime / test output - never commit)
