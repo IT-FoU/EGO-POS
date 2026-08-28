@@ -76,4 +76,4 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Controlled pilot | Not yet allowed |
 | Real-store production | Not allowed |
 
-Reason: a production target without catalogue, inventory, browser role tests, clean migration assurance, and lot reconciliation cannot safely process real Mini Mart operations. Super Admin bootstrap is in place.
+Reason: a production target without catalogue, inventory, browser role tests, and lot reconciliation cannot safely process real Mini Mart operations. Super Admin bootstrap and Production migration status targeting are in place.

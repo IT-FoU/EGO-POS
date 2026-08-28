@@ -6,7 +6,7 @@ Audit date: 2026-08-28
 
 **Result: PARTIAL. Readiness: OWNER UAT ONLY. Do not use this target for real-store operations yet.**
 
-The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. Remaining live-data gaps are no catalogue, no stock, no sales, no customers, and an unfinished migration-history entry. In addition, POS only updates product warehouse balances; it does not allocate or decrement `inventory_lots`, so expiry/lot quantity cannot be treated as operationally correct.
+The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). Remaining live-data gaps are no catalogue, no stock, no sales, and no customers. In addition, POS only updates product warehouse balances; it does not allocate or decrement `inventory_lots`, so expiry/lot quantity cannot be treated as operationally correct.
 
 The completion estimate is **55% evidence-supported**. It is a weighted audit estimate across code wiring, data readiness, security/configuration, operational accounting, deployment, and completed runtime verification; it is not a claim that 55% of the product is complete.
 
@@ -112,8 +112,8 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 * `.env.local` points at a Supabase/PostgreSQL target that matches the hardcoded target reference used by the local catalog migration tool. It is not a local database.
 * `.env.local` uses `NEXTAUTH_URL=http://localhost:3000`, appropriate for local testing but not a deployed production URL.
 * `prisma validate` passed.
-* `prisma migrate status` did **not** inspect the Supabase target: Prisma config falls back to `postgresql://postgres:postgres@localhost:5432/igo_pos` when the CLI does not load `.env.local`, then fails with a schema-engine error.
-* The target’s `_prisma_migrations` table reports 17 completed migrations and one unfinished historical `20260621_b6_schema_drift_fix` row. This must be reviewed by a migration owner before any deploy/migrate command.
+* `prisma migrate status` via `scripts/prisma-migrate-status.ts` inspects Production (pooler host for ref `ieutdqnlfiiaawctapor`) after `prisma.config.ts` loads `.env.local`. Result: 17 migrations, database schema up to date. Bare Prisma CLI previously fell back to localhost because there is no `.env` and Prisma does not load `.env.local`.
+* `_prisma_migrations` has 18 rows: a rolled-back failed apply of `20260621_b6_schema_drift_fix` (`approval_rules` did not exist), then a finished marker for the same version, then all later repository migrations finished. Live `updated_at` defaults on `approval_rules` / `approvals` / `company_users` are already null. No history row was deleted.
 * `scripts/production-database-cleanliness-check.ts` failed on a Prisma invocation with no detailed cause. Its generated-client/runtime path needs investigation; its expected GO BOX/BETA WATER fixture must not be treated as evidence of the live target.
 * Cloudflare Worker/Hyperdrive configuration exists, but no deployed smoke or rollback test was performed.
 
@@ -124,7 +124,7 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | `npm.cmd run typecheck` | PASS |
 | `IGO_DEMO_MODE=false; npm.cmd run build` | PASS |
 | `prisma validate` | PASS |
-| `prisma migrate status` | FAIL: targets localhost fallback, not configured Supabase |
+| `prisma migrate status` | PASS: Production-gated status reports schema up to date |
 | Demo production guard harness | PARTIAL: 15/16 PASS; one stale source-text assertion for already-closed `/register` |
 | Production database cleanliness harness | FAIL: Prisma invocation failure; no DB write occurred |
 | Browser smoke / authenticated journeys | NOT TESTED: controlled local dev server failed `listen EACCES` at `127.0.0.1:3000`; no external browser substituted |
@@ -145,7 +145,7 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | Customers/loyalty/promotions | Real write paths | Empty | Controlled UAT including reversals and cross-tenant tests |
 | Reports/dashboard | Real query paths | Empty | Reconcile reports with transaction lifecycle tests |
 | Super Admin status pages | Safe read-only status pages | Mostly no backend | Keep clearly labelled; do not market as live control plane |
-| Deployment/migrations | Worker config exists | Environment/migration inspection unreliable | Fix CLI target handling, resolve migration history, deploy canary/rollback |
+| Deployment/migrations | Worker config exists | EGO-FIX-02: Production migrate status is up to date | Deploy canary/rollback still required |
 
 ## Production blockers
 
@@ -153,4 +153,4 @@ See `EGO_POS_PRODUCTION_BLOCKERS.md` for owners, risk, verification, and commit 
 
 ## Final conclusion
 
-EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the remaining P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until migration history, lot integrity, first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01) is in place.
+EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the remaining P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until lot integrity, first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01) and Production migration targeting (EGO-FIX-02) are in place.

@@ -16,7 +16,8 @@
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
-    "db:bootstrap-super-admin": "tsx scripts/bootstrap-super-admin.ts"
+    "db:bootstrap-super-admin": "tsx scripts/bootstrap-super-admin.ts",
+    "prisma:migrate:status": "tsx scripts/prisma-migrate-status.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",
