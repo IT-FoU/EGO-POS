@@ -1,7 +1,13 @@
 import { reverseSaleLoyalty } from "@/features/loyalty/loyalty-service";
 import { computeCashRefundLak } from "@/features/cash-sessions/cash-session-calculator";
 import { createApprovalRequest } from "@/features/approvals/approval-engine";
-import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
+import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
+import {
+  inventoryLotLockKey,
+  LOT_ALLOCATION_SOURCE,
+  primaryLotMovementFields,
+  restoreInventoryForReturn,
+} from "@/features/inventory/lot-reconciliation";
 import type {
   PosRecentSaleRecord,
   PosReceiptSnapshot,
@@ -162,21 +168,48 @@ async function restoreSaleStock(
   const runningQtyByProduct = new Map<string, number>();
 
   for (const item of sale.items ?? []) {
+    const productId = String(item.productId);
+    const warehouseId = String(sale.warehouseId);
     const baseQuantity = await getBaseQuantity(item);
+    await lockInventoryMutationKey(
+      tx,
+      inventoryLotLockKey(tenant.companyId, warehouseId, productId),
+    );
+    await restoreInventoryForReturn(tx, {
+      companyId: tenant.companyId,
+      productId,
+      quantity: baseQuantity,
+      sourceId: String(item.id),
+      sourceType: LOT_ALLOCATION_SOURCE.saleItem,
+      warehouseId,
+    });
     const balance = await applyAtomicStockDelta(tx, {
       companyId: tenant.companyId,
-      productId: String(item.productId),
+      productId,
       quantityDelta: baseQuantity,
-      warehouseId: String(sale.warehouseId),
+      warehouseId,
     });
-    runningQtyByProduct.set(String(item.productId), balance.beforeQty);
+    runningQtyByProduct.set(productId, balance.beforeQty);
   }
 
   for (const item of sale.items ?? []) {
     const productId = String(item.productId);
+    const warehouseId = String(sale.warehouseId);
     const baseQuantity = await getBaseQuantity(item);
     const beforeQty = runningQtyByProduct.get(productId) ?? 0;
     const afterQty = beforeQty + baseQuantity;
+    const allocations = await tx.inventoryLotAllocation.findMany({
+      include: { inventoryLot: { select: { expiryDate: true, lotNumber: true } } },
+      where: { saleItemId: String(item.id) },
+    });
+    const lotFields = primaryLotMovementFields(
+      allocations.map((row: Record<string, any>) => ({
+        expiryDate: row.inventoryLot?.expiryDate ?? null,
+        inventoryLotId: String(row.inventoryLotId),
+        lotNumber: row.inventoryLot?.lotNumber ?? null,
+        quantity: Number(row.quantity),
+      })),
+    );
 
     await tx.stockMovement.create({
       data: {
@@ -184,6 +217,8 @@ async function restoreSaleStock(
         beforeQty,
         companyId: tenant.companyId,
         createdBy: tenant.userId,
+        expiryDate: lotFields.expiryDate,
+        lotNumber: lotFields.lotNumber,
         movementType: "return",
         note,
         productId,

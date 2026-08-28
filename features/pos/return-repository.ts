@@ -1,5 +1,12 @@
 import { applyExchangeLoyaltyEarn, isMembershipEligibleForBenefits, resolveMembershipDiscountPercent, reverseSaleLoyaltyPortion } from "@/features/loyalty/loyalty-service";
-import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
+import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
+import {
+  consumeInventoryForSale,
+  inventoryLotLockKey,
+  LOT_ALLOCATION_SOURCE,
+  primaryLotMovementFields,
+  restoreInventoryForReturn,
+} from "@/features/inventory/lot-reconciliation";
 import { assertOpenCashSessionForSale } from "@/features/cash-sessions/prisma-repository";
 import {
   applyActivePromotions,
@@ -175,20 +182,38 @@ async function applyReturnedStock(
     baseQuantity: number;
     condition: ReturnItemCondition;
     productId: string;
+    saleItemId: string;
     unitId?: string | null;
   }>,
   note: string,
 ) {
   const runningQty = new Map<string, number>();
+  const warehouseId = String(sale.warehouseId);
+  const restoredLots = new Map<string, Awaited<ReturnType<typeof restoreInventoryForReturn>>>();
 
   for (const line of lines) {
     if (line.baseQuantity <= 0) continue;
     if (line.condition === "sellable") {
+      await lockInventoryMutationKey(
+        tx,
+        inventoryLotLockKey(tenant.companyId, warehouseId, line.productId),
+      );
+      restoredLots.set(
+        line.saleItemId,
+        await restoreInventoryForReturn(tx, {
+          companyId: tenant.companyId,
+          productId: line.productId,
+          quantity: line.baseQuantity,
+          sourceId: line.saleItemId,
+          sourceType: LOT_ALLOCATION_SOURCE.saleItem,
+          warehouseId,
+        }),
+      );
       const balance = await applyAtomicStockDelta(tx, {
         companyId: tenant.companyId,
         productId: line.productId,
         quantityDelta: line.baseQuantity,
-        warehouseId: String(sale.warehouseId),
+        warehouseId,
       });
       runningQty.set(line.productId, balance.beforeQty);
     } else {
@@ -196,7 +221,7 @@ async function applyReturnedStock(
         where: {
           warehouseId_productId: {
             productId: line.productId,
-            warehouseId: String(sale.warehouseId),
+            warehouseId,
           },
         },
       });
@@ -208,12 +233,15 @@ async function applyReturnedStock(
     if (line.baseQuantity <= 0) continue;
     const beforeQty = runningQty.get(line.productId) ?? 0;
     const afterQty = line.condition === "sellable" ? beforeQty + line.baseQuantity : beforeQty;
+    const lotFields = primaryLotMovementFields(restoredLots.get(line.saleItemId) ?? []);
     await tx.stockMovement.create({
       data: {
         afterQty,
         beforeQty,
         companyId: tenant.companyId,
         createdBy: tenant.userId,
+        expiryDate: lotFields.expiryDate,
+        lotNumber: lotFields.lotNumber,
         movementType: movementTypeForCondition(line.condition),
         note: line.condition === "sellable" ? note : `${note} (${line.condition})`,
         productId: line.productId,
@@ -232,28 +260,44 @@ async function deductReplacementStock(
   tx: Record<string, any>,
   tenant: TenantContext,
   sale: Record<string, any>,
-  lines: Array<{ baseQuantity: number; productId: string; unitId?: string }>,
+  lines: Array<{ baseQuantity: number; productId: string; sourceId: string; unitId?: string }>,
   note: string,
 ) {
   const runningQty = new Map<string, number>();
+  const warehouseId = String(sale.warehouseId);
   for (const line of lines) {
+    await lockInventoryMutationKey(
+      tx,
+      inventoryLotLockKey(tenant.companyId, warehouseId, line.productId),
+    );
     const balance = await applyAtomicStockDelta(tx, {
       companyId: tenant.companyId,
       productId: line.productId,
       quantityDelta: -line.baseQuantity,
-      warehouseId: String(sale.warehouseId),
+      warehouseId,
     });
     runningQty.set(line.productId, balance.beforeQty);
   }
   for (const line of lines) {
     const beforeQty = runningQty.get(line.productId) ?? 0;
     const afterQty = beforeQty - line.baseQuantity;
+    const allocations = await consumeInventoryForSale(tx, {
+      companyId: tenant.companyId,
+      productId: line.productId,
+      quantity: line.baseQuantity,
+      sourceId: line.sourceId,
+      sourceType: LOT_ALLOCATION_SOURCE.refundExchangeItem,
+      warehouseId,
+    });
+    const lotFields = primaryLotMovementFields(allocations);
     await tx.stockMovement.create({
       data: {
         afterQty,
         beforeQty,
         companyId: tenant.companyId,
         createdBy: tenant.userId,
+        expiryDate: lotFields.expiryDate,
+        lotNumber: lotFields.lotNumber,
         movementType: "sale",
         note,
         productId: line.productId,
@@ -793,19 +837,25 @@ async function persistReturnOrExchange(
       baseQuantity: line.baseQuantity,
       condition: line.condition,
       productId: line.productId,
+      saleItemId: line.saleItemId,
       unitId: line.unitId,
     })),
     input.kind === "exchange" ? `Exchange return ${sale.saleNo}` : `Return ${sale.saleNo}`,
   );
 
   if (input.pricedReplacements?.length) {
+    const exchangeItems = refund.exchangeItems ?? [];
+    if (exchangeItems.length !== input.pricedReplacements.length) {
+      throw new Error("Exchange replacement persistence did not match priced lines.");
+    }
     await deductReplacementStock(
       tx,
       tenant,
       sale,
-      input.pricedReplacements.map((item) => ({
+      input.pricedReplacements.map((item, index) => ({
         baseQuantity: amount(item.baseQuantity),
         productId: String(item.productId),
+        sourceId: String(exchangeItems[index].id),
         unitId: item.unitId,
       })),
       `Exchange replacement ${sale.saleNo}`,

@@ -33,7 +33,7 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Store entry | Active company membership and access flags are required | VERIFIED SOURCE |
 | POS totals | Server re-fetches data, recomputes totals, validates payment, ignores unsafe client totals | VERIFIED SOURCE |
 | Stock mutation | POS and receiving use atomic balance changes and movement records | VERIFIED SOURCE |
-| Lot mutation | Receiving creates/updates lots; POS and return paths reviewed do not change lot quantity | BLOCKED for expiry/lot accuracy |
+| Lot mutation | Receiving creates/updates lots; POS sale/refund/void/exchange consume and restore lots FEFO with allocation provenance | FIXED in EGO-FIX-03; isolated fixtures passed |
 | Static status pages | Disabled UI is labelled as not connected/coming soon | VERIFIED SOURCE |
 
 ## Current verified database map
@@ -76,4 +76,4 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Controlled pilot | Not yet allowed |
 | Real-store production | Not allowed |
 
-Reason: a production target without catalogue, inventory, browser role tests, and lot reconciliation cannot safely process real Mini Mart operations. Super Admin bootstrap and Production migration status targeting are in place.
+Reason: a production target without catalogue, inventory, and browser role tests cannot safely process real Mini Mart operations. Super Admin bootstrap, Production migration targeting, and POS inventory-lot reconciliation are in place.

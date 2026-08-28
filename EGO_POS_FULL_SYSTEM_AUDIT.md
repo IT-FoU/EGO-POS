@@ -6,7 +6,7 @@ Audit date: 2026-08-28
 
 **Result: PARTIAL. Readiness: OWNER UAT ONLY. Do not use this target for real-store operations yet.**
 
-The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). Remaining live-data gaps are no catalogue, no stock, no sales, and no customers. In addition, POS only updates product warehouse balances; it does not allocate or decrement `inventory_lots`, so expiry/lot quantity cannot be treated as operationally correct.
+The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). EGO-FIX-03 reconciles `inventory_lots` through POS sale, refund, void, and exchange using FEFO plus allocation provenance. Remaining live-data gaps are no catalogue, no stock, no sales, and no customers. Browser smoke remains blocked by the local port 3000 `EACCES` environment.
 
 The completion estimate is **55% evidence-supported**. It is a weighted audit estimate across code wiring, data readiness, security/configuration, operational accounting, deployment, and completed runtime verification; it is not a claim that 55% of the product is complete.
 
@@ -76,12 +76,12 @@ Important limitation: the inventory snapshot and Quick Stock In search are built
 
 | Area | Actual behaviour | Readiness |
 | --- | --- | --- |
-| POS checkout | Server recomputes totals/promotions/tax/change, validates tender, requires open cash session, creates sale/items/payments, and atomically decrements warehouse balance | Source-backed; UAT required |
+| POS checkout | Server recomputes totals/promotions/tax/change, validates tender, requires open cash session, creates sale/items/payments, decrements warehouse balance, and consumes inventory lots FEFO | Source-backed; UAT required |
 | Held bills | Persistent hold-bill server foundation and APIs exist | Source-backed; not runtime-tested |
-| Void/refund/exchange | Server repositories create lifecycle records, balance movements, and return/exchange handling | Source-backed; not runtime-tested |
+| Void/refund/exchange | Server repositories create lifecycle records, restore/consume lots with allocation provenance, and write balance movements | Source-backed; isolated fixtures passed; browser UAT required |
 | Cash sessions | Open/close and cash transaction/reconciliation services exist | Source-backed; not runtime-tested |
 | Product unit conversion | Stock-in and POS calculate base quantities from product-unit conversion | Source-backed |
-| Lot/expiry | Receiving creates/updates lots and requires lot/expiry for expiry-tracked product | NOT production-ready: POS/returns update balances and movements but reviewed POS paths do not update lot quantities or allocate FEFO |
+| Lot/expiry | Receiving creates/updates lots and requires lot/expiry for expiry-tracked product | FIXED in EGO-FIX-03: POS sale/refund/void/exchange consume and restore lots FEFO with `inventory_lot_allocations` provenance; isolated fixture suite passed |
 | Purchasing | PO creation, receiving, supplier payable creation, and supplier payment writes are real | Source-backed; accounting UAT required |
 | Suppliers | Real CRUD/archive and payable-related reads/writes | Source-backed |
 | Customers/loyalty | CRUD, membership, points ledger, customer payments, and lifecycle reversal code exist | Source-backed; money/points UAT required |
@@ -153,4 +153,4 @@ See `EGO_POS_PRODUCTION_BLOCKERS.md` for owners, risk, verification, and commit 
 
 ## Final conclusion
 
-EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the remaining P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until lot integrity, first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01) and Production migration targeting (EGO-FIX-02) are in place.
+EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the remaining P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01), Production migration targeting (EGO-FIX-02), and inventory-lot POS reconciliation (EGO-FIX-03) are in place.

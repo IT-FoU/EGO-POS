@@ -629,11 +629,37 @@ model InventoryLot {
   company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  allocations InventoryLotAllocation[]
 
   @@index([companyId, productId])
   @@index([warehouseId, productId])
   @@index([expiryDate])
   @@map("inventory_lots")
+}
+
+model InventoryLotAllocation {
+  id                   String   @id @default(cuid())
+  companyId            String   @map("company_id")
+  warehouseId          String   @map("warehouse_id")
+  productId            String   @map("product_id")
+  inventoryLotId       String   @map("inventory_lot_id")
+  sourceType           String   @map("source_type")
+  sourceId             String   @map("source_id")
+  saleItemId           String?  @map("sale_item_id")
+  refundExchangeItemId String?  @map("refund_exchange_item_id")
+  quantity             Decimal  @db.Decimal(18, 3)
+  restoredQuantity     Decimal  @default(0) @map("restored_quantity") @db.Decimal(18, 3)
+  createdAt            DateTime @default(now()) @map("created_at")
+  inventoryLot         InventoryLot @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  saleItem             SaleItem? @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  refundExchangeItem   RefundExchangeItem? @relation(fields: [refundExchangeItemId], references: [id], onDelete: Cascade)
+
+  @@index([sourceType, sourceId])
+  @@index([saleItemId])
+  @@index([refundExchangeItemId])
+  @@index([inventoryLotId])
+  @@index([companyId, warehouseId, productId])
+  @@map("inventory_lot_allocations")
 }
 
 model StockMovement {
@@ -1121,6 +1147,7 @@ model SaleItem {
   product        Product @relation(fields: [productId], references: [id])
   unit           ProductUnit? @relation(fields: [unitId], references: [id])
   promotion      Promotion? @relation(fields: [promotionId], references: [id])
+  lotAllocations InventoryLotAllocation[]
 
   @@index([saleId])
   @@index([productId])
@@ -1257,6 +1284,7 @@ model RefundExchangeItem {
   promotionDiscount Decimal  @default(0) @map("promotion_discount") @db.Decimal(18, 2)
   totalAmount       Decimal  @map("total_amount") @db.Decimal(18, 2)
   refund            Refund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  lotAllocations    InventoryLotAllocation[]
 
   @@index([refundId])
   @@index([productId])

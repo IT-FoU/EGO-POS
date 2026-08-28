@@ -8,7 +8,13 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { assertBranchInScope, assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { getPrismaTaxAndLoyaltySettings } from "@/features/settings/prisma-repository";
-import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
+import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
+import {
+  consumeInventoryForSale,
+  inventoryLotLockKey,
+  LOT_ALLOCATION_SOURCE,
+  primaryLotMovementFields,
+} from "@/features/inventory/lot-reconciliation";
 import { assertPosActionAllowed, buildPosPolicyForTenant } from "@/features/pos/pos-permission-guard";
 import {
   getNextPosSaleNoFromExisting,
@@ -508,6 +514,10 @@ export async function completePrismaSale(input: {
       const runningQtyByProduct = new Map<string, number>();
 
       for (const [productId, requestedQty] of quantityByProduct) {
+        await lockInventoryMutationKey(
+          tx,
+          inventoryLotLockKey(tenant.companyId, input.warehouseId, productId),
+        );
         const balance = await applyAtomicStockDelta(tx, {
           companyId: tenant.companyId,
           productId,
@@ -518,7 +528,13 @@ export async function completePrismaSale(input: {
         runningQtyByProduct.set(productId, balance.beforeQty);
       }
 
-      for (const item of saleItems) {
+      if (sale.items.length !== saleItems.length) {
+        throw new Error("Sale item persistence did not match checkout lines.");
+      }
+
+      for (let index = 0; index < saleItems.length; index += 1) {
+        const item = saleItems[index];
+        const saleItem = sale.items[index];
         const beforeQty = runningQtyByProduct.get(item.productId) ?? 0;
         const afterQty = beforeQty - item.baseQuantity;
 
@@ -526,12 +542,24 @@ export async function completePrismaSale(input: {
           throw new Error(`Insufficient stock for product ${item.productId}. Available ${beforeQty}, requested ${item.baseQuantity}.`);
         }
 
+        const allocations = await consumeInventoryForSale(tx, {
+          companyId: tenant.companyId,
+          productId: item.productId,
+          quantity: item.baseQuantity,
+          sourceId: String(saleItem.id),
+          sourceType: LOT_ALLOCATION_SOURCE.saleItem,
+          warehouseId: input.warehouseId,
+        });
+        const lotFields = primaryLotMovementFields(allocations);
+
         await tx.stockMovement.create({
           data: {
             afterQty,
             beforeQty,
             companyId: tenant.companyId,
             createdBy: tenant.userId,
+            expiryDate: lotFields.expiryDate,
+            lotNumber: lotFields.lotNumber,
             movementType: "sale",
             note: `POS sale ${sale.saleNo}`,
             productId: item.productId,

@@ -32,7 +32,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | POS | Held bill/resume | WORKING | Persistent server foundation and APIs present. |
 | POS | Receipt/reprint | PARTIAL | Browser print path and reprint record code exist; physical printer/format UAT not done. |
 | POS | Void/refund/return/exchange | WORKING SOURCE | Real repositories and stock movement paths exist; no live reconciliation test. |
-| POS | Lot/FEFO sale handling | NOT WORKING FOR LOT ACCURACY | Reviewed POS and return paths mutate balance/movement, not `inventory_lots`; do not use expiry/lot as authoritative. |
+| POS | Lot/FEFO sale handling | WORKING SOURCE | EGO-FIX-03: checkout/refund/void/exchange consume and restore `inventory_lots` FEFO with `inventory_lot_allocations` provenance; isolated fixture suite passed. Browser UAT still required. |
 | Cash | Open/close session, cash in/out | WORKING SOURCE | Server services exist; shift reconciliation UAT required. |
 | Purchasing | Create PO | WORKING | Validates supplier/product/unit and writes draft PO. |
 | Purchasing | Receive goods | WORKING | Transaction updates balance, creates receipt/lot/movement, PO receipt status, payable/outstanding. |
@@ -48,7 +48,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 
 ## Unsafe or misleading action candidates
 
-1. **Lot/expiry is not end-to-end action-safe.** Receiving captures lot information but POS sale/refund paths reviewed do not maintain lot quantities. This is P0 for expiry-tracked products.
+1. **Lot/expiry sale-return reconciliation is source-fixed (EGO-FIX-03).** Remaining P0 is the controlled browser smoke environment, not lot mutation.
 2. **Quick Stock In cannot receive a product’s first stock through the new barcode handoff.** It is a P1 workflow blocker, not an auto-write issue.
 3. **Super Admin status pages are intentionally safe-status, not control-plane functionality.** Their disabled labels are correct; do not remove them or claim those actions are enabled.
 4. **Product tool drawers are intentionally read-only.** They are not broken click targets, but they must be labelled as deferred in release notes.
