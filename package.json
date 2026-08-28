@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
+    "dev:uat": "node scripts/dev-uat.cjs",
+    "test:browser-smoke": "tsx scripts/phase-fix-04-browser-smoke.ts",
     "build": "next build",
     "start": "next start",
     "cf:build": "node scripts/cf-build.cjs",

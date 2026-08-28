@@ -4,10 +4,10 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 
 | Module | Visible action/workflow | Classification | Evidence and required follow-up |
 | --- | --- | --- |
-| Authentication | Store login by username/email | WORKING | NextAuth Credentials calls merchant authentication and active membership resolver. Browser UAT remains required. |
-| Authentication | Logout | WORKING | NextAuth/session flow present. |
+| Authentication | Store login by username/email | WORKING | NextAuth Credentials calls merchant authentication and active membership resolver. EGO-FIX-04 local HTTP smoke logged in as GO BOX Owner `gobox`. |
+| Authentication | Logout | WORKING | NextAuth/session flow present. Super Admin logout smoke passed. |
 | Authentication | Public registration | BLOCKED BY DESIGN | `/register` is an informational closed page; store setup is Super Admin only. |
-| Super Admin | Super Admin login | WORKING | Bcrypt verification and server cookie session exist; EGO-FIX-01 provisioned exactly one Production Super Admin. Browser/Worker HTTP login was not re-tested in FIX-01 due to local DNS/`listen EACCES`. |
+| Super Admin | Super Admin login | WORKING | Bcrypt verification and server cookie session exist; EGO-FIX-01 provisioned exactly one Production Super Admin. EGO-FIX-04 local HTTP login/session/logout smoke passed. Worker hostname DNS still fails on this PC. |
 | Super Admin | Create Store | WORKING | Provisioning transaction creates user, company, branch, warehouse, roles, owner membership, subscription, and audit-related state. Requires an authenticated real Super Admin. |
 | Super Admin | Business/store/user/role pages | WORKING READ | Real admin-data queries reviewed. |
 | Super Admin | Plan, Feature Control, Subscriptions writes | UI ONLY | Billing/entitlement save, payment approval, plan changes, add-on activation disabled. |
@@ -48,7 +48,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 
 ## Unsafe or misleading action candidates
 
-1. **Lot/expiry sale-return reconciliation is source-fixed (EGO-FIX-03).** Remaining P0 is the controlled browser smoke environment, not lot mutation.
+1. **Lot/expiry sale-return reconciliation is source-fixed (EGO-FIX-03).** Controlled browser environment is restored (EGO-FIX-04). Remaining work is Owner UAT and P1 items, not a P0 environment blocker.
 2. **Quick Stock In cannot receive a product’s first stock through the new barcode handoff.** It is a P1 workflow blocker, not an auto-write issue.
 3. **Super Admin status pages are intentionally safe-status, not control-plane functionality.** Their disabled labels are correct; do not remove them or claim those actions are enabled.
 4. **Product tool drawers are intentionally read-only.** They are not broken click targets, but they must be labelled as deferred in release notes.

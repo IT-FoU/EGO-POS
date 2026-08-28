@@ -6,7 +6,7 @@ Audit date: 2026-08-28
 
 **Result: PARTIAL. Readiness: OWNER UAT ONLY. Do not use this target for real-store operations yet.**
 
-The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). EGO-FIX-03 reconciles `inventory_lots` through POS sale, refund, void, and exchange using FEFO plus allocation provenance. Remaining live-data gaps are no catalogue, no stock, no sales, and no customers. Browser smoke remains blocked by the local port 3000 `EACCES` environment.
+The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). EGO-FIX-03 reconciles `inventory_lots` through POS sale, refund, void, and exchange using FEFO plus allocation provenance. EGO-FIX-04 restored local UAT on `http://localhost:3000` (`npm run dev:uat`, HTTP smoke 25/25). Remaining live-data gaps are no catalogue, no stock, no sales, and no customers. Worker hostname DNS still fails on this PC (P1 deployment). Original production-audit P0 count is 0. Readiness remains OWNER UAT ONLY.
 
 The completion estimate is **55% evidence-supported**. It is a weighted audit estimate across code wiring, data readiness, security/configuration, operational accounting, deployment, and completed runtime verification; it is not a claim that 55% of the product is complete.
 
@@ -48,7 +48,7 @@ Production service layers for POS, dashboard, reports, inventory, purchasing, cu
 
 `/login` accepts username or email through NextAuth Credentials. Authentication checks active user state, password/PIN, active company membership, access flags, roles, and then resolves a template-aware entry route. Owner/Manager Back Office goes to `/dashboard`; POS-only/Cashier goes to `/pos`. Page-level and action-level permission checks are present in reviewed paths.
 
-The current verified database contains one active user, `gobox`, with an active Owner membership for GO BOX Mini Mart, store code `0001`, with POS and Back Office access enabled. Passwords were not read or tested in this audit. The actual Store Login journey was not browser-tested because a controlled local server could not bind port 3000.
+The current verified database contains one active user, `gobox`, with an active Owner membership for GO BOX Mini Mart, store code `0001`, with POS and Back Office access enabled. Passwords were not printed. EGO-FIX-04 exercised Store Owner login and dashboard navigation on `http://localhost:3000` (read-only page loads). Manager/Cashier were not present and were not seeded.
 
 ### Super Admin
 
@@ -127,7 +127,7 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | `prisma migrate status` | PASS: Production-gated status reports schema up to date |
 | Demo production guard harness | PARTIAL: 15/16 PASS; one stale source-text assertion for already-closed `/register` |
 | Production database cleanliness harness | FAIL: Prisma invocation failure; no DB write occurred |
-| Browser smoke / authenticated journeys | NOT TESTED: controlled local dev server failed `listen EACCES` at `127.0.0.1:3000`; no external browser substituted |
+| Browser smoke / authenticated journeys | PASS: EGO-FIX-04 local UAT `http://localhost:3000`; HTTP cookie smoke 25/25; Edge dump-dom of `/login`; Super Admin and Store Owner sessions; core nav loads. Worker DNS `ego-pos-beta.note-z.workers.dev` fails on this PC. |
 | Lint | NOT CONFIGURED |
 | Standard unit/integration test suite | NOT CONFIGURED |
 
@@ -135,12 +135,12 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 
 | Domain | Code capability | Live data/config | Required before pilot |
 | --- | --- | --- | --- |
-| Store login/roles | Mostly real | One Owner only; password/browser UAT not completed | Create controlled test accounts and execute role matrix |
-| Super Admin/provisioning | Real provisioning code | One active Super Admin after EGO-FIX-01 | Browser/Worker session UAT; Create Store remains available to that account |
+| Store login/roles | Mostly real | One Owner; EGO-FIX-04 local browser/HTTP smoke passed | Manager/Cashier role matrix still required |
+| Super Admin/provisioning | Real provisioning code | One active Super Admin; local login/session smoke passed | Worker HTTPS session UAT; do not create Production stores in smoke |
 | Products/catalogue | Real CRUD, units | Empty | Create approved catalogue and test duplicate/unit constraints |
 | Inventory receiving | Real explicit write | Empty; first-stock handoff incomplete | Fix/approve first-stock discovery and run controlled receiving UAT |
 | POS/cash/returns | Strong server wiring | No test inventory/sales | Run cash, QR, return, refund, void, and shift reconciliation UAT |
-| Lot/expiry | Receiving records lots | POS does not reconcile lot quantities | Implement/approve lot allocation and FEFO policy before expiry-tracked use |
+| Lot/expiry | Receiving records lots; EGO-FIX-03 FEFO consume/restore | No live catalogue/lots on GO BOX | Enable expiry-tracked products only after a live catalogue exists |
 | Purchasing/payables | Real write paths | Empty | Partial receipt/payment/overpayment and reconciliation UAT |
 | Customers/loyalty/promotions | Real write paths | Empty | Controlled UAT including reversals and cross-tenant tests |
 | Reports/dashboard | Real query paths | Empty | Reconcile reports with transaction lifecycle tests |
@@ -153,4 +153,4 @@ See `EGO_POS_PRODUCTION_BLOCKERS.md` for owners, risk, verification, and commit 
 
 ## Final conclusion
 
-EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the remaining P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01), Production migration targeting (EGO-FIX-02), and inventory-lot POS reconciliation (EGO-FIX-03) are in place.
+EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. Original production-audit P0 count is 0 after EGO-FIX-04. The earliest sensible release stage remains **OWNER UAT ONLY** until module functional testing, first-stock receiving, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01), Production migration targeting (EGO-FIX-02), inventory-lot POS reconciliation (EGO-FIX-03), and controlled local browser smoke (EGO-FIX-04) are in place.

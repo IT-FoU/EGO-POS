@@ -6,8 +6,8 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 
 | Route/area | Primary implementation | Data source | Main actions | Status |
 | --- | --- | --- | --- | --- |
-| Store Access `/login` | `app/(auth)/login/page.tsx`, `lib/auth/options.ts`, `lib/auth/merchant-login.ts` | Users, company_users, roles | Credentials login, membership redirect | VERIFIED SOURCE; browser NOT TESTED |
-| Super Admin `/super-admin` | Route guards, `lib/admin/session.ts`, `features/igo-admin/admin-data.ts` | Super admin/platform/company tables | Login, store provisioning, data review | VERIFIED DB; one active Super Admin after EGO-FIX-01; browser NOT TESTED |
+| Store Access `/login` | `app/(auth)/login/page.tsx`, `lib/auth/options.ts`, `lib/auth/merchant-login.ts` | Users, company_users, roles | Credentials login, membership redirect | VERIFIED SOURCE; EGO-FIX-04 local HTTP/browser smoke PASS |
+| Super Admin `/super-admin` | Route guards, `lib/admin/session.ts`, `features/igo-admin/admin-data.ts` | Super admin/platform/company tables | Login, store provisioning, data review | VERIFIED DB; one active Super Admin after EGO-FIX-01; EGO-FIX-04 local login/session smoke PASS |
 | Dashboard | `features/dashboard/dashboard-service.ts` | Sales, balances, cash, reports | Read, route navigation | VERIFIED SOURCE; live transaction data empty |
 | Products | `features/products/**` | Products, units, categories | CRUD, archive/delete, category actions | PARTIAL; real actions, product images/aliases deferred |
 | Inventory | `features/inventory/**` | Balances, lots, movements, warehouses | Stock-in, adjustment, count | PARTIAL; real write path, first-stock discoverability gap |
@@ -72,8 +72,8 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 
 | Stage | Decision |
 | --- | --- |
-| Internal owner UAT | Allowed after P0 gates are handled in a test database |
+| Internal owner UAT | Allowed on local `http://localhost:3000` (`npm run dev:uat`); original audit P0 count is 0 |
 | Controlled pilot | Not yet allowed |
 | Real-store production | Not allowed |
 
-Reason: a production target without catalogue, inventory, and browser role tests cannot safely process real Mini Mart operations. Super Admin bootstrap, Production migration targeting, and POS inventory-lot reconciliation are in place.
+Reason: a production target without catalogue, inventory, and Manager/Cashier role tests cannot safely process real Mini Mart operations. Super Admin bootstrap, Production migration targeting, POS inventory-lot reconciliation, and local browser smoke are in place.
