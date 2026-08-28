@@ -187,6 +187,11 @@ async function main() {
     "/promotions",
     "/pos",
     "/reports",
+    "/reports/sales",
+    "/reports/products",
+    "/reports/inventory",
+    "/reports/customers",
+    "/reports/purchasing",
     "/settings",
   ];
   for (const path of corePaths) {

@@ -58,7 +58,7 @@ EGO-FIX-01: the configured Production target now has exactly one active Super Ad
 
 ### Dashboard and reports
 
-Dashboard and reports read real tenant-scoped data. Dashboard requires `dashboard.view` and deliberately returns an empty snapshot with `dataStatus.hasError` when a dependent query fails; it does not substitute mock KPI values. This is safer than fabricating totals, but a visible error/observability UAT is required so an outage is not mistaken for a genuinely empty store.
+Dashboard and reports read real tenant-scoped data through `getPrismaReportsSnapshot` / `netReportLifecycle`. Gross sales are persisted `sale.totalAmount`; net sales apply refund and exchange deltas; voids (`cancelled`) are excluded from realized aggregates. Dashboard KPIs reuse the same snapshot. Empty GO BOX shows zeros, not mock revenue. Business Health Score remains a heuristic (`68 + margin − stock penalties`) over real inputs; it is not a ledger metric. Export/schedule/catalog named-report shells remain unimplemented. Promotions and membership modules are not independently verified. Dashboard still returns an empty snapshot with `dataStatus.hasError` when a dependent query fails.
 
 ### Products
 
@@ -86,7 +86,7 @@ EGO-FIX-05: Quick Stock In and Stock In merge active catalogue products that hav
 | Suppliers | Real CRUD/archive and payable-related reads/writes | Source-backed |
 | Customers/loyalty | CRUD, membership, points ledger, customer payments, and lifecycle reversal code exist | Source-backed; money/points UAT required |
 | Promotions | CRUD and server-side POS policy/calculation exist | Source-backed; relation scoping and analytics UAT required |
-| Reports | Tenant-scoped sales lifecycle/netting and inventory/report snapshot logic exist | Source-backed; parity UAT required |
+| Reports | Tenant-scoped sales lifecycle/netting and inventory/report snapshot logic exist | EGO-FIX-09 isolated 45/45; Dashboard reuses `getPrismaReportsSnapshot`; export/schedule shells still unimplemented; Promotions/Membership report pages DEPENDENT |
 | Settings | Real settings repository/actions exist | Source-backed; permissions and persistence UAT required |
 
 ## Phase 17 - Data and demo audit
@@ -140,11 +140,11 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | Products/catalogue | Real CRUD, units, search, barcode lookup | Empty on GO BOX; isolated create/search/archive matrix passed | Owner creates live catalogue in UAT; do not seed Production from this phase |
 | Inventory receiving | Real explicit write; first-stock catalogue lookup | Empty on GO BOX; isolated first receive passed | Owner UAT: create product then Confirm Stock In |
 | POS discovery/cart | Real Prisma catalogue, search/scan/cart | Empty on GO BOX; isolated 24/24 passed | Owner creates catalogue then UAT scan on a physical keyboard-wedge scanner |
-| POS checkout/cash/returns | Isolated checkout 28/28; isolated refund/void/exchange 40/40 | No GO BOX sales | Owner live-catalogue checkout UAT; Reports still not independently verified |
+| POS checkout/cash/returns | Isolated checkout 28/28; isolated refund/void/exchange 40/40 | No GO BOX sales | Owner live-catalogue checkout UAT |
 | Lot/expiry | Receiving records lots; EGO-FIX-03 FEFO consume/restore | No live catalogue/lots on GO BOX | Enable expiry-tracked products only after a live catalogue exists |
 | Purchasing/payables | Real write paths | Empty | Partial receipt/payment/overpayment and reconciliation UAT |
 | Customers/loyalty/promotions | Real write paths | Empty | Controlled UAT including reversals and cross-tenant tests |
-| Reports/dashboard | Real query paths | Empty | Reconcile reports with transaction lifecycle tests |
+| Reports/dashboard | Real query paths; EGO-FIX-09 isolated 45/45 | Empty GO BOX shows zeros | Owner UAT of live catalogue reports; export/schedule still unimplemented |
 | Super Admin status pages | Safe read-only status pages | Mostly no backend | Keep clearly labelled; do not market as live control plane |
 | Deployment/migrations | Worker config exists | EGO-FIX-02: Production migrate status is up to date | Deploy canary/rollback still required |
 
@@ -154,4 +154,4 @@ See `EGO_POS_PRODUCTION_BLOCKERS.md` for owners, risk, verification, and commit 
 
 ## Final conclusion
 
-EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. Original production-audit P0 count is 0. EGO-FIX-05 closed Products first-stock receiving (P1-1). EGO-FIX-06 closed POS discovery/barcode/cart. EGO-FIX-07 closed isolated checkout/payment/receipt integrity. EGO-FIX-08 closed isolated refund/void/exchange integrity. The earliest sensible release stage remains **OWNER UAT ONLY** until an Owner-created live catalogue exists. Reports, promotions, and membership are not independently verified.
+EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. Original production-audit P0 count is 0. EGO-FIX-05 closed Products first-stock receiving (P1-1). EGO-FIX-06 closed POS discovery/barcode/cart. EGO-FIX-07 closed isolated checkout/payment/receipt integrity. EGO-FIX-08 closed isolated refund/void/exchange integrity. EGO-FIX-09 closed isolated Reports/Dashboard lifecycle netting. The earliest sensible release stage remains **OWNER UAT ONLY** until an Owner-created live catalogue exists. Promotions and membership are not independently verified.

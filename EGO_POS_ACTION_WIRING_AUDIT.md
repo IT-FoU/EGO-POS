@@ -13,7 +13,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | Super Admin | Plan, Feature Control, Subscriptions writes | UI ONLY | Billing/entitlement save, payment approval, plan changes, add-on activation disabled. |
 | Super Admin | Support tickets | UI ONLY | Create/reply/assign/resolve/upload/notify disabled. |
 | Super Admin | Integrations, backup/restore, health actions | UI ONLY | Status/navigation only; no provider/backend writes. |
-| Dashboard | Dashboard metrics and drill-down reads | WORKING READ | Prisma data paths, permission check, lifecycle-aware reporting. Empty-on-error fallback needs visible UAT. |
+| Dashboard | Dashboard metrics and drill-down reads | WORKING | EGO-FIX-09: KPIs from `getPrismaReportsSnapshot` + `netReportLifecycle`. Isolated dash↔reports revenue/profit/txn PASS. Empty GO BOX is zeros, not mock. Close-day/shift still need live UAT. |
 | Products | Create/update product and units | WORKING | Server action and Prisma validation exist. Product save does not create stock. |
 | Products | Archive/delete and bulk delete | WORKING | Real actions; reference-aware archive/delete safeguards reviewed. Treat as controlled admin action in UAT. |
 | Products | Category add/edit/delete | WORKING | Real category action path and usage protection. |
@@ -42,7 +42,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | Customers | Credit payment | PARTIAL | Real payment write path exists; overpayment and report reconciliation need UAT. |
 | Loyalty/membership | Earn/redeem/reverse points | WORKING SOURCE | Ledger and lifecycle code exists; test reversed/voided sales. |
 | Promotions | Create/update/archive and POS auto-apply | WORKING SOURCE | POS recomputes promotion policy server-side. Validate submitted product/category/membership IDs are tenant-scoped before production. |
-| Reports | Dashboard/report filters and calculated views | WORKING READ | Real report repository; exact financial parity needs UAT fixture. |
+| Reports | Dashboard/report filters and calculated views | WORKING | EGO-FIX-09: `netReportLifecycle` is the canonical netting helper. Gross − refunds = net for refunds; voids excluded; exchanges use paymentAmount − refundAmount. Isolated 45/45. Day/hour detail modals now bind hub data (no hardcoded LAK). Export/schedule remain unimplemented. |
 | Reports | Export/download | NOT VERIFIED | Surface not exercised; no claim of export correctness. |
 | Settings | Save company/branch settings | WORKING SOURCE | Settings repository/action exists; verify owner/manager role boundaries. |
 

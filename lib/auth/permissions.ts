@@ -70,8 +70,8 @@ export class PermissionDeniedError extends Error {
   }
 }
 
-export async function assertPermission(tenant: TenantContext, permission: PermissionKey) {
-  const grantedKeys = await getUserPermissionKeys(tenant);
+export async function assertPermission(tenant: TenantContext, permission: PermissionKey, client?: any) {
+  const grantedKeys = await getUserPermissionKeys(tenant, client);
   if (grantedKeys.includes("*")) {
     return;
   }

@@ -1,3 +1,11 @@
+import {
+  endOfBusinessDay,
+  parseBusinessDate,
+  startOfBusinessDay,
+  startOfBusinessMonth,
+  startOfBusinessWeek,
+} from "@/lib/datetime/business-timezone";
+
 export type ReportDatePreset =
   | "today"
   | "yesterday"
@@ -30,43 +38,18 @@ export type ReportFilterOptions = {
 
 const ALL = "all";
 
-function startOfDay(date = new Date()) {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  return start;
-}
-
-function endOfDay(date = new Date()) {
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
-  return end;
-}
-
-function startOfWeek(date = new Date()) {
-  const start = startOfDay(date);
-  const day = start.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  start.setDate(start.getDate() + mondayOffset);
-  return start;
-}
-
-function startOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
 export function resolveReportDateRange(preset: ReportDatePreset, now = new Date()) {
   switch (preset) {
     case "today":
-      return { dateFrom: startOfDay(now), dateTo: endOfDay(now) };
+      return { dateFrom: startOfBusinessDay(now), dateTo: endOfBusinessDay(now) };
     case "yesterday": {
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      return { dateFrom: startOfDay(yesterday), dateTo: endOfDay(yesterday) };
+      const yesterday = new Date(startOfBusinessDay(now).getTime() - 86_400_000);
+      return { dateFrom: startOfBusinessDay(yesterday), dateTo: endOfBusinessDay(yesterday) };
     }
     case "this_week":
-      return { dateFrom: startOfWeek(now), dateTo: endOfDay(now) };
+      return { dateFrom: startOfBusinessWeek(now), dateTo: endOfBusinessDay(now) };
     case "this_month":
-      return { dateFrom: startOfMonth(now), dateTo: endOfDay(now) };
+      return { dateFrom: startOfBusinessMonth(now), dateTo: endOfBusinessDay(now) };
     case "all":
       return {};
     case "custom":
@@ -77,10 +60,8 @@ export function resolveReportDateRange(preset: ReportDatePreset, now = new Date(
 
 function parseDate(value: string | null) {
   if (!value) return undefined;
-  const localMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (localMatch) {
-    return new Date(Number(localMatch[1]), Number(localMatch[2]) - 1, Number(localMatch[3]));
-  }
+  const business = parseBusinessDate(value);
+  if (business) return business;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }

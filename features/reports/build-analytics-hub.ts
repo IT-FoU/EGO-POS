@@ -16,10 +16,13 @@ export type ReportsAnalyticsHub = {
   deadStockProducts: Array<{ action: string; age: string; name: string; stock: number; value: number }>;
   healthScore: number;
   healthStatus: "critical" | "excellent" | "good" | "warning";
-  hourlySales: Array<{ hour: string; transactions: number }>;
+  hourlySales: Array<{ hour: string; profitLak?: number; revenueLak?: number; transactions: number }>;
   inventoryAlerts: Array<{ action: string; count: number; key: string; label: string }>;
   inventoryValueLak: number;
   itemsSold: number;
+  discountLak: number;
+  grossSalesLak: number;
+  refundLak: number;
   kpis: Array<{
     key: ReportKpiKey;
     label: string;
@@ -28,7 +31,7 @@ export type ReportsAnalyticsHub = {
   }>;
   paymentBreakdown: Array<{ label: string; value: number }>;
   profitMarginPercent: number;
-  revenueProfitTrend: Array<{ label: string; profit: number; revenue: number }>;
+  revenueProfitTrend: Array<{ label: string; profit: number; revenue: number; transactions?: number }>;
   topSellers: Array<{ margin: number; name: string; profit: number; qty: number; revenue: number }>;
 };
 
@@ -55,8 +58,11 @@ export function buildAnalyticsHub(input: {
   itemsSold: number;
   paymentBreakdown: Array<{ method: string; value: number }>;
   productRows: ProductReportRow[];
-  revenueProfitTrend: Array<{ label: string; profit: number; revenue: number }>;
-  hourlySales: Array<{ hour: string; transactions: number }>;
+  refundLak?: number;
+  discountLak?: number;
+  grossSalesLak?: number;
+  revenueProfitTrend: Array<{ label: string; profit: number; revenue: number; transactions?: number }>;
+  hourlySales: Array<{ hour: string; profitLak?: number; revenueLak?: number; transactions: number }>;
 }): ReportsAnalyticsHub {
   const revenue = input.analytics.totalRevenue;
   const profit = input.analytics.totalProfit;
@@ -119,6 +125,8 @@ export function buildAnalyticsHub(input: {
     averageBillLak,
     categoryBreakdown: input.categoryBreakdown,
     deadStockProducts,
+    discountLak: round(input.discountLak ?? 0),
+    grossSalesLak: round(input.grossSalesLak ?? input.analytics.totalRevenue),
     healthScore,
     healthStatus,
     hourlySales: input.hourlySales,
@@ -140,6 +148,7 @@ export function buildAnalyticsHub(input: {
       value: round(entry.value),
     })),
     profitMarginPercent,
+    refundLak: round(input.refundLak ?? 0),
     revenueProfitTrend: input.revenueProfitTrend,
     topSellers,
   };

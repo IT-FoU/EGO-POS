@@ -1,3 +1,4 @@
+import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, withTenantTransaction } from "@/lib/db/write-context";
@@ -25,18 +26,18 @@ import {
 
 const db = prisma as any;
 
-export async function getPrismaInventorySnapshot(tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
+export async function getPrismaInventorySnapshot(tenant: TenantContext, client: any = db) {
+  const scope = await resolveTenantScope(tenant, client);
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   const [warehouses, balances, movements] = await Promise.all([
-    db.warehouse.findMany({
+    client.warehouse.findMany({
       include: { branch: true },
       orderBy: { name: "asc" },
       where: { branchId: scope.branchId, companyId: scope.companyId },
     }),
-    db.inventoryBalance.findMany({
+    client.inventoryBalance.findMany({
       include: {
         product: {
           include: {
@@ -51,7 +52,7 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext) {
       orderBy: { updatedAt: "desc" },
       where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
     }),
-    db.stockMovement.findMany({
+    client.stockMovement.findMany({
       include: { product: true, unit: true },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -62,15 +63,15 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext) {
   const productIds = balances.map((balance: Record<string, any>) => balance.productId);
   const [lastSaleItems, sold30Days] = productIds.length
     ? await Promise.all([
-        db.saleItem.findMany({
+        client.saleItem.findMany({
           orderBy: { sale: { createdAt: "desc" } },
           select: { productId: true, sale: { select: { createdAt: true } } },
           where: {
             productId: { in: productIds },
-            sale: { branchId: scope.branchId, companyId: scope.companyId, saleStatus: "completed" },
+            sale: { branchId: scope.branchId, companyId: scope.companyId, saleStatus: { in: [...REPORT_SALE_STATUSES] } },
           },
         }),
-        db.saleItem.groupBy({
+        client.saleItem.groupBy({
           by: ["productId"],
           _sum: { quantity: true },
           where: {
@@ -79,7 +80,7 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext) {
               branchId: scope.branchId,
               companyId: scope.companyId,
               createdAt: { gte: thirtyDaysAgo },
-              saleStatus: "completed",
+              saleStatus: { in: [...REPORT_SALE_STATUSES] },
             },
           },
         }),

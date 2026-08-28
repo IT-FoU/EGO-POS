@@ -30,6 +30,7 @@ export type ReportsSnapshot = {
   customers: Customer[];
   dataQuality: ReportDataQuality;
   filters: ReportFilters;
+  grossSalesLak: number;
   hub: ReportsAnalyticsHub;
   inventoryItems: InventoryItem[];
   products: Product[];

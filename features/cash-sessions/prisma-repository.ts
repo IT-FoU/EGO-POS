@@ -317,8 +317,9 @@ export async function closeCashSession(
 export async function computeCashSessionTotalsForShift(
   session: Record<string, any>,
   endAt = new Date(),
+  client: any = db,
 ) {
-  return loadSessionTotals(db, session, endAt);
+  return loadSessionTotals(client, session, endAt);
 }
 
 export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Record<string, any>) {

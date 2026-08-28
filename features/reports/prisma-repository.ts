@@ -8,6 +8,16 @@ import { buildReportAnalytics } from "@/features/reports/dto-mapper";
 import type { ReportFilterOptions, ReportFilters } from "@/features/reports/report-filters";
 import { resolveReportDateRange } from "@/features/reports/report-filters";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
+import {
+  businessDayLabel,
+  businessHour,
+  businessMonthLabel,
+  startOfBusinessDay,
+  startOfBusinessMonth,
+  startOfBusinessWeek,
+  startOfBusinessYear,
+} from "@/lib/datetime/business-timezone";
+import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
 import { resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 import type { InventoryItem } from "@/features/inventory/types";
@@ -78,28 +88,6 @@ function buildReportDataQuality(results: Array<ReportQueryResult<unknown>>): Rep
     status: criticalFailed ? "unavailable" : warnings.length > 0 ? "partial" : "complete",
     warnings,
   };
-}
-
-function startOfDay(date = new Date()) {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  return start;
-}
-
-function startOfWeek(date = new Date()) {
-  const start = startOfDay(date);
-  const day = start.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  start.setDate(start.getDate() + mondayOffset);
-  return start;
-}
-
-function startOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function startOfYear(date = new Date()) {
-  return new Date(date.getFullYear(), 0, 1);
 }
 
 function amount(value: unknown) {
@@ -201,7 +189,11 @@ function buildNettedProductTotals(saleItems: Array<Record<string, any>>, refunds
       bump(String(row.productId || item?.productId || ""), {
         profitLak: item ? -amount(item.profitAmount) * (qty / originalQty) : 0,
         quantitySold: -qty,
-        revenueLak: item ? -amount(item.totalAmount) * (qty / originalQty) : 0,
+        revenueLak: amount(row.amount)
+          ? -amount(row.amount)
+          : item
+            ? -amount(item.totalAmount) * (qty / originalQty)
+            : 0,
       });
     }
     for (const row of refund.exchangeItems ?? []) {
@@ -273,11 +265,11 @@ function clampReportFilters(scope: BranchScope, filters: ReportFilters): ReportF
 }
 
 function monthLabel(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+  return businessMonthLabel(value);
 }
 
 function dayLabel(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  return businessDayLabel(value);
 }
 
 function resolveEffectiveFilters(filters?: ReportFilters): ReportFilters {
@@ -390,36 +382,36 @@ function formatCustomerFilterLabel(row: {
   return row.fullName;
 }
 
-export async function getReportFilterOptions(tenant: TenantContext): Promise<ReportFilterOptions> {
-  const scope = await resolveTenantScope(tenant);
+export async function getReportFilterOptions(tenant: TenantContext, client: any = db): Promise<ReportFilterOptions> {
+  const scope = await resolveTenantScope(tenant, client);
   const [branches, warehouses, categories, suppliers, customers, cashiers] = await Promise.all([
-    db.branch.findMany({
+    client.branch.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
       where: { companyId: scope.companyId },
     }),
-    db.warehouse.findMany({
+    client.warehouse.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
       where: { branchId: scope.branchId, companyId: scope.companyId },
     }),
-    db.category.findMany({
+    client.category.findMany({
       orderBy: { nameEn: "asc" },
       select: { id: true, nameEn: true, nameLo: true },
       where: { companyId: scope.companyId },
     }),
-    db.supplier.findMany({
+    client.supplier.findMany({
       orderBy: { name: "asc" },
       select: { companyName: true, id: true, name: true },
       where: { companyId: scope.companyId },
     }),
-    db.customer.findMany({
+    client.customer.findMany({
       orderBy: { fullName: "asc" },
       select: { customerCode: true, fullName: true, id: true, phone: true },
       take: 200,
       where: { companyId: scope.companyId },
     }),
-    db.user.findMany({
+    client.user.findMany({
       orderBy: { username: "asc" },
       select: { fullName: true, id: true, username: true },
       where: { companies: { some: { companyId: scope.companyId } } },
@@ -457,22 +449,26 @@ export async function getReportFilterOptions(tenant: TenantContext): Promise<Rep
   };
 }
 
-export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters?: ReportFilters) {
-  const scope = await resolveTenantScope(tenant);
+export async function getPrismaReportsSnapshot(
+  tenant: TenantContext,
+  rawFilters?: ReportFilters,
+  client: any = db,
+) {
+  await assertPermission(tenant, READ_PERMISSIONS.reportsView, client);
+  const scope = await resolveTenantScope(tenant, client);
   const filters = clampReportFilters(scope, resolveEffectiveFilters(rawFilters));
   const saleFilter = buildSaleWhere(scope, filters);
   const saleItemFilter = buildSaleItemWhere(saleFilter, filters);
   const purchaseFilter = buildPurchaseWhere(scope, filters);
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const weekStart = startOfWeek(now);
-  const yearStart = startOfYear(now);
-  const trendStart = new Date(now);
-  trendStart.setDate(trendStart.getDate() - 6);
+  const monthStart = startOfBusinessMonth(now);
+  const weekStart = startOfBusinessWeek(now);
+  const yearStart = startOfBusinessYear(now);
+  const trendStart = new Date(startOfBusinessDay(now).getTime() - 6 * 86_400_000);
 
-  const salesAggregateResult = await settleReportQuery("salesAggregate", true, () => db.sale.aggregate({
+  const salesAggregateResult = await settleReportQuery("salesAggregate", true, () => client.sale.aggregate({
     _count: { id: true },
-    _sum: { profitAmount: true, taxAmount: true, totalAmount: true },
+    _sum: { discountAmount: true, profitAmount: true, taxAmount: true, totalAmount: true },
     where: saleFilter,
   }));
   const hasCompletedSales = salesAggregateResult.ok
@@ -493,13 +489,13 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     inventoryResult,
     suppliersResult,
   ] = await Promise.all([
-    settleReportQuery("salesByPeriod", false, () => db.sale.findMany({
+    settleReportQuery("salesByPeriod", false, () => client.sale.findMany({
       orderBy: { createdAt: "asc" },
       select: { createdAt: true, id: true, profitAmount: true, taxAmount: true, totalAmount: true },
       where: saleFilter,
     })),
     hasCompletedSales
-      ? settleReportQuery("saleItems", false, () => db.saleItem.findMany({
+      ? settleReportQuery("saleItems", false, () => client.saleItem.findMany({
           select: {
             profitAmount: true,
             quantity: true,
@@ -514,13 +510,13 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
         }))
       : Promise.resolve(settledReportValue("saleItems", false, [])),
     hasCompletedSales
-      ? settleReportQuery("saleItemsSold", true, () => db.saleItem.aggregate({
+      ? settleReportQuery("saleItemsSold", true, () => client.saleItem.aggregate({
           _sum: { quantity: true },
           where: saleItemFilter,
         }))
       : Promise.resolve(settledReportValue("saleItemsSold", true, { _sum: { quantity: 0 } })),
     hasCompletedSales
-      ? settleReportQuery("saleItemCostRows", true, () => db.saleItem.findMany({
+      ? settleReportQuery("saleItemCostRows", true, () => client.saleItem.findMany({
           select: {
             costPrice: true,
             id: true,
@@ -533,10 +529,10 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
         }))
       : Promise.resolve(settledReportValue("saleItemCostRows", true, [])),
     hasCompletedSales
-      ? settleReportQuery("refundRows", true, () => db.refund.findMany({
+      ? settleReportQuery("refundRows", true, () => client.refund.findMany({
           select: {
             exchangeItems: { select: { costPrice: true, productId: true, quantity: true, totalAmount: true } },
-            items: { select: { productId: true, quantity: true, saleItemId: true } },
+            items: { select: { amount: true, productId: true, quantity: true, saleItemId: true } },
             kind: true,
             paymentAmount: true,
             refundAmount: true,
@@ -547,24 +543,24 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
           where: { sale: saleFilter },
         }))
       : Promise.resolve(settledReportValue("refundRows", true, [])),
-    settleReportQuery("purchasesByPeriod", false, () => db.purchase.findMany({
+    settleReportQuery("purchasesByPeriod", false, () => client.purchase.findMany({
       orderBy: { purchaseDate: "asc" },
       select: { purchaseDate: true, totalAmount: true },
       where: purchaseFilter,
     })),
-    settleReportQuery("paymentGroups", false, () => db.salePayment.findMany({
+    settleReportQuery("paymentGroups", false, () => client.salePayment.findMany({
       select: { amount: true, changeAmount: true, paymentMethod: true },
       where: { sale: saleFilter },
     })),
-    settleReportQuery("payableGroups", false, () => db.supplierPayable.groupBy({
+    settleReportQuery("payableGroups", false, () => client.supplierPayable.groupBy({
       by: ["supplierId"],
       _sum: { balanceAmount: true },
       where: { companyId: scope.companyId },
     })),
-    settleReportQuery("customersSnapshot", false, () => getPrismaCustomersSnapshot(scope)),
-    settleReportQuery("productsSnapshot", false, () => getPrismaProducts(scope)),
-    settleReportQuery("inventorySnapshot", true, () => getPrismaInventorySnapshot(tenant)),
-    settleReportQuery("suppliersSnapshot", false, () => getPrismaSuppliersSnapshot(tenant)),
+    settleReportQuery("customersSnapshot", false, () => getPrismaCustomersSnapshot(scope, client)),
+    settleReportQuery("productsSnapshot", false, () => getPrismaProducts(scope, client)),
+    settleReportQuery("inventorySnapshot", true, () => getPrismaInventorySnapshot(tenant, client)),
+    settleReportQuery("suppliersSnapshot", false, () => getPrismaSuppliersSnapshot(tenant, client)),
   ]);
 
   const customers = resultOrFallback(customersResult, {
@@ -612,7 +608,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   } as any);
   const salesAggregate = resultOrFallback(salesAggregateResult, {
     _count: { id: 0 },
-    _sum: { profitAmount: 0, taxAmount: 0, totalAmount: 0 },
+    _sum: { discountAmount: 0, profitAmount: 0, taxAmount: 0, totalAmount: 0 },
   });
   const salesByPeriod: Array<Record<string, any>> = resultOrFallback(salesByPeriodResult, []);
   const saleItemsSold = resultOrFallback(saleItemsSoldResult, { _sum: { quantity: 0 } });
@@ -641,7 +637,9 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
   const nettedSalesByPeriod = applyLifecycleToSaleRows(salesByPeriod, refundRows, saleItemCostRows);
   const nettedPaymentGroups = netPaymentGroups(paymentTotalsFromRows(paymentRows), refundRows);
   const refundLak = refundRows.reduce((total, refund) => total + refundAmountOf(refund), 0);
-  const totalRevenue = amount(salesAggregate._sum.totalAmount) + lifecycleNet.revenueLak;
+  const grossSalesLak = amount(salesAggregate._sum.totalAmount);
+  const discountLak = amount(salesAggregate._sum.discountAmount);
+  const totalRevenue = grossSalesLak + lifecycleNet.revenueLak;
   const totalProfit = amount(salesAggregate._sum.profitAmount) + lifecycleNet.profitLak;
   const totalCogsLak = saleItemCostRows.reduce(
     (total: number, row: Record<string, any>) => total + amount(row.costPrice) * amount(row.quantity),
@@ -729,6 +727,9 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     productRows,
     revenueProfitTrend,
     hourlySales,
+    refundLak: Math.round(refundLak),
+    discountLak: Math.round(discountLak),
+    grossSalesLak: Math.round(grossSalesLak),
   });
 
   return {
@@ -737,6 +738,7 @@ export async function getPrismaReportsSnapshot(tenant: TenantContext, rawFilters
     customers: customers.customers,
     dataQuality,
     filters,
+    grossSalesLak: Math.round(grossSalesLak),
     hub,
     inventoryItems,
     productRows,
@@ -767,13 +769,14 @@ function buildRevenueTrend(rows: Array<Record<string, any>>): TrendPoint[] {
 }
 
 function buildRevenueProfitTrend(rows: Array<Record<string, any>>, start: Date) {
-  const totals = new Map<string, { profit: number; revenue: number }>();
+  const totals = new Map<string, { profit: number; revenue: number; transactions: number }>();
   for (const row of rows) {
     if (row.createdAt < start) continue;
     const label = dayLabel(row.createdAt);
-    const current = totals.get(label) ?? { profit: 0, revenue: 0 };
+    const current = totals.get(label) ?? { profit: 0, revenue: 0, transactions: 0 };
     current.profit += amount(row.profitAmount);
     current.revenue += amount(row.totalAmount);
+    current.transactions += 1;
     totals.set(label, current);
   }
 
@@ -781,18 +784,23 @@ function buildRevenueProfitTrend(rows: Array<Record<string, any>>, start: Date) 
     label,
     profit: Math.round(value.profit),
     revenue: Math.round(value.revenue),
+    transactions: value.transactions,
   }));
 }
 
 function buildHourlySales(rows: Array<Record<string, any>>) {
   const totals = Array.from({ length: 24 }, (_, hour) => ({
     hour: `${String(hour).padStart(2, "0")}:00`,
+    profitLak: 0,
+    revenueLak: 0,
     transactions: 0,
   }));
 
   for (const row of rows) {
-    const hour = row.createdAt.getHours();
+    const hour = businessHour(row.createdAt);
     totals[hour].transactions += 1;
+    totals[hour].revenueLak += amount(row.totalAmount);
+    totals[hour].profitLak += amount(row.profitAmount);
   }
 
   return totals;

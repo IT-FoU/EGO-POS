@@ -208,8 +208,8 @@ export function ReportsAnalyticsClient({
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
       {modal === "kpi" ? <KpiDetailModal activeKpi={activeKpi} currency={currency} hub={hub} onClose={() => setModal(null)} title={modalTitle}/> : null}
       {modal === "health" ? <HealthModal inventoryAlerts={hub.inventoryAlerts} onClose={() => setModal(null)}/> : null}
-      {modal === "daily" ? <DayDetailModal locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.dayDetail} topSellers={hub.topSellers}/> : null}
-      {modal === "hour" ? <HourDetailModal locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.hourDetail} topSellers={hub.topSellers}/> : null}
+      {modal === "daily" ? <DayDetailModal hub={hub} locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.dayDetail} topSellers={hub.topSellers}/> : null}
+      {modal === "hour" ? <HourDetailModal hub={hub} locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.hourDetail} topSellers={hub.topSellers}/> : null}
       {modal === "category" ? <CategoryModal currency={currency} onClose={() => setModal(null)} title={modalTitle} topSellers={hub.topSellers}/> : null}
       {modal === "inventory" ? <InventoryAlertModal onClose={() => setModal(null)} productRows={productRows} title={modalTitle}/> : null}
       {modal === "product" ? <ProductAnalyticsModal currency={currency} onClose={() => setModal(null)} revenueProfitTrend={hub.revenueProfitTrend} title={modalTitle}/> : null}
@@ -498,7 +498,7 @@ function RevenueProfitTrend({ currency, data, locale, onOpen }: {
               <span>{point.label}</span>
               <span>{formatCurrency(point.revenue, currency)} / {formatCurrency(point.profit, currency)} {currency}</span>
             </div>
-            <div className="text-xs text-muted-foreground">Margin {Math.round(point.profit / point.revenue * 100)}{t("ui.transactions")}{Math.round(point.revenue / 56000)} | {performanceStatus(point.revenue, max, locale, "revenue")}</div>
+            <div className="text-xs text-muted-foreground">Margin {point.revenue > 0 ? Math.round(point.profit / point.revenue * 100) : 0}{t("ui.transactions")}{point.transactions ?? 0} | {performanceStatus(point.revenue, max, locale, "revenue")}</div>
             <div className="h-4 rounded-full bg-background"><div className={`h-4 rounded-full ${performanceColor(point.revenue, max)}`} style={{ width: `${Math.max(point.revenue / max * 100, 6)}%` }}/></div>
             <div className="h-2 rounded-full bg-background"><div className="h-2 rounded-full bg-success" style={{ width: `${Math.max(point.profit / max * 100, 4)}%` }}/></div>
           </button>))}
@@ -871,29 +871,44 @@ function GenericDetailModal({ onClose, productRows, title }: {
 }) {
     return <ModalFrame onClose={onClose} title={title}><ReportRowsTable productRows={productRows}/></ModalFrame>;
 }
-function DayDetailModal({ locale, onClose, paymentBreakdown, title, topSellers }: {
+function DayDetailModal({ hub, locale, onClose, paymentBreakdown, title, topSellers }: {
+    hub: ReportsAnalyticsHub;
     locale: "en" | "th";
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
-    const labels = locale === "th"
-        ? ["Synced", "Warning", "Offline", "Demo data", "Revenue", "Profit", "Profit margin"]
-        : ["Revenue", "Profit", t("ui.margin.3"), "Transactions", "Customers", "Refunds", "Discounts"];
+    const labels = ["Revenue", "Profit", t("ui.margin.3"), "Transactions", "Customers", "Refunds", "Discounts"];
     const buttons = locale === "th" ? ["View Sales Report", "View Profit Report", "Export Day Report"] : ["View Sales Report", "View Profit Report", "Export Day Report"];
+    const dayKey = title.replace(/\s+Day Detail$/i, "").trim();
+    const dayPoint = hub.revenueProfitTrend.find((point) => point.label === dayKey);
+    const revenue = dayPoint?.revenue ?? 0;
+    const profit = dayPoint?.profit ?? 0;
+    const margin = revenue > 0 ? `${Math.round((profit / revenue) * 1000) / 10}%` : "0%";
+    const values = [
+        `${formatLak(revenue)} LAK`,
+        `${formatLak(profit)} LAK`,
+        margin,
+        String(dayPoint?.transactions ?? 0),
+        String(hub.kpis.find((kpi) => kpi.key === "customers")?.value ?? 0),
+        String(hub.refundLak ?? 0),
+        String(hub.discountLak ?? 0),
+    ];
+    const categoryNames = hub.categoryBreakdown.slice(0, 3).map((row) => row.category);
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-3 md:grid-cols-4">
-        {labels.map((label, index) => <KpiMini key={label} label={label} value={index < 2 ? `${formatLak(index === 0 ? 5940000 : 1710000)} LAK` : index === 2 ? "28.8%" : String([96, 74, 2, 318000][index - 3] ?? 0)}/>)}
+        {labels.map((label, index) => <KpiMini key={label} label={label} value={values[index] ?? "0"}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MiniList title={locale === "th" ? "Top categories" : "Top categories"} items={["Drinks", "Snacks", "Cold Goods"]} onOpen={() => undefined}/>
+        <MiniList title={locale === "th" ? "Top categories" : "Top categories"} items={categoryNames} onOpen={() => undefined}/>
         <MiniList title={locale === "th" ? "Top products" : "Top products"} items={topSellers.slice(0, 4).map((item) => item.name)} onOpen={() => undefined}/>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{buttons.map((button) => <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" key={button}>{button}</button>)}</div>
     </ModalFrame>);
 }
-function HourDetailModal({ locale, onClose, paymentBreakdown, title, topSellers }: {
+function HourDetailModal({ hub, locale, onClose, paymentBreakdown, title, topSellers }: {
+    hub: ReportsAnalyticsHub;
     locale: "en" | "th";
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
@@ -901,9 +916,17 @@ function HourDetailModal({ locale, onClose, paymentBreakdown, title, topSellers 
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
     const labels = locale === "th" ? ["Revenue", "Profit", "Transactions", "Items sold"] : ["Revenue", "Profit", "Transactions", "Items sold"];
+    const hourKey = title.replace(/\s+Hour Detail$/i, "").trim();
+    const hourPoint = hub.hourlySales.find((row) => row.hour === hourKey);
+    const values = [
+        `${formatLak(hourPoint?.revenueLak ?? 0)} LAK`,
+        `${formatLak(hourPoint?.profitLak ?? 0)} LAK`,
+        String(hourPoint?.transactions ?? 0),
+        String(hourPoint?.transactions ?? 0),
+    ];
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-3 md:grid-cols-4">
-        {labels.map((label, index) => <KpiMini key={label} label={label} value={index < 2 ? `${formatLak(index === 0 ? 860000 : 246000)} LAK` : String(index === 2 ? 18 : 96)}/>)}
+        {labels.map((label, index) => <KpiMini key={label} label={label} value={values[index] ?? "0"}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <MiniList title={locale === "th" ? "Top products sold in this hour" : "Top products sold in this hour"} items={topSellers.slice(0, 5).map((item) => item.name)} onOpen={() => undefined}/>
@@ -922,7 +945,7 @@ function DataSourceModal({ dataSourceStatuses, locale, onClose, source }: {
     return (<ModalFrame onClose={onClose} title={`${source} ${locale === "th" ? "Status" : "Status"}`}>
       <div className="grid gap-3 md:grid-cols-2">
         <KpiMini label={locale === "th" ? "Source module" : "Source module"} value={item.name}/>
-        <KpiMini label={locale === "th" ? t("ui.sync") : "Last sync time"} value={t("ui.20.jun.2026.09.42.2")}/>
+        <KpiMini label={locale === "th" ? t("ui.sync") : "Last sync time"} value="Live"/>
         <KpiMini label={locale === "th" ? "Record count" : "Record count"} value={formatNumber(item.count)}/>
         <div className="rounded-md border border-border bg-background p-3"><div className="text-xs text-muted-foreground">{locale === "th" ? "Status" : "Status"}</div><div className="mt-2"><StatusBadge locale={locale} status={item.status}/></div></div>
       </div>

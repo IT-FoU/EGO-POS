@@ -18,22 +18,22 @@ import {
 
 const db = prisma as any;
 
-export async function getPrismaSuppliersSnapshot(tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
+export async function getPrismaSuppliersSnapshot(tenant: TenantContext, client: any = db) {
+  const scope = await resolveTenantScope(tenant, client);
   const branchWhere = branchOwnedWhere(scope);
   const [suppliers, purchaseOrders, receivings, payments] = await Promise.all([
-    db.supplier.findMany({ orderBy: { name: "asc" }, where: { companyId: scope.companyId, ...branchWhere } }),
-    db.purchase.findMany({
+    client.supplier.findMany({ orderBy: { name: "asc" }, where: { companyId: scope.companyId, ...branchWhere } }),
+    client.purchase.findMany({
       include: { warehouse: true },
       orderBy: { purchaseDate: "desc" },
       where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
     }),
-    db.goodsReceipt.findMany({
+    client.goodsReceipt.findMany({
       include: { items: true, purchase: true, warehouse: true },
       orderBy: { receivedAt: "desc" },
       where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
     }),
-    db.purchasePayment.findMany({
+    client.purchasePayment.findMany({
       include: { purchase: true },
       orderBy: { paymentDate: "desc" },
       where: { purchase: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } } },

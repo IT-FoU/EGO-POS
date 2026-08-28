@@ -24,29 +24,29 @@ export { adjustCustomerLoyaltyPoints };
 
 const db = prisma as any;
 
-export async function getPrismaCustomersSnapshot(tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
+export async function getPrismaCustomersSnapshot(tenant: TenantContext, client: any = db) {
+  const scope = await resolveTenantScope(tenant, client);
   const branchWhere = branchOwnedWhere(scope);
-  const settings = await db.companySetting.findUnique({
+  const settings = await client.companySetting.findUnique({
     select: { loyaltySpendPerPointLak: true },
     where: { companyId: scope.companyId },
   });
   const loyaltySpendPerPointLak = Math.max(Number(settings?.loyaltySpendPerPointLak ?? 10_000), 1);
   const [customers, levels, payments, purchases] = await Promise.all([
-    db.customer.findMany({
+    client.customer.findMany({
       include: { loyaltyPointLedger: true, membershipLevel: true },
       orderBy: { createdAt: "desc" },
       where: { companyId: scope.companyId, ...branchWhere },
     }),
-    db.membershipLevel.findMany({
+    client.membershipLevel.findMany({
       orderBy: { minSpendLak: "asc" },
       where: { companyId: scope.companyId },
     }),
-    db.customerPayment.findMany({
+    client.customerPayment.findMany({
       orderBy: { paidAt: "desc" },
       where: { companyId: scope.companyId, customer: branchWhere },
     }),
-    db.sale.findMany({
+    client.sale.findMany({
       include: { loyaltyPointLedger: true, payments: true },
       orderBy: { createdAt: "desc" },
       where: { branchId: scope.branchId, companyId: scope.companyId },

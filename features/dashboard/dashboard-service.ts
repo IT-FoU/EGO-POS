@@ -5,6 +5,13 @@ import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
+import {
+  businessHour,
+  startOfBusinessDay,
+  startOfBusinessMonth,
+  startOfBusinessWeek,
+  startOfBusinessYear,
+} from "@/lib/datetime/business-timezone";
 
 export type DashboardAlertSeverity = "info" | "warning" | "critical";
 
@@ -240,26 +247,19 @@ function emptySnapshot(errorMessage?: string): DashboardSnapshot {
 }
 
 function startOfDay(date = new Date()) {
-  const start = new Date();
-  start.setTime(date.getTime());
-  start.setHours(0, 0, 0, 0);
-  return start;
+  return startOfBusinessDay(date);
 }
 
 function startOfWeek(date = new Date()) {
-  const start = startOfDay(date);
-  const day = start.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  start.setDate(start.getDate() + mondayOffset);
-  return start;
+  return startOfBusinessWeek(date);
 }
 
 function startOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  return startOfBusinessMonth(date);
 }
 
 function startOfYear(date = new Date()) {
-  return new Date(date.getFullYear(), 0, 1);
+  return startOfBusinessYear(date);
 }
 
 function resolveDateRange(range: DashboardDateRange) {
@@ -360,14 +360,16 @@ export async function getMiniMartDashboardSnapshot(
  *   snapshot with dataStatus.hasError so callers can show an unavailable state.
  * - No cache is applied here until checkout/refund/void invalidation exists.
  * - Date ranges use inclusive start and exclusive end; custom ranges include the
- *   full selected end day in the process local business timezone.
+ *   full selected end day in the Asia/Vientiane business timezone.
  */
 export async function getPrismaDashboardSnapshot(
   tenant: TenantContext,
   range: DashboardDateRange,
+  client: any = prisma,
 ): Promise<DashboardSnapshot> {
-  await assertPermission(tenant, READ_PERMISSIONS.dashboardView);
-  const scope = await resolveTenantScope(tenant);
+  await assertPermission(tenant, READ_PERMISSIONS.dashboardView, client);
+  const scope = await resolveTenantScope(tenant, client);
+  const db = client as any;
   const { end, label, start } = resolveDateRange(range);
   const nearExpiryEnd = plusDays(start, 30);
   const deadStockCutoff = plusDays(new Date(), -30);
@@ -376,7 +378,7 @@ export async function getPrismaDashboardSnapshot(
   const warehouseWhere = { warehouseId: scope.warehouseId };
 
   const [sales, salePayments, inventoryBalances, reportsSnapshot] = await Promise.all([
-    prisma.sale.findMany({
+    db.sale.findMany({
       include: {
         items: {
           include: {
@@ -407,7 +409,7 @@ export async function getPrismaDashboardSnapshot(
         saleStatus: { in: [...REPORT_SALE_STATUSES] },
       },
     }),
-    prisma.salePayment.findMany({
+    db.salePayment.findMany({
       include: {
         sale: {
           select: {
@@ -425,7 +427,7 @@ export async function getPrismaDashboardSnapshot(
         },
       },
     }),
-    prisma.inventoryBalance.findMany({
+    db.inventoryBalance.findMany({
       include: {
         product: {
           select: {
@@ -447,7 +449,7 @@ export async function getPrismaDashboardSnapshot(
       datePreset: "custom",
       dateTo: new Date(end.getTime() - 1),
       warehouseId: scope.warehouseId || undefined,
-    }),
+    }, db),
   ]);
 
   if (reportsSnapshot.dataQuality.status === "unavailable" || reportsSnapshot.dataQuality.status === "error") {
@@ -455,7 +457,7 @@ export async function getPrismaDashboardSnapshot(
   }
 
   const [nearExpiryLots, expiredLots, customerCredit] = await Promise.all([
-    prisma.inventoryLot.findMany({
+    db.inventoryLot.findMany({
       include: {
         product: {
           select: {
@@ -471,7 +473,7 @@ export async function getPrismaDashboardSnapshot(
         quantity: { gt: 0 },
       },
     }),
-    prisma.inventoryLot.findMany({
+    db.inventoryLot.findMany({
       where: {
         ...warehouseWhere,
         companyId: tenant.companyId,
@@ -479,7 +481,7 @@ export async function getPrismaDashboardSnapshot(
         quantity: { gt: 0 },
       },
     }),
-    prisma.customer.aggregate({
+    db.customer.aggregate({
       _sum: { outstandingBalance: true },
       where: {
         ...branchWhere,
@@ -491,13 +493,13 @@ export async function getPrismaDashboardSnapshot(
   ]);
 
   const [supplierPayables, currentShift, todayShifts] = await Promise.all([
-    prisma.supplierPayable.aggregate({
+    db.supplierPayable.aggregate({
       _sum: { balanceAmount: true },
       where: {
         companyId: tenant.companyId,
       },
     }),
-    prisma.cashSession.findFirst({
+    db.cashSession.findFirst({
       include: { transactions: true },
       orderBy: { openedAt: "desc" },
       where: {
@@ -507,7 +509,7 @@ export async function getPrismaDashboardSnapshot(
         companyId: tenant.companyId,
       },
     }),
-    prisma.cashSession.findMany({
+    db.cashSession.findMany({
       include: { transactions: true },
       orderBy: { openedAt: "asc" },
       where: {
@@ -519,7 +521,7 @@ export async function getPrismaDashboardSnapshot(
   ]);
 
   const [deadStockProducts, historicalSales, saleItemPromotionRows] = await Promise.all([
-    prisma.product.count({
+    db.product.count({
       where: {
         ...branchWhere,
         companyId: tenant.companyId,
@@ -534,7 +536,7 @@ export async function getPrismaDashboardSnapshot(
         },
       },
     }),
-    prisma.sale.findMany({
+    db.sale.findMany({
       select: { totalAmount: true },
       where: {
         ...branchWhere,
@@ -543,7 +545,7 @@ export async function getPrismaDashboardSnapshot(
         saleStatus: { in: [...REPORT_SALE_STATUSES] },
       },
     }),
-    prisma.saleItem.findMany({
+    db.saleItem.findMany({
       select: { promotionDiscount: true },
       where: {
         sale: {
@@ -557,7 +559,7 @@ export async function getPrismaDashboardSnapshot(
   ]);
 
   const [loyaltyRedeemLedger, voidCount] = await Promise.all([
-    prisma.loyaltyPointLedger.findMany({
+    db.loyaltyPointLedger.findMany({
       select: { amountLak: true },
       where: {
         companyId: tenant.companyId,
@@ -565,7 +567,7 @@ export async function getPrismaDashboardSnapshot(
         pointType: "redeem",
       },
     }),
-    prisma.sale.count({
+    db.sale.count({
       where: {
         ...branchWhere,
         companyId: tenant.companyId,
@@ -575,10 +577,32 @@ export async function getPrismaDashboardSnapshot(
     }),
   ]);
 
-    const grossSalesLak = sales.reduce((total, sale) => total + amount(sale.subtotal), 0);
-    const discountLak = sales.reduce((total, sale) => total + amount(sale.discountAmount), 0);
-    const promotionDiscountLak = saleItemPromotionRows.reduce((total, row) => total + amount(row.promotionDiscount), 0);
-    const loyaltyRedeemedLak = loyaltyRedeemLedger.reduce((total, row) => total + amount(row.amountLak), 0);
+    type DashSale = {
+      createdAt: Date;
+      discountAmount: unknown;
+      items: Array<Record<string, any>>;
+      payments: Array<{ paymentMethod?: string }>;
+      refunds?: Array<Record<string, any>>;
+      saleNo: string;
+      saleStatus: string;
+      totalAmount: unknown;
+    };
+    type DashBalance = {
+      product: { costPriceLak: unknown; minStock: unknown; nameEn: string; nameLo: string };
+      quantity: unknown;
+    };
+    type DashTxn = { amount: unknown; transactionType: string };
+    const saleRows = sales as DashSale[];
+    const inventoryRows = inventoryBalances as DashBalance[];
+    const historicalRows = historicalSales as Array<{ totalAmount: unknown }>;
+    const promotionRows = saleItemPromotionRows as Array<{ promotionDiscount: unknown }>;
+    const loyaltyRows = loyaltyRedeemLedger as Array<{ amountLak: unknown }>;
+    const shiftTxns = (currentShift?.transactions ?? []) as DashTxn[];
+
+    const grossSalesLak = saleRows.reduce((total, sale) => total + amount(sale.totalAmount), 0);
+    const discountLak = saleRows.reduce((total, sale) => total + amount(sale.discountAmount), 0);
+    const promotionDiscountLak = promotionRows.reduce((total, row) => total + amount(row.promotionDiscount), 0);
+    const loyaltyRedeemedLak = loyaltyRows.reduce((total, row) => total + amount(row.amountLak), 0);
     const salesTodayLak = amount(reportsSnapshot.analytics.totalRevenue);
     const profitTodayLak = amount(reportsSnapshot.analytics.totalProfit);
     const cogsLak = amount(reportsSnapshot.cogsLak);
@@ -587,13 +611,13 @@ export async function getPrismaDashboardSnapshot(
     const inventoryValueLak = amount(reportsSnapshot.hub.inventoryValueLak);
     const itemsSoldToday = amount(reportsSnapshot.hub.itemsSold);
     const profitWarnings: string[] = [];
-    const missingSaleLineCosts = sales.some((sale) =>
+    const missingSaleLineCosts = saleRows.some((sale) =>
       sale.items.some((item) => item.costPrice == null || !Number.isFinite(Number(item.costPrice))),
     );
     if (missingSaleLineCosts) {
       profitWarnings.push("Some sale lines are missing cost snapshots; profit and COGS may be partial.");
     }
-    const missingInventoryCosts = inventoryBalances.some(
+    const missingInventoryCosts = inventoryRows.some(
       (balance) => balance.product.costPriceLak == null || !Number.isFinite(Number(balance.product.costPriceLak)),
     );
     if (missingInventoryCosts) {
@@ -607,13 +631,13 @@ export async function getPrismaDashboardSnapshot(
       .reduce((total, row) => total + amount(row.value), 0);
     const selectedDays = Math.max(Math.ceil((end.getTime() - start.getTime()) / 86_400_000), 1);
     const historicalAverageLak =
-      historicalSales.reduce((total, sale) => total + amount(sale.totalAmount), 0) / 30;
+      historicalRows.reduce((total, sale) => total + amount(sale.totalAmount), 0) / 30;
     const selectedDailyAverageLak = salesTodayLak / selectedDays;
     const lowSalesPercent =
       historicalAverageLak > 0 && selectedDailyAverageLak < historicalAverageLak
         ? Math.round(((historicalAverageLak - selectedDailyAverageLak) / historicalAverageLak) * 100)
         : 0;
-    const lowStockProducts = inventoryBalances.filter(
+    const lowStockProducts = inventoryRows.filter(
       (balance) => amount(balance.quantity) <= amount(balance.product.minStock),
     );
     const lowStockItems = lowStockProducts
@@ -624,23 +648,21 @@ export async function getPrismaDashboardSnapshot(
       }))
       .sort((left, right) => left.quantity - right.quantity)
       .slice(0, 20);
-    const cashInLak =
-      currentShift?.transactions
-        .filter((transaction) => transaction.transactionType === "cash_in")
-        .reduce((total, transaction) => total + amount(transaction.amount), 0) ?? 0;
-    const cashOutLak =
-      currentShift?.transactions
-        .filter((transaction) => transaction.transactionType === "cash_out")
-        .reduce((total, transaction) => total + amount(transaction.amount), 0) ?? 0;
+    const cashInLak = shiftTxns
+      .filter((transaction) => transaction.transactionType === "cash_in")
+      .reduce((total, transaction) => total + amount(transaction.amount), 0);
+    const cashOutLak = shiftTxns
+      .filter((transaction) => transaction.transactionType === "cash_out")
+      .reduce((total, transaction) => total + amount(transaction.amount), 0);
     const openingCashLak = amount(currentShift?.openingCash);
     const currentShiftTotals = currentShift
-      ? await computeCashSessionTotalsForShift(currentShift)
+      ? await computeCashSessionTotalsForShift(currentShift, new Date(), db)
       : null;
     const expectedCashLak = currentShiftTotals?.expectedCashLak ?? openingCashLak;
     const hourlySales = emptySnapshot().hourlySales.map((point, hour) => ({
       ...point,
-      salesLak: sales
-        .filter((sale) => sale.createdAt.getHours() === hour)
+      salesLak: saleRows
+        .filter((sale) => businessHour(sale.createdAt) === hour)
         .reduce((total, sale) => {
           const net = netReportLifecycle(sale.refunds ?? [], sale.items ?? []);
           return total + amount(sale.totalAmount) + net.revenueLak;
@@ -653,7 +675,7 @@ export async function getPrismaDashboardSnapshot(
         quantity: row.quantitySold,
         totalLak: row.revenueLak,
       }));
-    const recentSales = [...sales]
+    const recentSales = [...saleRows]
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
       .slice(0, 20)
       .map((sale) => ({
@@ -699,7 +721,7 @@ export async function getPrismaDashboardSnapshot(
     const shiftSummaries: ShiftSummary[] = [];
     for (const shift of todayShifts) {
       const shiftEnd = shift.closedAt ?? new Date();
-      const totals = await computeCashSessionTotalsForShift(shift, shiftEnd);
+      const totals = await computeCashSessionTotalsForShift(shift, shiftEnd, db);
       const counted = amount(shift.closingCash);
       const expectedCashLak = amount(shift.expectedCash) || totals.expectedCashLak;
       shiftSummaries.push({
