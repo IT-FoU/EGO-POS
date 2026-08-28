@@ -7,7 +7,7 @@ Audit date: 2026-08-28. Status is based on source review, read-only database evi
 | ID | Blocker | Evidence | Owner/action | Verification | Recommended scope |
 | --- | --- | --- | --- | --- | --- |
 | P0-1 | Expiry/lot quantities are not maintained through POS sale or return workflows | Receiving creates/updates `inventory_lots`; reviewed POS checkout and return code updates `inventory_balances` and `stock_movements` only | Define lot allocation policy (at minimum deterministic FIFO/FEFO), decrement/reverse lot quantities transactionally, and reject insufficient eligible lot stock | Receive two dated lots, sell/return/exchange, reconcile lot, balance, movement, dashboard, and report quantities | Dedicated inventory/POS integrity change; no UI-only commit |
-| P0-2 | No real Super Admin account exists in configured target | Read-only DB: `super_admins=0`, `setup_admins=0`; all provisioning is behind Super Admin guard | Establish one protected bootstrap Super Admin through an approved operational process; do not use demo fallback | Real Super Admin login, Create Store, owner login, owner denied Super Admin, audit activity | Admin bootstrap/runbook; separate reviewed change only if code is necessary |
+| P0-2 | FIXED — Super Admin bootstrap now exists on the configured Production target | Before: `super_admins=0`. After EGO-FIX-01: exactly one active `SuperAdmin` (`admin@igopos.local` / username `igo-admin`). Password is bcrypt-hashed, not a repository default, and stored only in the local owner secrets file. `prisma/seed.ts` and `prisma/seed-demo.ts` now refuse this Production ref. Login UI was not changed. | Keep the owner-local credential; do not commit it. Worker/browser login remains environment-dependent. | bcrypt compare against the live hash passed; Store Owner `gobox` is a separate `User` row and is not a Super Admin. | Complete for identity/authentication; remaining P0 items are lots, migration history, and browser environment |
 | P0-3 | Migration/deploy state cannot be safely verified | `prisma migrate status` falls back to localhost; target contains unfinished migration row `20260621_b6_schema_drift_fix` | Make CLI/CI load the intended non-secret production target safely; inspect and resolve migration history with database owner | `migrate status` against controlled target, deploy canary, rollback/recovery rehearsal | Configuration/migration-only change, not module UI work |
 | P0-4 | Required browser UAT cannot run in the controlled local environment | Local dev process fails `listen EACCES` on `127.0.0.1:3000`; no authenticated end-to-end journey was executed | Resolve local browser/server policy or use an approved UAT host; execute role-based checklist | Owner, manager, cashier, and Super Admin journeys with console/network error review | Environment/UAT task; no product code change assumed |
 
@@ -37,7 +37,7 @@ Audit date: 2026-08-28. Status is based on source review, read-only database evi
 
 ## Recommended remediation order
 
-1. Freeze new feature work and resolve P0-2, P0-3, and P0-4 with an owner-approved UAT environment.
+1. Freeze new feature work and resolve P0-3 and P0-4 with an owner-approved UAT environment. P0-2 Super Admin identity/authentication is fixed.
 2. Implement and reconcile P0-1 lot allocation before enabling expiry-tracked products for any real store.
 3. Resolve P1-1 first-stock receiving; this is the smallest operational bridge to a usable catalogue/inventory loop.
 4. Run a written finance/stock/returns test matrix in a disposable test company and confirm role isolation.

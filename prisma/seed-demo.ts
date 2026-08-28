@@ -51,6 +51,10 @@ loadEnvFile(".env.local");
 function assertSandboxSeedTarget() {
   const url = process.env.DATABASE_URL ?? databaseUrl;
 
+  if (url.includes("ieutdqnlfiiaawctapor")) {
+    throw new Error("Refusing sandbox/demo seed against Production.");
+  }
+
   if (process.env.SEED_ALLOW_ANY_DATABASE === "true") {
     return;
   }

@@ -1,10 +1,56 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { databaseUrl } from "../lib/db/database-url";
+import { getDatabaseUrl } from "../lib/db/database-url";
+
+const PRODUCTION_REF = "ieutdqnlfiiaawctapor";
+
+function loadEnvFile(fileName: string) {
+  const filePath = resolve(process.cwd(), fileName);
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    let value = trimmed.slice(separatorIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFile(".env");
+loadEnvFile(".env.local");
+
+function assertNotProductionSeed() {
+  const url = process.env.DATABASE_URL ?? getDatabaseUrl();
+  if (url.includes(PRODUCTION_REF)) {
+    throw new Error(
+      "Refusing prisma/seed.ts against Production. Use: npx tsx scripts/bootstrap-super-admin.ts",
+    );
+  }
+}
+
+assertNotProductionSeed();
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: databaseUrl }),
+  adapter: new PrismaPg({ connectionString: getDatabaseUrl() }),
 });
 
 const permissions = [

@@ -21,7 +21,7 @@ Audit date: 2026-08-28. All database inspection was read-only. No customer, pass
 | Suppliers / POs / goods receipts / payables | 0 / 0 / 0 / 0 | No purchasing history |
 | Customers / promotions / sales / sale items | 0 / 0 / 0 / 0 | No customer or commerce history |
 | Cash sessions / audit logs / store activity | 0 / 0 / 0 | No operational audit trail in this target |
-| Super Admins / setup admins | 0 / 0 | Platform administration cannot be logged into here |
+| Super Admins / setup admins | 1 / 0 | One protected platform Super Admin after EGO-FIX-01; Setup Admin remains deferred |
 
 ## Business and user classification
 
@@ -47,7 +47,7 @@ Audit date: 2026-08-28. All database inspection was read-only. No customer, pass
 
 1. There is no detected old test/demo/QA business clutter in the configured target.
 2. The target has no sample or operational dataset suitable for proving POS, reports, promotions, receiving, returns, or cash reconciliation.
-3. The target has no Super Admin account, so there is no supported way to use the existing Create Store control plane on this target until a protected bootstrap account is established.
+3. EGO-FIX-01 established one protected Super Admin account. Create Store still requires a Super Admin session; Setup Admin remains deferred (`setup_admins=0`).
 4. A prior local test/product result should not be assumed to describe this target: the currently inspected database has zero products and zero inventory.
 
 ## Data policy before pilot

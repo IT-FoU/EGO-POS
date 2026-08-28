@@ -7,7 +7,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | Authentication | Store login by username/email | WORKING | NextAuth Credentials calls merchant authentication and active membership resolver. Browser UAT remains required. |
 | Authentication | Logout | WORKING | NextAuth/session flow present. |
 | Authentication | Public registration | BLOCKED BY DESIGN | `/register` is an informational closed page; store setup is Super Admin only. |
-| Super Admin | Super Admin login | WORKING CODE / BLOCKED DATA | Bcrypt verification and server cookie session exist; verified target has zero Super Admin records. |
+| Super Admin | Super Admin login | WORKING | Bcrypt verification and server cookie session exist; EGO-FIX-01 provisioned exactly one Production Super Admin. Browser/Worker HTTP login was not re-tested in FIX-01 due to local DNS/`listen EACCES`. |
 | Super Admin | Create Store | WORKING | Provisioning transaction creates user, company, branch, warehouse, roles, owner membership, subscription, and audit-related state. Requires an authenticated real Super Admin. |
 | Super Admin | Business/store/user/role pages | WORKING READ | Real admin-data queries reviewed. |
 | Super Admin | Plan, Feature Control, Subscriptions writes | UI ONLY | Billing/entitlement save, payment approval, plan changes, add-on activation disabled. |

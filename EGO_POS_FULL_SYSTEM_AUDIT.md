@@ -6,7 +6,7 @@ Audit date: 2026-08-28
 
 **Result: PARTIAL. Readiness: OWNER UAT ONLY. Do not use this target for real-store operations yet.**
 
-The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. However, the verified Supabase target has no Super Admin account, no catalogue, no stock, no sales, no customers, and an unfinished migration-history entry. In addition, POS only updates product warehouse balances; it does not allocate or decrement `inventory_lots`, so expiry/lot quantity cannot be treated as operationally correct.
+The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. Remaining live-data gaps are no catalogue, no stock, no sales, no customers, and an unfinished migration-history entry. In addition, POS only updates product warehouse balances; it does not allocate or decrement `inventory_lots`, so expiry/lot quantity cannot be treated as operationally correct.
 
 The completion estimate is **55% evidence-supported**. It is a weighted audit estimate across code wiring, data readiness, security/configuration, operational accounting, deployment, and completed runtime verification; it is not a claim that 55% of the product is complete.
 
@@ -54,7 +54,7 @@ The current verified database contains one active user, `gobox`, with an active 
 
 Every reviewed `/super-admin/*` page calls `requireSuperAdminPortalAccess`; the middleware redirect is only an early cookie check and server route guards revalidate the database session. Store owners are redirected away from Super Admin routes by the portal guard.
 
-The verified Supabase target has `super_admins = 0` and `setup_admins = 0`. Therefore no real Super Admin can log in on this database to provision or operate stores. This is a production/UAT blocker, independent of the UI pages being implemented.
+EGO-FIX-01: the configured Production target now has exactly one active Super Admin record in `super_admins` (`admin@igopos.local`, username `igo-admin`, role `super_admin`). Bootstrap is `scripts/bootstrap-super-admin.ts` (idempotent, refuses demo defaults, does not create Setup Admin or store data). Demo fallback remains disabled. `setup_admins` remains 0.
 
 ### Dashboard and reports
 
@@ -103,7 +103,7 @@ Read-only aggregate queries against the configured Supabase target show:
 | Customers / promotions / sales / sale items | 0 / 0 / 0 / 0 |
 | Cash sessions / audit logs / store activity | 0 / 0 / 0 |
 | Plans / subscriptions | 1 / 1 |
-| Super Admins / setup admins | 0 / 0 |
+| Super Admins / setup admins | 1 / 0 |
 
 The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, with one active Owner user (`gobox`) and no visible QA/demo/test/seed business, product, customer, sales, or promotions. The old visible test-data issue is therefore not present in this target. The absence of catalogue and opening inventory means this target is not ready for a real store transaction.
 
@@ -136,7 +136,7 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | Domain | Code capability | Live data/config | Required before pilot |
 | --- | --- | --- | --- |
 | Store login/roles | Mostly real | One Owner only; password/browser UAT not completed | Create controlled test accounts and execute role matrix |
-| Super Admin/provisioning | Real provisioning code | No real Super Admin record | Establish and verify one protected Super Admin account |
+| Super Admin/provisioning | Real provisioning code | One active Super Admin after EGO-FIX-01 | Browser/Worker session UAT; Create Store remains available to that account |
 | Products/catalogue | Real CRUD, units | Empty | Create approved catalogue and test duplicate/unit constraints |
 | Inventory receiving | Real explicit write | Empty; first-stock handoff incomplete | Fix/approve first-stock discovery and run controlled receiving UAT |
 | POS/cash/returns | Strong server wiring | No test inventory/sales | Run cash, QR, return, refund, void, and shift reconciliation UAT |
@@ -153,4 +153,4 @@ See `EGO_POS_PRODUCTION_BLOCKERS.md` for owners, risk, verification, and commit 
 
 ## Final conclusion
 
-EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until Super Admin bootstrap, migration history, lot integrity, first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed.
+EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. The earliest sensible release stage is a controlled owner UAT after the remaining P0/P1 blockers are closed, using non-production test data and a written cash/stock/return reconciliation script. A real store should not be onboarded until migration history, lot integrity, first-stock receiving, end-to-end browser testing, and data/backup controls are confirmed. Super Admin bootstrap (EGO-FIX-01) is in place.

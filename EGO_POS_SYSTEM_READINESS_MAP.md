@@ -7,7 +7,7 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Route/area | Primary implementation | Data source | Main actions | Status |
 | --- | --- | --- | --- | --- |
 | Store Access `/login` | `app/(auth)/login/page.tsx`, `lib/auth/options.ts`, `lib/auth/merchant-login.ts` | Users, company_users, roles | Credentials login, membership redirect | VERIFIED SOURCE; browser NOT TESTED |
-| Super Admin `/super-admin` | Route guards, `lib/admin/session.ts`, `features/igo-admin/admin-data.ts` | Super admin/platform/company tables | Login, store provisioning, data review | PARTIAL; live target has no Super Admin record |
+| Super Admin `/super-admin` | Route guards, `lib/admin/session.ts`, `features/igo-admin/admin-data.ts` | Super admin/platform/company tables | Login, store provisioning, data review | VERIFIED DB; one active Super Admin after EGO-FIX-01; browser NOT TESTED |
 | Dashboard | `features/dashboard/dashboard-service.ts` | Sales, balances, cash, reports | Read, route navigation | VERIFIED SOURCE; live transaction data empty |
 | Products | `features/products/**` | Products, units, categories | CRUD, archive/delete, category actions | PARTIAL; real actions, product images/aliases deferred |
 | Inventory | `features/inventory/**` | Balances, lots, movements, warehouses | Stock-in, adjustment, count | PARTIAL; real write path, first-stock discoverability gap |
@@ -47,7 +47,7 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Commerce | Zero sales, payments, cash sessions, customers, promotions |
 | Purchasing | Zero suppliers, POs, receipts, payables |
 | Audit/activity | Zero audit and store activity rows |
-| Platform accounts | Zero Super Admin and zero setup-admin rows |
+| Platform accounts | One Super Admin; zero setup-admin rows |
 
 ## MVP-now versus later
 
@@ -58,7 +58,7 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 * Explicit stock-in, adjustments/count, purchases/receipts/payables.
 * POS sales, payment capture, held bills, return/refund/exchange, cash sessions.
 * Customers, memberships, loyalty, promotions, dashboard, reports, settings.
-* Super Admin store provisioning, subject to a real Super Admin bootstrap account.
+* Super Admin store provisioning, with the Production Super Admin bootstrap now in place.
 
 ### Clearly deferred or read-only
 
@@ -76,4 +76,4 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Controlled pilot | Not yet allowed |
 | Real-store production | Not allowed |
 
-Reason: a production target without Super Admin bootstrap, catalogue, inventory, browser role tests, clean migration assurance, and lot reconciliation cannot safely process real Mini Mart operations.
+Reason: a production target without catalogue, inventory, browser role tests, clean migration assurance, and lot reconciliation cannot safely process real Mini Mart operations. Super Admin bootstrap is in place.
