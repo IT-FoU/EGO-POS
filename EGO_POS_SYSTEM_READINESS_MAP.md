@@ -12,7 +12,8 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Products | `features/products/**` | Products, units, categories | CRUD, archive/delete, category actions | REAL CRUD; EGO-FIX-05 isolated matrix 18/18; images/aliases still deferred |
 | Inventory | `features/inventory/**` | Balances, lots, movements, warehouses | Stock-in, adjustment, count | REAL WRITE; EGO-FIX-05 first-stock catalogue lookup on Quick Stock In / Stock In |
 | Quick Stock In | `quick-stock-in-form.tsx` | Inventory snapshot + catalogue | Search, preview, explicit confirm | WORKING; zero-stock products are searchable; Confirm Stock In still required |
-| POS | `features/pos/**` | Products/balances, sales, payments, settings | Checkout, held bills, print, void/refund/exchange | PARTIAL; server logic strong, no browser/cash UAT |
+| POS discovery/cart | `features/pos/pos-cart.ts`, `pos-page-client.tsx`, `prisma-repository.ts` | Prisma products + warehouse balances | Search, scan, add, qty, remove | VERIFIED SOURCE; EGO-FIX-06 isolated 24/24; `/pos` HTTP smoke LOADS |
+| POS checkout/payment/receipt | `features/pos/**` | Sales, payments, settings | Complete sale, tender, print, void/refund/exchange | PARTIAL; not in EGO-FIX-06; no checkout UAT |
 | Customers/membership | `features/customers/**`, `features/membership-levels/**` | Customers, payments, loyalty | CRUD, payment, points/membership | PARTIAL; no lifecycle UAT |
 | Promotions | `features/promotions/**` | Promotions and rules | CRUD, POS server policy | PARTIAL; needs relation scoping/analytics UAT |
 | Purchasing/receiving | `features/purchasing/**` | Purchases, receipts, payables, lots | PO, receive, supplier payment | PARTIAL; accounting UAT needed |
@@ -76,4 +77,4 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Controlled pilot | Not yet allowed |
 | Real-store production | Not allowed |
 
-Reason: a production target without catalogue, inventory, and Manager/Cashier role tests cannot safely process real Mini Mart operations. Super Admin bootstrap, Production migration targeting, POS inventory-lot reconciliation, and local browser smoke are in place.
+Reason: a production target without catalogue, inventory, and Manager/Cashier role tests cannot safely process real Mini Mart operations. Super Admin bootstrap, Production migration targeting, POS inventory-lot reconciliation, local browser smoke, Products first-stock, and POS discovery/cart wiring are in place. Checkout/payment/receipt remain untested.

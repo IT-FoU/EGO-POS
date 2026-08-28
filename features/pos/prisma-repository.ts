@@ -114,14 +114,34 @@ async function resolvePosSaleNo(
   return getNextPosSaleNo(companyId, normalizedPrefix, tx);
 }
 
+export async function listSellablePosProducts(tenant: TenantContext, client: any = db) {
+  const scope = await resolveTenantScope(tenant, client);
+  const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
+  const products = await client.product.findMany({
+    include: {
+      balances: { where: { warehouseId: { in: sellWarehouseIds } } },
+      category: true,
+      units: true,
+    },
+    orderBy: { nameEn: "asc" },
+    where: {
+      companyId: scope.companyId,
+      isActive: true,
+      balances: { some: { warehouseId: { in: sellWarehouseIds } } },
+    },
+  });
+  return products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId));
+}
+
 export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
   const branchWhere = branchOwnedWhere(scope);
+  const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
   const now = new Date();
   const [products, company, settings, customers, promotions, membershipLevels] = await Promise.all([
     db.product.findMany({
       include: {
-        balances: { where: { warehouseId: { in: scope.warehouseIds } } },
+        balances: { where: { warehouseId: { in: sellWarehouseIds } } },
         category: true,
         units: true,
       },
@@ -129,7 +149,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       where: {
         companyId: scope.companyId,
         isActive: true,
-        balances: { some: { warehouseId: { in: scope.warehouseIds } } },
+        balances: { some: { warehouseId: { in: sellWarehouseIds } } },
       },
     }),
     db.company.findUnique({
@@ -218,7 +238,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       id: String(level.id),
       name: String(level.name),
     })),
-    products: products.map(mapPrismaPosProduct),
+    products: products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId)),
     promotionBanners: promotions
       .map((promotion: Record<string, unknown>) => String(promotion.promotionName || promotion.description || ""))
       .filter(Boolean),

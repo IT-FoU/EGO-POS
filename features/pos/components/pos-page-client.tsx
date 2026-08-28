@@ -13,6 +13,18 @@ import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
+import {
+    addPosCartLine,
+    cartExceedsStock,
+    cartSubtotal,
+    filterPosCatalogue,
+    findPosScanMatch,
+    maxSellQty,
+    productWithSaleUnit,
+    removePosCartLine,
+    updatePosCartQuantity,
+    type AddPosCartResult,
+} from "@/features/pos/pos-cart";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
@@ -296,26 +308,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         const favorites = visibleProducts.filter((product) => product.isFavorite).slice(0, 16);
         return favorites.length >= 12 ? favorites : visibleProducts.slice(0, 16);
     }, [visibleProducts]);
-    const filteredProducts = useMemo(() => {
-        const normalized = productQuery.trim().toLowerCase();
-        return visibleProducts.filter((product) => {
-            const categoryMatch = selectedCategory === "All" || product.categoryName === selectedCategory;
-            const queryMatch = !normalized ||
-                product.nameEn.toLowerCase().includes(normalized) ||
-                product.nameLo.toLowerCase().includes(normalized) ||
-                product.sku.toLowerCase().includes(normalized) ||
-                product.productCode?.toLowerCase().includes(normalized) ||
-                product.barcode.includes(productQuery.trim());
-            return categoryMatch && queryMatch;
-        });
-    }, [productQuery, visibleProducts, selectedCategory]);
+    const filteredProducts = useMemo(
+        () => filterPosCatalogue(visibleProducts, productQuery, selectedCategory),
+        [productQuery, visibleProducts, selectedCategory],
+    );
     const selectedQrBank = availableQrBanks.find((bank) => bank.id === selectedQrBankId) ?? null;
     const staffOptions = useMemo(() => Array.from(new Set([cashierName || "Cashier 1", "Manager", "Cashier 1", "Cashier 2", "Owner"])), [cashierName]);
     const activeCustomer = isMembershipActive(selectedCustomer) ? selectedCustomer : null;
     const openingCashTotal = OPENING_CASH_DENOMINATIONS.reduce((total, denomination) => total + denomination * (openingCashCounts[denomination] ?? 0), 0);
     const workHours = calculateHours(workStartedAt, workEndedAt);
     const otHours = calculateHours(otStartedAt, otEndedAt);
-    const subtotal = cartItems.reduce((total, item) => total + item.priceLak * item.quantity, 0);
+    const subtotal = cartSubtotal(cartItems);
     const membershipSavings = cartItems.reduce((total, item) => total + Math.max(item.retailPriceLak - item.priceLak, 0) * item.quantity, 0);
     const promotionDiscountTotal = useMemo(() => {
         if (cartItems.length === 0 || promotions.length === 0) {
@@ -528,35 +531,43 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }, [appliedPromotions, cartItems, customerDisplayMode, membershipSavings, pointsEarned, promotionDiscountTotal, selectedCustomer, selectedQrBank, subtotal, totalAmount]);
     function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
         const saleUnit = selectedUnit ?? getSaleUnits(product)[0];
-        const unitProduct = saleUnit ? productWithSelectedUnit(product, saleUnit) : product;
+        const unitProduct = saleUnit ? productWithSaleUnit(product, saleUnit) : product;
         const pricedProduct = applyCustomerPricing(unitProduct, activeCustomer);
         const stockWarning = getStockWarning(unitProduct, stockReferenceDate);
+        let result: AddPosCartResult | undefined;
         setCartItems((current) => {
-            const existing = current.find((item) => item.id === product.id && item.unitId === pricedProduct.unitId);
-            if (existing) {
-                return current.map((item) => item.id === product.id && item.unitId === pricedProduct.unitId
-                    ? { ...item, quantity: Math.min(item.quantity + 1, Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1)))) }
-                    : item);
-            }
-            return [...current, {
-                    ...pricedProduct,
-                    cartLineId: `${product.id}:${pricedProduct.unitId ?? "default"}`,
-                    id: product.id,
-                    quantity: 1,
-                    stockWarning,
-                }];
+            result = addPosCartLine(current, {
+                ...pricedProduct,
+                id: product.id,
+                stockWarning,
+            });
+            return result.cart;
         });
+        if (!result?.added) {
+            const requested = saleUnit?.conversionQty ?? unitProduct.conversionQty ?? 1;
+            setMessage(`Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested ${requested}.`);
+            setUnitSelectionProduct(null);
+            return;
+        }
         setCustomerDisplayMode("checkout");
         setUnitSelectionProduct(null);
         setMessage(stockWarning ? `${stockWarning.label}: ${product.nameEn}` : `${product.nameEn} ${saleUnit?.unitName ?? ""} added to cart.`);
     }
     function selectProductForSale(product: PosProduct, matchedUnit?: PosProductUnit) {
-        const saleUnits = getSaleUnits(product);
-        if (saleUnits.length <= 1) {
-            addToCart(product, matchedUnit ?? saleUnits[0]);
+        if (matchedUnit) {
+            addToCart(product, matchedUnit);
             return;
         }
-        setUnitSelectionProduct(matchedUnit ? productWithSortedMatchedUnit(product, matchedUnit) : product);
+        const saleUnits = getSaleUnits(product);
+        if (saleUnits.length <= 1) {
+            addToCart(product, saleUnits[0]);
+            return;
+        }
+        if (maxSellQty(product.stockQty, 1) < 1) {
+            setMessage(`Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested 1.`);
+            return;
+        }
+        setUnitSelectionProduct(product);
     }
     function scanBarcode() {
         const normalized = productQuery.trim();
@@ -564,16 +575,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMessage(t("ui.scan.or.enter.barcode.sku.or.internal.code.f"));
             return;
         }
-        const product = visibleProducts.find((item) => item.barcode === normalized ||
-            item.units?.some((unit) => unit.barcode === normalized) ||
-            item.sku.toLowerCase() === normalized.toLowerCase() ||
-            item.productCode?.toLowerCase() === normalized.toLowerCase());
-        if (!product) {
+        const match = findPosScanMatch(visibleProducts, normalized);
+        if (!match) {
             setMessage(t("ui.no.product.found.for.barcode.sku.or.internal"));
             return;
         }
-        const matchedUnit = product.units?.find((unit) => unit.barcode === normalized);
-        selectProductForSale(product, matchedUnit);
+        selectProductForSale(match.product, match.unit);
         setProductQuery("");
     }
     function toggleProductGrid() {
@@ -636,17 +643,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             : `${customer.name} membership expired. Retail pricing applies.`);
     }
     function updateQuantity(productId: string, quantity: number, unitId?: string) {
-        setCartItems((current) => current
-            .map((item) => item.id === productId && item.unitId === unitId
-            ? { ...item, quantity: Math.max(1, Math.min(quantity, Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1))))) }
-            : item)
-            .filter((item) => item.quantity > 0));
+        setCartItems((current) => updatePosCartQuantity(current, productId, quantity, unitId));
     }
     function removeItem(productId: string, unitId?: string) {
         if (!enforcePosAction("delete_item_from_bill")) {
             return;
         }
-        setCartItems((current) => current.filter((item) => !(item.id === productId && item.unitId === unitId)));
+        setCartItems((current) => removePosCartLine(current, productId, unitId));
     }
     async function refreshHeldBillsFromServer() {
         if (demoMode) {
@@ -858,21 +861,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setCardAmount(payment.cardAmount);
     }
     function getStockValidationError() {
-        const soldByProduct = cartItems.reduce<Record<string, number>>((totals, item) => {
-            totals[item.id] = (totals[item.id] ?? 0) + item.quantity * (item.conversionQty ?? 1);
-            return totals;
-        }, {});
-        const productsToCheck = visibleProducts;
-        for (const [productId, soldQty] of Object.entries(soldByProduct)) {
-            const product = productsToCheck.find((item) => item.id === productId);
-            if (!product) {
-                return "Product was not found. Sale was not completed.";
-            }
-            if (soldQty > product.stockQty) {
-                return `Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested ${soldQty}.`;
-            }
-        }
-        return null;
+        return cartExceedsStock(cartItems, visibleProducts);
     }
     function buildReceiptSnapshot(payment: ResolvedPayment, saleNo: string, createdAt = new Date().toISOString()): ReceiptSnapshot {
         return {
@@ -1901,7 +1890,7 @@ function QuantityStepper({ item, onChange }: {
     item: PosCartItem;
     onChange: (productId: string, quantity: number, unitId?: string) => void;
 }) {
-    const maxSaleQty = Math.max(1, Math.floor(item.stockQty / (item.conversionQty ?? 1)));
+    const maxSaleQty = Math.max(1, maxSellQty(item.stockQty, item.conversionQty ?? 1));
     return (<div className="inline-flex h-11 items-center rounded-xl border border-border bg-card">
       <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity - 1, item.unitId)} aria-label="Decrease quantity">
         <Minus aria-hidden="true"/>
@@ -2789,30 +2778,6 @@ function getSaleUnits(product: PosProduct) {
             }];
     }
     return units;
-}
-function productWithSelectedUnit(product: PosProduct, unit: PosProductUnit): PosProduct {
-    return {
-        ...product,
-        barcode: unit.barcode || product.barcode,
-        conversionQty: unit.conversionQty,
-        costPriceLak: unit.costPriceLak,
-        priceLak: unit.sellingPriceLak,
-        unitId: unit.id,
-        unitImageUrl: unit.imageUrl || product.unitImageUrl,
-        unitName: unit.unitName,
-    } as PosProduct;
-}
-function productWithSortedMatchedUnit(product: PosProduct, unit: PosProductUnit) {
-    return {
-        ...product,
-        units: [...(product.units ?? [])].sort((left, right) => {
-            if (left.id === unit.id)
-                return -1;
-            if (right.id === unit.id)
-                return 1;
-            return left.sortOrder - right.sortOrder;
-        }),
-    };
 }
 function applyCustomerPricing(product: PosProduct, customer: PosCustomer | null): PosCartItem {
     const retailPriceLak = product.priceLak;

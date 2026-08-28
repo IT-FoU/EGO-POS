@@ -27,7 +27,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | Inventory | Stock adjustment | WORKING | Repository/action exists; runtime role UAT required. |
 | Inventory | Stock count | WORKING | Repository/action exists; reconciliation UAT required. |
 | Inventory | Transfers | NOT VERIFIED | Schema tables exist; no completed end-user transfer workflow was verified. |
-| POS | Add product/search/cart | WORKING SOURCE | DB snapshot includes company-scoped active products with balances; browser UAT needed. |
+| POS | Add product/search/cart | WORKING | EGO-FIX-06: Prisma catalogue (active products with POS-warehouse balances), name/SKU/barcode scan, keyboard-wedge Enter lookup, card add, qty merge, stock cap, pack conversion, tenant/warehouse isolation. Isolated matrix 24/24. GO BOX empty catalogue is a legitimate empty state. Checkout/payment not in this phase. |
 | POS | Complete sale/payment/change | WORKING | Server recalculates totals/tax/promotions, validates tender, writes sale/items/payments, decrements balance, writes movement. |
 | POS | Held bill/resume | WORKING | Persistent server foundation and APIs present. |
 | POS | Receipt/reprint | PARTIAL | Browser print path and reprint record code exist; physical printer/format UAT not done. |

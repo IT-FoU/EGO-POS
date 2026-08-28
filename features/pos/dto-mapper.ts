@@ -45,7 +45,7 @@ export function mapPrismaPosCustomer(customer: Row): PosCustomer {
   };
 }
 
-export function mapPrismaPosProduct(product: Row): PosProduct {
+export function mapPrismaPosProduct(product: Row, warehouseId?: string): PosProduct {
   const units = (product.units ?? [])
     .map((unit: Row) => ({
       allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
@@ -66,7 +66,10 @@ export function mapPrismaPosProduct(product: Row): PosProduct {
   const activeUnits = units.filter((unit: Row) => unit.status !== "inactive");
   const defaultSaleUnit = activeUnits.find((unit: Row) => unit.isDefaultSaleUnit) ?? activeUnits.find((unit: Row) => unit.isBaseUnit) ?? activeUnits[0];
   const baseUnit = activeUnits.find((unit: Row) => unit.isBaseUnit) ?? defaultSaleUnit;
-  const stockQty = (product.balances ?? []).reduce(
+  const balances = warehouseId
+    ? (product.balances ?? []).filter((balance: Row) => balance.warehouseId === warehouseId)
+    : (product.balances ?? []);
+  const stockQty = balances.reduce(
     (total: number, balance: Row) => total + toNumber(balance.quantity),
     0,
   );
@@ -82,9 +85,11 @@ export function mapPrismaPosProduct(product: Row): PosProduct {
     nameLo: product.nameLo,
     priceLak: toNumber(defaultSaleUnit?.sellingPriceLak ?? product.sellingPriceLak),
     costPriceLak: toNumber(defaultSaleUnit?.costPriceLak ?? product.costPriceLak),
+    conversionQty: toNumber(defaultSaleUnit?.conversionQty ?? 1) || 1,
     productCode: product.productCode ?? "",
     sku: product.sku ?? "",
     stockQty,
+    unitId: defaultSaleUnit?.id,
     unitName: defaultSaleUnit?.unitName ?? baseUnit?.unitName ?? "Piece",
     units,
   };

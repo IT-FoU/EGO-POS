@@ -24,6 +24,15 @@ EGO-FIX-05 Products status:
 * Product → Inventory: FIXED
 * Product → POS lookup: FIXED after first stock (POS still requires a balance to sell)
 
+EGO-FIX-06 POS discovery/cart status:
+
+* POS Product source: Prisma (`getPrismaPosSnapshot` / `listSellablePosProducts`), warehouse-scoped balances
+* Name/SKU/barcode search and keyboard-wedge scan: FIXED
+* Product card → cart, repeat scan qty, increase/decrease/remove: FIXED
+* Stock cap / zero-stock refuse / pack conversion / tenant+warehouse isolation: FIXED
+* Isolated matrix: 24/24 (`npm run test:pos-discovery`)
+* Checkout, payment, receipt, refund/void, cash session: NOT in this phase
+
 ## P1 - Close before broad pilot
 
 | ID | Risk | Evidence | Recommended next step | Verification |
@@ -50,9 +59,9 @@ EGO-FIX-05 Products status:
 
 ## Recommended remediation order
 
-1. Freeze new feature work. Original production-audit P0 items are closed. EGO-FIX-05 closed P1-1 first-stock receiving. Remaining P1 includes live catalogue UAT, POS checkout UAT, and deployment DNS.
+1. Freeze new feature work. Original production-audit P0 items are closed. EGO-FIX-05 closed P1-1 first-stock receiving. EGO-FIX-06 closed POS discovery/barcode/cart wiring. Remaining P1 includes live catalogue UAT, POS checkout UAT, and deployment DNS.
 2. P0-1 lot allocation is fixed. Enable expiry-tracked products only after a live catalogue exists.
-3. Next module: POS sellable checkout UAT after an Owner-created catalogue exists, or remaining Products P1-2 supplier/brand linking.
+3. Next module: EGO-FIX-07 checkout + payment + receipt after an Owner-created catalogue exists, or remaining Products P1-2 supplier/brand linking.
 4. Run a written finance/stock/returns test matrix in a disposable test company and confirm role isolation.
 5. Repair CI/read-only audit harnesses and establish deployed canary/rollback evidence.
 6. Only then consider a limited controlled pilot. Billing, support, backups, integrations, aliases, and imports remain deferred.
