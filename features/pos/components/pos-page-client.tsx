@@ -1,7 +1,7 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -28,6 +28,7 @@ import {
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
+import { receiptSnapshotFromPersistedSale } from "@/features/pos/checkout-receipt";
 import {
   closeCashSessionRequest,
   fetchCurrentCashSession,
@@ -156,6 +157,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const checkoutInFlightRef = useRef(false);
     const [productQuery, setProductQuery] = useState("");
     const [membershipQuery, setMembershipQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
@@ -882,6 +884,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         };
     }
     function completeSale() {
+        if (checkoutInFlightRef.current || isPending) {
+            return;
+        }
         if (cartItems.length === 0) {
             setMessage(t("ui.cart.is.empty"));
             return;
@@ -913,7 +918,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             completeDemoSale(saleNo, payment);
             return;
         }
+        checkoutInFlightRef.current = true;
         startTransition(async () => {
+            try {
             const result = await completeSaleAction({
                 branchId,
                 cardAmount: payment.cardAmount,
@@ -945,7 +952,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 return;
             }
             const assignedSaleNo = result.data?.saleNo ?? saleNo;
-            const receipt = buildReceiptSnapshot(payment, assignedSaleNo);
+            const receipt = result.data
+                ? receiptSnapshotFromPersistedSale(result.data, {
+                    branchName,
+                    cashierName,
+                    customerName: selectedCustomer?.name ?? "Guest",
+                })
+                : buildReceiptSnapshot(payment, assignedSaleNo);
             setLastReceipt(receipt);
             setSaleCompletedReceipt(receipt);
             setMessage(`${assignedSaleNo} completed and saved.`);
@@ -964,6 +977,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             window.setTimeout(() => {
                 setCustomerDisplayMode("advertising");
             }, displaySettings.autoReturnSeconds * 1000);
+            } finally {
+                checkoutInFlightRef.current = false;
+            }
         });
     }
     function completeDemoSale(saleNo: string, payment: ResolvedPayment) {

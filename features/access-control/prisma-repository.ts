@@ -138,51 +138,49 @@ function buildMatrixFromRolePermissions(
   return matrix;
 }
 
-export async function getStaffAccessSnapshot(tenant: TenantContext): Promise<StaffAccessSnapshot> {
-  const [branches, roles, staffRows, approvalRules, pendingApprovals, rolePermissionRows] = await Promise.all([
-    db.branch.findMany({
-      orderBy: [{ isMainBranch: "desc" }, { name: "asc" }],
-      select: { id: true, name: true },
-      where: { companyId: tenant.companyId },
-    }),
-    db.role.findMany({
-      orderBy: [{ templateKey: "asc" }, { name: "asc" }],
-      where: { companyId: tenant.companyId },
-    }),
-    db.companyUser.findMany({
-      include: {
-        branch: { select: { id: true, name: true } },
-        user: {
-          include: {
-            roles: {
-              include: { role: true },
-              where: { companyId: tenant.companyId },
-            },
+export async function getStaffAccessSnapshot(tenant: TenantContext, client: any = db): Promise<StaffAccessSnapshot> {
+  const branches = await client.branch.findMany({
+    orderBy: [{ isMainBranch: "desc" }, { name: "asc" }],
+    select: { id: true, name: true },
+    where: { companyId: tenant.companyId },
+  });
+  const roles = await client.role.findMany({
+    orderBy: [{ templateKey: "asc" }, { name: "asc" }],
+    where: { companyId: tenant.companyId },
+  });
+  const staffRows = await client.companyUser.findMany({
+    include: {
+      branch: { select: { id: true, name: true } },
+      user: {
+        include: {
+          roles: {
+            include: { role: true },
+            where: { companyId: tenant.companyId },
           },
         },
       },
-      orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
-      where: { companyId: tenant.companyId },
-    }),
-    db.approvalRule.findMany({
-      orderBy: { ruleKey: "asc" },
-      where: { companyId: tenant.companyId },
-    }),
-    db.approval.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 25,
-      where: { companyId: tenant.companyId, status: "pending" },
-    }),
-    db.rolePermission.findMany({
-      select: {
-        permission: { select: { key: true } },
-        roleId: true,
-      },
-      where: {
-        role: { companyId: tenant.companyId },
-      },
-    }),
-  ]);
+    },
+    orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
+    where: { companyId: tenant.companyId },
+  });
+  const approvalRules = await client.approvalRule.findMany({
+    orderBy: { ruleKey: "asc" },
+    where: { companyId: tenant.companyId },
+  });
+  const pendingApprovals = await client.approval.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    where: { companyId: tenant.companyId, status: "pending" },
+  });
+  const rolePermissionRows = await client.rolePermission.findMany({
+    select: {
+      permission: { select: { key: true } },
+      roleId: true,
+    },
+    where: {
+      role: { companyId: tenant.companyId },
+    },
+  });
 
   const mappedRoles = roles.map(mapRole);
   const matrix = buildMatrixFromRolePermissions(
@@ -516,10 +514,10 @@ export async function decideApproval(input: DecideApprovalInput, tenant: TenantC
   return decideApprovalRequest(input, tenant);
 }
 
-export async function getUserPermissionKeys(tenant: TenantContext) {
+export async function getUserPermissionKeys(tenant: TenantContext, client: any = db) {
   let membership: TenantMembership;
   try {
-    membership = await resolveTenantMembership(tenant, db);
+    membership = await resolveTenantMembership(tenant, client);
   } catch {
     return [] as string[];
   }
@@ -528,7 +526,7 @@ export async function getUserPermissionKeys(tenant: TenantContext) {
     return ["*"];
   }
 
-  const rows = await db.userRole.findMany({
+  const rows = await client.userRole.findMany({
     select: {
       role: {
         select: {

@@ -31,7 +31,17 @@ EGO-FIX-06 POS discovery/cart status:
 * Product card → cart, repeat scan qty, increase/decrease/remove: FIXED
 * Stock cap / zero-stock refuse / pack conversion / tenant+warehouse isolation: FIXED
 * Isolated matrix: 24/24 (`npm run test:pos-discovery`)
-* Checkout, payment, receipt, refund/void, cash session: NOT in this phase
+* Checkout, payment, receipt, refund/void, cash session: NOT in this phase (see EGO-FIX-07 below)
+
+EGO-FIX-07 checkout/payment/receipt status:
+
+* Server-authoritative checkout: `completeSaleAction` → `writeCompletePrismaSale`
+* Cash/QR/card/transfer/mixed tender, change, reused saleNo rejection: FIXED
+* Atomic sale + items + payments + stock + FEFO lots + movements: FIXED
+* Receipt from persisted Sale; Recent Sales single entry: FIXED
+* Isolated matrix: 28/28 (`npm run test:pos-checkout`); GO BOX sales remain zero
+* Browser `/pos` HTTP smoke LOADS; Production checkout write not exercised
+* Refund/void/exchange: NOT in this phase
 
 ## P1 - Close before broad pilot
 
@@ -59,9 +69,9 @@ EGO-FIX-06 POS discovery/cart status:
 
 ## Recommended remediation order
 
-1. Freeze new feature work. Original production-audit P0 items are closed. EGO-FIX-05 closed P1-1 first-stock receiving. EGO-FIX-06 closed POS discovery/barcode/cart wiring. Remaining P1 includes live catalogue UAT, POS checkout UAT, and deployment DNS.
+1. Freeze new feature work. Original production-audit P0 items are closed. EGO-FIX-05 closed P1-1 first-stock receiving. EGO-FIX-06 closed POS discovery/barcode/cart wiring. EGO-FIX-07 closed isolated checkout/payment/receipt integrity. Remaining P1 includes live catalogue UAT, post-sale refund/void/exchange, and deployment DNS.
 2. P0-1 lot allocation is fixed. Enable expiry-tracked products only after a live catalogue exists.
-3. Next module: EGO-FIX-07 checkout + payment + receipt after an Owner-created catalogue exists, or remaining Products P1-2 supplier/brand linking.
+3. Next module: EGO-FIX-08 post-sale refund/void/exchange, or Owner live-catalogue checkout UAT. Do not create Production sales from this phase.
 4. Run a written finance/stock/returns test matrix in a disposable test company and confirm role isolation.
 5. Repair CI/read-only audit harnesses and establish deployed canary/rollback evidence.
 6. Only then consider a limited controlled pilot. Billing, support, backups, integrations, aliases, and imports remain deferred.

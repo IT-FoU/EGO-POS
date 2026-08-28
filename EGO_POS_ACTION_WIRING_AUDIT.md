@@ -27,10 +27,10 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | Inventory | Stock adjustment | WORKING | Repository/action exists; runtime role UAT required. |
 | Inventory | Stock count | WORKING | Repository/action exists; reconciliation UAT required. |
 | Inventory | Transfers | NOT VERIFIED | Schema tables exist; no completed end-user transfer workflow was verified. |
-| POS | Add product/search/cart | WORKING | EGO-FIX-06: Prisma catalogue (active products with POS-warehouse balances), name/SKU/barcode scan, keyboard-wedge Enter lookup, card add, qty merge, stock cap, pack conversion, tenant/warehouse isolation. Isolated matrix 24/24. GO BOX empty catalogue is a legitimate empty state. Checkout/payment not in this phase. |
-| POS | Complete sale/payment/change | WORKING | Server recalculates totals/tax/promotions, validates tender, writes sale/items/payments, decrements balance, writes movement. |
+| POS | Add product/search/cart | WORKING | EGO-FIX-06: Prisma catalogue (active products with POS-warehouse balances), name/SKU/barcode scan, keyboard-wedge Enter lookup, card add, qty merge, stock cap, pack conversion, tenant/warehouse isolation. Isolated matrix 24/24. GO BOX empty catalogue is a legitimate empty state. |
+| POS | Complete sale/payment/change | WORKING | EGO-FIX-07: `completeSaleAction` → `writeCompletePrismaSale`. Server-authoritative price/tax/tender, reused saleNo rejected, atomic sale/items/payments/stock/lots/movements. Open cash session required; cash totals derived from payments. Isolated matrix 28/28. Production sales were not created. |
 | POS | Held bill/resume | WORKING | Persistent server foundation and APIs present. |
-| POS | Receipt/reprint | PARTIAL | Browser print path and reprint record code exist; physical printer/format UAT not done. |
+| POS | Receipt/reprint | WORKING SOURCE | EGO-FIX-07: post-pay receipt uses persisted Sale via `receiptSnapshotFromPersistedSale`; Recent Sales refresh after success. Browser `window.print()` / reprint API wired. Physical printer not tested. |
 | POS | Void/refund/return/exchange | WORKING SOURCE | Real repositories and stock movement paths exist; no live reconciliation test. |
 | POS | Lot/FEFO sale handling | WORKING SOURCE | EGO-FIX-03: checkout/refund/void/exchange consume and restore `inventory_lots` FEFO with `inventory_lot_allocations` provenance; isolated fixture suite passed. Browser UAT still required. |
 | Cash | Open/close session, cash in/out | WORKING SOURCE | Server services exist; shift reconciliation UAT required. |

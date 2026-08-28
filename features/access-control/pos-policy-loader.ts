@@ -46,6 +46,7 @@ function posActionFromPermissionKeys(keys: Set<string>, action: PosPermissionAct
 export async function createPosPermissionPolicyFromDatabase(input: {
   assignedTerminal?: string | null;
   branchName?: string | null;
+  client?: any;
   displayName?: string | null;
   roles: unknown;
   tenant: TenantContext;
@@ -53,13 +54,13 @@ export async function createPosPermissionPolicyFromDatabase(input: {
   username?: string | null;
 }): Promise<PosPermissionPolicy> {
   const role = normalizePosRole(input.roles) as PosRole;
-  const snapshot = await getStaffAccessSnapshot(input.tenant);
+  const snapshot = await getStaffAccessSnapshot(input.tenant, input.client);
 
   // B8-3: derive permission keys from the logged-in user's ACTUAL assigned roles
   // (getUserPermissionKeys resolves the user's real roleId(s); owner => "*"),
   // not from a role matched only by template label. This keeps the client preview
   // in sync with the server-enforced policy.
-  const permissionKeys = new Set<string>(((await getUserPermissionKeys(input.tenant)) as string[]).map(String));
+  const permissionKeys = new Set<string>(((await getUserPermissionKeys(input.tenant, input.client)) as string[]).map(String));
 
   const rules = Object.fromEntries(
     APPROVAL_RULE_KEYS.map((ruleKey) => [ruleKey, snapshot.approvalRules.find((rule) => rule.ruleKey === ruleKey)]),

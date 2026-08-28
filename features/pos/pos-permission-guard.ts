@@ -14,8 +14,8 @@ const db = prisma as any;
 // label). Owners resolve to "owner"; otherwise the highest-privilege assigned
 // role template wins, and unknown/custom roles fall back to cashier (least
 // privilege) for limit purposes.
-async function resolveUserRoleNames(tenant: TenantContext): Promise<string[]> {
-  const membership = await db.companyUser.findFirst({
+async function resolveUserRoleNames(tenant: TenantContext, client: any = db): Promise<string[]> {
+  const membership = await client.companyUser.findFirst({
     select: { isOwner: true },
     where: { companyId: tenant.companyId, status: "active", userId: tenant.userId },
   });
@@ -26,7 +26,7 @@ async function resolveUserRoleNames(tenant: TenantContext): Promise<string[]> {
     return ["owner"];
   }
 
-  const roles = await db.userRole.findMany({
+  const roles = await client.userRole.findMany({
     select: { role: { select: { name: true, templateKey: true } } },
     where: { companyId: tenant.companyId, userId: tenant.userId },
   });
@@ -36,11 +36,9 @@ async function resolveUserRoleNames(tenant: TenantContext): Promise<string[]> {
   return names.length > 0 ? names : ["cashier"];
 }
 
-// Build the authoritative server-side POS policy for the acting user, sourced
-// entirely from live DB role permissions + approval rules.
-export async function buildPosPolicyForTenant(tenant: TenantContext): Promise<PosPermissionPolicy> {
-  const roles = await resolveUserRoleNames(tenant);
-  return createPosPermissionPolicyFromDatabase({ roles, tenant, userId: tenant.userId });
+export async function buildPosPolicyForTenant(tenant: TenantContext, client: any = db): Promise<PosPermissionPolicy> {
+  const roles = await resolveUserRoleNames(tenant, client);
+  return createPosPermissionPolicyFromDatabase({ client, roles, tenant, userId: tenant.userId });
 }
 
 // Throws PermissionDeniedError when the action is not allowed for the policy.

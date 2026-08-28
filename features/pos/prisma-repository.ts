@@ -105,9 +105,10 @@ async function resolvePosSaleNo(
         select: { id: true },
         where: { companyId, saleNo: trimmed },
       });
-      if (!existing) {
-        return trimmed;
+      if (existing) {
+        throw new Error(`Sale number ${trimmed} was already used.`);
       }
+      return trimmed;
     }
   }
 
@@ -284,7 +285,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   };
 }
 
-export async function completePrismaSale(input: {
+export type CompletePrismaSaleInput = {
   branchId: string;
   cardAmount?: number;
   cashAmount: number;
@@ -303,9 +304,9 @@ export async function completePrismaSale(input: {
   totalAmount: number;
   transferAmount?: number;
   warehouseId: string;
-}, tenant: TenantContext) {
-  // B8-3: resolve the acting user's authoritative POS policy from live DB role
-  // permissions and enforce create_sale server-side (never trust the client gate).
+};
+
+export async function completePrismaSale(input: CompletePrismaSaleInput, tenant: TenantContext) {
   const posPolicy = await buildPosPolicyForTenant(tenant);
   assertPosActionAllowed(posPolicy, "create_sale");
 
@@ -314,19 +315,38 @@ export async function completePrismaSale(input: {
     module: "pos",
     newData: input,
     tenant,
-    write: async (tx) => {
-      const [branchScope, warehouseScope] = await Promise.all([
-        assertBranchInScope(tx, tenant, input.branchId),
-        assertWarehouseInScope(tx, tenant, input.warehouseId),
-      ]);
-      if (branchScope.branchId !== warehouseScope.branchId) {
-        throw new Error("POS branch and warehouse scopes do not match.");
-      }
-      await assertOpenCashSessionForSale(tenant, tx);
-      rejectClientPromotionClaims(input.items);
-      const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
-      const receiptPrefix = settings?.receiptPrefix ?? "INV";
-      const saleNo = await resolvePosSaleNo(tx, tenant.companyId, input.saleNo, receiptPrefix);
+    write: (tx) => writeCompletePrismaSale(tx, input, tenant, posPolicy),
+  });
+}
+
+export async function writeCompletePrismaSale(
+  tx: any,
+  input: CompletePrismaSaleInput,
+  tenant: TenantContext,
+  posPolicy?: Awaited<ReturnType<typeof buildPosPolicyForTenant>>,
+) {
+  const policy = posPolicy ?? await buildPosPolicyForTenant(tenant, tx);
+  assertPosActionAllowed(policy, "create_sale");
+
+  const [branchScope, warehouseScope] = await Promise.all([
+    assertBranchInScope(tx, tenant, input.branchId),
+    assertWarehouseInScope(tx, tenant, input.warehouseId),
+  ]);
+  if (branchScope.branchId !== warehouseScope.branchId) {
+    throw new Error("POS branch and warehouse scopes do not match.");
+  }
+  await assertOpenCashSessionForSale(tenant, tx);
+  rejectClientPromotionClaims(input.items);
+  const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
+  const receiptPrefix = settings?.receiptPrefix ?? "INV";
+  const requestedSaleNo = stringValue(input.saleNo);
+  if (requestedSaleNo) {
+    await lockInventoryMutationKey(tx, `pos-checkout:${tenant.companyId}:${requestedSaleNo}`);
+  }
+  const saleNo = await resolvePosSaleNo(tx, tenant.companyId, input.saleNo, receiptPrefix);
+  if (!requestedSaleNo || saleNo !== requestedSaleNo) {
+    await lockInventoryMutationKey(tx, `pos-checkout:${tenant.companyId}:${saleNo}`);
+  }
       const vatRate = settings?.vatEnabled ? numberValue(settings.vatRate) : 0;
       const taxInclusive = Boolean(settings?.taxInclusive);
       const loyaltyEnabled = settings?.loyaltyEnabled ?? true;
@@ -438,7 +458,7 @@ export async function completePrismaSale(input: {
       // no approved-decision token in a live checkout payload).
       if (manualDiscountAmount > 0 || requestedDiscountAmount > 0 || requestedDiscountPercent > 0) {
         const effectiveDiscountPercent = subtotal > 0 ? manualDiscountAmount / subtotal * 100 : requestedDiscountPercent;
-        assertPosActionAllowed(posPolicy, "apply_discount", { discountPercent: effectiveDiscountPercent });
+        assertPosActionAllowed(policy, "apply_discount", { discountPercent: effectiveDiscountPercent });
       }
       const loyaltyRedemption = await calculateLoyaltyRedemption(tx, {
         companyId: tenant.companyId,
@@ -528,7 +548,15 @@ export async function completePrismaSale(input: {
           totalAmount,
           warehouseId: input.warehouseId,
         },
-        include: { items: true, payments: true },
+        include: {
+          items: {
+            include: {
+              product: { select: { nameEn: true, nameLo: true } },
+              unit: { select: { conversionQty: true, unitName: true } },
+            },
+          },
+          payments: true,
+        },
       });
 
       const runningQtyByProduct = new Map<string, number>();
@@ -613,7 +641,16 @@ export async function completePrismaSale(input: {
         });
       }
 
-      return sale;
-    },
-  });
+      return tx.sale.findFirstOrThrow({
+        include: {
+          items: {
+            include: {
+              product: { select: { nameEn: true, nameLo: true } },
+              unit: { select: { conversionQty: true, unitName: true } },
+            },
+          },
+          payments: true,
+        },
+        where: { id: sale.id },
+      });
 }
