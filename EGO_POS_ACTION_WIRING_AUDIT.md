@@ -21,7 +21,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 | Products | Product image management | UI ONLY | Read-only/image placeholder state; no confirmed storage backend. |
 | Products | Barcode alias management | UI ONLY | Local form state only; no persistence or POS lookup. |
 | Products | Import/export, label print, barcode generate, bulk price apply | DISABLED | Product tool drawers are deliberately read-only/preview-first. |
-| Inventory | Quick Stock In search/preload | WORKING READ | Barcode query preloads local search; never auto-selects or writes. |
+| Inventory | Quick Stock In search/preload | WORKING READ | Barcode query preloads search over balances plus zero-stock catalogue products (EGO-FIX-05). Never auto-selects or writes. |
 | Inventory | Quick Stock In confirm | WORKING | Explicit preview then `stockInAction`; validates product/warehouse/unit/qty/lot/expiry and writes transactionally. |
 | Inventory | Initial product receiving from handoff | BLOCKED | Search only contains existing `inventory_balances`; zero-balance new product is not discoverable. |
 | Inventory | Stock adjustment | WORKING | Repository/action exists; runtime role UAT required. |
@@ -49,7 +49,7 @@ Audit date: 2026-08-28. This is a high-impact action inventory, grouped by user 
 ## Unsafe or misleading action candidates
 
 1. **Lot/expiry sale-return reconciliation is source-fixed (EGO-FIX-03).** Controlled browser environment is restored (EGO-FIX-04). Remaining work is Owner UAT and P1 items, not a P0 environment blocker.
-2. **Quick Stock In cannot receive a product’s first stock through the new barcode handoff.** It is a P1 workflow blocker, not an auto-write issue.
+2. **Quick Stock In first-stock handoff is source-fixed (EGO-FIX-05).** Zero-stock catalogue products are searchable; Confirm Stock In remains the only write. Do not create stock on product save.
 3. **Super Admin status pages are intentionally safe-status, not control-plane functionality.** Their disabled labels are correct; do not remove them or claim those actions are enabled.
 4. **Product tool drawers are intentionally read-only.** They are not broken click targets, but they must be labelled as deferred in release notes.
 

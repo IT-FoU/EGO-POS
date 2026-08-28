@@ -67,9 +67,8 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
         if (!term) {
             return items.slice(0, 12);
         }
-        return items
-            .filter((item) => {
-            const searchable = [
+        const scored = items.map((item) => {
+            const fields = [
                 item.barcode,
                 item.productCode,
                 item.productNameEn,
@@ -77,13 +76,13 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
                 item.sku,
                 ...((item.units ?? []).map((unit) => unit.barcode) ?? []),
                 ...((item.units ?? []).map((unit) => unit.unitName) ?? []),
-            ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase();
-            return searchable.includes(term);
-        })
-            .slice(0, 20);
+            ].filter(Boolean) as string[];
+            const exact = fields.some((field) => field.toLowerCase() === term);
+            const partial = fields.join(" ").toLowerCase().includes(term);
+            return { exact, item, partial };
+        }).filter((row) => row.exact || row.partial);
+        scored.sort((left, right) => Number(right.exact) - Number(left.exact));
+        return scored.slice(0, 20).map((row) => row.item);
     }, [items, query]);
     const searchedValue = query.trim();
     const showProductNotFound = searchedValue.length > 0 && filteredItems.length === 0;

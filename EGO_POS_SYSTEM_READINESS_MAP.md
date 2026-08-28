@@ -9,9 +9,9 @@ Audit date: 2026-08-28. Status values mean: `VERIFIED SOURCE`, `VERIFIED DB`, `P
 | Store Access `/login` | `app/(auth)/login/page.tsx`, `lib/auth/options.ts`, `lib/auth/merchant-login.ts` | Users, company_users, roles | Credentials login, membership redirect | VERIFIED SOURCE; EGO-FIX-04 local HTTP/browser smoke PASS |
 | Super Admin `/super-admin` | Route guards, `lib/admin/session.ts`, `features/igo-admin/admin-data.ts` | Super admin/platform/company tables | Login, store provisioning, data review | VERIFIED DB; one active Super Admin after EGO-FIX-01; EGO-FIX-04 local login/session smoke PASS |
 | Dashboard | `features/dashboard/dashboard-service.ts` | Sales, balances, cash, reports | Read, route navigation | VERIFIED SOURCE; live transaction data empty |
-| Products | `features/products/**` | Products, units, categories | CRUD, archive/delete, category actions | PARTIAL; real actions, product images/aliases deferred |
-| Inventory | `features/inventory/**` | Balances, lots, movements, warehouses | Stock-in, adjustment, count | PARTIAL; real write path, first-stock discoverability gap |
-| Quick Stock In | `quick-stock-in-form.tsx` | Inventory snapshot | Search, preview, explicit confirm | PARTIAL; no automatic receive; searches balances only |
+| Products | `features/products/**` | Products, units, categories | CRUD, archive/delete, category actions | REAL CRUD; EGO-FIX-05 isolated matrix 18/18; images/aliases still deferred |
+| Inventory | `features/inventory/**` | Balances, lots, movements, warehouses | Stock-in, adjustment, count | REAL WRITE; EGO-FIX-05 first-stock catalogue lookup on Quick Stock In / Stock In |
+| Quick Stock In | `quick-stock-in-form.tsx` | Inventory snapshot + catalogue | Search, preview, explicit confirm | WORKING; zero-stock products are searchable; Confirm Stock In still required |
 | POS | `features/pos/**` | Products/balances, sales, payments, settings | Checkout, held bills, print, void/refund/exchange | PARTIAL; server logic strong, no browser/cash UAT |
 | Customers/membership | `features/customers/**`, `features/membership-levels/**` | Customers, payments, loyalty | CRUD, payment, points/membership | PARTIAL; no lifecycle UAT |
 | Promotions | `features/promotions/**` | Promotions and rules | CRUD, POS server policy | PARTIAL; needs relation scoping/analytics UAT |

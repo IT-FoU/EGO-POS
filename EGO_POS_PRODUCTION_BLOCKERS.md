@@ -15,11 +15,20 @@ ORIGINAL PRODUCTION AUDIT P0 COUNT = 0
 
 This does not mean Production-ready. Readiness remains OWNER UAT ONLY until module functional testing is completed.
 
+EGO-FIX-05 Products status:
+
+* Product CRUD: FIXED / isolated 18/18
+* Search (name/SKU/barcode): FIXED
+* Barcode lookup: FIXED (string identifier, leading zeros preserved)
+* First stock: FIXED (catalogue lookup + existing Confirm Stock In)
+* Product → Inventory: FIXED
+* Product → POS lookup: FIXED after first stock (POS still requires a balance to sell)
+
 ## P1 - Close before broad pilot
 
 | ID | Risk | Evidence | Recommended next step | Verification |
 | --- | --- | --- | --- | --- |
-| P1-1 | First stock cannot be received via Create Product-to-Quick Stock In handoff | Quick Stock In only renders products from `inventory_balances`; a new product has no balance | Add a safe product lookup/preselect path independent of existing balance, still requiring explicit Confirm Stock In | New product -> Quick Stock In -> explicit receive -> first balance/lot/movement |
+| P1-1 | FIXED — Create Product → Quick Stock In can receive first stock without a prior balance row | Before: Quick Stock In/Stock In searched `inventory_balances` only, so a new product was undiscoverable. After EGO-FIX-05: receiving pages merge active catalogue products with quantity 0; `createStockIn` still upserts `inventory_balances` via `applyAtomicStockDelta`, optional lots, and `stock_movements`. Isolated rollback suite 18/18. GO BOX business rows remain zero. | Keep Confirm Stock In as the only write. Do not create stock on product save. | `npm run test:products-first-stock`; new product appears in Quick Stock In search; first receive creates balance/movement and POS sell lookup | Complete for first-stock discoverability |
 | P1-2 | Product supplier/brand text is not persistently linked | ProductForm avoids sending free text as supplier/brand foreign keys | Decide whether to use selectable existing records, create records in a controlled flow, or store sanctioned text fields | Create/edit product then verify linked supplier/brand/report filtering |
 | P1-3 | Financial/stock workflows lack current live reconciliation UAT | Live target has zero catalogue, sales, cash, receipts, refunds, and reports | Execute a controlled test matrix for sale, multi-tender, QR, void, refund, exchange, cash close, receipt, PO, partial receipt, and supplier payment | Ledger/balance/report parity signed by owner |
 | P1-4 | Permission enforcement has inconsistent defense-in-depth | Inventory actions use store-action + permission checks; products/purchasing/suppliers reviewed use legacy permission check only | Audit all write routes/actions against the intended role-action matrix | Owner/manager/cashier allow/deny matrix, including cross-company attempts |
@@ -41,9 +50,9 @@ This does not mean Production-ready. Readiness remains OWNER UAT ONLY until modu
 
 ## Recommended remediation order
 
-1. Freeze new feature work. Original production-audit P0 items (Super Admin, migrations, lots, browser environment) are closed. Remaining work is Owner UAT and P1 items (first-stock receiving, catalogue, deployment DNS).
+1. Freeze new feature work. Original production-audit P0 items are closed. EGO-FIX-05 closed P1-1 first-stock receiving. Remaining P1 includes live catalogue UAT, POS checkout UAT, and deployment DNS.
 2. P0-1 lot allocation is fixed. Enable expiry-tracked products only after a live catalogue exists.
-3. Resolve P1-1 first-stock receiving; this is the smallest operational bridge to a usable catalogue/inventory loop.
+3. Next module: POS sellable checkout UAT after an Owner-created catalogue exists, or remaining Products P1-2 supplier/brand linking.
 4. Run a written finance/stock/returns test matrix in a disposable test company and confirm role isolation.
 5. Repair CI/read-only audit harnesses and establish deployed canary/rollback evidence.
 6. Only then consider a limited controlled pilot. Billing, support, backups, integrations, aliases, and imports remain deferred.

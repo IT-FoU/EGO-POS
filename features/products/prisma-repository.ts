@@ -19,10 +19,10 @@ function productInventoryScopeWhere(scope: BranchScope) {
   };
 }
 
-export async function getPrismaProducts(tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
+export async function getPrismaProducts(tenant: TenantContext, client: any = db) {
+  const scope = await resolveTenantScope(tenant, client);
   const branchWhere = branchOwnedWhere(scope);
-  const products = await db.product.findMany({
+  const products = await client.product.findMany({
     include: {
       balances: true,
       barcodeHistory: { orderBy: { createdAt: "desc" }, take: 20 },
@@ -44,10 +44,10 @@ export async function getPrismaProducts(tenant: TenantContext) {
   return products.map(mapPrismaProduct);
 }
 
-export async function getPrismaProductById(productId: string, tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
+export async function getPrismaProductById(productId: string, tenant: TenantContext, client: any = db) {
+  const scope = await resolveTenantScope(tenant, client);
   const branchWhere = branchOwnedWhere(scope);
-  const product = await db.product.findFirst({
+  const product = await client.product.findFirst({
     include: {
       balances: true,
       barcodeHistory: { orderBy: { createdAt: "desc" }, take: 50 },
@@ -94,14 +94,14 @@ export type ProductBarcodeLookupResult = {
   sku: string;
 };
 
-export async function findPrismaProductByBarcode(barcode: string, tenant: TenantContext): Promise<ProductBarcodeLookupResult | null> {
+export async function findPrismaProductByBarcode(barcode: string, tenant: TenantContext, client: any = db): Promise<ProductBarcodeLookupResult | null> {
   const normalized = normalizeBarcode(barcode);
   if (!normalized) {
     return null;
   }
 
-  const scope = await resolveTenantScope(tenant);
-  const product = await db.product.findFirst({
+  const scope = await resolveTenantScope(tenant, client);
+  const product = await client.product.findFirst({
     include: {
       units: {
         orderBy: { sortOrder: "asc" },
@@ -158,7 +158,11 @@ export type ProductWriteInput = {
 };
 
 function normalizeBarcode(value: unknown) {
-  return optionalString(value);
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return undefined;
 }
 
 export type ProductUnitWriteInput = {
@@ -335,6 +339,28 @@ async function assertProductBranchReferences(
   }
 }
 
+async function assertUniqueSku(
+  client: any,
+  scope: Awaited<ReturnType<typeof resolveTenantScope>>,
+  input: Partial<ProductWriteInput>,
+  productId?: string,
+) {
+  const sku = optionalString(input.sku);
+  if (!sku) return;
+
+  const existing = await client.product.findFirst({
+    where: {
+      companyId: scope.companyId,
+      sku,
+      ...(productId ? { NOT: { id: productId } } : {}),
+    },
+  });
+
+  if (existing) {
+    throw new Error("SKU already exists.");
+  }
+}
+
 async function assertUniqueBarcodes(
   client: any,
   scope: Awaited<ReturnType<typeof resolveTenantScope>>,
@@ -391,69 +417,67 @@ function unitReferenceCount(unit: Record<string, any>) {
   );
 }
 
-export async function createPrismaProduct(input: ProductWriteInput, tenant: TenantContext) {
+export async function writePrismaProductCreate(tx: any, input: ProductWriteInput, tenant: TenantContext) {
   assertValidProductWriteInput(input);
+  const scope = await resolveTenantScope(tenant, tx);
+  await assertProductBranchReferences(tx, scope, input);
+  await assertUniqueSku(tx, scope, input);
+  await assertUniqueBarcodes(tx, scope, input);
+  const units = normalizedProductUnits(input.units, {
+    barcode: input.barcode,
+    costPriceLak: input.costPriceLak,
+    sellingPriceLak: input.sellingPriceLak,
+  });
+
+  const createdProduct = await tx.product.create({
+    data: {
+      barcode: optionalString(input.barcode),
+      branchId: scope.branchId,
+      brandId: optionalString(input.brandId),
+      categoryId: optionalString(input.categoryId),
+      companyId: tenant.companyId,
+      costPriceLak: numberValue(input.costPriceLak),
+      description: optionalString(input.description),
+      imageUrl: optionalString(input.imageUrl),
+      minStock: numberValue(input.minStock),
+      nameEn: optionalString(input.nameEn),
+      nameLo: stringValue(input.nameLo),
+      productCode: optionalString(input.productCode),
+      sellingPriceLak: numberValue(input.sellingPriceLak),
+      sku: optionalString(input.sku),
+      status: input.status ?? "active",
+      stockDisplayMode: input.stockDisplayMode ?? "base_unit_only",
+      supplierId: optionalString(input.supplierId),
+      tags: input.tags ?? [],
+      units: {
+        create: units.map(({ id: _id, ...unit }) => unit),
+      },
+    },
+    include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+  });
+
+  return mapPrismaProduct(createdProduct);
+}
+
+export async function createPrismaProduct(input: ProductWriteInput, tenant: TenantContext) {
   return withTenantTransaction({
     action: "create",
     module: "products",
     newData: input,
     tenant,
-    write: async (tx) => {
-      const scope = await resolveTenantScope(tenant, tx);
-      await assertProductBranchReferences(tx, scope, input);
-      await assertUniqueBarcodes(tx, scope, input);
-      const units = normalizedProductUnits(input.units, {
-        barcode: input.barcode,
-        costPriceLak: input.costPriceLak,
-        sellingPriceLak: input.sellingPriceLak,
-      });
-
-      const createdProduct = await tx.product.create({
-        data: {
-          barcode: optionalString(input.barcode),
-          branchId: scope.branchId,
-          brandId: optionalString(input.brandId),
-          categoryId: optionalString(input.categoryId),
-          companyId: tenant.companyId,
-          costPriceLak: numberValue(input.costPriceLak),
-          description: optionalString(input.description),
-          imageUrl: optionalString(input.imageUrl),
-          minStock: numberValue(input.minStock),
-          nameEn: optionalString(input.nameEn),
-          nameLo: stringValue(input.nameLo),
-          productCode: optionalString(input.productCode),
-          sellingPriceLak: numberValue(input.sellingPriceLak),
-          sku: optionalString(input.sku),
-          status: input.status ?? "active",
-          stockDisplayMode: input.stockDisplayMode ?? "base_unit_only",
-          supplierId: optionalString(input.supplierId),
-          tags: input.tags ?? [],
-          units: {
-            create: units.map(({ id: _id, ...unit }) => unit),
-          },
-        },
-        include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
-      });
-
-      return mapPrismaProduct(createdProduct);
-    },
+    write: (tx) => writePrismaProductCreate(tx, input, tenant),
   });
 }
 
-export async function updatePrismaProduct(productId: string, input: Partial<ProductWriteInput>, tenant: TenantContext) {
+export async function writePrismaProductUpdate(tx: any, productId: string, input: Partial<ProductWriteInput>, tenant: TenantContext) {
   assertValidProductWriteInput(input);
-  return withTenantTransaction({
-    action: "update",
-    module: "products",
-    newData: { productId, ...input },
-    tenant,
-    write: async (tx) => {
-      const scope = await resolveTenantScope(tenant, tx);
-      const existing = await tx.product.findFirstOrThrow({
-        include: { units: true },
-        where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
-      });
+  const scope = await resolveTenantScope(tenant, tx);
+  const existing = await tx.product.findFirstOrThrow({
+    include: { units: true },
+    where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
+  });
       await assertProductBranchReferences(tx, scope, input);
+      await assertUniqueSku(tx, scope, input, existing.id);
       await assertUniqueBarcodes(tx, scope, input, existing.id);
       await tx.product.update({
         data: {
@@ -593,7 +617,15 @@ export async function updatePrismaProduct(productId: string, input: Partial<Prod
       });
 
       return mapPrismaProduct(updatedProduct);
-    },
+}
+
+export async function updatePrismaProduct(productId: string, input: Partial<ProductWriteInput>, tenant: TenantContext) {
+  return withTenantTransaction({
+    action: "update",
+    module: "products",
+    newData: { productId, ...input },
+    tenant,
+    write: (tx) => writePrismaProductUpdate(tx, productId, input, tenant),
   });
 }
 
@@ -777,24 +809,26 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
   });
 }
 
+export async function writePrismaProductArchive(tx: any, productId: string, tenant: TenantContext) {
+  const scope = await resolveTenantScope(tenant, tx);
+  const existing = await tx.product.findFirstOrThrow({
+    where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
+  });
+  const archivedProduct = await tx.product.update({
+    data: { isActive: false, status: "deleted" },
+    where: { id: existing.id },
+  });
+
+  return mapPrismaProduct(archivedProduct);
+}
+
 export async function archivePrismaProduct(productId: string, tenant: TenantContext) {
   return withTenantTransaction({
     action: "archive",
     module: "products",
     newData: { productId, isActive: false, status: "deleted" },
     tenant,
-    write: async (tx) => {
-      const scope = await resolveTenantScope(tenant, tx);
-      const existing = await tx.product.findFirstOrThrow({
-        where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
-      });
-      const archivedProduct = await tx.product.update({
-        data: { isActive: false, status: "deleted" },
-        where: { id: existing.id },
-      });
-
-      return mapPrismaProduct(archivedProduct);
-    },
+    write: (tx) => writePrismaProductArchive(tx, productId, tenant),
   });
 }
 
