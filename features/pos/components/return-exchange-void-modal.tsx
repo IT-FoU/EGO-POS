@@ -130,7 +130,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
   }
 
   async function submitReturn() {
-    if (!sale) return;
+    if (!sale || busy) return;
     if (selectedReturns.length === 0) {
       setError("Select at least one returned item.");
       return;
@@ -162,7 +162,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
   }
 
   async function submitExchange() {
-    if (!sale) return;
+    if (!sale || busy) return;
     if (selectedReturns.length === 0 || replacements.length === 0) {
       setError("Select returned items and at least one replacement product.");
       return;
@@ -200,7 +200,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
   }
 
   async function submitVoid(approval?: PostSaleManagerApprovalPayload) {
-    if (!sale) return;
+    if (!sale || busy) return;
     if (!reason.trim()) {
       setError("A void reason is required.");
       return;

@@ -950,36 +950,47 @@ export async function returnPrismaSale(tenant: TenantContext, input: ReturnSaleI
     module: "pos",
     newData: { items: input.items, reason: input.reason, refundMethod: input.refundMethod, saleId },
     tenant,
-    write: async (tx) => {
-      await lockSaleForUpdate(tx, tenant, saleId);
-      const sale = await loadMutableSale(tx, tenant, saleId);
-      const session = await assertOpenCashSessionForSale(tenant, tx);
-      const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.items);
-      const refund = await persistReturnOrExchange(tx, tenant, sale, {
-        approvedBy: input.managerPinApproval?.approvedById ?? null,
-        differenceLak: 0,
-        kind: "refund",
-        paymentAmountLak: 0,
-        prepared,
-        reason: input.reason ?? null,
-        refundAmountLak: returnValueLak,
-        refundMethod: asMethod(input.refundMethod),
-        returnValueLak,
-        sessionId: session.id,
-      });
-      const cashierName = String(
-        (await tx.user.findFirst({ select: { fullName: true, username: true }, where: { id: sale.createdBy } }))?.fullName
-          ?? "Cashier",
-      );
-      const updated = await tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
-      return {
-        receipt: await mapReturnReceipt(tx, refund, updated),
-        refundId: String(refund.id),
-        sale: mapSaleRow(updated, cashierName),
-        status: "completed" as const,
-      };
-    },
+    write: (tx) => writeReturnPrismaSale(tx, tenant, input),
   });
+}
+
+export async function writeReturnPrismaSale(
+  tx: Record<string, any>,
+  tenant: TenantContext,
+  input: ReturnSaleInput,
+): Promise<ReturnMutationResult> {
+  const saleId = String(input.saleId).trim();
+  await lockSaleForUpdate(tx, tenant, saleId);
+  const sale = await loadMutableSale(tx, tenant, saleId);
+  if (!input.managerPinApproval) {
+    const policy = await buildPosPolicyForTenant(tenant, tx);
+    assertPosActionAllowed(policy, "refund_bill", { amountLak: amount(sale.totalAmount) });
+  }
+  const session = await assertOpenCashSessionForSale(tenant, tx);
+  const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.items);
+  const refund = await persistReturnOrExchange(tx, tenant, sale, {
+    approvedBy: input.managerPinApproval?.approvedById ?? null,
+    differenceLak: 0,
+    kind: "refund",
+    paymentAmountLak: 0,
+    prepared,
+    reason: input.reason ?? null,
+    refundAmountLak: returnValueLak,
+    refundMethod: asMethod(input.refundMethod),
+    returnValueLak,
+    sessionId: session.id,
+  });
+  const cashierName = String(
+    (await tx.user.findFirst({ select: { fullName: true, username: true }, where: { id: sale.createdBy } }))?.fullName
+      ?? "Cashier",
+  );
+  const updated = await tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
+  return {
+    receipt: await mapReturnReceipt(tx, refund, updated),
+    refundId: String(refund.id),
+    sale: mapSaleRow(updated, cashierName),
+    status: "completed" as const,
+  };
 }
 
 export async function exchangePrismaSale(tenant: TenantContext, input: ExchangeSaleInput): Promise<ReturnMutationResult> {
@@ -1022,46 +1033,57 @@ export async function exchangePrismaSale(tenant: TenantContext, input: ExchangeS
       saleId,
     },
     tenant,
-    write: async (tx) => {
-      await lockSaleForUpdate(tx, tenant, saleId);
-      const sale = await loadMutableSale(tx, tenant, saleId);
-      const session = await assertOpenCashSessionForSale(tenant, tx);
-      const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.returnedItems);
-      const { priced, replacementTotalLak } = await priceReplacementItems(tx, tenant, sale, input.replacementItems);
-      const differenceLak = roundLak(replacementTotalLak - returnValueLak);
-      const paymentAmountLak = Math.max(differenceLak, 0);
-      const refundAmountLak = Math.max(-differenceLak, 0);
-      if (paymentAmountLak > 0 && amount(input.paidAmountLak) + 0.009 < paymentAmountLak) {
-        throw new Error(`Additional payment of ${paymentAmountLak} LAK is required for this exchange.`);
-      }
-      const refund = await persistReturnOrExchange(tx, tenant, sale, {
-        approvedBy: input.managerPinApproval?.approvedById ?? null,
-        differenceLak,
-        exchangeReceiptNo: null,
-        kind: "exchange",
-        paymentAmountLak,
-        prepared,
-        pricedReplacements: priced,
-        reason: input.reason ?? null,
-        refundAmountLak,
-        refundMethod: asMethod(input.refundMethod),
-        returnValueLak,
-        sessionId: session.id,
-      });
-      const cashierName = String(
-        (await tx.user.findFirst({ select: { fullName: true, username: true }, where: { id: sale.createdBy } }))?.fullName
-          ?? "Cashier",
-      );
-      const updated = await tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
-      return {
-        differenceLak,
-        receipt: await mapReturnReceipt(tx, refund, updated),
-        refundId: String(refund.id),
-        sale: mapSaleRow(updated, cashierName),
-        status: "completed" as const,
-      };
-    },
+    write: (tx) => writeExchangePrismaSale(tx, tenant, input),
   });
+}
+
+export async function writeExchangePrismaSale(
+  tx: Record<string, any>,
+  tenant: TenantContext,
+  input: ExchangeSaleInput,
+): Promise<ReturnMutationResult> {
+  const saleId = String(input.saleId).trim();
+  await lockSaleForUpdate(tx, tenant, saleId);
+  const sale = await loadMutableSale(tx, tenant, saleId);
+  if (!input.managerPinApproval) {
+    const policy = await buildPosPolicyForTenant(tenant, tx);
+    assertPosActionAllowed(policy, "refund_bill", { amountLak: amount(sale.totalAmount) });
+  }
+  const session = await assertOpenCashSessionForSale(tenant, tx);
+  const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.returnedItems);
+  const { priced, replacementTotalLak } = await priceReplacementItems(tx, tenant, sale, input.replacementItems);
+  const differenceLak = roundLak(replacementTotalLak - returnValueLak);
+  const paymentAmountLak = Math.max(differenceLak, 0);
+  const refundAmountLak = Math.max(-differenceLak, 0);
+  if (paymentAmountLak > 0 && amount(input.paidAmountLak) + 0.009 < paymentAmountLak) {
+    throw new Error(`Additional payment of ${paymentAmountLak} LAK is required for this exchange.`);
+  }
+  const refund = await persistReturnOrExchange(tx, tenant, sale, {
+    approvedBy: input.managerPinApproval?.approvedById ?? null,
+    differenceLak,
+    exchangeReceiptNo: null,
+    kind: "exchange",
+    paymentAmountLak,
+    prepared,
+    pricedReplacements: priced,
+    reason: input.reason ?? null,
+    refundAmountLak,
+    refundMethod: asMethod(input.refundMethod),
+    returnValueLak,
+    sessionId: session.id,
+  });
+  const cashierName = String(
+    (await tx.user.findFirst({ select: { fullName: true, username: true }, where: { id: sale.createdBy } }))?.fullName
+      ?? "Cashier",
+  );
+  const updated = await tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
+  return {
+    differenceLak,
+    receipt: await mapReturnReceipt(tx, refund, updated),
+    refundId: String(refund.id),
+    sale: mapSaleRow(updated, cashierName),
+    status: "completed" as const,
+  };
 }
 
 export async function returnRemainingSaleCore(

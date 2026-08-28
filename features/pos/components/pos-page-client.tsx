@@ -158,6 +158,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const checkoutInFlightRef = useRef(false);
+    const postSaleInFlightRef = useRef(false);
     const [productQuery, setProductQuery] = useState("");
     const [membershipQuery, setMembershipQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
@@ -1140,6 +1141,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         if (!demoMode && sale.id) {
+            if (postSaleInFlightRef.current) {
+                return;
+            }
+            postSaleInFlightRef.current = true;
             void (async () => {
                 try {
                     const result = await voidSaleRequest(sale.id!);
@@ -1152,6 +1157,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     setMessage(`${sale.saleNo} voided. Stock restored.`);
                 } catch (error) {
                     setMessage(error instanceof Error ? error.message : "Void failed.");
+                } finally {
+                    postSaleInFlightRef.current = false;
                 }
             })();
             return;

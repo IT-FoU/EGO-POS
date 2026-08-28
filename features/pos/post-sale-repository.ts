@@ -304,21 +304,32 @@ export async function voidPrismaSale(
     module: "pos",
     newData: input,
     tenant,
-    write: async (tx) => {
-      await lockSaleForUpdate(tx, tenant, saleId);
-      const sale = await loadMutableSale(tx, tenant, saleId);
-      assertSaleVoidable(sale);
-      await voidSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
-      const cashierName = await resolveCashierName(tx, sale.createdBy);
-      return {
-        sale: mapSaleRow(
-          await tx.sale.findFirstOrThrow({ include: saleInclude, where: { id: sale.id } }),
-          cashierName,
-        ),
-        status: "completed" as const,
-      };
-    },
+    write: (tx) => writeVoidPrismaSale(tx, tenant, input),
   });
+}
+
+export async function writeVoidPrismaSale(
+  tx: Record<string, any>,
+  tenant: TenantContext,
+  input: { managerPinApproval?: StoreManagerPinApprovalResult | null; reason?: string; saleId: string },
+): Promise<PostSaleMutationResult> {
+  const saleId = String(input.saleId).trim();
+  await lockSaleForUpdate(tx, tenant, saleId);
+  const sale = await loadMutableSale(tx, tenant, saleId);
+  if (!input.managerPinApproval) {
+    const policy = await buildPosPolicyForTenant(tenant, tx);
+    assertPosActionAllowed(policy, "void_bill", { amountLak: amount(sale.totalAmount) });
+  }
+  assertSaleVoidable(sale);
+  await voidSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
+  const cashierName = await resolveCashierName(tx, sale.createdBy);
+  return {
+    sale: mapSaleRow(
+      await tx.sale.findFirstOrThrow({ include: saleInclude, where: { id: sale.id } }),
+      cashierName,
+    ),
+    status: "completed" as const,
+  };
 }
 
 export async function refundPrismaSale(
@@ -360,20 +371,31 @@ export async function refundPrismaSale(
     module: "pos",
     newData: input,
     tenant,
-    write: async (tx) => {
-      await lockSaleForUpdate(tx, tenant, saleId);
-      const sale = await loadMutableSale(tx, tenant, saleId);
-      await refundSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
-      const cashierName = await resolveCashierName(tx, sale.createdBy);
-      return {
-        sale: mapSaleRow(
-          await tx.sale.findFirstOrThrow({ include: saleInclude, where: { id: sale.id } }),
-          cashierName,
-        ),
-        status: "completed" as const,
-      };
-    },
+    write: (tx) => writeRefundPrismaSale(tx, tenant, input),
   });
+}
+
+export async function writeRefundPrismaSale(
+  tx: Record<string, any>,
+  tenant: TenantContext,
+  input: { managerPinApproval?: StoreManagerPinApprovalResult | null; reason?: string; saleId: string },
+): Promise<PostSaleMutationResult> {
+  const saleId = String(input.saleId).trim();
+  await lockSaleForUpdate(tx, tenant, saleId);
+  const sale = await loadMutableSale(tx, tenant, saleId);
+  if (!input.managerPinApproval) {
+    const policy = await buildPosPolicyForTenant(tenant, tx);
+    assertPosActionAllowed(policy, "refund_bill", { amountLak: amount(sale.totalAmount) });
+  }
+  await refundSaleCore(tx, tenant, sale, input.reason, input.managerPinApproval?.approvedById ?? null);
+  const cashierName = await resolveCashierName(tx, sale.createdBy);
+  return {
+    sale: mapSaleRow(
+      await tx.sale.findFirstOrThrow({ include: saleInclude, where: { id: sale.id } }),
+      cashierName,
+    ),
+    status: "completed" as const,
+  };
 }
 
 export async function voidSaleCore(

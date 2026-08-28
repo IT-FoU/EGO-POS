@@ -6,9 +6,9 @@ Audit date: 2026-08-28
 
 **Result: PARTIAL. Readiness: OWNER UAT ONLY. Do not use this target for real-store operations yet.**
 
-The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). EGO-FIX-03 reconciles `inventory_lots` through POS sale, refund, void, and exchange using FEFO plus allocation provenance. EGO-FIX-04 restored local UAT on `http://localhost:3000`. EGO-FIX-05 closed Products CRUD + first-stock receiving (P1-1). EGO-FIX-06 closed POS product discovery, barcode scan, and basic cart wiring. EGO-FIX-07 closed checkout/payment/receipt integrity on isolated fixtures (28/28); Production GO BOX sales were not created. Remaining live-data gaps are no GO BOX catalogue, stock, sales, or customers. Worker hostname DNS still fails on this PC (P1 deployment). Original production-audit P0 count is 0. Readiness remains OWNER UAT ONLY.
+The codebase contains substantial real database-backed Mini Mart workflows, not a visual-only prototype. TypeScript and the production build pass. EGO-FIX-01 provisioned one Production Super Admin. EGO-FIX-02 reconciled Production migration targeting/history (`20260621_b6_schema_drift_fix` is schema-applied; Prisma status is up to date). EGO-FIX-03 reconciles `inventory_lots` through POS sale, refund, void, and exchange using FEFO plus allocation provenance. EGO-FIX-04 restored local UAT on `http://localhost:3000`. EGO-FIX-05 closed Products CRUD + first-stock receiving (P1-1). EGO-FIX-06 closed POS product discovery, barcode scan, and basic cart wiring. EGO-FIX-07 closed checkout/payment/receipt integrity on isolated fixtures (28/28). EGO-FIX-08 closed refund/void/exchange integrity on isolated fixtures (40/40); Production GO BOX sales/refunds/voids/exchanges were not created. Remaining live-data gaps are no GO BOX catalogue, stock, sales, or customers. Worker hostname DNS still fails on this PC (P1 deployment). Original production-audit P0 count is 0. Readiness remains OWNER UAT ONLY.
 
-The completion estimate is **55% evidence-supported**. It is a weighted audit estimate across code wiring, data readiness, security/configuration, operational accounting, deployment, and completed runtime verification; it is not a claim that 55% of the product is complete.
+The completion estimate is **58% evidence-supported**. It is a weighted audit estimate across code wiring, data readiness, security/configuration, operational accounting, deployment, and completed runtime verification; it is not a claim that 58% of the product is complete.
 
 ## Audit boundary and baseline
 
@@ -78,7 +78,7 @@ EGO-FIX-05: Quick Stock In and Stock In merge active catalogue products that hav
 | --- | --- | --- |
 | POS checkout | Server recomputes totals/promotions/tax/change, validates tender, requires open cash session, creates sale/items/payments, decrements warehouse balance, and consumes inventory lots FEFO | EGO-FIX-07 isolated 28/28; Owner live-catalogue UAT still required |
 | Held bills | Persistent hold-bill server foundation and APIs exist | Source-backed; not runtime-tested |
-| Void/refund/exchange | Server repositories create lifecycle records, restore/consume lots with allocation provenance, and write balance movements | Source-backed; isolated fixtures passed; browser UAT required |
+| Void/refund/exchange | Server repositories create lifecycle records, restore/consume lots with allocation provenance, and write balance movements | EGO-FIX-08 isolated 40/40; Production post-sale writes not run; browser mutations PARTIAL |
 | Cash sessions | Open/close and cash transaction/reconciliation services exist | Source-backed; not runtime-tested |
 | Product unit conversion | Stock-in and POS calculate base quantities from product-unit conversion | Source-backed |
 | Lot/expiry | Receiving creates/updates lots and requires lot/expiry for expiry-tracked product | FIXED in EGO-FIX-03: POS sale/refund/void/exchange consume and restore lots FEFO with `inventory_lot_allocations` provenance; isolated fixture suite passed |
@@ -140,7 +140,7 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | Products/catalogue | Real CRUD, units, search, barcode lookup | Empty on GO BOX; isolated create/search/archive matrix passed | Owner creates live catalogue in UAT; do not seed Production from this phase |
 | Inventory receiving | Real explicit write; first-stock catalogue lookup | Empty on GO BOX; isolated first receive passed | Owner UAT: create product then Confirm Stock In |
 | POS discovery/cart | Real Prisma catalogue, search/scan/cart | Empty on GO BOX; isolated 24/24 passed | Owner creates catalogue then UAT scan on a physical keyboard-wedge scanner |
-| POS checkout/cash/returns | Isolated checkout/payment/receipt PASS | No GO BOX sales | EGO-FIX-08: refund/void/exchange; Owner live-catalogue checkout UAT |
+| POS checkout/cash/returns | Isolated checkout 28/28; isolated refund/void/exchange 40/40 | No GO BOX sales | Owner live-catalogue checkout UAT; Reports still not independently verified |
 | Lot/expiry | Receiving records lots; EGO-FIX-03 FEFO consume/restore | No live catalogue/lots on GO BOX | Enable expiry-tracked products only after a live catalogue exists |
 | Purchasing/payables | Real write paths | Empty | Partial receipt/payment/overpayment and reconciliation UAT |
 | Customers/loyalty/promotions | Real write paths | Empty | Controlled UAT including reversals and cross-tenant tests |
@@ -154,4 +154,4 @@ See `EGO_POS_PRODUCTION_BLOCKERS.md` for owners, risk, verification, and commit 
 
 ## Final conclusion
 
-EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. Original production-audit P0 count is 0. EGO-FIX-05 closed Products first-stock receiving (P1-1). EGO-FIX-06 closed POS discovery/barcode/cart. EGO-FIX-07 closed isolated checkout/payment/receipt integrity. The earliest sensible release stage remains **OWNER UAT ONLY** until an Owner-created live catalogue exists and post-sale refund/void/exchange are independently verified.
+EGO POS is a credible database-backed Mini Mart application with a newly rebuilt UX, but it is **not production-ready**. Original production-audit P0 count is 0. EGO-FIX-05 closed Products first-stock receiving (P1-1). EGO-FIX-06 closed POS discovery/barcode/cart. EGO-FIX-07 closed isolated checkout/payment/receipt integrity. EGO-FIX-08 closed isolated refund/void/exchange integrity. The earliest sensible release stage remains **OWNER UAT ONLY** until an Owner-created live catalogue exists. Reports, promotions, and membership are not independently verified.
