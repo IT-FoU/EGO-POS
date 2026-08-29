@@ -1,4 +1,5 @@
 import { hash } from "bcryptjs";
+import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
@@ -524,7 +525,7 @@ export async function decideApproval(input: DecideApprovalInput, tenant: TenantC
   return decideApprovalRequest(input, tenant);
 }
 
-export async function getUserPermissionKeys(tenant: TenantContext, client: any = db) {
+async function getUserPermissionKeysUncached(tenant: TenantContext, client: any) {
   let membership: TenantMembership;
   try {
     membership = await resolveTenantMembership(tenant, client);
@@ -565,6 +566,17 @@ export async function getUserPermissionKeys(tenant: TenantContext, client: any =
       }),
     ),
   ).filter(Boolean);
+}
+
+const getUserPermissionKeysCached = cache(async (companyId: string, userId: string) =>
+  getUserPermissionKeysUncached({ companyId, userId }, db),
+);
+
+export async function getUserPermissionKeys(tenant: TenantContext, client: any = db) {
+  if (client === db) {
+    return getUserPermissionKeysCached(tenant.companyId, tenant.userId);
+  }
+  return getUserPermissionKeysUncached(tenant, client);
 }
 
 export async function ensureAccessControlCatalog(dbClient: any = db) {

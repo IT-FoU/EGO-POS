@@ -233,7 +233,10 @@ function wiringPass() {
   const dash = readFileSync("features/dashboard/dashboard-service.ts", "utf8");
   assert(!analytics.includes("5940000") && !analytics.includes("56000"), "Reports client still has hardcoded KPI numbers");
   assert(reports.includes("netReportLifecycle") && reports.includes("REPORT_SALE_STATUSES"), "Lifecycle netting missing");
-  assert(dash.includes("getPrismaReportsSnapshot"), "Dashboard does not reuse reports snapshot");
+  assert(dash.includes("getPrismaDashboardSalesKpis"), "Dashboard does not reuse canonical sales KPIs");
+  assert(!dash.includes("getPrismaReportsSnapshot"), "Dashboard still loads the full Reports snapshot");
+  assert(!dash.includes("getPrismaInventorySnapshot"), "Dashboard still loads the inventory snapshot");
+  assert(!dash.includes("getPrismaCustomersSnapshot"), "Dashboard still loads the customers snapshot");
   assert(BUSINESS_TIME_ZONE === "Asia/Vientiane", "Business timezone must be Asia/Vientiane");
   assert(!reports.includes("IGO_DEMO_MODE") && !dash.includes("mock-full-data"), "Demo report leakage in live path");
 }
@@ -850,6 +853,129 @@ async function main() {
     assertClose(dash.cards.totalBillsToday, reports.analytics.totalTransactions, "dash txn");
   });
 
+
+  await isolated("46. Dashboard vs Reports after refund", async (tx) => {
+    const seed = await seedStore(tx);
+    const sale = await sellCash(tx, seed);
+    await writeReturnPrismaSale(tx, seed.tenant, {
+      items: [{ condition: "sellable", quantity: 1, saleItemId: sale.items[0].id }],
+      refundMethod: "cash",
+      saleId: sale.id,
+    });
+    const reports = await getPrismaReportsSnapshot(seed.tenant, ALL, tx);
+    const dash = await getPrismaDashboardSnapshot(seed.tenant, { key: "today" }, tx);
+    assertClose(dash.cards.netSalesLak, reports.analytics.totalRevenue, "dash refund revenue");
+    assertClose(dash.cards.refundLak, reports.refundLak, "dash refund amount");
+    assertClose(dash.cards.cogsLak, reports.cogsLak, "dash refund cogs");
+    assertClose(dash.cards.profitTodayLak, reports.analytics.totalProfit, "dash refund profit");
+  });
+
+  await isolated("47. Dashboard vs Reports after exchange", async (tx) => {
+    const seed = await seedStore(tx);
+    const sale = await sellCash(tx, seed);
+    await writeExchangePrismaSale(tx, seed.tenant, {
+      paidAmountLak: 0,
+      refundMethod: "cash",
+      replacementItems: [{ productId: seed.productA.id, quantity: 1, unitId: seed.unitA.id }],
+      returnedItems: [{ condition: "sellable", quantity: 1, saleItemId: sale.items[0].id }],
+      saleId: sale.id,
+    });
+    const reports = await getPrismaReportsSnapshot(seed.tenant, ALL, tx);
+    const dash = await getPrismaDashboardSnapshot(seed.tenant, { key: "today" }, tx);
+    assertClose(dash.cards.netSalesLak, reports.analytics.totalRevenue, "dash exchange revenue");
+    assertClose(dash.cards.profitTodayLak, reports.analytics.totalProfit, "dash exchange profit");
+  });
+
+  await isolated("48. Dashboard vs Reports QR payment", async (tx) => {
+    const seed = await seedStore(tx);
+    await writeCompletePrismaSale(tx, checkoutInput(seed.tenant, [{
+      productId: seed.productA.id,
+      quantity: 1,
+      sellingPrice: 10000,
+      unitId: seed.unitA.id,
+    }], { paymentMode: "qr", totalAmount: 10000, cashAmount: 0, qrAmount: 10000 }), seed.tenant);
+    const reports = await getPrismaReportsSnapshot(seed.tenant, ALL, tx);
+    const dash = await getPrismaDashboardSnapshot(seed.tenant, { key: "today" }, tx);
+    assertClose(dash.cards.netSalesLak, reports.analytics.totalRevenue, "dash qr revenue");
+    const dashQr = dash.paymentBreakdown.find((row) => row.method === "qr")?.totalLak ?? 0;
+    const reportQr = paymentValue(reports.hub, "QR");
+    assertClose(dashQr, reportQr, "dash qr breakdown");
+  });
+
+  await isolated("49. Dashboard vs Reports inventory value", async (tx) => {
+    const seed = await seedStore(tx);
+    const reports = await getPrismaReportsSnapshot(seed.tenant, ALL, tx);
+    const dash = await getPrismaDashboardSnapshot(seed.tenant, { key: "today" }, tx);
+    assertClose(dash.cards.inventoryValueLak, reports.hub.inventoryValueLak, "dash inventory");
+  });
+
+  await isolated("50. Cashier dashboard denied", async (tx) => {
+    const seed = await seedStore(tx);
+    const clerk = await tx.user.create({
+      data: { fullName: "E9 Dash Clerk", passwordHash: "x", username: `e9d${randomBytes(4).toString("hex")}` },
+    });
+    await tx.companyUser.create({
+      data: {
+        branchId: seed.branchId,
+        companyId: seed.tenant.companyId,
+        isOwner: false,
+        status: "active",
+        userId: clerk.id,
+      },
+    });
+    let denied = false;
+    try {
+      await getPrismaDashboardSnapshot({ ...seed.tenant, userId: clerk.id }, { key: "today" }, tx);
+    } catch (error) {
+      denied = error instanceof PermissionDeniedError || (error instanceof Error && /Permission denied/i.test(error.message));
+    }
+    assert(denied, "clerk dashboard.view must be denied");
+  });
+
+  await isolated("50b. Manager dashboard allowed", async (tx) => {
+    const seed = await seedStore(tx);
+    const permission = await tx.permission.upsert({
+      create: { key: READ_PERMISSIONS.dashboardView, module: "dashboard", name: "Dashboard" },
+      update: {},
+      where: { key: READ_PERMISSIONS.dashboardView },
+    });
+    const managerUser = await tx.user.create({
+      data: { fullName: "E9 Manager", passwordHash: "x", username: `e9m${randomBytes(4).toString("hex")}` },
+    });
+    await tx.companyUser.create({
+      data: {
+        branchId: seed.branchId,
+        companyId: seed.tenant.companyId,
+        isOwner: false,
+        status: "active",
+        userId: managerUser.id,
+      },
+    });
+    const role = await tx.role.create({
+      data: { companyId: seed.tenant.companyId, name: "Manager" },
+    });
+    await tx.rolePermission.create({
+      data: { permissionId: permission.id, roleId: role.id },
+    });
+    await tx.userRole.create({
+      data: { companyId: seed.tenant.companyId, roleId: role.id, userId: managerUser.id },
+    });
+    const dash = await getPrismaDashboardSnapshot(
+      { ...seed.tenant, userId: managerUser.id },
+      { key: "today" },
+      tx,
+    );
+    assertClose(dash.cards.netSalesLak, 0, "manager dashboard loads");
+  });
+
+  await isolated("51. Dashboard tenant isolation", async (tx) => {
+    const a = await seedStore(tx);
+    const b = await seedStore(tx);
+    await sellCash(tx, a);
+    const dashB = await getPrismaDashboardSnapshot(b.tenant, { key: "today" }, tx);
+    assertClose(dashB.cards.netSalesLak, 0, "store B dashboard cannot see store A");
+  });
+
   const after = await goboxCounts(prisma);
   const leaked = await prisma.company.count({ where: { storeCode: { startsWith: "e9" } } });
   assert(after.products === before.products && after.sales === before.sales && after.refunds === before.refunds, "GO BOX mutated");
@@ -861,7 +987,7 @@ async function main() {
     failed: failed.length,
     gobox: after,
     matrixPassed: results.filter((row) => row.status === "PASS").length,
-    matrixTotal: 45,
+    matrixTotal: 52,
     passed: results.filter((row) => row.status === "PASS").length,
     results,
     total: results.length,

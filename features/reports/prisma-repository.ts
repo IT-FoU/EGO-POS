@@ -449,6 +449,173 @@ export async function getReportFilterOptions(tenant: TenantContext, client: any 
   };
 }
 
+function reportPaymentLabel(method: string) {
+  if (method === "visa" || method === "card") return "Card";
+  if (method === "transfer") return "Transfer";
+  if (method === "qr") return "QR";
+  return "Cash";
+}
+
+export type DashboardSalesKpis = {
+  cogsLak: number;
+  discountLak: number;
+  grossSalesLak: number;
+  itemsSold: number;
+  missingSaleLineCosts: boolean;
+  nettedSales: Array<{
+    createdAt: Date;
+    id: string;
+    paymentMethod: string;
+    profitAmount: number;
+    saleNo: string;
+    saleStatus: string;
+    totalAmount: number;
+  }>;
+  paymentBreakdown: Array<{ label: string; totalLak: number }>;
+  paymentRows: Array<{ amount: unknown; changeAmount: unknown; paymentMethod: string; saleId: string }>;
+  productRows: Array<{ name: string; quantity: number; totalLak: number }>;
+  refundLak: number;
+  totalProfit: number;
+  totalRevenue: number;
+  totalTransactions: number;
+};
+
+export async function getPrismaDashboardSalesKpis(
+  scope: BranchScope,
+  range: { dateFrom: Date; dateTo: Date },
+  client: any,
+): Promise<DashboardSalesKpis> {
+  const filters = clampReportFilters(scope, resolveEffectiveFilters({
+    branchId: scope.branchId,
+    dateFrom: range.dateFrom,
+    datePreset: "custom",
+    dateTo: range.dateTo,
+    warehouseId: scope.warehouseId || undefined,
+  }));
+  const saleFilter = buildSaleWhere(scope, filters);
+  const saleItemFilter = buildSaleItemWhere(saleFilter, filters);
+
+  const [salesByPeriod, saleItemCostRows, refundRows, paymentRows, products] = await Promise.all([
+    client.sale.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        createdAt: true,
+        discountAmount: true,
+        id: true,
+        profitAmount: true,
+        saleNo: true,
+        saleStatus: true,
+        taxAmount: true,
+        totalAmount: true,
+        payments: { select: { paymentMethod: true }, take: 1 },
+      },
+      where: saleFilter,
+    }),
+    client.saleItem.findMany({
+      select: {
+        costPrice: true,
+        id: true,
+        productId: true,
+        profitAmount: true,
+        quantity: true,
+        totalAmount: true,
+      },
+      where: saleItemFilter,
+    }),
+    client.refund.findMany({
+      select: {
+        exchangeItems: { select: { costPrice: true, productId: true, quantity: true, totalAmount: true } },
+        items: { select: { amount: true, productId: true, quantity: true, saleItemId: true } },
+        kind: true,
+        paymentAmount: true,
+        refundAmount: true,
+        refundMethod: true,
+        saleId: true,
+        totalAmount: true,
+      },
+      where: { sale: saleFilter },
+    }),
+    client.salePayment.findMany({
+      select: { amount: true, changeAmount: true, paymentMethod: true, saleId: true },
+      where: { sale: saleFilter },
+    }),
+    client.product.findMany({
+      select: { id: true, nameEn: true, nameLo: true },
+      where: { companyId: scope.companyId },
+    }),
+  ]);
+
+  const lifecycleNet = netReportLifecycle(refundRows, saleItemCostRows);
+  const nettedSalesByPeriod = applyLifecycleToSaleRows(salesByPeriod, refundRows, saleItemCostRows);
+  const grossSalesLak = salesByPeriod.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.totalAmount),
+    0,
+  );
+  const discountLak = salesByPeriod.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.discountAmount),
+    0,
+  );
+  const totalRevenue = grossSalesLak + lifecycleNet.revenueLak;
+  const totalProfit = salesByPeriod.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.profitAmount),
+    0,
+  ) + lifecycleNet.profitLak;
+  const totalCogsLak = saleItemCostRows.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.costPrice) * amount(row.quantity),
+    0,
+  ) + lifecycleNet.cogsLak;
+  const itemsSold = saleItemCostRows.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.quantity),
+    0,
+  ) + lifecycleNet.quantitySold;
+  const productById = new Map<string, { nameEn: string; nameLo: string }>(
+    products.map((product: { id: string; nameEn: string; nameLo: string }) => [product.id, product]),
+  );
+  const nettedProductTotals = buildNettedProductTotals(saleItemCostRows, refundRows);
+  const productRows = Array.from(nettedProductTotals.entries())
+    .map(([productId, totals]) => {
+      const product = productById.get(productId);
+      return {
+        name: product?.nameEn || product?.nameLo || productId,
+        quantity: totals.quantitySold,
+        totalLak: Math.round(totals.revenueLak),
+      };
+    })
+    .sort((left, right) => right.totalLak - left.totalLak)
+    .slice(0, 10);
+  const nettedPaymentGroups = netPaymentGroups(paymentTotalsFromRows(paymentRows), refundRows);
+  const paymentBreakdown = nettedPaymentGroups.map((row: Record<string, any>) => ({
+    label: reportPaymentLabel(String(row.paymentMethod ?? "cash")),
+    totalLak: Math.round(amount(row._sum.amount)),
+  }));
+
+  return {
+    cogsLak: Math.round(totalCogsLak),
+    discountLak,
+    grossSalesLak,
+    itemsSold,
+    missingSaleLineCosts: saleItemCostRows.some(
+      (row: Record<string, any>) => row.costPrice == null || !Number.isFinite(Number(row.costPrice)),
+    ),
+    nettedSales: nettedSalesByPeriod.map((row: Record<string, any>) => ({
+      createdAt: row.createdAt,
+      id: String(row.id),
+      paymentMethod: String(row.payments?.[0]?.paymentMethod ?? "cash"),
+      profitAmount: amount(row.profitAmount),
+      saleNo: String(row.saleNo ?? ""),
+      saleStatus: String(row.saleStatus ?? ""),
+      totalAmount: amount(row.totalAmount),
+    })),
+    paymentBreakdown,
+    paymentRows,
+    productRows,
+    refundLak: Math.round(refundRows.reduce((total: number, refund: Record<string, any>) => total + refundAmountOf(refund), 0)),
+    totalProfit,
+    totalRevenue,
+    totalTransactions: salesByPeriod.length,
+  };
+}
+
 export async function getPrismaReportsSnapshot(
   tenant: TenantContext,
   rawFilters?: ReportFilters,

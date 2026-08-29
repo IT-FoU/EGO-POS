@@ -1,6 +1,6 @@
 import { computeCashSessionTotalsForShift } from "@/features/cash-sessions/prisma-repository";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
-import { getPrismaReportsSnapshot, netReportLifecycle } from "@/features/reports/prisma-repository";
+import { getPrismaDashboardSalesKpis } from "@/features/reports/prisma-repository";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
@@ -349,551 +349,517 @@ export async function getMiniMartDashboardSnapshot(
 
 /*
  * Dashboard calculation contract
- * - Revenue, transaction count, profit, COGS, inventory value, product rows, and
- *   Reports-aligned payment/product aggregates come from getPrismaReportsSnapshot.
- * - Reports nets refunds/exchanges via netReportLifecycle; Dashboard must not
- *   subtract refunds again from already-netted revenue.
- * - Dashboard-specific queries are limited to operational widgets such as current
- *   shift state, alerts, recent bills, low-stock list, hourly sales, and close-day
- *   drawer data. Hourly LAK uses the same lifecycle net as Reports.
+ * - Revenue, transaction count, profit, COGS, payment totals, and top products
+ *   come from getPrismaDashboardSalesKpis, which reuses the same sale filters and
+ *   netReportLifecycle netting as Reports. Dashboard must not subtract refunds
+ *   again from already-netted revenue.
+ * - Dashboard does not load the Reports page catalogues (products/inventory/
+ *   customers/suppliers snapshots) on first paint.
+ * - Operational widgets (shift, alerts, low-stock, hourly, close-day) use
+ *   aggregates, counts, and slim selects in one parallel wave after tenant scope.
  * - Query failures never produce mock metrics. The service returns an empty
  *   snapshot with dataStatus.hasError so callers can show an unavailable state.
- * - No cache is applied here until checkout/refund/void invalidation exists.
+ * - No cross-request cache is applied here until checkout/refund/void invalidation exists.
  * - Date ranges use inclusive start and exclusive end; custom ranges include the
  *   full selected end day in the Asia/Vientiane business timezone.
  */
+function dashboardLoadTimingEnabled() {
+  return process.env.IGO_DASHBOARD_LOAD_TIMING === "1";
+}
+
+async function timedDashboardLoad<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  if (!dashboardLoadTimingEnabled()) {
+    return fn();
+  }
+  const started = Date.now();
+  try {
+    return await fn();
+  } finally {
+    console.info(`[dashboard-load] ${label} ${Date.now() - started}ms`);
+  }
+}
+
+function inventoryBalanceValueLak(row: {
+  product: {
+    costPriceLak: unknown;
+    units?: Array<{ costPriceLak: unknown; isBaseUnit?: boolean }>;
+  };
+  quantity: unknown;
+}) {
+  const units = row.product.units ?? [];
+  const baseUnit = units.find((unit) => unit.isBaseUnit) ?? units[0];
+  return amount(row.quantity) * amount(baseUnit?.costPriceLak ?? row.product.costPriceLak);
+}
+
 export async function getPrismaDashboardSnapshot(
   tenant: TenantContext,
   range: DashboardDateRange,
   client: any = prisma,
 ): Promise<DashboardSnapshot> {
   await assertPermission(tenant, READ_PERMISSIONS.dashboardView, client);
-  const scope = await resolveTenantScope(tenant, client);
   const db = client as any;
+  const started = dashboardLoadTimingEnabled() ? Date.now() : 0;
+  const scope = await timedDashboardLoad("scope", () => resolveTenantScope(tenant, client));
   const { end, label, start } = resolveDateRange(range);
+  const dateTo = new Date(end.getTime() - 1);
   const nearExpiryEnd = plusDays(start, 30);
   const deadStockCutoff = plusDays(new Date(), -30);
   const historicalStart = plusDays(start, -30);
   const branchWhere = { branchId: scope.branchId };
   const warehouseWhere = { warehouseId: scope.warehouseId };
+  const reportSaleWhere = {
+    ...branchWhere,
+    companyId: tenant.companyId,
+    createdAt: { gte: start, lt: end },
+    saleStatus: { in: [...REPORT_SALE_STATUSES] },
+  };
 
-  const [sales, salePayments, inventoryBalances, reportsSnapshot] = await Promise.all([
-    db.sale.findMany({
-      include: {
-        items: {
-          include: {
-            product: {
-              select: {
-                nameEn: true,
-                nameLo: true,
+  const [
+    salesKpis,
+    inventoryBalances,
+    nearExpiryCount,
+    expiredCount,
+    customerCredit,
+    supplierPayables,
+    currentShift,
+    todayShifts,
+    deadStockProducts,
+    historicalSales,
+    promotionDiscount,
+    loyaltyRedeemed,
+    voidCount,
+  ] = await timedDashboardLoad("parallel-reads", () =>
+    Promise.all([
+      getPrismaDashboardSalesKpis(scope, { dateFrom: start, dateTo }, db),
+      db.inventoryBalance.findMany({
+        select: {
+          quantity: true,
+          product: {
+            select: {
+              costPriceLak: true,
+              minStock: true,
+              nameEn: true,
+              nameLo: true,
+              units: { select: { costPriceLak: true, isBaseUnit: true } },
+            },
+          },
+        },
+        where: {
+          ...warehouseWhere,
+          companyId: tenant.companyId,
+        },
+      }),
+      db.inventoryLot.count({
+        where: {
+          ...warehouseWhere,
+          companyId: tenant.companyId,
+          expiryDate: { gte: start, lt: nearExpiryEnd },
+          quantity: { gt: 0 },
+        },
+      }),
+      db.inventoryLot.count({
+        where: {
+          ...warehouseWhere,
+          companyId: tenant.companyId,
+          expiryDate: { lt: start },
+          quantity: { gt: 0 },
+        },
+      }),
+      db.customer.aggregate({
+        _sum: { outstandingBalance: true },
+        where: {
+          ...branchWhere,
+          companyId: tenant.companyId,
+          outstandingBalance: { gt: 0 },
+          status: "active",
+        },
+      }),
+      db.supplierPayable.aggregate({
+        _sum: { balanceAmount: true },
+        where: {
+          companyId: tenant.companyId,
+        },
+      }),
+      db.cashSession.findFirst({
+        include: { transactions: true },
+        orderBy: { openedAt: "desc" },
+        where: {
+          ...branchWhere,
+          cashierId: tenant.userId,
+          closedAt: null,
+          companyId: tenant.companyId,
+        },
+      }),
+      db.cashSession.findMany({
+        include: { transactions: true },
+        orderBy: { openedAt: "asc" },
+        where: {
+          ...branchWhere,
+          companyId: tenant.companyId,
+          openedAt: { gte: start, lt: end },
+        },
+      }),
+      db.product.count({
+        where: {
+          ...branchWhere,
+          companyId: tenant.companyId,
+          isActive: true,
+          saleItems: {
+            none: {
+              sale: {
+                createdAt: { gte: deadStockCutoff },
+                saleStatus: { in: [...REPORT_SALE_STATUSES] },
               },
             },
           },
         },
-        payments: {
-          select: {
-            paymentMethod: true,
-          },
-        },
-        refunds: {
-          include: {
-            exchangeItems: true,
-            items: true,
-          },
-        },
-      },
-      where: {
-        ...branchWhere,
-        companyId: tenant.companyId,
-        createdAt: { gte: start, lt: end },
-        saleStatus: { in: [...REPORT_SALE_STATUSES] },
-      },
-    }),
-    db.salePayment.findMany({
-      include: {
-        sale: {
-          select: {
-            branchId: true,
-            companyId: true,
-          },
-        },
-      },
-      where: {
-        paymentDate: { gte: start, lt: end },
-        sale: {
+      }),
+      db.sale.aggregate({
+        _sum: { totalAmount: true },
+        where: {
           ...branchWhere,
           companyId: tenant.companyId,
+          createdAt: { gte: historicalStart, lt: start },
           saleStatus: { in: [...REPORT_SALE_STATUSES] },
         },
-      },
-    }),
-    db.inventoryBalance.findMany({
-      include: {
-        product: {
-          select: {
-            costPriceLak: true,
-            minStock: true,
-            nameEn: true,
-            nameLo: true,
-          },
+      }),
+      db.saleItem.aggregate({
+        _sum: { promotionDiscount: true },
+        where: { sale: reportSaleWhere },
+      }),
+      db.loyaltyPointLedger.aggregate({
+        _sum: { amountLak: true },
+        where: {
+          companyId: tenant.companyId,
+          createdAt: { gte: start, lt: end },
+          pointType: "redeem",
         },
-      },
-      where: {
-        ...warehouseWhere,
-        companyId: tenant.companyId,
-      },
-    }),
-    getPrismaReportsSnapshot(tenant, {
-      branchId: scope.branchId,
-      dateFrom: start,
-      datePreset: "custom",
-      dateTo: new Date(end.getTime() - 1),
-      warehouseId: scope.warehouseId || undefined,
-    }, db),
-  ]);
-
-  if (reportsSnapshot.dataQuality.status === "unavailable" || reportsSnapshot.dataQuality.status === "error") {
-    throw new Error(`Reports snapshot unavailable: ${reportsSnapshot.dataQuality.failedScopes.join(", ")}`);
-  }
-
-  const [nearExpiryLots, expiredLots, customerCredit] = await Promise.all([
-    db.inventoryLot.findMany({
-      include: {
-        product: {
-          select: {
-            nameEn: true,
-            nameLo: true,
-          },
-        },
-      },
-      where: {
-        ...warehouseWhere,
-        companyId: tenant.companyId,
-        expiryDate: { gte: start, lt: nearExpiryEnd },
-        quantity: { gt: 0 },
-      },
-    }),
-    db.inventoryLot.findMany({
-      where: {
-        ...warehouseWhere,
-        companyId: tenant.companyId,
-        expiryDate: { lt: start },
-        quantity: { gt: 0 },
-      },
-    }),
-    db.customer.aggregate({
-      _sum: { outstandingBalance: true },
-      where: {
-        ...branchWhere,
-        companyId: tenant.companyId,
-        outstandingBalance: { gt: 0 },
-        status: "active",
-      },
-    }),
-  ]);
-
-  const [supplierPayables, currentShift, todayShifts] = await Promise.all([
-    db.supplierPayable.aggregate({
-      _sum: { balanceAmount: true },
-      where: {
-        companyId: tenant.companyId,
-      },
-    }),
-    db.cashSession.findFirst({
-      include: { transactions: true },
-      orderBy: { openedAt: "desc" },
-      where: {
-        ...branchWhere,
-        cashierId: tenant.userId,
-        closedAt: null,
-        companyId: tenant.companyId,
-      },
-    }),
-    db.cashSession.findMany({
-      include: { transactions: true },
-      orderBy: { openedAt: "asc" },
-      where: {
-        ...branchWhere,
-        companyId: tenant.companyId,
-        openedAt: { gte: start, lt: end },
-      },
-    }),
-  ]);
-
-  const [deadStockProducts, historicalSales, saleItemPromotionRows] = await Promise.all([
-    db.product.count({
-      where: {
-        ...branchWhere,
-        companyId: tenant.companyId,
-        isActive: true,
-        saleItems: {
-          none: {
-            sale: {
-              createdAt: { gte: deadStockCutoff },
-              saleStatus: { in: [...REPORT_SALE_STATUSES] },
-            },
-          },
-        },
-      },
-    }),
-    db.sale.findMany({
-      select: { totalAmount: true },
-      where: {
-        ...branchWhere,
-        companyId: tenant.companyId,
-        createdAt: { gte: historicalStart, lt: start },
-        saleStatus: { in: [...REPORT_SALE_STATUSES] },
-      },
-    }),
-    db.saleItem.findMany({
-      select: { promotionDiscount: true },
-      where: {
-        sale: {
+      }),
+      db.sale.count({
+        where: {
           ...branchWhere,
           companyId: tenant.companyId,
           createdAt: { gte: start, lt: end },
-          saleStatus: { in: [...REPORT_SALE_STATUSES] },
+          saleStatus: "cancelled",
         },
-      },
-    }),
-  ]);
+      }),
+    ]),
+  );
 
-  const [loyaltyRedeemLedger, voidCount] = await Promise.all([
-    db.loyaltyPointLedger.findMany({
-      select: { amountLak: true },
-      where: {
-        companyId: tenant.companyId,
-        createdAt: { gte: start, lt: end },
-        pointType: "redeem",
-      },
-    }),
-    db.sale.count({
-      where: {
-        ...branchWhere,
-        companyId: tenant.companyId,
-        createdAt: { gte: start, lt: end },
-        saleStatus: "cancelled",
-      },
-    }),
-  ]);
-
-    type DashSale = {
-      createdAt: Date;
-      discountAmount: unknown;
-      items: Array<Record<string, any>>;
-      payments: Array<{ paymentMethod?: string }>;
-      refunds?: Array<Record<string, any>>;
-      saleNo: string;
-      saleStatus: string;
-      totalAmount: unknown;
+  type DashBalance = {
+    product: {
+      costPriceLak: unknown;
+      minStock: unknown;
+      nameEn: string;
+      nameLo: string;
+      units?: Array<{ costPriceLak: unknown; isBaseUnit?: boolean }>;
     };
-    type DashBalance = {
-      product: { costPriceLak: unknown; minStock: unknown; nameEn: string; nameLo: string };
-      quantity: unknown;
-    };
-    type DashTxn = { amount: unknown; transactionType: string };
-    const saleRows = sales as DashSale[];
-    const inventoryRows = inventoryBalances as DashBalance[];
-    const historicalRows = historicalSales as Array<{ totalAmount: unknown }>;
-    const promotionRows = saleItemPromotionRows as Array<{ promotionDiscount: unknown }>;
-    const loyaltyRows = loyaltyRedeemLedger as Array<{ amountLak: unknown }>;
-    const shiftTxns = (currentShift?.transactions ?? []) as DashTxn[];
-
-    const grossSalesLak = saleRows.reduce((total, sale) => total + amount(sale.totalAmount), 0);
-    const discountLak = saleRows.reduce((total, sale) => total + amount(sale.discountAmount), 0);
-    const promotionDiscountLak = promotionRows.reduce((total, row) => total + amount(row.promotionDiscount), 0);
-    const loyaltyRedeemedLak = loyaltyRows.reduce((total, row) => total + amount(row.amountLak), 0);
-    const salesTodayLak = amount(reportsSnapshot.analytics.totalRevenue);
-    const profitTodayLak = amount(reportsSnapshot.analytics.totalProfit);
-    const cogsLak = amount(reportsSnapshot.cogsLak);
-    const refundLak = amount(reportsSnapshot.refundLak);
-    const netSalesLak = salesTodayLak;
-    const inventoryValueLak = amount(reportsSnapshot.hub.inventoryValueLak);
-    const itemsSoldToday = amount(reportsSnapshot.hub.itemsSold);
-    const profitWarnings: string[] = [];
-    const missingSaleLineCosts = saleRows.some((sale) =>
-      sale.items.some((item) => item.costPrice == null || !Number.isFinite(Number(item.costPrice))),
-    );
-    if (missingSaleLineCosts) {
-      profitWarnings.push("Some sale lines are missing cost snapshots; profit and COGS may be partial.");
-    }
-    const missingInventoryCosts = inventoryRows.some(
-      (balance) => balance.product.costPriceLak == null || !Number.isFinite(Number(balance.product.costPriceLak)),
-    );
-    if (missingInventoryCosts) {
-      profitWarnings.push("Some inventory items are missing product cost; inventory value may be partial.");
-    }
-    const cashSalesLak = reportsSnapshot.hub.paymentBreakdown
-      .filter((row) => row.label.toLowerCase() === "cash")
-      .reduce((total, row) => total + amount(row.value), 0);
-    const qrTransferSalesLak = reportsSnapshot.hub.paymentBreakdown
-      .filter((row) => ["qr", "transfer", "card"].includes(row.label.toLowerCase()))
-      .reduce((total, row) => total + amount(row.value), 0);
-    const selectedDays = Math.max(Math.ceil((end.getTime() - start.getTime()) / 86_400_000), 1);
-    const historicalAverageLak =
-      historicalRows.reduce((total, sale) => total + amount(sale.totalAmount), 0) / 30;
-    const selectedDailyAverageLak = salesTodayLak / selectedDays;
-    const lowSalesPercent =
-      historicalAverageLak > 0 && selectedDailyAverageLak < historicalAverageLak
-        ? Math.round(((historicalAverageLak - selectedDailyAverageLak) / historicalAverageLak) * 100)
-        : 0;
-    const lowStockProducts = inventoryRows.filter(
-      (balance) => amount(balance.quantity) <= amount(balance.product.minStock),
-    );
-    const lowStockItems = lowStockProducts
-      .map((balance) => ({
-        minStock: amount(balance.product.minStock),
-        name: balance.product.nameEn || balance.product.nameLo,
-        quantity: amount(balance.quantity),
-      }))
-      .sort((left, right) => left.quantity - right.quantity)
-      .slice(0, 20);
-    const cashInLak = shiftTxns
-      .filter((transaction) => transaction.transactionType === "cash_in")
-      .reduce((total, transaction) => total + amount(transaction.amount), 0);
-    const cashOutLak = shiftTxns
-      .filter((transaction) => transaction.transactionType === "cash_out")
-      .reduce((total, transaction) => total + amount(transaction.amount), 0);
-    const openingCashLak = amount(currentShift?.openingCash);
-    const currentShiftTotals = currentShift
-      ? await computeCashSessionTotalsForShift(currentShift, new Date(), db)
-      : null;
-    const expectedCashLak = currentShiftTotals?.expectedCashLak ?? openingCashLak;
-    const hourlySales = emptySnapshot().hourlySales.map((point, hour) => ({
-      ...point,
-      salesLak: saleRows
-        .filter((sale) => businessHour(sale.createdAt) === hour)
-        .reduce((total, sale) => {
-          const net = netReportLifecycle(sale.refunds ?? [], sale.items ?? []);
-          return total + amount(sale.totalAmount) + net.revenueLak;
-        }, 0),
-    }));
-    const topProducts = reportsSnapshot.productRows
-      .slice(0, 10)
-      .map((row) => ({
-        name: row.productName,
-        quantity: row.quantitySold,
-        totalLak: row.revenueLak,
-      }));
-    const recentSales = [...saleRows]
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-      .slice(0, 20)
-      .map((sale) => ({
-        createdAt: sale.createdAt.toISOString(),
-        paymentMethod: sale.payments[0]?.paymentMethod ? String(sale.payments[0].paymentMethod) : "cash",
-        saleNo: sale.saleNo,
-        status: sale.saleStatus,
-        totalLak: amount(sale.totalAmount) + netReportLifecycle(sale.refunds ?? [], sale.items ?? []).revenueLak,
-      }));
-    const paymentBreakdown = reportsSnapshot.hub.paymentBreakdown.map((row) => ({
-      method: row.label.toLowerCase(),
-      totalLak: amount(row.value),
-    }));
-    const billIdsByCurrency = new Map<DashboardCurrencyCode, Set<string>>([
-      ["LAK", new Set()],
-      ["THB", new Set()],
-      ["USD", new Set()],
-    ]);
-    const paymentByCurrency = new Map<DashboardCurrencyCode, Map<string, number>>([
-      ["LAK", new Map()],
-      ["THB", new Map()],
-      ["USD", new Map()],
-    ]);
-    for (const payment of salePayments) {
-      // The current sale_payments schema stores base LAK amounts only. Until
-      // production multi-currency fields exist, do not convert LAK into THB/USD.
-      const currency: DashboardCurrencyCode = "LAK";
-      const method = String(payment.paymentMethod ?? "cash");
-      billIdsByCurrency.get(currency)?.add(payment.saleId);
-      const methodTotals = paymentByCurrency.get(currency);
-      methodTotals?.set(method, (methodTotals.get(method) ?? 0) + amount(payment.amount));
-    }
-    const currencyBreakdown: DashboardCurrencyBreakdown[] = (["LAK", "THB", "USD"] as DashboardCurrencyCode[])
-      .map((currency) => {
-        const methodTotals = paymentByCurrency.get(currency) ?? new Map<string, number>();
-        return {
-          billCount: billIdsByCurrency.get(currency)?.size ?? 0,
-          currency,
-          paymentMethods: Array.from(methodTotals.entries()).map(([method, total]) => ({ method, total })),
-          total: Array.from(methodTotals.values()).reduce((sum, total) => sum + total, 0),
-        };
-      });
-    const shiftSummaries: ShiftSummary[] = [];
-    for (const shift of todayShifts) {
-      const shiftEnd = shift.closedAt ?? new Date();
-      const totals = await computeCashSessionTotalsForShift(shift, shiftEnd, db);
-      const counted = amount(shift.closingCash);
-      const expectedCashLak = amount(shift.expectedCash) || totals.expectedCashLak;
-      shiftSummaries.push({
-        cashierId: shift.cashierId,
-        closedAt: shift.closedAt?.toISOString() ?? null,
-        countedCashLak: counted,
-        differenceLak: amount(shift.cashDifference) || counted - expectedCashLak,
-        expectedCashLak,
-        openedAt: shift.openedAt.toISOString(),
-        openingCashLak: amount(shift.openingCash),
-        status: shift.closedAt ? "closed" : "open",
-      });
-    }
-    const closeDayExpectedCashLak = shiftSummaries.length > 0
-      ? shiftSummaries.reduce((total, shift) => total + shift.expectedCashLak, 0)
-      : expectedCashLak;
-    const alerts: DashboardAlert[] = [
-      deadStockProducts > 0
-        ? {
-            href: "/inventory",
-            message: "Products not sold for more than 30 days",
-            severity: "warning",
-            title: "Dead Stock",
-            type: "Inventory",
-            value: String(deadStockProducts),
-          }
-        : null,
-      lowSalesPercent > 0
-        ? {
-            href: "/reports/sales",
-            message: "Sales lower than expected",
-            severity: "warning",
-            title: "Low Sales Warning",
-            type: "Sales",
-            value: `${lowSalesPercent}% below average`,
-          }
-        : null,
-      lowStockProducts.length > 0
-        ? {
-            href: "/inventory",
-            message: `${lowStockProducts.length} products need stock review.`,
-            severity: "warning",
-            title: "Low stock",
-            type: "Inventory",
-            value: String(lowStockProducts.length),
-          }
-        : null,
-      nearExpiryLots.length > 0
-        ? {
-            href: "/inventory",
-            message: `${nearExpiryLots.length} lots expire within 30 days.`,
-            severity: "warning",
-            title: "Near expiry",
-            type: "Expiry",
-            value: String(nearExpiryLots.length),
-          }
-        : null,
-      expiredLots.length > 0
-        ? {
-            href: "/inventory",
-            message: `${expiredLots.length} expired lots should be reviewed.`,
-            severity: "critical",
-            title: "Expired products",
-            type: "Expiry",
-            value: String(expiredLots.length),
-          }
-        : null,
-      amount(supplierPayables._sum.balanceAmount) > 0
-        ? {
-            href: "/purchasing/payables",
-            message: `${amount(supplierPayables._sum.balanceAmount).toLocaleString("en-US")} LAK due to suppliers.`,
-            severity: "warning",
-            title: "Supplier due",
-            type: "Payables",
-            value: formatLak(amount(supplierPayables._sum.balanceAmount)),
-          }
-        : null,
-      amount(customerCredit._sum.outstandingBalance) > 0
-        ? {
-            href: "/customers",
-            message: `${amount(customerCredit._sum.outstandingBalance).toLocaleString("en-US")} LAK customer credit outstanding.`,
-            severity: "info",
-            title: "Customer credit due",
-            type: "Credit",
-            value: formatLak(amount(customerCredit._sum.outstandingBalance)),
-          }
-        : null,
-      shiftSummaries.some((shift) => shift.differenceLak !== 0)
-        ? {
-            href: "/dashboard",
-            message: "Cash count does not match expected amount",
-            severity: "critical",
-            title: "Cash Difference",
-            type: "Cash",
-            value: formatLak(shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0)),
-          }
-        : null,
-    ].filter(Boolean) as DashboardAlert[];
-
+    quantity: unknown;
+  };
+  type DashTxn = { amount: unknown; transactionType: string };
+  const inventoryRows = inventoryBalances as DashBalance[];
+  const shiftTxns = (currentShift?.transactions ?? []) as DashTxn[];
+  const grossSalesLak = salesKpis.grossSalesLak;
+  const discountLak = salesKpis.discountLak;
+  const promotionDiscountLak = amount(promotionDiscount._sum.promotionDiscount);
+  const loyaltyRedeemedLak = amount(loyaltyRedeemed._sum.amountLak);
+  const salesTodayLak = amount(salesKpis.totalRevenue);
+  const profitTodayLak = amount(salesKpis.totalProfit);
+  const cogsLak = amount(salesKpis.cogsLak);
+  const refundLak = amount(salesKpis.refundLak);
+  const netSalesLak = salesTodayLak;
+  const inventoryValueLak = Math.round(
+    inventoryRows.reduce((total, balance) => total + inventoryBalanceValueLak(balance), 0),
+  );
+  const itemsSoldToday = amount(salesKpis.itemsSold);
+  const profitWarnings: string[] = [];
+  if (salesKpis.missingSaleLineCosts) {
+    profitWarnings.push("Some sale lines are missing cost snapshots; profit and COGS may be partial.");
+  }
+  const missingInventoryCosts = inventoryRows.some((balance) => {
+    const units = balance.product.units ?? [];
+    const baseUnit = units.find((unit) => unit.isBaseUnit) ?? units[0];
+    const cost = baseUnit?.costPriceLak ?? balance.product.costPriceLak;
+    return cost == null || !Number.isFinite(Number(cost));
+  });
+  if (missingInventoryCosts) {
+    profitWarnings.push("Some inventory items are missing product cost; inventory value may be partial.");
+  }
+  const cashSalesLak = salesKpis.paymentBreakdown
+    .filter((row) => row.label.toLowerCase() === "cash")
+    .reduce((total, row) => total + amount(row.totalLak), 0);
+  const qrTransferSalesLak = salesKpis.paymentBreakdown
+    .filter((row) => ["qr", "transfer", "card"].includes(row.label.toLowerCase()))
+    .reduce((total, row) => total + amount(row.totalLak), 0);
+  const selectedDays = Math.max(Math.ceil((end.getTime() - start.getTime()) / 86_400_000), 1);
+  const historicalAverageLak = amount(historicalSales._sum.totalAmount) / 30;
+  const selectedDailyAverageLak = salesTodayLak / selectedDays;
+  const lowSalesPercent =
+    historicalAverageLak > 0 && selectedDailyAverageLak < historicalAverageLak
+      ? Math.round(((historicalAverageLak - selectedDailyAverageLak) / historicalAverageLak) * 100)
+      : 0;
+  const lowStockProducts = inventoryRows.filter(
+    (balance) => amount(balance.quantity) <= amount(balance.product.minStock),
+  );
+  const lowStockItems = lowStockProducts
+    .map((balance) => ({
+      minStock: amount(balance.product.minStock),
+      name: balance.product.nameEn || balance.product.nameLo,
+      quantity: amount(balance.quantity),
+    }))
+    .sort((left, right) => left.quantity - right.quantity)
+    .slice(0, 20);
+  const cashInLak = shiftTxns
+    .filter((transaction) => transaction.transactionType === "cash_in")
+    .reduce((total, transaction) => total + amount(transaction.amount), 0);
+  const cashOutLak = shiftTxns
+    .filter((transaction) => transaction.transactionType === "cash_out")
+    .reduce((total, transaction) => total + amount(transaction.amount), 0);
+  const openingCashLak = amount(currentShift?.openingCash);
+  const shiftsForTotals = new Map<string, Record<string, any>>();
+  if (currentShift) {
+    shiftsForTotals.set(String(currentShift.id), currentShift);
+  }
+  for (const shift of todayShifts as Array<Record<string, any>>) {
+    shiftsForTotals.set(String(shift.id), shift);
+  }
+  const shiftTotalsEntries = await timedDashboardLoad("cash-session-totals", () =>
+    Promise.all(
+      Array.from(shiftsForTotals.values()).map(async (shift) => {
+        const shiftEnd = shift.closedAt ?? new Date();
+        const totals = await computeCashSessionTotalsForShift(shift, shiftEnd, db);
+        return [String(shift.id), totals] as const;
+      }),
+    ),
+  );
+  const totalsByShiftId = new Map(shiftTotalsEntries);
+  const currentShiftTotals = currentShift ? totalsByShiftId.get(String(currentShift.id)) ?? null : null;
+  const expectedCashLak = currentShiftTotals?.expectedCashLak ?? openingCashLak;
+  const hourlySales = emptySnapshot().hourlySales.map((point, hour) => ({
+    ...point,
+    salesLak: salesKpis.nettedSales
+      .filter((sale) => businessHour(sale.createdAt) === hour)
+      .reduce((total, sale) => total + amount(sale.totalAmount), 0),
+  }));
+  const topProducts = salesKpis.productRows.slice(0, 10);
+  const recentSales = salesKpis.nettedSales.slice(0, 20).map((sale) => ({
+    createdAt: sale.createdAt.toISOString(),
+    paymentMethod: sale.paymentMethod,
+    saleNo: sale.saleNo,
+    status: sale.saleStatus,
+    totalLak: amount(sale.totalAmount),
+  }));
+  const paymentBreakdown = salesKpis.paymentBreakdown.map((row) => ({
+    method: row.label.toLowerCase(),
+    totalLak: amount(row.totalLak),
+  }));
+  const billIdsByCurrency = new Map<DashboardCurrencyCode, Set<string>>([
+    ["LAK", new Set()],
+    ["THB", new Set()],
+    ["USD", new Set()],
+  ]);
+  const paymentByCurrency = new Map<DashboardCurrencyCode, Map<string, number>>([
+    ["LAK", new Map()],
+    ["THB", new Map()],
+    ["USD", new Map()],
+  ]);
+  for (const payment of salesKpis.paymentRows) {
+    // The current sale_payments schema stores base LAK amounts only. Until
+    // production multi-currency fields exist, do not convert LAK into THB/USD.
+    const currency: DashboardCurrencyCode = "LAK";
+    const method = String(payment.paymentMethod ?? "cash");
+    billIdsByCurrency.get(currency)?.add(payment.saleId);
+    const methodTotals = paymentByCurrency.get(currency);
+    methodTotals?.set(method, (methodTotals.get(method) ?? 0) + amount(payment.amount));
+  }
+  const currencyBreakdown: DashboardCurrencyBreakdown[] = (["LAK", "THB", "USD"] as DashboardCurrencyCode[])
+    .map((currency) => {
+      const methodTotals = paymentByCurrency.get(currency) ?? new Map<string, number>();
+      return {
+        billCount: billIdsByCurrency.get(currency)?.size ?? 0,
+        currency,
+        paymentMethods: Array.from(methodTotals.entries()).map(([method, total]) => ({ method, total })),
+        total: Array.from(methodTotals.values()).reduce((sum, total) => sum + total, 0),
+      };
+    });
+  const shiftSummaries: ShiftSummary[] = (todayShifts as Array<Record<string, any>>).map((shift) => {
+    const totals = totalsByShiftId.get(String(shift.id));
+    const counted = amount(shift.closingCash);
+    const shiftExpectedCashLak = amount(shift.expectedCash) || totals?.expectedCashLak || 0;
     return {
-      alerts,
-      cards: {
-        cashDrawerExpectedLak: expectedCashLak,
-        cogsLak,
-        customerCreditDueLak: amount(customerCredit._sum.outstandingBalance),
-        discountLak,
-        expiredProducts: expiredLots.length,
-        grossSalesLak,
-        inventoryValueLak,
-        itemsSoldToday,
-        lowStockProducts: lowStockProducts.length,
-        loyaltyRedeemedLak,
-        netSalesLak,
-        nearExpiryProducts: nearExpiryLots.length,
-        profitTodayLak,
-        promotionDiscountLak,
-        refundLak,
-        salesTodayLak,
-        supplierPayablesDueLak: amount(supplierPayables._sum.balanceAmount),
-        totalBillsToday: amount(reportsSnapshot.analytics.totalTransactions),
-        voidCount,
-      },
-      closeDay: {
-        cashCountedLak: shiftSummaries.reduce((total, shift) => total + shift.countedCashLak, 0),
-        cashSalesLak,
-        differenceLak: shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0),
-        expectedCashLak: closeDayExpectedCashLak,
-        profitLak: profitTodayLak,
-        qrTransferSalesLak,
-        refundLak,
-        shiftSummaries,
-        totalBills: amount(reportsSnapshot.analytics.totalTransactions),
-        totalSalesLak: salesTodayLak,
-        voidCount,
-      },
-      hourlySales,
-      lowStockItems,
-      paymentBreakdown,
-      currencyBreakdown,
-      period: {
-        end: end.toISOString(),
-        key: range.key,
-        label,
-        start: start.toISOString(),
-      },
-      recentSales,
-      shift: {
-        cashInLak,
-        cashOutLak,
-        cashSalesLak: currentShiftTotals?.cashSalesLak ?? 0,
-        expectedCashLak,
-        openedAt: currentShift?.openedAt.toISOString() ?? null,
-        openingCashLak,
-        qrTransferSalesLak: currentShiftTotals?.nonCashSalesLak ?? 0,
-        status: currentShift ? "open" : "not_started",
-      },
-      summary: {
-        cogsLak,
-        discountLak,
-        grossSalesLak,
-        inventoryValueLak,
-        loyaltyRedeemedLak,
-        netSalesLak,
-        promotionDiscountLak,
-        refundLak,
-        voidCount,
-      },
-      topProducts,
-      dataStatus: {
-        hasError: false,
-        isPartial: profitWarnings.length > 0,
-        warnings: profitWarnings,
-      },
+      cashierId: shift.cashierId,
+      closedAt: shift.closedAt?.toISOString() ?? null,
+      countedCashLak: counted,
+      differenceLak: amount(shift.cashDifference) || counted - shiftExpectedCashLak,
+      expectedCashLak: shiftExpectedCashLak,
+      openedAt: shift.openedAt.toISOString(),
+      openingCashLak: amount(shift.openingCash),
+      status: shift.closedAt ? "closed" : "open",
     };
+  });
+  const closeDayExpectedCashLak = shiftSummaries.length > 0
+    ? shiftSummaries.reduce((total, shift) => total + shift.expectedCashLak, 0)
+    : expectedCashLak;
+  const alerts: DashboardAlert[] = [
+    deadStockProducts > 0
+      ? {
+          href: "/inventory",
+          message: "Products not sold for more than 30 days",
+          severity: "warning" as const,
+          title: "Dead Stock",
+          type: "Inventory",
+          value: String(deadStockProducts),
+        }
+      : null,
+    lowSalesPercent > 0
+      ? {
+          href: "/reports/sales",
+          message: "Sales lower than expected",
+          severity: "warning" as const,
+          title: "Low Sales Warning",
+          type: "Sales",
+          value: `${lowSalesPercent}% below average`,
+        }
+      : null,
+    lowStockProducts.length > 0
+      ? {
+          href: "/inventory",
+          message: `${lowStockProducts.length} products need stock review.`,
+          severity: "warning" as const,
+          title: "Low stock",
+          type: "Inventory",
+          value: String(lowStockProducts.length),
+        }
+      : null,
+    nearExpiryCount > 0
+      ? {
+          href: "/inventory",
+          message: `${nearExpiryCount} lots expire within 30 days.`,
+          severity: "warning" as const,
+          title: "Near expiry",
+          type: "Expiry",
+          value: String(nearExpiryCount),
+        }
+      : null,
+    expiredCount > 0
+      ? {
+          href: "/inventory",
+          message: `${expiredCount} expired lots should be reviewed.`,
+          severity: "critical" as const,
+          title: "Expired products",
+          type: "Expiry",
+          value: String(expiredCount),
+        }
+      : null,
+    amount(supplierPayables._sum.balanceAmount) > 0
+      ? {
+          href: "/purchasing/payables",
+          message: `${amount(supplierPayables._sum.balanceAmount).toLocaleString("en-US")} LAK due to suppliers.`,
+          severity: "warning" as const,
+          title: "Supplier due",
+          type: "Payables",
+          value: formatLak(amount(supplierPayables._sum.balanceAmount)),
+        }
+      : null,
+    amount(customerCredit._sum.outstandingBalance) > 0
+      ? {
+          href: "/customers",
+          message: `${amount(customerCredit._sum.outstandingBalance).toLocaleString("en-US")} LAK customer credit outstanding.`,
+          severity: "info" as const,
+          title: "Customer credit due",
+          type: "Credit",
+          value: formatLak(amount(customerCredit._sum.outstandingBalance)),
+        }
+      : null,
+    shiftSummaries.some((shift) => shift.differenceLak !== 0)
+      ? {
+          href: "/dashboard",
+          message: "Cash count does not match expected amount",
+          severity: "critical" as const,
+          title: "Cash Difference",
+          type: "Cash",
+          value: formatLak(shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0)),
+        }
+      : null,
+  ].filter(Boolean) as DashboardAlert[];
+
+  const snapshot: DashboardSnapshot = {
+    alerts,
+    cards: {
+      cashDrawerExpectedLak: expectedCashLak,
+      cogsLak,
+      customerCreditDueLak: amount(customerCredit._sum.outstandingBalance),
+      discountLak,
+      expiredProducts: expiredCount,
+      grossSalesLak,
+      inventoryValueLak,
+      itemsSoldToday,
+      lowStockProducts: lowStockProducts.length,
+      loyaltyRedeemedLak,
+      netSalesLak,
+      nearExpiryProducts: nearExpiryCount,
+      profitTodayLak,
+      promotionDiscountLak,
+      refundLak,
+      salesTodayLak,
+      supplierPayablesDueLak: amount(supplierPayables._sum.balanceAmount),
+      totalBillsToday: amount(salesKpis.totalTransactions),
+      voidCount,
+    },
+    closeDay: {
+      cashCountedLak: shiftSummaries.reduce((total, shift) => total + shift.countedCashLak, 0),
+      cashSalesLak,
+      differenceLak: shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0),
+      expectedCashLak: closeDayExpectedCashLak,
+      profitLak: profitTodayLak,
+      qrTransferSalesLak,
+      refundLak,
+      shiftSummaries,
+      totalBills: amount(salesKpis.totalTransactions),
+      totalSalesLak: salesTodayLak,
+      voidCount,
+    },
+    hourlySales,
+    lowStockItems,
+    paymentBreakdown,
+    currencyBreakdown,
+    period: {
+      end: end.toISOString(),
+      key: range.key,
+      label,
+      start: start.toISOString(),
+    },
+    recentSales,
+    shift: {
+      cashInLak,
+      cashOutLak,
+      cashSalesLak: currentShiftTotals?.cashSalesLak ?? 0,
+      expectedCashLak,
+      openedAt: currentShift?.openedAt.toISOString() ?? null,
+      openingCashLak,
+      qrTransferSalesLak: currentShiftTotals?.nonCashSalesLak ?? 0,
+      status: currentShift ? "open" : "not_started",
+    },
+    summary: {
+      cogsLak,
+      discountLak,
+      grossSalesLak,
+      inventoryValueLak,
+      loyaltyRedeemedLak,
+      netSalesLak,
+      promotionDiscountLak,
+      refundLak,
+      voidCount,
+    },
+    topProducts,
+    dataStatus: {
+      hasError: false,
+      isPartial: profitWarnings.length > 0,
+      warnings: profitWarnings,
+    },
+  };
+  if (dashboardLoadTimingEnabled()) {
+    console.info(`[dashboard-load] total ${Date.now() - started}ms`);
+  }
+  return snapshot;
 }
