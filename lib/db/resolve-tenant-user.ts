@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 
@@ -13,9 +14,9 @@ export type TenantMembership = {
   isOwner: boolean;
 };
 
-export async function resolveTenantMembership(
+async function resolveTenantMembershipUncached(
   tenant: TenantContext,
-  client: any = prisma,
+  client: any,
 ): Promise<TenantMembership> {
   let effectiveUserId = tenant.userId;
 
@@ -57,4 +58,18 @@ export async function resolveTenantMembership(
     effectiveUserId,
     isOwner: Boolean(membership.isOwner),
   };
+}
+
+const resolveTenantMembershipCached = cache(async (companyId: string, userId: string) =>
+  resolveTenantMembershipUncached({ companyId, userId }, prisma),
+);
+
+export async function resolveTenantMembership(
+  tenant: TenantContext,
+  client: any = prisma,
+): Promise<TenantMembership> {
+  if (client === prisma) {
+    return resolveTenantMembershipCached(tenant.companyId, tenant.userId);
+  }
+  return resolveTenantMembershipUncached(tenant, client);
 }

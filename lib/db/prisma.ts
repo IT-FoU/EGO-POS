@@ -58,6 +58,10 @@ function createPrismaClient() {
     adapter: new PrismaPg({
       connectionString,
       ...(workerRuntime ? {} : { ssl: { rejectUnauthorized: false } }),
+      // Hyperdrive already pools at the edge. Prisma+Workers guidance is max: 1 so
+      // the isolate does not open a second TCP client. maxUses: 1 is kept because
+      // reusing a PrismaPg connection across Worker invocations has hung isolates
+      // (prisma/prisma#28193). Do not raise these without a Worker soak test.
       max: 1,
       maxUses: 1,
     }),

@@ -1537,7 +1537,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             {cartCollapsed ? (<div className="flex h-full min-h-[84px] items-center justify-between gap-3 bg-primary/5 p-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-muted-foreground">
                 <h2 className="max-w-full truncate text-lg font-black tracking-tight text-foreground">{t("ui.shopping.cart")}</h2>
-                <span className="shrink-0">{t("ui.bill")}: {billNo}</span>
+                <span className="shrink-0">{t("ui.bill")}: {billNo || receiptSettings.receiptPrefix}</span>
                 <span className="shrink-0">{t("ui.time")}: {currentTime}</span>
                 <span className="shrink-0">{cartItems.length} {t("ui.items")}</span>
                 <span className="min-w-0 truncate text-xl font-black text-[#FACC15]">{formatLak(totalAmount)} LAK</span>
@@ -1559,7 +1559,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-xs">
-              <CartMeta label={t("ui.bill.no")} value={billNo}/>
+              <CartMeta label={t("ui.bill.no")} value={billNo || receiptSettings.receiptPrefix}/>
               <CartMeta label={t("ui.customer")} value={selectedCustomer?.name ?? t("ui.guest")}/>
               <CartMeta label={t("ui.cashier")} value={cashierName || t("ui.current.user")}/>
               <CartMeta label={t("ui.time")} value={currentTime}/>

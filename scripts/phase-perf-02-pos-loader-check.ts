@@ -177,11 +177,24 @@ check("Warehouse/branch isolation follows the provided request scope", true);
 const posPage = readFileSync(new URL("../app/(dashboard)/pos/page.tsx", import.meta.url), "utf8");
 const posSnapshot = readFileSync(new URL("../features/pos/prisma-repository.ts", import.meta.url), "utf8");
 const posClient = readFileSync(new URL("../features/pos/components/pos-page-client.tsx", import.meta.url), "utf8");
-check("POS page loads snapshot and policy in parallel", posPage.includes("Promise.all") && posPage.includes("getPosSnapshot()") && posPage.includes("createPosPermissionPolicyFromDatabase"));
+const sessionSrc = readFileSync(new URL("../lib/auth/session.ts", import.meta.url), "utf8");
+const membershipSrc = readFileSync(new URL("../lib/db/resolve-tenant-user.ts", import.meta.url), "utf8");
+const scopeSrc = readFileSync(new URL("../lib/db/tenant-scope.ts", import.meta.url), "utf8");
+const posSnapshotFn = posSnapshot.slice(
+  posSnapshot.indexOf("export async function getPrismaPosSnapshot"),
+  posSnapshot.indexOf("export async function completePrismaSale"),
+);
+check("POS page loads snapshot and policy in parallel", posPage.includes("Promise.all") && posPage.includes("getPosSnapshot(session)") && posPage.includes("createPosPermissionPolicyFromDatabase"));
 check("POS snapshot reuses open cash-session scope", posSnapshot.includes("getOpenCashSession(tenant, { scope })"));
-check("POS snapshot does not re-read tax settings from a second query", !posSnapshot.includes("getPrismaTaxAndLoyaltySettings"));
+check("POS snapshot does not re-read tax settings from a second query", !posSnapshotFn.includes("getPrismaTaxAndLoyaltySettings"));
 check("Held/recent sales are not fetched on POS mount", !posClient.includes("void refreshRecentSalesFromServer();\n        void refreshHeldBillsFromServer();"));
-check("Checkout/sale writer is unchanged in this file set", posSnapshot.includes("export async function completePrismaSale"));
+check("Checkout/sale writer is unchanged in this file set", posSnapshot.includes("export async function completePrismaSale") && posSnapshot.includes("resolvePosSaleNo"));
+check("Session JWT decode is request-cached", sessionSrc.includes("cache(async () => getServerSession"));
+check("Tenant membership is request-cached for the default client", membershipSrc.includes("resolveTenantMembershipCached"));
+check("Tenant scope is request-cached for the default client", scopeSrc.includes("resolveTenantScopeCached") && scopeSrc.includes("Promise.all"));
+check("POS snapshot does not block on next sale number", !posSnapshotFn.includes("getNextPosSaleNo("));
+check("POS snapshot reads company settings without a company join", posSnapshotFn.includes("companySetting.findUnique") && !posSnapshotFn.includes("company.findUnique"));
+check("Write-path sale numbering remains authoritative", posSnapshot.includes("const saleNo = await resolvePosSaleNo"));
 
 const failed = results.filter((result) => !result.ok);
 if (failed.length) {

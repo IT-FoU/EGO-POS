@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
@@ -63,9 +64,7 @@ async function demoSessionFromDatabase(): Promise<Session | null> {
   };
 }
 
-export async function getCurrentSession() {
-  return getServerSession(authOptions);
-}
+export const getCurrentSession = cache(async () => getServerSession(authOptions));
 
 /** API routes: return 401 JSON instead of redirecting unauthenticated callers. */
 export async function requireApiSession() {

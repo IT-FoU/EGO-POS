@@ -156,7 +156,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const branchWhere = branchOwnedWhere(scope);
   const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
   const now = new Date();
-  const [products, company, customers, promotions, membershipLevels, openSession, qrBanks] = await timedPosLoad(
+  const [products, settings, customers, promotions, membershipLevels, openSession, qrBanks] = await timedPosLoad(
     "parallel-reads",
     () =>
       Promise.all([
@@ -173,9 +173,8 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
             balances: { some: { warehouseId: { in: sellWarehouseIds } } },
           },
         }),
-        db.company.findUnique({
-          include: { settings: true },
-          where: { id: scope.companyId },
+        db.companySetting.findUnique({
+          where: { companyId: scope.companyId },
         }),
         db.customer.findMany({
           include: {
@@ -213,10 +212,10 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
         getPrismaPosQrBanks(tenant, scope.branchId),
       ]),
   );
-  const settings = company?.settings ?? null;
   const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
-  const nextSaleNo = await timedPosLoad("next-sale-no", () => getNextPosSaleNo(scope.companyId, receiptPrefix));
+  // Preview sale numbers are display-only. Checkout still issues/validates via resolvePosSaleNo.
+  const nextSaleNo = "";
   if (posLoadTimingEnabled()) {
     console.info(`[pos-load] total ${Date.now() - started}ms`);
   }
@@ -248,7 +247,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           sessionId: null,
           status: "not_started" as const,
         },
-    companyName: company?.name ?? "Business",
+    companyName: "Business",
     customers: customers.map(mapPrismaPosCustomer),
     loyaltySettings: {
       loyaltyEnabled: taxAndLoyalty.loyaltyEnabled,
@@ -288,7 +287,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     })),
     qrBanks,
     receiptSettings: {
-      companyName: company?.name ?? "Business",
+      companyName: "Business",
       profileAddress: settings?.profileAddress ?? undefined,
       profileEmail: settings?.profileEmail ?? undefined,
       profilePhone: settings?.profilePhone ?? undefined,

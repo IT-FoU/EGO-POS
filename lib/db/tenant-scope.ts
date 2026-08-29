@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { resolveTenantMembership } from "@/lib/db/resolve-tenant-user";
@@ -13,34 +14,57 @@ export type BranchScope = TenantContext & {
   warehouseIds: string[];
 };
 
-export async function resolveTenantScope(tenant: TenantContext, client: any = db): Promise<BranchScope> {
+async function resolveTenantScopeUncached(tenant: TenantContext, client: any): Promise<BranchScope> {
   const { effectiveUserId, isOwner } = await resolveTenantMembership(tenant, client);
   const scopedTenant: TenantContext = { ...tenant, userId: effectiveUserId };
 
-  const branch = scopedTenant.branchId
-    ? await client.branch.findFirst({
+  const branchPromise = scopedTenant.branchId
+    ? client.branch.findFirst({
         where: { companyId: scopedTenant.companyId, id: scopedTenant.branchId },
       })
-    : await client.branch.findFirst({
+    : client.branch.findFirst({
         orderBy: [{ isMainBranch: "desc" }, { createdAt: "asc" }],
         where: { companyId: scopedTenant.companyId },
       });
+
+  const ownerBranchesPromise = isOwner
+    ? client.branch.findMany({
+        select: { id: true },
+        where: { companyId: scopedTenant.companyId },
+      })
+    : Promise.resolve(null);
+
+  const knownBranchId = scopedTenant.branchId;
+  const warehousesPromise =
+    isOwner || knownBranchId
+      ? client.warehouse.findMany({
+          orderBy: { createdAt: "asc" },
+          where: isOwner
+            ? { companyId: scopedTenant.companyId }
+            : { branchId: knownBranchId, companyId: scopedTenant.companyId },
+        })
+      : Promise.resolve(null);
+
+  const [branch, ownerBranches, parallelWarehouses] = await Promise.all([
+    branchPromise,
+    ownerBranchesPromise,
+    warehousesPromise,
+  ]);
 
   if (!branch) {
     throw new Error("Active branch was not found for this user.");
   }
 
   const branchIds = isOwner
-    ? (await client.branch.findMany({
-        select: { id: true },
-        where: { companyId: scopedTenant.companyId },
-      })).map((row: Record<string, any>) => row.id)
+    ? (ownerBranches as Array<{ id: string }>).map((row) => row.id)
     : [branch.id];
 
-  const warehouses = await client.warehouse.findMany({
-    orderBy: { createdAt: "asc" },
-    where: { branchId: { in: branchIds }, companyId: scopedTenant.companyId },
-  });
+  const warehouses =
+    parallelWarehouses ??
+    (await client.warehouse.findMany({
+      orderBy: { createdAt: "asc" },
+      where: { branchId: { in: branchIds }, companyId: scopedTenant.companyId },
+    }));
   const warehouseIds = warehouses.map((warehouse: Record<string, any>) => warehouse.id);
 
   if (scopedTenant.warehouseId && !warehouseIds.includes(scopedTenant.warehouseId)) {
@@ -56,6 +80,22 @@ export async function resolveTenantScope(tenant: TenantContext, client: any = db
     warehouseId: scopedTenant.warehouseId ?? warehouseIds[0],
     warehouseIds,
   };
+}
+
+const resolveTenantScopeCached = cache(async (companyId: string, userId: string, branchId: string, warehouseId: string) =>
+  resolveTenantScopeUncached({ branchId: branchId || undefined, companyId, userId, warehouseId: warehouseId || undefined }, db),
+);
+
+export async function resolveTenantScope(tenant: TenantContext, client: any = db): Promise<BranchScope> {
+  if (client === db) {
+    return resolveTenantScopeCached(
+      tenant.companyId,
+      tenant.userId,
+      tenant.branchId ?? "",
+      tenant.warehouseId ?? "",
+    );
+  }
+  return resolveTenantScopeUncached(tenant, client);
 }
 
 export function branchOwnedWhere(scope: BranchScope) {

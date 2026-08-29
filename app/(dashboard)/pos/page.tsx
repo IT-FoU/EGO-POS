@@ -16,7 +16,7 @@ export default async function PosPage() {
   }
   const tenant = tenantFromSession(session);
   const [snapshot, loadedPolicy] = await Promise.all([
-    getPosSnapshot(),
+    getPosSnapshot(session),
     createPosPermissionPolicyFromDatabase({
       assignedTerminal: session.user.assignedTerminal,
       displayName: session.user.name,
