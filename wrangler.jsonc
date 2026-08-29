@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ego-pos-beta",
+  "name": "egopos",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": [
@@ -14,11 +14,12 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "ego-pos-beta"
+      "service": "egopos"
     }
   ],
   "vars": {
-    "IGO_DEMO_MODE": "false"
+    "IGO_DEMO_MODE": "false",
+    "NEXTAUTH_URL": "https://egopos.i-goto.workers.dev"
   },
   "hyperdrive": [
     {

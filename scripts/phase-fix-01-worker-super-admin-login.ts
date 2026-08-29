@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const BASE = "https://ego-pos-beta.note-z.workers.dev";
+const BASE = "https://egopos.i-goto.workers.dev";
 const SECRETS_PATH = join(process.env.LOCALAPPDATA ?? "", "ego-pos-production", "secrets.json");
 
 type Secrets = {

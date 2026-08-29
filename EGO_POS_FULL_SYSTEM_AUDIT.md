@@ -127,7 +127,7 @@ The one business is `GO BOX Mini Mart`, code `0001`, active Mini Mart template, 
 | `prisma migrate status` | PASS: Production-gated status reports schema up to date |
 | Demo production guard harness | PARTIAL: 15/16 PASS; one stale source-text assertion for already-closed `/register` |
 | Production database cleanliness harness | FAIL: Prisma invocation failure; no DB write occurred |
-| Browser smoke / authenticated journeys | PASS: EGO-FIX-04 local UAT `http://localhost:3000`; HTTP cookie smoke 25/25; Edge dump-dom of `/login`; Super Admin and Store Owner sessions; core nav loads. Worker DNS `ego-pos-beta.note-z.workers.dev` fails on this PC. |
+| Browser smoke / authenticated journeys | PASS: EGO-FIX-04 local UAT `http://localhost:3000`; HTTP cookie smoke 25/25; Edge dump-dom of `/login`; Super Admin and Store Owner sessions; core nav loads. Historical Worker DNS `ego-pos-beta.note-z.workers.dev` failed on this PC. EGO-FIX-10 authoritative Production: `https://egopos.i-goto.workers.dev`; legacy rollback Worker `ego-pos-beta`. |
 | Lint | NOT CONFIGURED |
 | Standard unit/integration test suite | NOT CONFIGURED |
 

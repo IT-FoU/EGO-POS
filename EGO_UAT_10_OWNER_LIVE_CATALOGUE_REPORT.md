@@ -15,6 +15,7 @@ Read-only preparation completed. No owner-supplied Product name, SKU, barcode, c
 | Item | Value |
 | --- | --- |
 | App | `npm run dev:uat` → `http://localhost:3000` |
+| Current EGO POS Production | `https://egopos.i-goto.workers.dev` |
 | Node | v22.19.0 |
 | Next.js | 16.2.12 |
 | Store | GO BOX Mini Mart, store code `0001` |
