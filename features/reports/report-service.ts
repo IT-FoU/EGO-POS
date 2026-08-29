@@ -29,6 +29,7 @@ export type ReportsSnapshot = {
   cogsLak: number;
   customers: Customer[];
   dataQuality: ReportDataQuality;
+  filterOptions?: ReportFilterOptions;
   filters: ReportFilters;
   grossSalesLak: number;
   hub: ReportsAnalyticsHub;
@@ -66,9 +67,7 @@ export async function getReportsPageData(
     Object.entries(searchParams ?? {}).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]),
   );
   const filters = parseReportFilters(normalizedParams);
-  const [snapshot, filterOptions] = await Promise.all([
-    getPrismaReportsSnapshot(tenant, filters),
-    getReportFilterOptions(tenant),
-  ]);
+  const snapshot = await getPrismaReportsSnapshot(tenant, filters);
+  const filterOptions = snapshot.filterOptions ?? (await getReportFilterOptions(tenant));
   return { ...snapshot, filterOptions };
 }

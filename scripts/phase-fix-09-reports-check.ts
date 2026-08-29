@@ -233,6 +233,9 @@ function wiringPass() {
   const dash = readFileSync("features/dashboard/dashboard-service.ts", "utf8");
   assert(!analytics.includes("5940000") && !analytics.includes("56000"), "Reports client still has hardcoded KPI numbers");
   assert(reports.includes("netReportLifecycle") && reports.includes("REPORT_SALE_STATUSES"), "Lifecycle netting missing");
+  assert(!reports.includes("getPrismaInventorySnapshot") && !reports.includes("getPrismaCustomersSnapshot") && !reports.includes("getPrismaProducts(") && !reports.includes("getPrismaSuppliersSnapshot"), "Reports still loads full catalogue snapshots");
+  assert(reports.includes("timedReportsLoad(\"parallel-reads\"") && reports.includes("Promise.all"), "Reports first-paint reads are not parallel");
+  assert(!reports.includes("salesAggregate") || !reports.includes("hasCompletedSales"), "Reports still gates on a sequential sales aggregate");
   assert(dash.includes("getPrismaDashboardSalesKpis"), "Dashboard does not reuse canonical sales KPIs");
   assert(!dash.includes("getPrismaReportsSnapshot"), "Dashboard still loads the full Reports snapshot");
   assert(!dash.includes("getPrismaInventorySnapshot"), "Dashboard still loads the inventory snapshot");
