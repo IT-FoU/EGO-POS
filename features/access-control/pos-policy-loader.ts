@@ -1,4 +1,4 @@
-import { getStaffAccessSnapshot, getUserPermissionKeys } from "@/features/access-control/prisma-repository";
+import { getPosPolicyApprovalRules, getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import {
   APPROVAL_RULE_KEYS,
   type ApprovalRuleKey,
@@ -54,17 +54,21 @@ export async function createPosPermissionPolicyFromDatabase(input: {
   username?: string | null;
 }): Promise<PosPermissionPolicy> {
   const role = normalizePosRole(input.roles) as PosRole;
-  const snapshot = await getStaffAccessSnapshot(input.tenant, input.client);
 
   // B8-3: derive permission keys from the logged-in user's ACTUAL assigned roles
   // (getUserPermissionKeys resolves the user's real roleId(s); owner => "*"),
   // not from a role matched only by template label. This keeps the client preview
   // in sync with the server-enforced policy.
-  const permissionKeys = new Set<string>(((await getUserPermissionKeys(input.tenant, input.client)) as string[]).map(String));
+  // POS first paint only needs keys + approval thresholds — not the full staff matrix.
+  const [permissionKeyList, approvalRuleRows] = await Promise.all([
+    getUserPermissionKeys(input.tenant, input.client),
+    getPosPolicyApprovalRules(input.tenant, input.client),
+  ]);
+  const permissionKeys = new Set<string>(permissionKeyList.map(String));
 
   const rules = Object.fromEntries(
-    APPROVAL_RULE_KEYS.map((ruleKey) => [ruleKey, snapshot.approvalRules.find((rule) => rule.ruleKey === ruleKey)]),
-  ) as Record<ApprovalRuleKey, (typeof snapshot.approvalRules)[number] | undefined>;
+    APPROVAL_RULE_KEYS.map((ruleKey) => [ruleKey, approvalRuleRows.find((rule) => rule.ruleKey === ruleKey)]),
+  ) as Record<ApprovalRuleKey, (typeof approvalRuleRows)[number] | undefined>;
 
   const discountRule = rules.discount;
   const refundRule = rules.refund;

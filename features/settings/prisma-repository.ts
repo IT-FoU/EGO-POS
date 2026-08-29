@@ -95,6 +95,19 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
   };
 }
 
+export function taxAndLoyaltyFromSettingsRow(settings: SettingsRow | null | undefined) {
+  const row = settings ?? {};
+  return {
+    loyaltyEnabled: row.loyaltyEnabled ?? DEFAULT_SETTINGS.loyaltyEnabled,
+    loyaltyMinRedeemPoints: toNumber(row.loyaltyMinRedeemPoints, DEFAULT_SETTINGS.loyaltyMinRedeemPoints),
+    loyaltyPointValueLak: toNumber(row.loyaltyPointValueLak, DEFAULT_SETTINGS.loyaltyPointValueLak),
+    loyaltySpendPerPointLak: toNumber(row.loyaltySpendPerPointLak, DEFAULT_SETTINGS.loyaltySpendPerPointLak),
+    taxInclusive: row.taxInclusive ?? DEFAULT_SETTINGS.taxInclusive,
+    vatEnabled: row.vatEnabled ?? DEFAULT_SETTINGS.vatEnabled,
+    vatRate: toNumber(row.vatRate, DEFAULT_SETTINGS.vatRate),
+  };
+}
+
 function mapSettings(company: SettingsRow): SettingsFormData {
   const settings = company.settings ?? {};
 
@@ -235,18 +248,8 @@ export async function getPrismaTaxAndLoyaltySettings(companyId: string) {
   });
 
   if (!company) {
-    return DEFAULT_SETTINGS;
+    return taxAndLoyaltyFromSettingsRow(null);
   }
 
-  const settings = mapSettings(company);
-
-  return {
-    loyaltyEnabled: settings.loyaltyEnabled,
-    loyaltyMinRedeemPoints: settings.loyaltyMinRedeemPoints,
-    loyaltyPointValueLak: settings.loyaltyPointValueLak,
-    loyaltySpendPerPointLak: settings.loyaltySpendPerPointLak,
-    taxInclusive: settings.taxInclusive,
-    vatEnabled: settings.vatEnabled,
-    vatRate: settings.vatRate,
-  };
+  return taxAndLoyaltyFromSettingsRow(company.settings);
 }

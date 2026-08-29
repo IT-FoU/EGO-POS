@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { assertBranchInScope, assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
-import { getPrismaTaxAndLoyaltySettings } from "@/features/settings/prisma-repository";
+import { taxAndLoyaltyFromSettingsRow } from "@/features/settings/prisma-repository";
 import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
 import {
   consumeInventoryForSale,
@@ -134,70 +134,92 @@ export async function listSellablePosProducts(tenant: TenantContext, client: any
   return products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId));
 }
 
+function posLoadTimingEnabled() {
+  return process.env.IGO_POS_LOAD_TIMING === "1";
+}
+
+async function timedPosLoad<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  if (!posLoadTimingEnabled()) {
+    return fn();
+  }
+  const started = Date.now();
+  try {
+    return await fn();
+  } finally {
+    console.info(`[pos-load] ${label} ${Date.now() - started}ms`);
+  }
+}
+
 export async function getPrismaPosSnapshot(tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
+  const started = posLoadTimingEnabled() ? Date.now() : 0;
+  const scope = await timedPosLoad("scope", () => resolveTenantScope(tenant));
   const branchWhere = branchOwnedWhere(scope);
   const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
   const now = new Date();
-  const [products, company, settings, customers, promotions, membershipLevels] = await Promise.all([
-    db.product.findMany({
-      include: {
-        balances: { where: { warehouseId: { in: sellWarehouseIds } } },
-        category: true,
-        units: true,
-      },
-      orderBy: { nameEn: "asc" },
-      where: {
-        companyId: scope.companyId,
-        isActive: true,
-        balances: { some: { warehouseId: { in: sellWarehouseIds } } },
-      },
-    }),
-    db.company.findUnique({
-      select: { name: true },
-      where: { id: scope.companyId },
-    }),
-    db.companySetting.findUnique({
-      where: { companyId: scope.companyId },
-    }),
-    db.customer.findMany({
-      include: {
-        membershipLevel: true,
-        subscriptions: {
-          orderBy: { endDate: "desc" },
-          take: 1,
-          where: { status: "active" },
-        },
-      },
-      orderBy: { fullName: "asc" },
-      where: { companyId: scope.companyId, status: "active", ...branchWhere },
-    }),
-    db.promotion.findMany({
-      include: {
-        categories: { select: { categoryId: true } },
-        membershipLevels: { select: { membershipLevelId: true } },
-        products: { select: { productId: true } },
-      },
-      orderBy: [{ priority: "desc" }, { startDate: "desc" }, { id: "asc" }],
-      where: {
-        companyId: scope.companyId,
-        endDate: { gte: now },
-        isActive: true,
-        startDate: { lte: now },
-        status: "active",
-      },
-    }),
-    db.membershipLevel.findMany({
-      orderBy: { minSpendLak: "asc" },
-      select: { discountPercent: true, id: true, name: true },
-      where: { companyId: scope.companyId, isActive: true },
-    }),
-  ]);
-  const openSession = await getOpenCashSession(tenant);
-  const taxAndLoyalty = await getPrismaTaxAndLoyaltySettings(scope.companyId);
-  const qrBanks = await getPrismaPosQrBanks(tenant, scope.branchId);
+  const [products, company, customers, promotions, membershipLevels, openSession, qrBanks] = await timedPosLoad(
+    "parallel-reads",
+    () =>
+      Promise.all([
+        db.product.findMany({
+          include: {
+            balances: { where: { warehouseId: { in: sellWarehouseIds } } },
+            category: true,
+            units: true,
+          },
+          orderBy: { nameEn: "asc" },
+          where: {
+            companyId: scope.companyId,
+            isActive: true,
+            balances: { some: { warehouseId: { in: sellWarehouseIds } } },
+          },
+        }),
+        db.company.findUnique({
+          include: { settings: true },
+          where: { id: scope.companyId },
+        }),
+        db.customer.findMany({
+          include: {
+            membershipLevel: true,
+            subscriptions: {
+              orderBy: { endDate: "desc" },
+              take: 1,
+              where: { status: "active" },
+            },
+          },
+          orderBy: { fullName: "asc" },
+          where: { companyId: scope.companyId, status: "active", ...branchWhere },
+        }),
+        db.promotion.findMany({
+          include: {
+            categories: { select: { categoryId: true } },
+            membershipLevels: { select: { membershipLevelId: true } },
+            products: { select: { productId: true } },
+          },
+          orderBy: [{ priority: "desc" }, { startDate: "desc" }, { id: "asc" }],
+          where: {
+            companyId: scope.companyId,
+            endDate: { gte: now },
+            isActive: true,
+            startDate: { lte: now },
+            status: "active",
+          },
+        }),
+        db.membershipLevel.findMany({
+          orderBy: { minSpendLak: "asc" },
+          select: { discountPercent: true, id: true, name: true },
+          where: { companyId: scope.companyId, isActive: true },
+        }),
+        getOpenCashSession(tenant, { scope }),
+        getPrismaPosQrBanks(tenant, scope.branchId),
+      ]),
+  );
+  const settings = company?.settings ?? null;
+  const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
-  const nextSaleNo = await getNextPosSaleNo(scope.companyId, receiptPrefix);
+  const nextSaleNo = await timedPosLoad("next-sale-no", () => getNextPosSaleNo(scope.companyId, receiptPrefix));
+  if (posLoadTimingEnabled()) {
+    console.info(`[pos-load] total ${Date.now() - started}ms`);
+  }
 
   return {
     branchId: scope.branchId,

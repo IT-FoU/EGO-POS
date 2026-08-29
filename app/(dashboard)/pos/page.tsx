@@ -14,17 +14,19 @@ export default async function PosPage() {
       </div>
     );
   }
-  const snapshot = await getPosSnapshot();
   const tenant = tenantFromSession(session);
-  const posPermissionPolicy = await createPosPermissionPolicyFromDatabase({
-    assignedTerminal: session.user.assignedTerminal,
-    branchName: snapshot.branchName,
-    displayName: session.user.name,
-    roles: session.user.roles,
-    tenant,
-    userId: session.user.id,
-    username: session.user.username,
-  });
+  const [snapshot, loadedPolicy] = await Promise.all([
+    getPosSnapshot(),
+    createPosPermissionPolicyFromDatabase({
+      assignedTerminal: session.user.assignedTerminal,
+      displayName: session.user.name,
+      roles: session.user.roles,
+      tenant,
+      userId: session.user.id,
+      username: session.user.username,
+    }),
+  ]);
+  const posPermissionPolicy = { ...loadedPolicy, branchName: snapshot.branchName };
 
   return (
       <PosPageClient

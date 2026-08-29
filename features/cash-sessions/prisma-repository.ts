@@ -16,7 +16,7 @@ import type {
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, withTenantTransaction } from "@/lib/db/write-context";
-import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
+import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 
 const db = prisma as any;
 
@@ -148,9 +148,13 @@ async function getScopedSession(
   return session;
 }
 
-export async function getOpenCashSession(tenant: TenantContext) {
-  const scope = await resolveTenantScope(tenant);
-  const session = await db.cashSession.findFirst({
+export async function getOpenCashSession(
+  tenant: TenantContext,
+  options?: { client?: any; scope?: BranchScope },
+) {
+  const client = options?.client ?? db;
+  const scope = options?.scope ?? (await resolveTenantScope(tenant, client));
+  const session = await client.cashSession.findFirst({
     include: { transactions: true },
     orderBy: { openedAt: "desc" },
     where: {
@@ -165,7 +169,7 @@ export async function getOpenCashSession(tenant: TenantContext) {
     return null;
   }
 
-  const totals = await loadSessionTotals(db, session);
+  const totals = await loadSessionTotals(client, session);
   return mapSessionSummary(session, totals);
 }
 

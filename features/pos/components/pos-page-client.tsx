@@ -182,6 +182,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [transferAmount, setTransferAmount] = useState(0);
     const [cardAmount, setCardAmount] = useState(0);
     const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
+    const [heldBillsLoaded, setHeldBillsLoaded] = useState(false);
+    const [recentSalesLoaded, setRecentSalesLoaded] = useState(false);
     const [selectedHeldSaleId, setSelectedHeldSaleId] = useState("");
     const [heldBillsBusy, setHeldBillsBusy] = useState(false);
     const [heldBillConflict, setHeldBillConflict] = useState<HeldSale | null>(null);
@@ -257,14 +259,16 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
         setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
-        void refreshRecentSalesFromServer();
-        void refreshHeldBillsFromServer();
         setReceiptPrintMode(readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"));
     }, []);
     useEffect(() => {
         function refreshOnFocus() {
-            void refreshRecentSalesFromServer();
-            void refreshHeldBillsFromServer();
+            if (recentSalesLoaded) {
+                void refreshRecentSalesFromServer();
+            }
+            if (heldBillsLoaded) {
+                void refreshHeldBillsFromServer();
+            }
             setReceiptPrintMode(readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"));
         }
         window.addEventListener("focus", refreshOnFocus);
@@ -273,7 +277,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             window.removeEventListener("focus", refreshOnFocus);
             window.removeEventListener("storage", refreshOnFocus);
         };
-    }, [receiptSettings.receiptPrintMode]);
+    }, [heldBillsLoaded, recentSalesLoaded, receiptSettings.receiptPrintMode]);
     useEffect(() => {
         const updateClock = () => {
             const now = new Date();
@@ -429,11 +433,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     async function refreshRecentSalesFromServer() {
         if (demoMode) {
             setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
+            setRecentSalesLoaded(true);
             return;
         }
         try {
             const sales = await fetchRecentSales();
             setRecentSales(sales as DemoSaleRecord[]);
+            setRecentSalesLoaded(true);
         } catch {
             // Keep the current list when the server read fails.
         }
@@ -656,10 +662,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }
     async function refreshHeldBillsFromServer() {
         if (demoMode) {
+            setHeldBillsLoaded(true);
             return;
         }
         try {
             setHeldSales(await fetchHeldBills());
+            setHeldBillsLoaded(true);
         }
         catch (error) {
             setMessage(error instanceof Error ? error.message : "Unable to load held bills.");
@@ -1608,7 +1616,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
             {paymentMode === "mixed" ? (<div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3 text-sm font-semibold text-success">
               {t("ui.mixed.payment.configured")} - {formatLak(paidAmount)} LAK
-            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => setHeldBillsOpen(true)} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>) }
+            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} heldBillsLoaded={heldBillsLoaded} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => {
+                void refreshHeldBillsFromServer();
+                setHeldBillsOpen(true);
+            }} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>) }
 
             <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
               <Metric label={t("ui.paid")} value={`${formatLak(paidAmount)} LAK`}/>
@@ -1639,6 +1650,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }
         }}/>
           <MoreMenuButton label={t("ui.hold.bills.resume.bills")} onClick={() => {
+            void refreshHeldBillsFromServer();
             setHeldBillsOpen(true);
             setMoreMenuOpen(false);
         }}/>
@@ -1933,11 +1945,12 @@ function Field({ children, label }: {
       {children}
     </label>);
 }
-function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount, holdDisabled, mode, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
+function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount, heldBillsLoaded, holdDisabled, mode, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
     availableQrBanks: QrBank[];
     cardAmount: number;
     cashAmount: number;
     heldBillCount: number;
+    heldBillsLoaded: boolean;
     holdDisabled: boolean;
     mode: PaymentMode;
     onHoldBill: () => void;
@@ -1959,7 +1972,7 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount
             <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>
               Hold Bill
             </button>
-            <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={heldBillCount === 0}>
+            <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={heldBillsLoaded && heldBillCount === 0}>
               Resume Bills{heldBillCount > 0 ? ` (${heldBillCount})` : ""}
             </button>
           </div>
