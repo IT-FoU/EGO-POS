@@ -25,7 +25,8 @@
     "test:pos-discovery": "tsx scripts/phase-fix-06-pos-discovery-cart-check.ts",
     "test:pos-checkout": "tsx scripts/phase-fix-07-pos-checkout-check.ts",
     "test:pos-postsale": "tsx scripts/phase-fix-08-pos-postsale-check.ts",
-    "test:reports": "tsx scripts/phase-fix-09-reports-check.ts"
+    "test:reports": "tsx scripts/phase-fix-09-reports-check.ts",
+    "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

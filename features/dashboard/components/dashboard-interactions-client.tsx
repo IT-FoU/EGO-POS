@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { DashboardDateRangeControls } from "@/features/dashboard/components/dashboard-date-range-controls";
 import type { DashboardAlert, DashboardRangeKey, DashboardSnapshot } from "@/features/dashboard/dashboard-service";
+import { formatBusinessDateLabel, formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
 import type { DashboardCopy } from "@/lib/i18n/dashboard-copy";
 
 type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "top_products";
@@ -46,21 +47,12 @@ function formatMoney(value: number) {
 }
 
 function formatBusinessDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
+  return formatBusinessDateLabel(value);
 }
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-  }).format(new Date(value));
+  return formatBusinessDateTimeLabel(value);
 }
 
 export function DashboardInteractionsClient({

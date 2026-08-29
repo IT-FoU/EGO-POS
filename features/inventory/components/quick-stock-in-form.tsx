@@ -43,7 +43,7 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     const [supplierId, setSupplierId] = useState("");
     const [paymentStatus, setPaymentStatus] = useState<"paid" | "credit">("paid");
     const [invoiceNo, setInvoiceNo] = useState("");
-    const [stockInNo, setStockInNo] = useState(generateClientStockInNo);
+    const [stockInNo, setStockInNo] = useState("");
     const [lotNumber, setLotNumber] = useState("");
     const [expiryDate, setExpiryDate] = useState("");
     const [note, setNote] = useState("");
@@ -53,6 +53,7 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     const [error, setError] = useState("");
     const [isPending, startTransition] = useTransition();
     useEffect(() => {
+        setStockInNo((current) => current || generateClientStockInNo());
         const nextBarcodeQuery = readBarcodeQueryParam();
         if (!nextBarcodeQuery)
             return;

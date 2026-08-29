@@ -20,6 +20,7 @@ export default async function ReportsPage({
     <ReportsAnalyticsClient
       filterOptions={filterOptions}
       filters={filters}
+      generatedAt={new Date().toISOString()}
       hub={hub}
       productRows={productRows}
     />

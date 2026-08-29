@@ -61,3 +61,37 @@ export function parseBusinessDate(value: string) {
   const day = Number(match[3]);
   return new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - OFFSET_MS);
 }
+
+function toDate(value: Date | string) {
+  return value instanceof Date ? value : new Date(value);
+}
+
+/** Deterministic display date for SSR and the first client render. */
+export function formatBusinessDateLabel(value: Date | string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+  }).format(toDate(value));
+}
+
+/** Deterministic short date-time for SSR and the first client render. */
+export function formatBusinessDateTimeLabel(value: Date | string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(toDate(value));
+}
+
+/** Deterministic medium date-time for SSR and the first client render. */
+export function formatBusinessMediumDateTime(value: Date | string, locale: "en" | "th" = "en") {
+  return new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(toDate(value));
+}

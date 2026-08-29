@@ -12,6 +12,7 @@ import type { ReportFilterOptions, ReportFilters } from "@/features/reports/repo
 import { reportFiltersToSearchParams } from "@/features/reports/report-filters";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import type { ProductReportRow, ReportKpiKey } from "@/features/reports/types";
+import { formatBusinessMediumDateTime } from "@/lib/datetime/business-timezone";
 const datePresetLabels = {
     all: "All Time",
     custom: "Custom",
@@ -127,11 +128,13 @@ const reportCopy = {
 export function ReportsAnalyticsClient({
     filterOptions,
     filters,
+    generatedAt,
     hub,
     productRows,
 }: {
     filterOptions: ReportFilterOptions;
     filters: ReportFilters;
+    generatedAt: string;
     hub: ReportsAnalyticsHub;
     productRows: ProductReportRow[];
 }) {
@@ -277,7 +280,7 @@ export function ReportsAnalyticsClient({
           <BusinessHealthScore hub={hub} locale={locale} score={healthScore} statusKey={healthStatusKey} onOpen={() => setModal("health")}/>
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
             <AIInsightsPanel hub={hub} locale={locale} onOpenReport={openReport}/>
-            <DataSourceStatusPanel dataSourceStatuses={dataSourceStatuses} locale={locale} onOpen={(source) => { setActiveSource(source); setModal("dataSource"); }}/>
+            <DataSourceStatusPanel dataSourceStatuses={dataSourceStatuses} generatedAt={generatedAt} locale={locale} onOpen={(source) => { setActiveSource(source); setModal("dataSource"); }}/>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -450,16 +453,14 @@ function AIInsightsPanel({ hub, locale, onOpenReport }: {
       </div>
     </section>);
 }
-function DataSourceStatusPanel({ dataSourceStatuses, locale, onOpen }: {
+function DataSourceStatusPanel({ dataSourceStatuses, generatedAt, locale, onOpen }: {
     dataSourceStatuses: DataSourceStatus[];
+    generatedAt: string;
     locale: "en" | "th";
     onOpen: (source: string) => void;
 }) {
     const copy = reportCopy[locale];
-    const lastUpdated = new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(new Date());
+    const lastUpdated = formatBusinessMediumDateTime(generatedAt, locale);
     return (<section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold">{copy.dataSourceStatus}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{copy.lastUpdated}: {lastUpdated}</p>
