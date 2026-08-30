@@ -31,10 +31,14 @@ import { cn } from "@/lib/utils";
 import { completeSaleAction } from "@/features/pos/actions";
 import { receiptSnapshotFromPersistedSale } from "@/features/pos/checkout-receipt";
 import {
+  cashInRequest,
+  cashOutRequest,
   closeCashSessionRequest,
   fetchCurrentCashSession,
   openCashSessionRequest,
 } from "@/features/pos/cash-session-client";
+import { CashInOutModal } from "@/features/pos/components/cash-in-out-modal";
+import { claimCashMovementSubmit, type CashMovementType } from "@/features/pos/cash-movement";
 import {
   fetchRecentSales,
   fetchSaleReceipt,
@@ -167,6 +171,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [favoritesOpen, setFavoritesOpen] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const [cashShiftCountOpen, setCashShiftCountOpen] = useState(false);
+    const [cashInOutOpen, setCashInOutOpen] = useState(false);
+    const [cashInOutBusy, setCashInOutBusy] = useState(false);
+    const cashInOutInFlightRef = useRef(false);
+    const [ownShiftReportEpoch, setOwnShiftReportEpoch] = useState(0);
     const [heldBillsOpen, setHeldBillsOpen] = useState(false);
     const [memberSearchOpen, setMemberSearchOpen] = useState(false);
     const [cartCollapsed, setCartCollapsed] = useState(false);
@@ -1361,6 +1369,42 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }
         });
     }
+    async function submitCashMovement(input: { amountLak: number; reason: string; type: CashMovementType }) {
+        if (!claimCashMovementSubmit(cashInOutInFlightRef)) {
+            return;
+        }
+        setCashInOutBusy(true);
+        try {
+            if (!enforcePosAction(input.type, { amountLak: input.amountLak, newValue: `${formatLak(input.amountLak)} LAK` })) {
+                return;
+            }
+            if (demoMode) {
+                setMessage(input.type === "cash_in" ? `Cash in recorded: +${formatLak(input.amountLak)} LAK.` : `Cash out recorded: -${formatLak(input.amountLak)} LAK.`);
+                setCashInOutOpen(false);
+                return;
+            }
+            if (!activeCashSession.sessionId || activeCashSession.status !== "open") {
+                throw new Error(t("ui.no.open.cash.shift"));
+            }
+            const session = input.type === "cash_in"
+                ? await cashInRequest(activeCashSession.sessionId, input.amountLak, input.reason || undefined)
+                : await cashOutRequest(activeCashSession.sessionId, input.amountLak, input.reason);
+            setActiveCashSession(session);
+            setOwnShiftReportEpoch((current) => current + 1);
+            setCashInOutOpen(false);
+            setMessage(
+                input.type === "cash_in"
+                    ? `Cash in recorded: +${formatLak(input.amountLak)} LAK.`
+                    : `Cash out recorded: -${formatLak(input.amountLak)} LAK.`,
+            );
+        } catch (error) {
+            setMessage(error instanceof Error ? error.message : t("ui.cash.movement.failed"));
+            throw error;
+        } finally {
+            cashInOutInFlightRef.current = false;
+            setCashInOutBusy(false);
+        }
+    }
     function recordStartOt() {
         setOtStartedAt(new Date());
         setOtEndedAt(null);
@@ -1675,8 +1719,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }
         }}/>
           <MoreMenuButton label={t("ui.cash.in.cash.out")} onClick={() => {
-            setCashShiftCountOpen(true);
+            setCashInOutOpen(true);
             setMoreMenuOpen(false);
+            void fetchCurrentCashSession().then(setActiveCashSession).catch(() => undefined);
         }}/>
           <MoreMenuButton label={t("ui.print.reprint.receipt")} onClick={() => {
             if (lastReceipt) {
@@ -1789,7 +1834,18 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onClose={() => setReturnExchangeOpen(false)} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
-      {ownShiftReportOpen ? <OwnShiftReportModal locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
+      {cashInOutOpen ? (
+        <CashInOutModal
+          expectedCashLak={activeCashSession.status === "open" ? activeCashSession.expectedCashLak : 0}
+          sessionOpen={activeCashSession.status === "open" && Boolean(activeCashSession.sessionId)}
+          submitting={cashInOutBusy}
+          onClose={() => {
+            if (!cashInOutBusy) setCashInOutOpen(false);
+          }}
+          onSubmit={(input) => submitCashMovement(input)}
+        />
+      ) : null}
+      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
             setReceiptOpen(false);

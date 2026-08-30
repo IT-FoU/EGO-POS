@@ -538,5 +538,19 @@
   "ui.cash.out.reason.is.required.when.cash.out.am": "Cash out reason is required when cash out amount is greater than 0.",
   "ui.ot.rules.will.use.owner.defined.settings.in.": "OT rules will use owner-defined settings in a future step. Current structure separates normal-hours and OT-hours sales for later configuration.",
   "ui.warehouse": "Warehouse",
-  "ui.all.warehouses": "All warehouses"
+  "ui.all.warehouses": "All warehouses",
+  "ui.amount": "จำนวนเงิน",
+  "ui.cancel": "ยกเลิก",
+  "ui.cash.amount.must.be.greater.than.zero": "จำนวนเงินต้องมากกว่า 0",
+  "ui.cash.in": "เงินเข้า",
+  "ui.cash.in.cash.out": "เงินเข้า / เงินออก",
+  "ui.cash.movement.failed": "บันทึกเงินเข้าหรือเงินออกไม่สำเร็จ",
+  "ui.cash.out": "เงินออก",
+  "ui.cash.shift.count": "นับเงินปิดกะ",
+  "ui.expected.after": "คาดว่าจะเหลือ",
+  "ui.expected.cash": "เงินสดที่ควรมี",
+  "ui.no.open.cash.shift": "ยังไม่เปิดกะเงินสด กรุณาเปิดกะก่อนบันทึกเงินเข้าหรือเงินออก",
+  "ui.reason": "เหตุผล",
+  "ui.record.cash.in": "บันทึกเงินเข้า",
+  "ui.record.cash.out": "บันทึกเงินออก"
 }
