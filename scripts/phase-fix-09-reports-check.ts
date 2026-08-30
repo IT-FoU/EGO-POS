@@ -250,7 +250,7 @@ async function main() {
   const url = resolveScriptDatabaseUrl("test-write");
 
   const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: url, ssl: { rejectUnauthorized: false } }),
+    adapter: new PrismaPg({ connectionString: url }),
   });
   const before = await goboxCounts(prisma);
   const results: Array<{ name: string; status: "PASS" | "FAIL"; detail?: string }> = [];

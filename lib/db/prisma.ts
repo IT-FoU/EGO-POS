@@ -66,10 +66,12 @@ function createPrismaClient() {
   const connectionString = readConnectionString();
   const workerRuntime = isCloudflareWorkerRuntime();
 
+  const localDatabase = /localhost|127\.0\.0\.1/.test(connectionString);
+
   return new PrismaClient({
     adapter: new PrismaPg({
       connectionString,
-      ...(workerRuntime ? {} : { ssl: { rejectUnauthorized: false } }),
+      ...(workerRuntime || localDatabase ? {} : { ssl: { rejectUnauthorized: false } }),
       // Hyperdrive already pools at the edge. Prisma+Workers guidance is max: 1 so
       // the isolate does not open a second TCP client. maxUses: 1 is kept because
       // reusing a PrismaPg connection across Worker invocations has hung isolates

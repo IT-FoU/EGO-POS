@@ -7,7 +7,11 @@ export function createScriptPrismaClient(
 ) {
   loadProjectEnvFiles();
   const connectionString = resolveScriptDatabaseUrl(purpose);
+  const localDatabase = /localhost|127\.0\.0\.1/.test(connectionString);
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString, ssl: { rejectUnauthorized: false } }),
+    adapter: new PrismaPg({
+      connectionString,
+      ...(localDatabase ? {} : { ssl: { rejectUnauthorized: false } }),
+    }),
   });
 }

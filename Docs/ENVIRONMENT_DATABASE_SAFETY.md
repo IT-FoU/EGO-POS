@@ -4,17 +4,49 @@ Local development must never write to the Production database.
 
 Production fingerprint (non-secret): `ieutdqnlfiiaawctapor`
 
+## LOCAL POSTGRES (Docker)
+
+```
+docker start ego-pos-postgres-dev
+docker stop ego-pos-postgres-dev
+docker ps --filter name=ego-pos-postgres-dev
+```
+
+Container: `ego-pos-postgres-dev`  
+Volume: `ego-pos-postgres-data`  
+Image: `postgres:17`  
+Bind: `127.0.0.1:5432`  
+User / password: `postgres` / `postgres` (local only)
+
+Development DB: `igo_pos`  
+Test DB: `igo_pos_test`
+
 ## LOCAL DEV
 
 `npm run dev` and `npm run dev:uat` use `DEV_DATABASE_URL` only.
 
-Current committed default: local Postgres `127.0.0.1:5432/igo_pos`.
+```
+postgresql://postgres:postgres@127.0.0.1:5432/igo_pos?schema=public
+```
+
+First-time local data:
+
+```
+npm run db:seed
+npx tsx scripts/phase-env-01a-local-fixture.ts
+```
+
+Local store login (synthetic): `igo-admin` / `AdminChangeMe123!`
 
 Missing or Production `DEV_DATABASE_URL` fails closed. There is no fallback to `DATABASE_URL`.
 
 ## AUTOMATED TESTS
 
-DB-backed tests use `TEST_DATABASE_URL`, then `DEV_DATABASE_URL`.
+DB-backed tests use `TEST_DATABASE_URL`:
+
+```
+postgresql://postgres:postgres@127.0.0.1:5432/igo_pos_test?schema=public
+```
 
 They refuse the Production fingerprint.
 
@@ -40,6 +72,8 @@ npx prisma migrate deploy
 ```
 
 `npm run prisma:migrate` and `npm run prisma:migrate:status` refuse Production unless that flag is set.
+
+Local `prisma migrate deploy` uses `DEV_DATABASE_URL` / `TEST_DATABASE_URL`.
 
 ## PRODUCTION READ-ONLY SCRIPTS
 

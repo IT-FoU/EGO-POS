@@ -27,7 +27,9 @@ export function resolveScriptDatabaseUrl(purpose: "dev-write" | "test-write" | "
   const url =
     purpose === "production-readonly" || purpose === "production-migration"
       ? process.env.DATABASE_URL
-      : process.env.TEST_DATABASE_URL || process.env.DEV_DATABASE_URL;
+      : purpose === "test-write"
+        ? process.env.TEST_DATABASE_URL || process.env.DEV_DATABASE_URL
+        : process.env.DEV_DATABASE_URL;
   assertSafeDatabaseTarget({ databaseUrl: url, environment: role, operation: purpose });
   return String(url);
 }
