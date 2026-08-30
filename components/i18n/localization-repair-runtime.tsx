@@ -6,7 +6,9 @@ import { DEFAULT_LOCALE } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 
 const textOriginals = new WeakMap<Text, string>();
+const textAppliedValues = new WeakMap<Text, string>();
 const attrOriginalPrefix = "data-ego-original-";
+const attrAppliedPrefix = "data-ego-applied-";
 const translatedAttrs = ["aria-label", "placeholder", "title", "alt"];
 
 export function LocalizationRepairRuntime() {
@@ -18,29 +20,39 @@ export function LocalizationRepairRuntime() {
     }
 
     function translateTextNode(node: Text, locale: "th" | "en") {
-      const original = textOriginals.get(node) ?? node.nodeValue ?? "";
-      if (!textOriginals.has(node)) {
-        textOriginals.set(node, original);
+      const current = node.nodeValue ?? "";
+      // React reuses text nodes across renders. If the node no longer holds
+      // the value this runtime last wrote, the change came from React and the
+      // stale snapshot must be discarded, otherwise live state (cart totals,
+      // clocks, counters) would be reverted to first-seen SSR text.
+      if (textAppliedValues.get(node) !== current) {
+        textOriginals.set(node, current);
       }
-      node.nodeValue = locale === "th" ? translateToThai(original) : original;
+      const original = textOriginals.get(node) ?? current;
+      const next = locale === "th" ? translateToThai(original) : original;
+      if (next !== current) {
+        node.nodeValue = next;
+      }
+      textAppliedValues.set(node, next);
     }
 
     function translateElementAttrs(element: Element, locale: "th" | "en") {
       for (const attr of translatedAttrs) {
         const originalAttr = `${attrOriginalPrefix}${attr}`;
+        const appliedAttr = `${attrAppliedPrefix}${attr}`;
         const current = element.getAttribute(attr);
-        const storedOriginal = element.getAttribute(originalAttr);
-
-        if (current && !storedOriginal) {
-          element.setAttribute(originalAttr, current);
-        }
-
-        const original = storedOriginal ?? current;
-        if (!original) {
+        if (!current) {
           continue;
         }
-
-        element.setAttribute(attr, locale === "th" ? translateToThai(original) : original);
+        if (element.getAttribute(appliedAttr) !== current) {
+          element.setAttribute(originalAttr, current);
+        }
+        const original = element.getAttribute(originalAttr) ?? current;
+        const next = locale === "th" ? translateToThai(original) : original;
+        if (next !== current) {
+          element.setAttribute(attr, next);
+        }
+        element.setAttribute(appliedAttr, next);
       }
     }
 
