@@ -31,6 +31,7 @@
     "test:pos-loader": "tsx scripts/phase-perf-02-pos-loader-check.ts",
     "test:pos-cart-stock": "tsx scripts/phase-fix-14-pos-cart-stock-check.ts",
     "test:pos-cart-summary": "tsx scripts/phase-fix-14b-cart-summary-check.ts",
+    "test:pos-hold-resume": "tsx scripts/phase-fix-15-hold-resume-check.ts",
     "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { slimHeldSnapshot } from "@/features/pos/held-cart";
 import { assertPosActionAllowed, buildPosPolicyForTenant } from "@/features/pos/pos-permission-guard";
 import type { HeldBillCartSnapshot, HeldSale, PosCartItem } from "@/features/pos/types";
 import { prisma } from "@/lib/db/prisma";
@@ -23,15 +24,15 @@ function createHoldReference() {
 }
 
 function toHeldSale(bill: HeldBillRow): HeldSale {
-  const snapshot = bill.cartSnapshot as HeldBillCartSnapshot | null;
-  const items = Array.isArray(snapshot?.cartItems) ? snapshot.cartItems : [];
+  const snapshot = slimHeldSnapshot(bill.cartSnapshot as HeldBillCartSnapshot | null);
+  const items = snapshot?.cartItems ?? [];
   return {
     createdAt: new Date(bill.createdAt).toISOString(),
     id: String(bill.id),
     itemCount: items.reduce((total, item) => total + Math.max(0, amount(item.quantity)), 0),
     items,
     saleNo: String(bill.holdNo),
-    snapshot: snapshot ?? undefined,
+    snapshot,
     totalLak: amount(bill.grandTotal),
   };
 }
@@ -54,26 +55,31 @@ function normaliseSnapshot(input: HeldBillCartSnapshot) {
   const taxTotal = Math.max(0, amount(input.taxAmount));
   const grandTotal = Math.max(0, subtotal - discountTotal + taxTotal);
 
-  return {
+  const snapshot = slimHeldSnapshot({
+    ...input,
+    appliedPromotions: Array.isArray(input.appliedPromotions) ? input.appliedPromotions : [],
+    cardAmount: amount(input.cardAmount),
+    cashAmount: amount(input.cashAmount),
     cartItems,
+    discountAmount: Math.max(0, amount(input.discountAmount)),
+    discountPercent: Math.max(0, amount(input.discountPercent)),
+    membershipDiscountLak: Math.max(0, amount(input.membershipDiscountLak)),
+    qrAmount: amount(input.qrAmount),
+    redeemPoints: Math.max(0, amount(input.redeemPoints)),
+    taxAmount: taxTotal,
+    taxEnabled: Boolean(input.taxEnabled),
+    taxRatePercent: Math.max(0, amount(input.taxRatePercent)),
+    transferAmount: amount(input.transferAmount),
+  });
+  if (!snapshot) {
+    throw new Error("Cart is empty. Add items before holding a bill.");
+  }
+
+  return {
+    cartItems: snapshot.cartItems,
     discountTotal,
     grandTotal,
-    snapshot: {
-      ...input,
-      appliedPromotions: Array.isArray(input.appliedPromotions) ? input.appliedPromotions : [],
-      cardAmount: amount(input.cardAmount),
-      cashAmount: amount(input.cashAmount),
-      cartItems,
-      discountAmount: Math.max(0, amount(input.discountAmount)),
-      discountPercent: Math.max(0, amount(input.discountPercent)),
-      membershipDiscountLak: Math.max(0, amount(input.membershipDiscountLak)),
-      qrAmount: amount(input.qrAmount),
-      redeemPoints: Math.max(0, amount(input.redeemPoints)),
-      taxAmount: taxTotal,
-      taxEnabled: Boolean(input.taxEnabled),
-      taxRatePercent: Math.max(0, amount(input.taxRatePercent)),
-      transferAmount: amount(input.transferAmount),
-    } satisfies HeldBillCartSnapshot,
+    snapshot,
     subtotal,
     taxTotal,
   };

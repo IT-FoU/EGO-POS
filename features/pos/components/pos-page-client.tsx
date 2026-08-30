@@ -13,6 +13,7 @@ import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
+import { hasRestorableHeldCart, pickRestorableHeldSale, restoreCartFromHeldSale, slimHeldSnapshot } from "@/features/pos/held-cart";
 import {
     cartExceedsStock,
     cartSubtotal,
@@ -672,7 +673,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
     }
     function buildHeldBillSnapshot(): HeldBillCartSnapshot {
-        return {
+        return slimHeldSnapshot({
             appliedPromotions,
             cardAmount,
             cashAmount,
@@ -688,17 +689,16 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             taxEnabled,
             taxRatePercent,
             transferAmount,
-        };
+        })!;
     }
     function restoreHeldBill(sale: HeldSale) {
         const snapshot = sale.snapshot;
         const restoredCustomer = snapshot?.customer
             ? customers.find((customer) => customer.id === snapshot.customer?.id) ?? snapshot.customer
             : null;
-        setCartItems((snapshot?.cartItems ?? sale.items).map((item, index) => ({
-            ...item,
-            cartLineId: `${item.id}:${item.unitId ?? "default"}:held-${sale.id}-${index}`,
-        })));
+        const restored = restoreCartFromHeldSale(sale);
+        cartItemsRef.current = restored;
+        setCartItems(restored);
         setSelectedCustomer(restoredCustomer);
         setDiscountAmount(snapshot?.discountAmount ?? 0);
         setDiscountPercent(snapshot?.discountPercent ?? 0);
@@ -778,7 +778,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setHeldBillsBusy(true);
         try {
             const result = await resumeHeldBill(heldSale.id);
-            restoreHeldBill(result.sale);
+            const restorable = pickRestorableHeldSale(result.sale, heldSale);
+            if (!hasRestorableHeldCart(restorable)) {
+                setMessage("Unable to restore this held bill cart.");
+                return false;
+            }
+            restoreHeldBill(restorable);
             setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
             setSelectedHeldSaleId("");
             setMessage(result.availabilityWarnings.length > 0
