@@ -161,6 +161,8 @@ check("source: localization runtime re-captures externally changed text", () => 
     "runtime must not unconditionally restore first-seen text",
   );
   assert(src.includes("attrAppliedPrefix"), "attribute translation must track applied values too");
+  const thaiTable = readFileSync(join(process.cwd(), "lib/i18n/thai-ui-translations.ts"), "utf8");
+  assert(thaiTable.includes('"Report": "รายงาน"') && thaiTable.includes('"Promotion": "โปรโมชัน"'), "Thai table must cover the singular shell nav placeholders");
 });
 
 check("source: cart header and totals derive from cartItems state", () => {
