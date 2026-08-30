@@ -44,30 +44,33 @@ if (!warehouse) throw new Error("warehouse missing");
 const pepsi = await prisma.inventoryBalance.findFirst({
   where: { companyId: company.id, product: { barcode: "8859313502907" }, warehouseId: warehouse.id },
 });
-const sale = await prisma.sale.findFirst({ where: { companyId: company.id, saleNo: "00010001" } });
-const saleCount = await prisma.sale.count({ where: { companyId: company.id } });
+const completedSales = await prisma.sale.findMany({
+  orderBy: { saleNo: "asc" },
+  where: { companyId: company.id, saleStatus: "completed" },
+  select: { saleNo: true },
+});
 const heldCount = await prisma.holdBill.count({ where: { companyId: company.id, status: "held" } }).catch(() => -1);
 const refundCount = await prisma.refund.count({ where: { companyId: company.id } });
 const voidCount = await prisma.sale.count({ where: { companyId: company.id, saleStatus: "cancelled" } });
 const exchangedCount = await prisma.sale.count({ where: { companyId: company.id, saleStatus: "exchanged" } });
 const movementCount = await prisma.stockMovement.count({ where: { companyId: company.id } }).catch(() => -1);
 
-console.log(`PEPSI stock: ${Number(pepsi?.quantity)} (expect 23)`);
-console.log(`Sale 00010001: ${sale?.saleStatus} (expect completed)`);
-console.log(`Total sales: ${saleCount} (expect 1)`);
+console.log(`PEPSI stock: ${Number(pepsi?.quantity)} (expect 18)`);
+console.log(`Completed sales: ${completedSales.map((s) => s.saleNo).join(", ")} (expect 00010001, 00010002, 00010003)`);
 console.log(`Held bills (held): ${heldCount}`);
 console.log(`Refunds: ${refundCount} (expect 0)`);
 console.log(`Voided/cancelled sales: ${voidCount} (expect 0)`);
 console.log(`Exchanged sales: ${exchangedCount} (expect 0)`);
-console.log(`Stock movements: ${movementCount}`);
+console.log(`Stock movements: ${movementCount} (expect 4)`);
 
 const ok =
-  Number(pepsi?.quantity) === 23 &&
-  sale?.saleStatus === "completed" &&
-  saleCount === 1 &&
+  Number(pepsi?.quantity) === 18 &&
+  completedSales.length === 3 &&
+  completedSales.every((s, i) => s.saleNo === `0001000${i + 1}`) &&
   refundCount === 0 &&
   voidCount === 0 &&
   exchangedCount === 0 &&
+  movementCount === 4 &&
   (heldCount === 0 || heldCount === -1);
 console.log(ok ? "PRODUCTION SAFETY: PASS" : "PRODUCTION SAFETY: FAIL");
 await prisma.$disconnect();
