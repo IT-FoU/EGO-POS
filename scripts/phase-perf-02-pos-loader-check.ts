@@ -195,6 +195,8 @@ check("Tenant scope is request-cached for the default client", scopeSrc.includes
 check("POS snapshot does not block on next sale number", !posSnapshotFn.includes("getNextPosSaleNo("));
 check("POS snapshot reads company settings without a company join", posSnapshotFn.includes("companySetting.findUnique") && !posSnapshotFn.includes("company.findUnique"));
 check("Write-path sale numbering remains authoritative", posSnapshot.includes("const saleNo = await resolvePosSaleNo"));
+check("POS add-to-cart plans stock synchronously", posClient.includes("planPosCartAdd(cartItemsRef.current"));
+check("POS add-to-cart does not read a deferred setState result", !posClient.includes("let result: AddPosCartResult"));
 
 const failed = results.filter((result) => !result.ok);
 if (failed.length) {

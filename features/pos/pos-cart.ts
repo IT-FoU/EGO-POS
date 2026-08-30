@@ -60,6 +60,27 @@ export function defaultPosSaleUnit(product: PosProduct): PosProductUnit | undefi
   return units.find((unit) => unit.isDefaultSaleUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
 }
 
+export function resolvePosSaleUnits(product: PosProduct): PosProductUnit[] {
+  const units = (product.units ?? []).filter((unit) => unit.status !== "inactive" && unit.allowManualUnitSelect !== false);
+  if (units.length === 0) {
+    return [{
+      allowManualUnitSelect: true,
+      barcode: product.barcode,
+      conversionQty: 1,
+      costPriceLak: product.costPriceLak ?? 0,
+      id: `${product.id}-default-unit`,
+      isBaseUnit: true,
+      isDefaultSaleUnit: true,
+      isPurchaseUnit: true,
+      sellingPriceLak: product.priceLak,
+      sortOrder: 0,
+      status: "active",
+      unitName: product.unitName,
+    }];
+  }
+  return units;
+}
+
 export function productWithSaleUnit(product: PosProduct, unit: PosProductUnit): PosProduct {
   return {
     ...product,
@@ -117,6 +138,44 @@ export function addPosCartLine(
         quantity: 1,
       },
     ],
+  };
+}
+
+export function planPosCartAdd(
+  cart: PosCartItem[],
+  product: PosProduct,
+  selectedUnit?: PosProductUnit,
+  pricedOverrides: Partial<PosCartItem> = {},
+): {
+  line: PosCartItem;
+  maxSellableQty: number;
+  requestedBaseQty: number;
+  requestedSellQty: number;
+  result: AddPosCartResult;
+  saleUnit: PosProductUnit;
+} {
+  const saleUnit = selectedUnit ?? resolvePosSaleUnits(product)[0]!;
+  const unitProduct = productWithSaleUnit(product, saleUnit);
+  const conversionQty = Number(saleUnit?.conversionQty ?? unitProduct.conversionQty ?? 1);
+  const requestedSellQty = 1;
+  const line: PosCartItem = {
+    ...unitProduct,
+    ...pricedOverrides,
+    conversionQty,
+    id: product.id,
+    quantity: requestedSellQty,
+    retailPriceLak: pricedOverrides.retailPriceLak ?? unitProduct.priceLak,
+    stockQty: product.stockQty,
+    unitId: saleUnit?.id ?? unitProduct.unitId,
+    unitName: saleUnit?.unitName ?? unitProduct.unitName,
+  };
+  return {
+    line,
+    maxSellableQty: maxSellQty(product.stockQty, conversionQty),
+    requestedBaseQty: requiredBaseQty(requestedSellQty, conversionQty),
+    requestedSellQty,
+    result: addPosCartLine(cart, line),
+    saleUnit,
   };
 }
 

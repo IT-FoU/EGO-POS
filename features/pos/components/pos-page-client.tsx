@@ -14,16 +14,16 @@ import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
 import {
-    addPosCartLine,
     cartExceedsStock,
     cartSubtotal,
     filterPosCatalogue,
     findPosScanMatch,
     maxSellQty,
+    planPosCartAdd,
     productWithSaleUnit,
     removePosCartLine,
+    resolvePosSaleUnits,
     updatePosCartQuantity,
-    type AddPosCartResult,
 } from "@/features/pos/pos-cart";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
@@ -170,6 +170,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [memberSearchOpen, setMemberSearchOpen] = useState(false);
     const [cartCollapsed, setCartCollapsed] = useState(false);
     const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
+    const cartItemsRef = useRef<PosCartItem[]>([]);
+    cartItemsRef.current = cartItems;
     const [unitSelectionProduct, setUnitSelectionProduct] = useState<PosProduct | null>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(null);
     const [discountAmount, setDiscountAmount] = useState(0);
@@ -539,25 +541,21 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
     }, [appliedPromotions, cartItems, customerDisplayMode, membershipSavings, pointsEarned, promotionDiscountTotal, selectedCustomer, selectedQrBank, subtotal, totalAmount]);
     function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
-        const saleUnit = selectedUnit ?? getSaleUnits(product)[0];
+        const saleUnit = selectedUnit ?? resolvePosSaleUnits(product)[0];
         const unitProduct = saleUnit ? productWithSaleUnit(product, saleUnit) : product;
         const pricedProduct = applyCustomerPricing(unitProduct, activeCustomer);
         const stockWarning = getStockWarning(unitProduct, stockReferenceDate);
-        let result: AddPosCartResult | undefined;
-        setCartItems((current) => {
-            result = addPosCartLine(current, {
-                ...pricedProduct,
-                id: product.id,
-                stockWarning,
-            });
-            return result.cart;
+        const planned = planPosCartAdd(cartItemsRef.current, product, saleUnit, {
+            ...pricedProduct,
+            stockWarning,
         });
-        if (!result?.added) {
-            const requested = saleUnit?.conversionQty ?? unitProduct.conversionQty ?? 1;
-            setMessage(`Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested ${requested}.`);
+        if (!planned.result.added) {
+            setMessage(`Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested ${planned.requestedBaseQty}.`);
             setUnitSelectionProduct(null);
             return;
         }
+        cartItemsRef.current = planned.result.cart;
+        setCartItems(planned.result.cart);
         setCustomerDisplayMode("checkout");
         setUnitSelectionProduct(null);
         setMessage(stockWarning ? `${stockWarning.label}: ${product.nameEn}` : `${product.nameEn} ${saleUnit?.unitName ?? ""} added to cart.`);
@@ -567,7 +565,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             addToCart(product, matchedUnit);
             return;
         }
-        const saleUnits = getSaleUnits(product);
+        const saleUnits = resolvePosSaleUnits(product);
         if (saleUnits.length <= 1) {
             addToCart(product, saleUnits[0]);
             return;
@@ -2323,7 +2321,7 @@ function UnitSelectorModal({ onClose, onSelect, product, }: {
     onSelect: (unit: PosProductUnit) => void;
     product: PosProduct;
 }) {
-    const units = getSaleUnits(product);
+    const units = resolvePosSaleUnits(product);
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
       <section className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
@@ -2794,26 +2792,6 @@ function isMembershipActive(customer: PosCustomer | null | undefined) {
         return true;
     const expiry = new Date(`${customer.membershipExpiry}T23:59:59`);
     return expiry.getTime() >= Date.now();
-}
-function getSaleUnits(product: PosProduct) {
-    const units = (product.units ?? []).filter((unit) => unit.status !== "inactive" && unit.allowManualUnitSelect !== false);
-    if (units.length === 0) {
-        return [{
-                allowManualUnitSelect: true,
-                barcode: product.barcode,
-                conversionQty: 1,
-                costPriceLak: product.costPriceLak ?? 0,
-                id: `${product.id}-default-unit`,
-                isBaseUnit: true,
-                isDefaultSaleUnit: true,
-                isPurchaseUnit: true,
-                sellingPriceLak: product.priceLak,
-                sortOrder: 0,
-                status: "active" as const,
-                unitName: product.unitName,
-            }];
-    }
-    return units;
 }
 function applyCustomerPricing(product: PosProduct, customer: PosCustomer | null): PosCartItem {
     const retailPriceLak = product.priceLak;
