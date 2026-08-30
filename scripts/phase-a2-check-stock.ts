@@ -1,4 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
+
+loadProjectEnvFiles();
+const SCRIPT_DATABASE_URL = resolveScriptDatabaseUrl("test-write");
 for (const f of [".env", ".env.local"]) {
   if (!existsSync(f)) continue;
   for (const line of readFileSync(f, "utf8").split("\n")) {
@@ -14,7 +18,7 @@ for (const f of [".env", ".env.local"]) {
 }
 const { PrismaClient } = await import("@prisma/client");
 const { PrismaPg } = await import("@prisma/adapter-pg");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
 const rows = await prisma.inventoryBalance.findMany({
   where: { companyId: "gobox-company", warehouseId: "gobox-default-warehouse", quantity: { gt: 0 } },
   take: 5,

@@ -1,4 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
+
+loadProjectEnvFiles();
+const SCRIPT_DATABASE_URL = resolveScriptDatabaseUrl("test-write");
 
 // Force production reads BEFORE loading env files (loader only sets unset keys).
 process.env.IGO_DEMO_MODE = "false";
@@ -28,7 +32,7 @@ const { getPrismaInventorySnapshot } = await import("../features/inventory/prism
 const { mockSuppliers, mockPurchaseOrders, mockSupplierPayables } = await import("../features/purchasing/mock-data");
 const { mockWarehouses, mockInventoryItems, mockStockMovements } = await import("../features/inventory/mock-data");
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
 
 const COMPANY_ID = "gobox-company";
 const WAREHOUSE_ID = "gobox-default-warehouse";

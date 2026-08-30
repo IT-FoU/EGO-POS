@@ -1,4 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
+
+loadProjectEnvFiles();
+const SCRIPT_DATABASE_URL = resolveScriptDatabaseUrl("test-write");
 
 for (const fileName of [".env", ".env.local"]) {
   if (!existsSync(fileName)) continue;
@@ -20,7 +24,7 @@ const sku = process.argv[2] ?? "A2-1782049664447";
 const { PrismaClient } = await import("@prisma/client");
 const { PrismaPg } = await import("@prisma/adapter-pg");
 const { getPrismaProducts } = await import("../features/products/prisma-repository");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
 const row = await prisma.product.findFirst({ where: { companyId: "gobox-company", sku } });
 const user = await prisma.user.findFirst({ where: { username: "igo-admin" } });
 const tenant = {

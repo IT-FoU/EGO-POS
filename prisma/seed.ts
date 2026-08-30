@@ -36,13 +36,14 @@ function loadEnvFile(fileName: string) {
 }
 
 loadEnvFile(".env");
+loadEnvFile(".env.development");
 loadEnvFile(".env.local");
 
 function assertNotProductionSeed() {
-  const url = process.env.DATABASE_URL ?? getDatabaseUrl();
-  if (url.includes(PRODUCTION_REF)) {
+  const url = process.env.DEV_DATABASE_URL || "";
+  if (!url || url.includes(PRODUCTION_REF)) {
     throw new Error(
-      "Refusing prisma/seed.ts against Production. Use: npx tsx scripts/bootstrap-super-admin.ts",
+      "Refusing prisma/seed.ts against Production. Set DEV_DATABASE_URL to a local database.",
     );
   }
 }

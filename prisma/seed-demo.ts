@@ -14,7 +14,7 @@ import {
   ensureDefaultApprovalRules,
   seedRoleTemplatePermissions,
 } from "../features/access-control/prisma-repository";
-import { databaseUrl } from "../lib/db/database-url";
+import { getDatabaseUrl } from "../lib/db/database-url";
 
 function loadEnvFile(fileName: string) {
   const filePath = resolve(process.cwd(), fileName);
@@ -46,32 +46,25 @@ function loadEnvFile(fileName: string) {
 }
 
 loadEnvFile(".env");
+loadEnvFile(".env.development");
 loadEnvFile(".env.local");
 
 function assertSandboxSeedTarget() {
-  const url = process.env.DATABASE_URL ?? databaseUrl;
+  const url = process.env.DEV_DATABASE_URL || process.env.TEST_DATABASE_URL || "";
 
-  if (url.includes("ieutdqnlfiiaawctapor")) {
+  if (!url || url.includes("ieutdqnlfiiaawctapor")) {
     throw new Error("Refusing sandbox/demo seed against Production.");
-  }
-
-  if (process.env.SEED_ALLOW_ANY_DATABASE === "true") {
-    return;
   }
 
   const host = url.match(/@([^/?]+)/)?.[1] ?? url;
   const isLocal = /localhost|127\.0\.0\.1/.test(host);
-  const isSupabaseSandbox = /supabase\.com|pooler\.supabase/.test(host);
-
-  if (!isLocal && !isSupabaseSandbox) {
-    throw new Error(
-      `Refusing sandbox seed: DATABASE_URL host "${host}" is not recognized as local or Supabase sandbox. Set SEED_ALLOW_ANY_DATABASE=true to override.`,
-    );
+  if (!isLocal) {
+    throw new Error(`Refusing sandbox seed: host "${host}" is not a local Development database.`);
   }
 }
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL ?? databaseUrl }),
+  adapter: new PrismaPg({ connectionString: getDatabaseUrl() }),
 });
 
 const companyId = "gobox-company";

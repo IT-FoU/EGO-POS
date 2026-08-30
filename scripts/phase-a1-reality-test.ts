@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 function loadEnvFile(fileName: string) {
   const filePath = resolve(process.cwd(), fileName);
@@ -23,7 +24,9 @@ function loadEnvFile(fileName: string) {
 }
 
 loadEnvFile(".env");
+loadEnvFile(".env.development");
 loadEnvFile(".env.local");
+loadProjectEnvFiles();
 process.env.IGO_DEMO_MODE = "false";
 
 type Result = { detail: string; module: string; name: string; pass: boolean };
@@ -59,8 +62,7 @@ async function main() {
   const { isDemoMode } = await import("../lib/demo-mode");
   type TenantContext = import("../lib/db/write-context").TenantContext;
 
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) throw new Error("DATABASE_URL is required.");
+  const dbUrl = resolveScriptDatabaseUrl("test-write");
 
   record("Login", "Environment IGO_DEMO_MODE=false", !isDemoMode(), `isDemoMode()=${isDemoMode()}`);
 

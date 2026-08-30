@@ -3,6 +3,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { getDatabaseUrl } from "@/lib/db/database-url";
+import { assertSafeDatabaseTarget, inferDatabaseRole, isBuildPhase } from "@/lib/db/database-target";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -45,7 +46,18 @@ function readConnectionString() {
     return connectionString;
   }
 
-  const connectionString = workerEnv?.DATABASE_URL || getDatabaseUrl();
+  if (isBuildPhase()) {
+    return getDatabaseUrl();
+  }
+
+  // Local Next.js / scripts must never inherit Worker or .dev.vars Production URLs.
+  const connectionString = getDatabaseUrl();
+  const role = inferDatabaseRole() === "production" ? "development" : inferDatabaseRole();
+  assertSafeDatabaseTarget({
+    databaseUrl: connectionString,
+    environment: role,
+    operation: "prisma-client",
+  });
   console.log(`prisma-db-host=${hostOf(connectionString)} worker=no transport=database_url`);
   return connectionString;
 }

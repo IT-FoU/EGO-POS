@@ -27,24 +27,22 @@ load(".env.development.local");
 
 const databaseUrl = process.env.DEV_DATABASE_URL || "";
 if (!databaseUrl) {
-  throw new Error("REFUSING LOCAL DATABASE ACCESS: DEV_DATABASE_URL is missing. localhost UAT does not use Production.");
+  throw new Error("REFUSING LOCAL DATABASE ACCESS: DEV_DATABASE_URL is missing. Development does not fall back to Production.");
 }
 if (databaseUrl.includes(PRODUCTION_REF)) {
   throw new Error("REFUSING LOCAL DATABASE ACCESS: Development environment is targeting the Production database.");
 }
 
 process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE = databaseUrl;
-process.env.IGO_DEMO_MODE = "false";
 if (!process.env.NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = "http://localhost:3000";
 }
 
-console.log("UAT Hyperdrive host=127.0.0.1 DEV_DATABASE=igo_pos NEXTAUTH_URL=http://localhost:3000");
-console.log("Open http://localhost:3000 — Production UAT must use https://egopos.i-goto.workers.dev");
+console.log("dev-database-target=DEVELOPMENT host=127.0.0.1");
 
 const child = spawn(
   process.execPath,
-  [require.resolve("next/dist/bin/next"), "dev", "--hostname", "0.0.0.0", "--port", "3000"],
+  [require.resolve("next/dist/bin/next"), "dev", "--hostname", "0.0.0.0"],
   {
     cwd: process.cwd(),
     env: process.env,

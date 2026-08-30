@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0",
+    "dev": "node scripts/dev-local.cjs",
+    "predev": "node scripts/assert-dev-database.cjs",
     "dev:uat": "node scripts/dev-uat.cjs",
+    "test:db-safety": "tsx scripts/phase-env-01-database-safety-check.ts",
     "test:browser-smoke": "tsx scripts/phase-fix-04-browser-smoke.ts",
     "build": "next build",
     "start": "next start",

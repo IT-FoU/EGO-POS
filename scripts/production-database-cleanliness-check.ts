@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 const TARGET_REF = "ieutdqnlfiiaawctapor";
 const GOFLO_REF = "luivrsuotrdkgxkhxxbq";
@@ -37,7 +38,8 @@ function qaText(value: unknown) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "";
+  loadProjectEnvFiles();
+  const url = resolveScriptDatabaseUrl("production-readonly");
   if (!url.includes(TARGET_REF) || url.includes(GOFLO_REF) || url.includes(OLD_PRO_REF)) {
     throw new Error("Refusing cleanliness check: DATABASE_URL is not the promoted Production project");
   }

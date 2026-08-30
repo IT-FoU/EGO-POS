@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 import {
   APPROVAL_RULE_KEYS,
   LEGACY_PERMISSION_ENTRIES,
@@ -46,7 +47,8 @@ loadEnv();
 process.env.IGO_DEMO_MODE = "false";
 
 function assertTarget() {
-  const url = process.env.DATABASE_URL ?? "";
+  loadProjectEnvFiles();
+  const url = resolveScriptDatabaseUrl("production-migration");
   if (!url.includes(TARGET_REF) || url.includes(GOFLO_REF) || url.includes(OLD_PRO_REF)) {
     throw new Error("Refusing seed: DATABASE_URL is not the promoted Production project");
   }

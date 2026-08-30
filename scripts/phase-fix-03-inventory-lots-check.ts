@@ -9,6 +9,7 @@ import {
   LOT_ALLOCATION_SOURCE,
   restoreInventoryForReturn,
 } from "../features/inventory/lot-reconciliation";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 const TARGET_REF = "ieutdqnlfiiaawctapor";
 const GOFLO_REF = "luivrsuotrdkgxkhxxbq";
@@ -43,6 +44,7 @@ function loadEnv() {
 }
 
 loadEnv();
+loadProjectEnvFiles();
 process.env.IGO_DEMO_MODE = "false";
 
 function qty(value: unknown) {
@@ -477,10 +479,7 @@ async function runInRollback(prisma: PrismaClient, fn: (tx: Tx) => Promise<void>
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "";
-  if (!url.includes(TARGET_REF) || url.includes(GOFLO_REF) || url.includes(OLD_PRO_REF)) {
-    throw new Error("Refusing FIX-03 tests: DATABASE_URL is not the intended Production project");
-  }
+  const url = resolveScriptDatabaseUrl("test-write");
 
   const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString: url, ssl: { rejectUnauthorized: false } }),

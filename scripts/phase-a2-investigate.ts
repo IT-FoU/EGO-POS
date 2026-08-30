@@ -5,6 +5,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
+
+loadProjectEnvFiles();
+const SCRIPT_DATABASE_URL = resolveScriptDatabaseUrl("test-write");
 
 function loadEnvFile(fileName: string) {
   const filePath = resolve(process.cwd(), fileName);
@@ -79,7 +83,7 @@ async function investigateProduct() {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaPg } = await import("@prisma/adapter-pg");
   const { createPrismaProduct, getPrismaProducts } = await import("../features/products/prisma-repository");
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
   const tenant = await getUserTenant(prisma, "igo-admin");
   const stamp = Date.now();
   const sku = `INV-A2-${stamp}`;
@@ -129,7 +133,7 @@ async function investigateCustomer() {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaPg } = await import("@prisma/adapter-pg");
   const { createPrismaCustomer, getPrismaCustomers } = await import("../features/customers/prisma-repository");
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
   const tenant = await getUserTenant(prisma, "igo-admin");
   const stamp = Date.now();
   const phone = `020${String(stamp).slice(-7)}`;
@@ -182,7 +186,7 @@ async function investigatePos(username: string, roleLabel: string) {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaPg } = await import("@prisma/adapter-pg");
   const { completePrismaSale, getPrismaPosSnapshot } = await import("../features/pos/prisma-repository");
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
   const tenant = await getUserTenant(prisma, username);
   const snapshot = await getPrismaPosSnapshot(tenant);
   const product = snapshot.products.find((p: { stockQty: number }) => p.stockQty > 0) ?? snapshot.products[0];
@@ -261,7 +265,7 @@ async function investigatePriorA2Product() {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaPg } = await import("@prisma/adapter-pg");
   const { getPrismaProducts } = await import("../features/products/prisma-repository");
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
   const tenant = await getUserTenant(prisma, "igo-admin");
   const priorSku = "A2-1782049664447";
   const dbRow = await prisma.product.findFirst({ where: { companyId, sku: priorSku } });

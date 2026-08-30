@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 const TARGET_REF = "ieutdqnlfiiaawctapor";
 const GOFLO_REF = "luivrsuotrdkgxkhxxbq";
@@ -45,11 +46,16 @@ loadEnv();
 process.env.IGO_DEMO_MODE = "false";
 delete process.env.IGO_ENABLE_DEMO_FALLBACK;
 
-function assertTarget() {
-  const url = process.env.DATABASE_URL ?? "";
-  if (!url.includes(TARGET_REF) || url.includes(GOFLO_REF) || url.includes(OLD_PRO_REF)) {
-    throw new Error("Refusing Super Admin bootstrap: DATABASE_URL is not the intended Production project");
+function resolveBootstrapUrl() {
+  loadProjectEnvFiles();
+  if (process.env.EGO_ALLOW_PRODUCTION_MIGRATION === "true") {
+    const url = resolveScriptDatabaseUrl("production-migration");
+    if (!url.includes(TARGET_REF) || url.includes(GOFLO_REF) || url.includes(OLD_PRO_REF)) {
+      throw new Error("Refusing Super Admin bootstrap: Production fingerprint mismatch");
+    }
+    return url;
   }
+  return resolveScriptDatabaseUrl("dev-write");
 }
 
 function readSecrets(): OwnerSecrets {
@@ -116,12 +122,12 @@ function resolvePassword(secrets: OwnerSecrets, email: string, username: string)
 }
 
 async function main() {
-  assertTarget();
+  const connectionString = resolveBootstrapUrl();
   const rotate = process.env.EGO_SUPER_ADMIN_ROTATE === "true";
   const secrets = readSecrets();
   const identity = resolveIdentity(secrets);
   const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
+    adapter: new PrismaPg({ connectionString }),
   });
 
   try {

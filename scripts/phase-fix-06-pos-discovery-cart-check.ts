@@ -22,6 +22,7 @@ import {
   writePrismaProductCreate,
 } from "../features/products/prisma-repository";
 import type { TenantContext } from "../lib/db/write-context";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 const TARGET_REF = "ieutdqnlfiiaawctapor";
 const GOFLO_REF = "luivrsuotrdkgxkhxxbq";
@@ -56,6 +57,7 @@ function loadEnv() {
 }
 
 loadEnv();
+loadProjectEnvFiles();
 process.env.IGO_DEMO_MODE = "false";
 
 type Tx = any;
@@ -294,9 +296,7 @@ async function seedCore(tx: Tx) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "";
-  assert(url.includes(TARGET_REF), "Refusing non-Production database");
-  assert(!url.includes(GOFLO_REF) && !url.includes(OLD_PRO_REF), "Refusing inactive PRO or GoFLO database");
+  const url = resolveScriptDatabaseUrl("test-write");
 
   const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString: url, ssl: { rejectUnauthorized: false } }),

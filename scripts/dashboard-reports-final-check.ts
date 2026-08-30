@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 process.env.IGO_DEMO_MODE = "false";
 
@@ -23,11 +24,8 @@ for (const fileName of [".env", ".env.local"]) {
   }
 }
 
-const databaseUrl = process.env.DATABASE_URL ?? "";
-if (!databaseUrl.includes(NEW_REF) || databaseUrl.includes(OLD_REF) || databaseUrl.includes(PROD_REF)) {
-  console.error("Refusing script: DATABASE_URL is not the TEST project");
-  process.exit(1);
-}
+loadProjectEnvFiles();
+resolveScriptDatabaseUrl("test-write");
 
 const { prisma } = await import("../lib/db/prisma");
 const { completePrismaSale } = await import("../features/pos/prisma-repository");

@@ -34,7 +34,13 @@ function classify(url: string) {
 }
 
 loadEnvFile(".env");
+loadEnvFile(".env.development");
 loadEnvFile(".env.local");
+
+if (process.env.EGO_ALLOW_PRODUCTION_MIGRATION !== "true") {
+  console.error("REFUSING PRODUCTION MIGRATION: set EGO_ALLOW_PRODUCTION_MIGRATION=true for this command only.");
+  process.exit(1);
+}
 
 const url = process.env.DATABASE_URL ?? "";
 const target = classify(url);

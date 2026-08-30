@@ -1,4 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
+
+loadProjectEnvFiles();
+const SCRIPT_DATABASE_URL = resolveScriptDatabaseUrl("test-write");
 
 // Force production writes BEFORE loading env files (loader only sets unset keys).
 process.env.IGO_DEMO_MODE = "false";
@@ -25,7 +29,7 @@ const { PrismaPg } = await import("@prisma/adapter-pg");
 const { createApprovalRequest, decideApprovalRequest, evaluateApprovalRequirement } = await import("../features/approvals/approval-engine");
 const { assertPermission, WRITE_PERMISSIONS } = await import("../lib/auth/permissions");
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: SCRIPT_DATABASE_URL }) });
 
 const COMPANY_ID = "gobox-company";
 const BRANCH_ID = "gobox-main-branch";

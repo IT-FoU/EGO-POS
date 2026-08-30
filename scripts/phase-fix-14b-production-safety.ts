@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 const TARGET_REF = "ieutdqnlfiiaawctapor";
 
@@ -23,8 +24,9 @@ function loadEnv() {
 }
 
 loadEnv();
+loadProjectEnvFiles();
 
-const url = process.env.DATABASE_URL ?? "";
+const url = resolveScriptDatabaseUrl("production-readonly");
 if (!url.includes(TARGET_REF)) {
   throw new Error("Refusing non-Production database");
 }

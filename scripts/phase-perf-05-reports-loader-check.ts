@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { getPrismaDashboardSnapshot } from "../features/dashboard/dashboard-service";
 import { getPrismaReportsSnapshot } from "../features/reports/prisma-repository";
 import { PermissionDeniedError } from "../lib/auth/permissions";
+import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 
 const TARGET_REF = "ieutdqnlfiiaawctapor";
 const GOFLO_REF = "luivrsuotrdkgxkhxxbq";
@@ -99,7 +100,16 @@ check("Tenant scope is request-cached for the default client", tenantScope.inclu
 check("PrismaPg max/maxUses unchanged", prismaSrc.includes("max: 1") && prismaSrc.includes("maxUses: 1"));
 check("POS checkout writer is not part of this change set", posRepo.includes("export async function completePrismaSale"));
 
-const url = process.env.DATABASE_URL ?? "";
+if (process.env.EGO_PRODUCTION_READONLY !== "true") {
+  console.log("Skipping Production live queries (set EGO_PRODUCTION_READONLY=true)");
+  const failed = results.filter((row) => !row.ok);
+  console.log(`\nPERF-05 reports loader: ${results.length - failed.length}/${results.length} PASS${failed.length ? ` (${failed.length} FAIL)` : ""}`);
+  if (failed.length) process.exit(1);
+  process.exit(0);
+}
+
+loadProjectEnvFiles();
+const url = resolveScriptDatabaseUrl("production-readonly");
 assert(url.includes(TARGET_REF), "Refusing non-Production database");
 assert(!url.includes(GOFLO_REF) && !url.includes(OLD_PRO_REF), "Refusing inactive PRO or GoFLO database");
 
