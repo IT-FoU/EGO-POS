@@ -42,9 +42,11 @@ const dashboardPage = readFileSync("app/(dashboard)/dashboard/page.tsx", "utf8")
 const prismaSrc = readFileSync("lib/db/prisma.ts", "utf8");
 const inventoryPage = readFileSync("app/(dashboard)/inventory/page.tsx", "utf8");
 
-check("Inventory summary uses parameterized aggregate SQL", inventoryList.includes("loadInventoryListBundle") && inventoryList.includes("$queryRaw"));
+check("Inventory summary uses parameterized aggregate SQL", inventoryList.includes("loadInventoryListSummary") && inventoryList.includes("$queryRaw"));
 check("Inventory value uses product cost * quantity", inventoryList.includes("SUM(quantity * cost_price_lak)"));
 check("No $queryRawUnsafe in inventory list-query", !inventoryList.includes("$queryRawUnsafe"));
+check("No Prisma.sql fragment interpolation", !inventoryList.includes("Prisma.empty") && !inventoryList.includes("Prisma.sql"));
+check("No json_agg in inventory list-query", !inventoryList.includes("json_agg"));
 check("Summary does not load all balances into memory", !inventoryList.includes("summaryRows") && inventoryList.includes("hydrateIds"));
 check("Inventory page stays paginated", inventoryPage.includes("getInventoryListPage") && inventoryList.includes("OFFSET"));
 check("Stock Count snapshot is not paginated", inventoryRepo.includes("getPrismaInventorySnapshot") && inventoryRepo.includes("inventoryBalance.findMany"));

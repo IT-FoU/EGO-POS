@@ -34,6 +34,7 @@
     "test:navigation-loading": "tsx scripts/phase-perf-08-navigation-loading-check.ts",
     "test:list-query": "tsx scripts/phase-perf-09-list-query-check.ts",
     "test:inventory-summary": "tsx scripts/phase-perf-09b-summary-check.ts",
+    "test:inventory-worker-summary": "tsx scripts/phase-perf-09d-worker-summary-check.ts",
     "test:reports-loader": "tsx scripts/phase-perf-05-reports-loader-check.ts",
     "test:pos-loader": "tsx scripts/phase-perf-02-pos-loader-check.ts",
     "test:pos-cart-stock": "tsx scripts/phase-fix-14-pos-cart-stock-check.ts",

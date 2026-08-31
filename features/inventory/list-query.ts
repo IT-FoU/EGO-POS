@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import {
   mapPrismaInventoryBalance,
@@ -164,72 +163,56 @@ export function summarizeInventoryItems(items: InventoryItem[]): InventoryListSu
 }
 
 function asNumber(value: unknown) {
+  if (typeof value === "bigint") {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) ? parsed : 0;
+  }
+  if (typeof value === "object" && value != null && "toString" in value) {
+    const parsed = Number(value.toString());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function asIdList(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String);
-  if (typeof value === "string" && value.trim()) {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
+function asIdRows(rows: Array<{ id?: unknown }> | null | undefined): string[] {
+  return (rows ?? []).map((row) => String(row.id ?? "")).filter(Boolean);
 }
 
-function inventorySearchSql(search: string) {
-  if (!search) return Prisma.empty;
-  const pattern = `%${search.replace(/[%_\\]/g, "\\$&")}%`;
-  return Prisma.sql`AND (
-    p.name_lo ILIKE ${pattern} ESCAPE '\\'
-    OR COALESCE(p.name_en, '') ILIKE ${pattern} ESCAPE '\\'
-    OR COALESCE(p.barcode, '') ILIKE ${pattern} ESCAPE '\\'
-    OR COALESCE(p.sku, '') ILIKE ${pattern} ESCAPE '\\'
-  )`;
+function searchPattern(search: string) {
+  return search ? `%${search.replace(/[%_\\]/g, "\\$&")}%` : "";
 }
 
-function inventoryStockFilterSql(filter: InventoryStockFilter, now: Date) {
-  if (filter === "out_of_stock") return Prisma.sql`AND quantity <= 0`;
-  if (filter === "low_stock") return Prisma.sql`AND quantity > 0 AND quantity <= min_stock`;
-  if (filter === "near_expiry") {
-    return Prisma.sql`AND expiry_date IS NOT NULL AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${now})) / 86400.0) <= 30`;
-  }
-  if (filter === "dead_stock") return Prisma.sql`AND days_without_sale >= 30`;
-  if (filter === "fast_moving") return Prisma.sql`AND (sold_30 > 0 OR days_without_sale <= 7)`;
-  return Prisma.empty;
-}
-
-type InventoryListBundleRow = {
+type InventoryListSummaryRow = {
   dead_stock: unknown;
   fast_moving: unknown;
   inventory_value: unknown;
   low_stock: unknown;
   near_expiry: unknown;
   out_of_stock: unknown;
-  page_ids: unknown;
-  preview_ids: unknown;
   total_count: unknown;
   total_quantity: unknown;
 };
 
-async function loadInventoryListBundle(
+type InventoryIdRow = { id: string };
+
+type InventorySqlInput = {
+  now: Date;
+  pageSize: number;
+  search: string;
+  skip: number;
+  stockFilter: InventoryStockFilter;
+  thirtyDaysAgo: Date;
+  warehouseIds: string[];
+};
+
+async function loadInventoryListSummary(
   client: any,
   scope: BranchScope,
-  input: {
-    now: Date;
-    pageSize: number;
-    search: string;
-    skip: number;
-    stockFilter: InventoryStockFilter;
-    thirtyDaysAgo: Date;
-    warehouseIds: string[];
-  },
+  input: InventorySqlInput,
 ) {
-  const rows = await client.$queryRaw<InventoryListBundleRow[]>`
+  const pattern = searchPattern(input.search);
+  const rows = await client.$queryRaw<InventoryListSummaryRow[]>`
     WITH last_sale AS (
       SELECT DISTINCT ON (si.product_id)
         si.product_id,
@@ -254,9 +237,7 @@ async function loadInventoryListBundle(
     scoped AS (
       SELECT
         b.id,
-        b.product_id,
         b.quantity,
-        b.updated_at,
         p.min_stock,
         p.cost_price_lak,
         lot.expiry_date,
@@ -280,68 +261,205 @@ async function loadInventoryListBundle(
       ) lot ON true
       WHERE b.company_id = ${scope.companyId}
         AND b.warehouse_id = ANY(${input.warehouseIds})
-        ${inventorySearchSql(input.search)}
-    ),
-    filtered AS (
-      SELECT * FROM scoped
-      WHERE TRUE
-      ${inventoryStockFilterSql(input.stockFilter, input.now)}
-    ),
-    summary AS (
-      SELECT
-        COUNT(*)::int AS total_count,
-        COALESCE(SUM(quantity), 0)::float8 AS total_quantity,
-        COALESCE(SUM(quantity * cost_price_lak), 0)::float8 AS inventory_value,
-        COUNT(*) FILTER (WHERE quantity <= 0)::int AS out_of_stock,
-        COUNT(*) FILTER (WHERE quantity > 0 AND quantity <= min_stock)::int AS low_stock,
-        COUNT(*) FILTER (
-          WHERE expiry_date IS NOT NULL
-            AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${input.now})) / 86400.0) <= 30
-        )::int AS near_expiry,
-        COUNT(*) FILTER (WHERE days_without_sale >= 30)::int AS dead_stock,
-        COUNT(*) FILTER (WHERE sold_30 > 0 OR days_without_sale <= 7)::int AS fast_moving
-      FROM filtered
-    ),
-    page_rows AS (
-      SELECT id
-      FROM filtered
-      ORDER BY updated_at DESC, id DESC
-      OFFSET ${input.skip}
-      LIMIT ${input.pageSize}
+        AND (
+          ${input.search} = ''
+          OR p.name_lo ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.name_en, '') ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.barcode, '') ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.sku, '') ILIKE ${pattern} ESCAPE '\\'
+        )
     )
     SELECT
-      summary.total_count,
-      summary.total_quantity,
-      summary.inventory_value,
-      summary.out_of_stock,
-      summary.low_stock,
-      summary.near_expiry,
-      summary.dead_stock,
-      summary.fast_moving,
-      (SELECT COALESCE(json_agg(page_rows.id), '[]'::json) FROM page_rows) AS page_ids,
-      (
-        SELECT COALESCE(json_agg(preview.id), '[]'::json)
-        FROM (
-          (SELECT id FROM scoped WHERE quantity <= 0 ORDER BY updated_at DESC, id DESC LIMIT 20)
-          UNION ALL
-          (SELECT id FROM scoped WHERE quantity > 0 AND quantity <= min_stock ORDER BY updated_at DESC, id DESC LIMIT 20)
-          UNION ALL
-          (SELECT id FROM scoped WHERE days_without_sale >= 30 ORDER BY updated_at DESC, id DESC LIMIT 20)
-          UNION ALL
-          (
-            SELECT id FROM scoped
-            WHERE expiry_date IS NOT NULL
-              AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${input.now})) / 86400.0) <= 30
-            ORDER BY updated_at DESC, id DESC
-            LIMIT 20
-          )
-          UNION ALL
-          (SELECT id FROM scoped WHERE sold_30 > 0 OR days_without_sale <= 7 ORDER BY updated_at DESC, id DESC LIMIT 9)
-        ) preview
-      ) AS preview_ids
-    FROM summary
+      COUNT(*)::int AS total_count,
+      COALESCE(SUM(quantity), 0)::text AS total_quantity,
+      COALESCE(SUM(quantity * cost_price_lak), 0)::text AS inventory_value,
+      COUNT(*) FILTER (WHERE quantity <= 0)::int AS out_of_stock,
+      COUNT(*) FILTER (WHERE quantity > 0 AND quantity <= min_stock)::int AS low_stock,
+      COUNT(*) FILTER (
+        WHERE expiry_date IS NOT NULL
+          AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${input.now})) / 86400.0) <= 30
+      )::int AS near_expiry,
+      COUNT(*) FILTER (WHERE days_without_sale >= 30)::int AS dead_stock,
+      COUNT(*) FILTER (WHERE sold_30 > 0 OR days_without_sale <= 7)::int AS fast_moving
+    FROM scoped
+    WHERE
+      ${input.stockFilter} = 'all'
+      OR (${input.stockFilter} = 'out_of_stock' AND quantity <= 0)
+      OR (${input.stockFilter} = 'low_stock' AND quantity > 0 AND quantity <= min_stock)
+      OR (
+        ${input.stockFilter} = 'near_expiry'
+        AND expiry_date IS NOT NULL
+        AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${input.now})) / 86400.0) <= 30
+      )
+      OR (${input.stockFilter} = 'dead_stock' AND days_without_sale >= 30)
+      OR (${input.stockFilter} = 'fast_moving' AND (sold_30 > 0 OR days_without_sale <= 7))
   `;
   return rows[0];
+}
+
+async function loadInventoryPageIds(
+  client: any,
+  scope: BranchScope,
+  input: InventorySqlInput,
+) {
+  const pattern = searchPattern(input.search);
+  return client.$queryRaw<InventoryIdRow[]>`
+    WITH last_sale AS (
+      SELECT DISTINCT ON (si.product_id)
+        si.product_id,
+        s.created_at AS last_sale_at
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      WHERE s.company_id = ${scope.companyId}
+        AND s.branch_id = ${scope.branchId}
+        AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
+      ORDER BY si.product_id, s.created_at DESC
+    ),
+    sold_30 AS (
+      SELECT si.product_id, SUM(si.quantity) AS qty
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      WHERE s.company_id = ${scope.companyId}
+        AND s.branch_id = ${scope.branchId}
+        AND s.created_at >= ${input.thirtyDaysAgo}
+        AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
+      GROUP BY si.product_id
+    ),
+    scoped AS (
+      SELECT
+        b.id,
+        b.quantity,
+        b.updated_at,
+        p.min_stock,
+        lot.expiry_date,
+        CASE
+          WHEN ls.last_sale_at IS NOT NULL THEN GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (${input.now} - ls.last_sale_at)) / 86400))
+          WHEN b.quantity > 0 THEN 999
+          ELSE 0
+        END AS days_without_sale,
+        COALESCE(s30.qty, 0) AS sold_30
+      FROM inventory_balances b
+      INNER JOIN products p ON p.id = b.product_id
+      LEFT JOIN last_sale ls ON ls.product_id = b.product_id
+      LEFT JOIN sold_30 s30 ON s30.product_id = b.product_id
+      LEFT JOIN LATERAL (
+        SELECT l.expiry_date
+        FROM inventory_lots l
+        WHERE l.company_id = b.company_id
+          AND l.product_id = b.product_id
+        ORDER BY l.expiry_date ASC
+        LIMIT 1
+      ) lot ON true
+      WHERE b.company_id = ${scope.companyId}
+        AND b.warehouse_id = ANY(${input.warehouseIds})
+        AND (
+          ${input.search} = ''
+          OR p.name_lo ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.name_en, '') ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.barcode, '') ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.sku, '') ILIKE ${pattern} ESCAPE '\\'
+        )
+    )
+    SELECT id
+    FROM scoped
+    WHERE
+      ${input.stockFilter} = 'all'
+      OR (${input.stockFilter} = 'out_of_stock' AND quantity <= 0)
+      OR (${input.stockFilter} = 'low_stock' AND quantity > 0 AND quantity <= min_stock)
+      OR (
+        ${input.stockFilter} = 'near_expiry'
+        AND expiry_date IS NOT NULL
+        AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${input.now})) / 86400.0) <= 30
+      )
+      OR (${input.stockFilter} = 'dead_stock' AND days_without_sale >= 30)
+      OR (${input.stockFilter} = 'fast_moving' AND (sold_30 > 0 OR days_without_sale <= 7))
+    ORDER BY updated_at DESC, id DESC
+    OFFSET ${input.skip}
+    LIMIT ${input.pageSize}
+  `;
+}
+
+async function loadInventoryPreviewIds(
+  client: any,
+  scope: BranchScope,
+  input: InventorySqlInput,
+) {
+  const pattern = searchPattern(input.search);
+  return client.$queryRaw<InventoryIdRow[]>`
+    WITH last_sale AS (
+      SELECT DISTINCT ON (si.product_id)
+        si.product_id,
+        s.created_at AS last_sale_at
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      WHERE s.company_id = ${scope.companyId}
+        AND s.branch_id = ${scope.branchId}
+        AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
+      ORDER BY si.product_id, s.created_at DESC
+    ),
+    sold_30 AS (
+      SELECT si.product_id, SUM(si.quantity) AS qty
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      WHERE s.company_id = ${scope.companyId}
+        AND s.branch_id = ${scope.branchId}
+        AND s.created_at >= ${input.thirtyDaysAgo}
+        AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
+      GROUP BY si.product_id
+    ),
+    scoped AS (
+      SELECT
+        b.id,
+        b.quantity,
+        b.updated_at,
+        p.min_stock,
+        lot.expiry_date,
+        CASE
+          WHEN ls.last_sale_at IS NOT NULL THEN GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (${input.now} - ls.last_sale_at)) / 86400))
+          WHEN b.quantity > 0 THEN 999
+          ELSE 0
+        END AS days_without_sale,
+        COALESCE(s30.qty, 0) AS sold_30
+      FROM inventory_balances b
+      INNER JOIN products p ON p.id = b.product_id
+      LEFT JOIN last_sale ls ON ls.product_id = b.product_id
+      LEFT JOIN sold_30 s30 ON s30.product_id = b.product_id
+      LEFT JOIN LATERAL (
+        SELECT l.expiry_date
+        FROM inventory_lots l
+        WHERE l.company_id = b.company_id
+          AND l.product_id = b.product_id
+        ORDER BY l.expiry_date ASC
+        LIMIT 1
+      ) lot ON true
+      WHERE b.company_id = ${scope.companyId}
+        AND b.warehouse_id = ANY(${input.warehouseIds})
+        AND (
+          ${input.search} = ''
+          OR p.name_lo ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.name_en, '') ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.barcode, '') ILIKE ${pattern} ESCAPE '\\'
+          OR COALESCE(p.sku, '') ILIKE ${pattern} ESCAPE '\\'
+        )
+    )
+    SELECT id FROM (
+      (SELECT id, updated_at FROM scoped WHERE quantity <= 0 ORDER BY updated_at DESC, id DESC LIMIT 20)
+      UNION ALL
+      (SELECT id, updated_at FROM scoped WHERE quantity > 0 AND quantity <= min_stock ORDER BY updated_at DESC, id DESC LIMIT 20)
+      UNION ALL
+      (SELECT id, updated_at FROM scoped WHERE days_without_sale >= 30 ORDER BY updated_at DESC, id DESC LIMIT 20)
+      UNION ALL
+      (
+        SELECT id, updated_at FROM scoped
+        WHERE expiry_date IS NOT NULL
+          AND CEIL(EXTRACT(EPOCH FROM (expiry_date - ${input.now})) / 86400.0) <= 30
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 20
+      )
+      UNION ALL
+      (SELECT id, updated_at FROM scoped WHERE sold_30 > 0 OR days_without_sale <= 7 ORDER BY updated_at DESC, id DESC LIMIT 9)
+    ) preview
+  `;
 }
 
 export async function getPrismaInventoryListPage(
@@ -374,7 +492,16 @@ export async function getPrismaInventoryListPage(
     totalQuantity: 0,
   };
 
-  const [warehouses, movements, bundle] = await Promise.all([
+  const sqlInput: InventorySqlInput = {
+    now,
+    pageSize,
+    search,
+    skip,
+    stockFilter,
+    thirtyDaysAgo,
+    warehouseIds,
+  };
+  const [warehouses, movements, summaryRow, pageIdRows, previewIdRows] = await Promise.all([
     client.warehouse.findMany({
       include: { branch: { select: { name: true } } },
       orderBy: { name: "asc" },
@@ -389,36 +516,28 @@ export async function getPrismaInventoryListPage(
       take: 50,
       where: { companyId: scope.companyId, warehouseId: { in: warehouseIds } },
     }),
-    warehouseIds.length
-      ? loadInventoryListBundle(client, scope, {
-          now,
-          pageSize,
-          search,
-          skip,
-          stockFilter,
-          thirtyDaysAgo,
-          warehouseIds,
-        })
-      : Promise.resolve(null),
+    warehouseIds.length ? loadInventoryListSummary(client, scope, sqlInput) : Promise.resolve(null),
+    warehouseIds.length ? loadInventoryPageIds(client, scope, sqlInput) : Promise.resolve([]),
+    warehouseIds.length ? loadInventoryPreviewIds(client, scope, sqlInput) : Promise.resolve([]),
   ]);
 
-  const pageIds = asIdList(bundle?.page_ids);
-  const previewIds = asIdList(bundle?.preview_ids);
-  const totalCount = asNumber(bundle?.total_count);
-  const outOfStock = asNumber(bundle?.out_of_stock);
-  const lowStock = asNumber(bundle?.low_stock);
-  const deadStock = asNumber(bundle?.dead_stock);
-  const summary: InventoryListSummary = bundle
+  const pageIds = asIdRows(pageIdRows);
+  const previewIds = asIdRows(previewIdRows);
+  const totalCount = asNumber(summaryRow?.total_count);
+  const outOfStock = asNumber(summaryRow?.out_of_stock);
+  const lowStock = asNumber(summaryRow?.low_stock);
+  const deadStock = asNumber(summaryRow?.dead_stock);
+  const summary: InventoryListSummary = summaryRow
     ? {
         alertCenter: outOfStock + lowStock + deadStock,
         deadStock,
-        fastMoving: asNumber(bundle.fast_moving),
-        inventoryValue: asNumber(bundle.inventory_value),
+        fastMoving: asNumber(summaryRow.fast_moving),
+        inventoryValue: asNumber(summaryRow.inventory_value),
         lowStock,
-        nearExpiry: asNumber(bundle.near_expiry),
+        nearExpiry: asNumber(summaryRow.near_expiry),
         outOfStock,
         totalProducts: totalCount,
-        totalQuantity: asNumber(bundle.total_quantity),
+        totalQuantity: asNumber(summaryRow.total_quantity),
       }
     : emptySummary;
 
