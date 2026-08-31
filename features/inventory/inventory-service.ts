@@ -1,7 +1,9 @@
 import type { InventoryItem, StockMovement, Warehouse } from "@/features/inventory/types";
+import type { InventoryListPage, InventoryListQuery } from "@/features/inventory/list-query";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import {
+  getPrismaInventoryListPage,
   getPrismaInventorySnapshot,
   getPrismaReceivableCatalogItems,
   mergeQuickStockInCatalog,
@@ -13,10 +15,11 @@ export async function getInventorySnapshot(): Promise<{
   items: InventoryItem[];
   movements: StockMovement[];
 }> {
-  // DB-only (B7-4): warehouses, stock items, movements, and lots are read from
-  // PostgreSQL via Prisma, scoped to the active tenant/company/warehouse.
-  // Missing data yields empty live results, never mock.
   return getPrismaInventorySnapshot(tenantFromSession(await requireSession()));
+}
+
+export async function getInventoryListPage(query: InventoryListQuery = {}): Promise<InventoryListPage> {
+  return getPrismaInventoryListPage(tenantFromSession(await requireSession()), query);
 }
 
 export async function getReceivableCatalogItems(): Promise<InventoryItem[]> {

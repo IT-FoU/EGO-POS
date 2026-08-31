@@ -1,6 +1,6 @@
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { InventoryPageClient } from "@/features/inventory/components/inventory-page-client";
-import { getInventorySnapshot } from "@/features/inventory/inventory-service";
+import { getInventoryListPage } from "@/features/inventory/inventory-service";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { requireSession } from "@/lib/auth/session";
 
@@ -10,13 +10,14 @@ export default async function InventoryPage() {
     return <StoreAccessDenied />;
   }
 
-  const snapshot = await getInventorySnapshot();
+  const listPage = await getInventoryListPage({ page: 1, pageSize: 100 });
 
   return (
     <InventoryPageClient
-      items={snapshot.items}
-      movements={snapshot.movements}
-      warehouses={snapshot.warehouses}
+      items={listPage.items}
+      listPage={listPage}
+      movements={listPage.movements}
+      warehouses={listPage.warehouses}
     />
   );
 }

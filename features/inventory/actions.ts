@@ -4,9 +4,12 @@ import { STORE_ACTIONS, type StoreAction } from "@/features/permissions/store-pe
 import { createStockAdjustment, createStockCount, createStockIn } from "@/features/inventory/prisma-repository";
 import {
   assertPermission,
+  READ_PERMISSIONS,
   WRITE_PERMISSIONS,
   type WritePermissionKey,
 } from "@/lib/auth/permissions";
+import { getPrismaInventoryListPage } from "@/features/inventory/prisma-repository";
+import type { InventoryListQuery } from "@/features/inventory/list-query";
 import { requireSession } from "@/lib/auth/session";
 import { requireStoreActionPermission } from "@/lib/auth/store-permission-guard";
 import { tenantFromSession, writeFailure, writeSuccess } from "@/lib/db/write-context";
@@ -17,6 +20,17 @@ async function tenant(permission: WritePermissionKey, storeAction: StoreAction) 
   await requireStoreActionPermission({ action: storeAction, session, tenant: nextTenant });
   await assertPermission(nextTenant, permission);
   return nextTenant;
+}
+
+export async function loadInventoryListAction(query: InventoryListQuery = {}) {
+  try {
+    const session = await requireSession();
+    const nextTenant = tenantFromSession(session);
+    await assertPermission(nextTenant, READ_PERMISSIONS.inventoryView);
+    return writeSuccess(await getPrismaInventoryListPage(nextTenant, query));
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function stockInAction(input: Parameters<typeof createStockIn>[0]) {

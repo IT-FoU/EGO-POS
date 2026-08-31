@@ -1,7 +1,7 @@
 "use server";
 
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
-import { requireWritePermission, WRITE_PERMISSIONS, type WritePermissionKey } from "@/lib/auth/permissions";
+import { requireReadPermission, requireWritePermission, WRITE_PERMISSIONS, READ_PERMISSIONS, type WritePermissionKey } from "@/lib/auth/permissions";
 import {
   archivePrismaProduct,
   bulkUpdatePrismaProductPrices,
@@ -9,14 +9,25 @@ import {
   deletePrismaCategory,
   deletePrismaProduct,
   duplicatePrismaProduct,
+  getPrismaProductListPage,
   updatePrismaProduct,
   upsertPrismaCategory,
   type ProductWriteInput,
   type BulkPriceUpdateInput,
 } from "@/features/products/prisma-repository";
+import type { ProductListQuery } from "@/features/products/list-query";
 
 async function tenant(permission: WritePermissionKey) {
   return requireWritePermission(permission);
+}
+
+export async function loadProductListAction(query: ProductListQuery = {}) {
+  try {
+    const tenant = await requireReadPermission(READ_PERMISSIONS.productsView);
+    return writeSuccess(await getPrismaProductListPage(tenant, query));
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function createProductAction(input: ProductWriteInput) {

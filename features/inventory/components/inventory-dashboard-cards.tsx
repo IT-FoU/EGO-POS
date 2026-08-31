@@ -1,6 +1,7 @@
 import { t } from "@/lib/i18n/ui";
 import { AlertTriangle, Boxes, CalendarClock, PackageCheck, PackageSearch, TrendingUp, WalletCards, } from "lucide-react";
 import type { InventoryItem, StockMovement } from "@/features/inventory/types";
+import type { InventoryListSummary } from "@/features/inventory/list-query";
 import { getDaysUntil } from "@/features/inventory/format";
 export type InventoryDashboardPanel = "fast_moving" | "stock_alerts" | null;
 export type InventoryStockFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "fast_moving";
@@ -46,42 +47,51 @@ export function getInventoryDashboardMetrics(items: InventoryItem[], movements: 
         totalQuantity,
     };
 }
-export function InventoryDashboardCards({ activePanel, items, movements = [], onFilterChange, onPanelChange, }: {
+export function InventoryDashboardCards({ activePanel, items, movements = [], summary, onFilterChange, onPanelChange, }: {
     activePanel: InventoryDashboardPanel;
     items: InventoryItem[];
     movements?: StockMovement[];
+    summary?: InventoryListSummary;
     onFilterChange: (filter: InventoryStockFilter) => void;
     onPanelChange: (panel: InventoryDashboardPanel) => void;
 }) {
     const metrics = getInventoryDashboardMetrics(items, movements);
+    const totalProducts = summary?.totalProducts ?? metrics.totalProducts;
+    const totalQuantity = summary?.totalQuantity ?? metrics.totalQuantity;
+    const inventoryValue = summary?.inventoryValue ?? metrics.inventoryValue;
+    const fastMoving = summary?.fastMoving ?? metrics.fastMovingItems.length;
+    const alertCenter = summary?.alertCenter ?? metrics.alertCenter;
+    const lowStock = summary?.lowStock ?? metrics.lowStockItems.length;
+    const deadStock = summary?.deadStock ?? metrics.deadStockItems.length;
+    const nearExpiry = summary?.nearExpiry ?? metrics.nearExpiryItems.length;
     const cards = [
-        { filter: "all" as const, label: "Total Products", value: metrics.totalProducts, icon: Boxes },
+        { filter: "all" as const, label: "Total Products", value: totalProducts, icon: Boxes },
         {
             filter: "all" as const,
             label: "Inventory Quantity",
-            value: metrics.totalQuantity.toLocaleString("en-US"),
+            value: totalQuantity.toLocaleString("en-US"),
             icon: PackageSearch,
         },
-        { filter: "all" as const, label: "Inventory Value", value: formatLak(metrics.inventoryValue), icon: WalletCards },
+        { filter: "all" as const, label: "Inventory Value", value: formatLak(inventoryValue), icon: WalletCards },
         { filter: "all" as const, label: t("ui.today.s.stock.in"), value: metrics.todaysStockIn, icon: PackageCheck },
         { filter: "all" as const, label: t("ui.today.s.adjustments"), value: metrics.todaysAdjustments, icon: AlertTriangle },
         {
             filter: "fast_moving" as const,
             label: "Fast Moving Products",
             panel: "fast_moving" as const,
-            value: metrics.fastMovingItems.length,
+            value: fastMoving,
             icon: TrendingUp,
         },
         {
             filter: "low_stock" as const,
             label: "Stock Alert Center",
             panel: "stock_alerts" as const,
-            value: metrics.alertCenter,
+            value: alertCenter,
             icon: AlertTriangle,
         },
-        { filter: "low_stock" as const, label: "Low Stock", value: metrics.lowStockItems.length, icon: AlertTriangle },
-        { filter: "dead_stock" as const, label: "Dead Stock", value: metrics.deadStockItems.length, icon: PackageSearch },
-        { filter: "near_expiry" as const, label: "Expiring Soon", value: metrics.nearExpiryItems.length, icon: CalendarClock },
+        { filter: "low_stock" as const, label: "Low Stock", value: lowStock, icon: AlertTriangle },
+        { filter: "dead_stock" as const, label: "Dead Stock", value: deadStock, icon: PackageSearch },
+        { filter: "near_expiry" as const, label: "Expiring Soon", value: nearExpiry, icon: CalendarClock },
     ];
     return (<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       {cards.map((card) => {

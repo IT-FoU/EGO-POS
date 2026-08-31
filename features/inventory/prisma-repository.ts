@@ -9,11 +9,17 @@ import {
   setAtomicStockCount,
 } from "@/features/inventory/stock-concurrency";
 import {
-  mapPrismaInventoryBalance,
   mapPrismaProductToReceivableItem,
   mapPrismaStockMovement,
   mapPrismaWarehouse,
 } from "@/features/inventory/dto-mapper";
+import {
+  attachInventorySalesMetrics,
+  getPrismaInventoryListPage as loadPrismaInventoryListPage,
+  inventoryProductSelect,
+  loadLastSaleByProduct,
+  type InventoryListQuery,
+} from "@/features/inventory/list-query";
 import type { InventoryItem } from "@/features/inventory/types";
 import {
   parseStockAdjustmentInput,
@@ -26,6 +32,10 @@ import {
 
 const db = prisma as any;
 
+export async function getPrismaInventoryListPage(tenant: TenantContext, input: InventoryListQuery = {}, client: any = db) {
+  return loadPrismaInventoryListPage(tenant, input, client);
+}
+
 export async function getPrismaInventorySnapshot(tenant: TenantContext, client: any = db) {
   const scope = await resolveTenantScope(tenant, client);
   const thirtyDaysAgo = new Date();
@@ -33,27 +43,20 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext, client: 
 
   const [warehouses, balances, movements] = await Promise.all([
     client.warehouse.findMany({
-      include: { branch: true },
+      include: { branch: { select: { name: true } } },
       orderBy: { name: "asc" },
       where: { branchId: scope.branchId, companyId: scope.companyId },
     }),
     client.inventoryBalance.findMany({
-      include: {
-        product: {
-          include: {
-            _count: { select: { saleItems: true } },
-            category: true,
-            inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
-            supplier: true,
-            units: true,
-          },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
+      include: { product: { select: inventoryProductSelect } },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
     }),
     client.stockMovement.findMany({
-      include: { product: true, unit: true },
+      include: {
+        product: { select: { nameEn: true, nameLo: true, sku: true } },
+        unit: { select: { unitName: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: 50,
       where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
@@ -61,58 +64,26 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext, client: 
   ]);
 
   const productIds = balances.map((balance: Record<string, any>) => balance.productId);
-  const [lastSaleItems, sold30Days] = productIds.length
+  const [lastSaleByProduct, sold30Days] = productIds.length
     ? await Promise.all([
-        client.saleItem.findMany({
-          orderBy: { sale: { createdAt: "desc" } },
-          select: { productId: true, sale: { select: { createdAt: true } } },
-          where: {
-            productId: { in: productIds },
-            sale: { branchId: scope.branchId, companyId: scope.companyId, saleStatus: { in: [...REPORT_SALE_STATUSES] } },
-          },
-        }),
+        loadLastSaleByProduct(client, scope, productIds),
         client.saleItem.groupBy({
           by: ["productId"],
           _sum: { quantity: true },
           where: {
             productId: { in: productIds },
-            sale: {
-              branchId: scope.branchId,
-              companyId: scope.companyId,
-              createdAt: { gte: thirtyDaysAgo },
-              saleStatus: { in: [...REPORT_SALE_STATUSES] },
-            },
+            sale: { branchId: scope.branchId, companyId: scope.companyId, createdAt: { gte: thirtyDaysAgo }, saleStatus: { in: [...REPORT_SALE_STATUSES] } },
           },
         }),
       ])
-    : [[], []];
+    : [new Map<string, Date>(), []];
 
-  const lastSaleByProduct = new Map<string, Date>();
-  for (const row of lastSaleItems as Array<{ productId: string; sale: { createdAt: Date } }>) {
-    if (!lastSaleByProduct.has(row.productId)) {
-      lastSaleByProduct.set(row.productId, row.sale.createdAt);
-    }
-  }
   const sold30ByProduct = new Map<string, number>(
     sold30Days.map((row: Record<string, any>) => [row.productId, amount(row._sum.quantity)]),
   );
-  const nowMs = Date.now();
 
   return {
-    items: balances.map((balance: Record<string, any>) => {
-      const item = mapPrismaInventoryBalance(balance);
-      const lastSale = lastSaleByProduct.get(balance.productId);
-      const daysWithoutSale = lastSale
-        ? Math.max(0, Math.floor((nowMs - lastSale.getTime()) / 86_400_000))
-        : item.quantity > 0
-          ? 999
-          : 0;
-      return {
-        ...item,
-        daysWithoutSale,
-        unitsSold30Days: sold30ByProduct.get(balance.productId) ?? 0,
-      };
-    }),
+    items: attachInventorySalesMetrics(balances, lastSaleByProduct, sold30ByProduct),
     movements: movements.map(mapPrismaStockMovement),
     warehouses: warehouses.map(mapPrismaWarehouse),
   };
@@ -127,12 +98,7 @@ export async function getPrismaReceivableCatalogItems(tenant: TenantContext, cli
   const scope = await resolveTenantScope(tenant, client);
   const [products, balances] = await Promise.all([
     client.product.findMany({
-      include: {
-        category: true,
-        inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
-        supplier: true,
-        units: true,
-      },
+      select: inventoryProductSelect,
       orderBy: { nameEn: "asc" },
       where: {
         companyId: scope.companyId,

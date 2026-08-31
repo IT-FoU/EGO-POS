@@ -1,15 +1,16 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIcon, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, AlertCircle, Archive, Clock, Package, Boxes, X, Trash2, } from "lucide-react";
 import type { Category, Product, ProductStatus } from "@/features/products/types";
+import type { ProductListPage, ProductInsightFilter } from "@/features/products/list-query";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
 import { StatusBadge } from "@/features/products/components/status-badge";
 import { formatLak } from "@/features/products/format";
-import { deleteProductAction } from "@/features/products/actions";
+import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
 import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
 const importFields = [
@@ -30,7 +31,7 @@ const importFields = [
 ] as const;
 type ProductsModal = "image" | null;
 type ExpiryStatus = "normal" | "near_expiry" | "expired" | "no_expiry";
-type InsightFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "missing_barcode" | "no_image";
+type InsightFilter = ProductInsightFilter;
 type SummaryInsight = Exclude<InsightFilter, "missing_barcode" | "no_image">;
 type ProductShellDrawerKey = "total" | "active" | "missing_images" | "missing_barcode" | "product_health" | "product_list" | "categories" | "barcode_sku" | "images" | "labels" | "tool_import" | "tool_export" | "tool_audit" | "tool_print_barcode" | "tool_print_shelf" | "tool_bulk_price";
 type ProductShellStats = ReturnType<typeof getProductShellStats>;
@@ -42,20 +43,26 @@ type ProductShellDrawerContent = {
     title: string;
 };
 const pageSizeOptions = [25, 50, 100, 200] as const;
-export function ProductListClient({ products: initialProducts, categories: initialCategories, }: {
+export function ProductListClient({ products: initialProducts, categories: initialCategories, listPage: initialListPage, }: {
     products: Product[];
     categories: Category[];
+    listPage?: ProductListPage;
 }) {
     const router = useRouter();
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
+    const [listPage, setListPage] = useState<ProductListPage | undefined>(initialListPage);
     const [query, setQuery] = useState("");
     const [categoryId, setCategoryId] = useState("all");
     const [status, setStatus] = useState<ProductStatus | "all">("all");
     const [insightFilter, setInsightFilter] = useState<InsightFilter>("all");
     const [expandedInsight, setExpandedInsight] = useState<SummaryInsight | null>(null);
-    const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(100);
-    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(
+        pageSizeOptions.includes((initialListPage?.pageSize ?? 100) as (typeof pageSizeOptions)[number])
+            ? ((initialListPage?.pageSize ?? 100) as (typeof pageSizeOptions)[number])
+            : 100,
+    );
+    const [page, setPage] = useState(initialListPage?.page ?? 1);
     const [activeModal, setActiveModal] = useState<ProductsModal>(null);
     const [actionMenuOpen, setActionMenuOpen] = useState(false);
     const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -65,13 +72,52 @@ export function ProductListClient({ products: initialProducts, categories: initi
     const [isPending, startTransition] = useTransition();
     useEffect(() => {
         setProducts(initialProducts);
-    }, [initialProducts]);
+        setListPage(initialListPage);
+    }, [initialListPage, initialProducts]);
     useEffect(() => {
         setCategories(initialCategories);
     }, [initialCategories]);
-    const productInsights = useMemo(() => getProductInsights(products), [products]);
+    const skipServerFetch = useRef(true);
+    useEffect(() => {
+        if (!initialListPage) return;
+        if (skipServerFetch.current) {
+            skipServerFetch.current = false;
+            return;
+        }
+        const handle = window.setTimeout(() => {
+            startTransition(async () => {
+                const result = await loadProductListAction({
+                    categoryId,
+                    insight: insightFilter,
+                    page,
+                    pageSize,
+                    search: query,
+                    status,
+                });
+                if (!result.ok || !result.data) return;
+                const next = result.data as ProductListPage;
+                setListPage(next);
+                setProducts(next.products);
+            });
+        }, 250);
+        return () => window.clearTimeout(handle);
+    }, [categoryId, initialListPage, insightFilter, page, pageSize, query, status]);
+    const productInsights = useMemo(() => listPage?.summary ?? getProductInsights(products), [listPage, products]);
     const insightProducts = useMemo(() => getInsightProducts(products), [products]);
-    const productShellStats = useMemo(() => getProductShellStats(products, categories), [categories, products]);
+    const productShellStats = useMemo(() => {
+        const local = getProductShellStats(products, categories);
+        if (!listPage) return local;
+        return {
+            ...local,
+            deadStock: listPage.summary.deadStock,
+            lowStock: listPage.summary.lowStock,
+            missingBarcode: listPage.summary.missingBarcode,
+            missingImages: listPage.summary.missingImages,
+            nearExpiry: listPage.summary.nearExpiry,
+            outOfStock: listPage.summary.outOfStock,
+            totalProducts: listPage.summary.total,
+        };
+    }, [categories, listPage, products]);
     const summaryCards = useMemo(() => ([
         { color: "blue" as const, count: productInsights.total, drawerKey: "total" as ProductShellDrawerKey, emptyText: t("ui.no.products.found"), filter: "all" as SummaryInsight, icon: Boxes, label: "Total Products" },
         { color: "red" as const, count: productInsights.outOfStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.out.of.stock.products"), filter: "out_of_stock" as SummaryInsight, icon: AlertCircle, label: "Out of Stock" },
@@ -79,7 +125,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
         { color: "yellow" as const, count: productInsights.nearExpiry, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.products.near.expiry"), filter: "near_expiry" as SummaryInsight, icon: Clock, label: "Near Expiry" },
         { color: "purple" as const, count: productInsights.deadStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.dead.stock.products"), filter: "dead_stock" as SummaryInsight, icon: Archive, label: "Dead Stock" },
     ]), [productInsights]);
-    const filteredProducts = useMemo(() => {
+    const clientFilteredProducts = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
         return products.filter((product) => {
             const matchesQuery = normalizedQuery.length === 0 ||
@@ -102,11 +148,13 @@ export function ProductListClient({ products: initialProducts, categories: initi
             return matchesQuery && matchesCategory && matchesStatus && matchesInsight;
         });
     }, [categoryId, insightFilter, products, query, status]);
-    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+    const filteredProducts = listPage ? products : clientFilteredProducts;
+    const totalCount = listPage?.totalCount ?? filteredProducts.length;
+    const totalPages = listPage?.totalPages ?? Math.max(1, Math.ceil(filteredProducts.length / pageSize));
     const safePage = Math.min(page, totalPages);
-    const pageStart = filteredProducts.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
-    const pageEnd = Math.min(safePage * pageSize, filteredProducts.length);
-    const paginatedProducts = filteredProducts.slice(pageStart > 0 ? pageStart - 1 : 0, pageEnd);
+    const pageStart = totalCount === 0 ? 0 : (safePage - 1) * pageSize + 1;
+    const pageEnd = Math.min(safePage * pageSize, totalCount);
+    const paginatedProducts = listPage ? products : filteredProducts.slice(pageStart > 0 ? pageStart - 1 : 0, pageEnd);
     const selectedProducts = useMemo(() => products.filter((product) => selectedProductIds.includes(product.id)), [products, selectedProductIds]);
     const operationProducts = selectedProducts.length > 0 ? selectedProducts : filteredProducts;
     const allVisibleSelected = paginatedProducts.length > 0 && paginatedProducts.every((product) => selectedProductIds.includes(product.id));
@@ -250,7 +298,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            Showing {pageStart}-{pageEnd} of {filteredProducts.length}{t("ui.products")}{selectedProductIds.length > 0 ? `${selectedProductIds.length} selected.` : t("ui.operations.use.current.filters.if.nothing.is")}
+            Showing {pageStart}-{pageEnd} of {totalCount}{t("ui.products")}{selectedProductIds.length > 0 ? `${selectedProductIds.length} selected.` : t("ui.operations.use.current.filters.if.nothing.is")}
           </span>
           {message ? <span className="rounded-full bg-success/10 px-3 py-1 font-semibold text-success">{message}</span> : null}
         </div>
@@ -322,7 +370,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
             </tbody>
           </table>
         </div>
-        {filteredProducts.length === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("ui.no.products.match.the.current.search.and.fil")}</div>) : null}
+        {totalCount === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("ui.no.products.match.the.current.search.and.fil")}</div>) : null}
         <div className="flex flex-col gap-3 border-t border-border bg-background px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Rows per page</span>

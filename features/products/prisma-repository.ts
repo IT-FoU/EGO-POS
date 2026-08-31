@@ -1,10 +1,17 @@
 import { prisma } from "@/lib/db/prisma";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
+import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 
+export { productListInclude };
+
 const db = prisma as any;
+
+export async function getPrismaProductListPage(tenant: TenantContext, input: ProductListQuery = {}, client: any = db) {
+  return loadPrismaProductListPage(tenant, input, client);
+}
 
 function productInventoryScopeWhere(scope: BranchScope) {
   if (scope.isOwner) {
@@ -23,17 +30,8 @@ export async function getPrismaProducts(tenant: TenantContext, client: any = db)
   const scope = await resolveTenantScope(tenant, client);
   const branchWhere = branchOwnedWhere(scope);
   const products = await client.product.findMany({
-    include: {
-      balances: true,
-      barcodeHistory: { orderBy: { createdAt: "desc" }, take: 20 },
-      brand: true,
-      category: true,
-      inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
-      priceHistory: { orderBy: { createdAt: "desc" }, take: 20 },
-      supplier: true,
-      units: { orderBy: { sortOrder: "asc" } },
-    },
-    orderBy: { updatedAt: "desc" },
+    include: productListInclude,
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     where: {
       companyId: scope.companyId,
       ...branchWhere,
