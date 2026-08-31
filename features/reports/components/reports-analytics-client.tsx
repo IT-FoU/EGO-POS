@@ -569,11 +569,12 @@ function TopSellers({ currency, data, onOpen }: {
 }) {
     return (<section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold">Top Sellers</h2>
+      <p className="mt-1 text-xs text-muted-foreground" title={t("ui.product.revenue.helper")}>{t("ui.product.revenue")}</p>
       <div className="mt-5 max-h-[520px] overflow-y-auto">
         {data.map((product, index) => (<button className="grid w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 border-b border-border py-3 text-left last:border-b-0" key={product.name} type="button" onClick={() => onOpen(product.name)}>
             <span className="text-sm font-semibold text-primary">{index + 1}</span>
             <span className="min-w-0"><span className="block truncate font-semibold">{product.name}</span><span className="text-xs text-muted-foreground">Qty {product.qty}{t("ui.margin.2")}{product.margin}%</span></span>
-            <span className="text-right text-sm">{formatCurrency(product.revenue, currency)} {currency}<span className="block text-xs text-muted-foreground">Profit {formatCurrency(product.profit, currency)}</span></span>
+            <span className="text-right text-sm" title={t("ui.product.revenue.helper")}>{formatCurrency(product.revenue, currency)} {currency}<span className="block text-xs text-muted-foreground">Profit {formatCurrency(product.profit, currency)}</span></span>
           </button>))}
       </div>
     </section>);
@@ -1039,7 +1040,7 @@ function ModalFrame({ children, onClose, title }: {
 function ReportRowsTable({ productRows }: { productRows: ProductReportRow[] }) {
     return (<div className="max-w-full overflow-x-auto rounded-lg border border-border">
       <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground"><tr>{["Name", "Category", "Qty", "Revenue", "Profit", "Margin"].map((column) => <th className="px-3 py-3" key={column}>{column}</th>)}</tr></thead>
+        <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground"><tr>{["Name", "Category", "Qty", "Revenue", "Profit", "Margin"].map((column) => <th className="px-3 py-3" key={column} title={column === "Revenue" || column === "Profit" ? t("ui.product.revenue.helper") : undefined}>{column}</th>)}</tr></thead>
         <tbody>{productRows.map((row) => {
             const margin = row.revenueLak > 0 ? `${((row.profitLak / row.revenueLak) * 100).toFixed(1)}%` : "0%";
             return (<tr className="border-b border-border last:border-b-0" key={row.productName}>

@@ -315,12 +315,15 @@ function BestSellersList({ copy, products }: { copy: DashboardCopy; products: Da
 
   return (
     <div className="grid gap-2">
+      <p className="text-xs text-muted-foreground" title={copy.productRevenueHelper}>
+        {copy.productRevenue}
+      </p>
       {products.map((product, index) => (
         <div className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-[64px_minmax(0,1fr)_120px_140px] sm:items-center" key={product.name}>
           <span className="font-semibold text-primary">#{index + 1}</span>
           <span className="min-w-0 truncate font-semibold" title={product.name}>{product.name}</span>
           <span className="text-sm text-muted-foreground sm:text-right">{formatNumber(product.quantity)} {copy.unitsSold}</span>
-          <span className="font-semibold sm:text-right">{formatMoney(product.totalLak)}</span>
+          <span className="font-semibold sm:text-right" title={copy.productRevenueHelper}>{formatMoney(product.totalLak)}</span>
         </div>
       ))}
     </div>
@@ -572,6 +575,7 @@ function buildDetailPanel({
 
   if (detail === "top_products") {
     return {
+      description: copy.productRevenueHelper,
       table: snapshot.topProducts.map((product, index) => ({
         label: `${index + 1}. ${product.name}`,
         meta: `${formatNumber(product.quantity)} ${copy.unitsSold}`,

@@ -540,5 +540,7 @@
   "ui.cash.out.amount.cannot.exceed.expected.cas": "ຈຳນວນເງິນອອກຕ້ອງບໍ່ເກີນເງິນສົດທີ່ຄວນມີ",
   "ui.ot.rules.will.use.owner.defined.settings.in.": "?????????????",
   "ui.warehouse": "???",
-  "ui.all.warehouses": "??????"
+  "ui.all.warehouses": "??????",
+  "ui.product.revenue": "ລາຍໄດ້ສິນຄ້າ",
+  "ui.product.revenue.helper": "ຫຼັງລາຄາສະມາຊິກ ແລະ ໂປຣໂມຊັນສິນຄ້າ ກ່ອນໃຊ້ແຕ້ມ ແລະ ສ່ວນຫຼຸດທ້າຍບິນ"
 }

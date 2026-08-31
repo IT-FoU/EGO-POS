@@ -36,7 +36,8 @@
     "test:pos-hold-resume": "tsx scripts/phase-fix-15-hold-resume-check.ts",
     "test:cash-in-out": "tsx scripts/phase-fix-16-cash-in-out-check.ts",
     "test:cash-out-overdraw": "tsx scripts/phase-fix-18-cash-out-overdraw-check.ts",
-    "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts"
+    "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts",
+    "test:product-revenue-label": "tsx scripts/phase-fix-19-product-revenue-label-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

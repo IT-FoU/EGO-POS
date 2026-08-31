@@ -609,5 +609,7 @@
   "ui.split.payment": "Split Payment",
   "ui.time": "Time",
   "ui.total": "Total",
-  "ui.view.receipt": "View receipt"
+  "ui.view.receipt": "View receipt",
+  "ui.product.revenue": "Product revenue",
+  "ui.product.revenue.helper": "After member pricing and product promotions; before points and bill-level discounts."
 }

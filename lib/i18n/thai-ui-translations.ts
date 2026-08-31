@@ -60,6 +60,8 @@ const thaiUiTranslations: Record<string, string> = {
   "Payment": "การชำระเงิน",
   "Phone": "โทรศัพท์",
   "Print Receipt": "พิมพ์ใบเสร็จ",
+  "Product revenue": "รายได้สินค้า",
+  "After member pricing and product promotions; before points and bill-level discounts.": "หลังราคาสมาชิกและโปรโมชันสินค้า ก่อนใช้แต้มและส่วนลดท้ายบิล",
   "Products": "สินค้า",
   "Promotion": "โปรโมชัน",
   "Promotions": "โปรโมชัน",
