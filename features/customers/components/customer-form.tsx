@@ -89,7 +89,8 @@ export function CustomerForm({ levels }: {
               <input className="field-input" name="birthday" type="date"/>
             </Field>
             <Field label="Membership Level">
-              <select className="field-input" name="membershipLevelId" defaultValue={levels[0]?.id}>
+              <select className="field-input" name="membershipLevelId" defaultValue="">
+                <option value="">{t("ui.no.membership")}</option>
                 {levels.map((level) => (<option key={level.id} value={level.id}>
                     {level.name} - {level.discountPercent}{t("ui.discount")}</option>))}
               </select>

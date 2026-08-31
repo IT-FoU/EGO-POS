@@ -1,10 +1,10 @@
+import { membershipLevelNameFromRelation } from "@/features/customers/membership-display";
 import type {
   Customer,
   CustomerPayment,
   CustomerPurchase,
   CustomerStatus,
   MembershipLevel,
-  MembershipLevelName,
 } from "@/features/customers/types";
 
 type Row = Record<string, any>;
@@ -17,16 +17,12 @@ function dateOnly(value: unknown) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : "";
 }
 
-function levelName(value: unknown): MembershipLevelName {
-  return value === "Silver" || value === "Gold" || value === "Platinum" ? value : "Standard";
-}
-
 export function mapPrismaMembershipLevel(level: Row): MembershipLevel {
   return {
     discountPercent: toNumber(level.discountPercent),
     id: level.id,
     minSpendLak: toNumber(level.minSpendLak),
-    name: levelName(level.name),
+    name: membershipLevelNameFromRelation(level.name) ?? String(level.name ?? "").trim(),
   };
 }
 
@@ -48,7 +44,7 @@ export function mapPrismaCustomer(customer: Row): Customer {
     email: customer.email ?? "",
     fullName: customer.fullName,
     id: customer.id,
-    membershipLevel: levelName(customer.membershipLevel?.name),
+    membershipLevel: membershipLevelNameFromRelation(customer.membershipLevel?.name),
     notes: customer.notes ?? "",
     openingBalanceLak: toNumber(customer.openingBalance),
     outstandingBalanceLak: toNumber(customer.outstandingBalance),

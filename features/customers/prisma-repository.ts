@@ -19,6 +19,13 @@ import {
   type CustomerUpdateInput,
 } from "@/features/customers/dto";
 import { adjustCustomerLoyaltyPoints } from "@/features/loyalty/loyalty-service";
+import {
+  CUSTOMER_CODE_PREFIX,
+  CUSTOMER_CODE_RETRY_LIMIT,
+  customerCodeLockKey,
+  isCustomerCodeUniqueCollision,
+  nextCustomerCode,
+} from "@/features/customers/customer-code";
 
 export { adjustCustomerLoyaltyPoints };
 
@@ -92,21 +99,48 @@ export async function getPrismaCustomerDetail(customerId: string, tenant: Tenant
 }
 
 async function allocateMemberCode(tx: Record<string, any>, companyId: string) {
-  await tx.$queryRaw`
-    SELECT company_id FROM company_settings WHERE company_id = ${companyId} FOR UPDATE
-  `;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${customerCodeLockKey(companyId)}))`;
   const rows = await tx.customer.findMany({
     select: { customerCode: true },
-    where: { companyId, customerCode: { startsWith: "MEM-" } },
+    where: { companyId, customerCode: { startsWith: CUSTOMER_CODE_PREFIX } },
   });
-  let max = 0;
-  for (const row of rows) {
-    const parsed = Number(String(row.customerCode ?? "").replace(/^MEM-/, ""));
-    if (Number.isFinite(parsed) && parsed > max) {
-      max = parsed;
-    }
-  }
-  return `MEM-${String(max + 1).padStart(6, "0")}`;
+  return nextCustomerCode(rows.map((row: { customerCode?: string | null }) => row.customerCode));
+}
+
+async function createCustomerRecord(
+  data: ReturnType<typeof parseCustomerCreateInput>,
+  phone: string,
+  tenant: TenantContext,
+  memberCode?: string,
+) {
+  return withTenantTransaction({
+    action: "create",
+    module: "customers",
+    newData: data,
+    tenant,
+    write: async (tx) => {
+      const scope = await resolveTenantScope(tenant, tx);
+      const code = memberCode ?? (await allocateMemberCode(tx, tenant.companyId));
+      return tx.customer.create({
+        data: {
+          address: data.address,
+          birthday: data.birthday ? new Date(data.birthday) : data.birthday,
+          branchId: scope.branchId,
+          companyId: tenant.companyId,
+          creditLimit: numberValue(data.creditLimit),
+          customerCode: code,
+          email: data.email,
+          fullName: stringValue(data.fullName),
+          membershipLevelId: data.membershipLevelId,
+          notes: data.notes,
+          openingBalance: numberValue(data.openingBalance),
+          outstandingBalance: numberValue(data.openingBalance),
+          phone,
+          qrMemberCode: code,
+        },
+      });
+    },
+  });
 }
 
 export async function createPrismaCustomer(input: CustomerCreateInput, tenant: TenantContext) {
@@ -116,35 +150,23 @@ export async function createPrismaCustomer(input: CustomerCreateInput, tenant: T
   if (!phone) {
     throw new Error("Phone is required.");
   }
-  return withTenantTransaction({
-    action: "create",
-    module: "customers",
-    newData: data,
-    tenant,
-    write: async (tx) => {
-      const scope = await resolveTenantScope(tenant, tx);
-      const requestedCode = optionalString(data.customerCode);
-      const memberCode = requestedCode ?? await allocateMemberCode(tx, tenant.companyId);
-      return tx.customer.create({
-        data: {
-          address: data.address,
-          birthday: data.birthday ? new Date(data.birthday) : data.birthday,
-          branchId: scope.branchId,
-          companyId: tenant.companyId,
-          creditLimit: numberValue(data.creditLimit),
-          customerCode: memberCode,
-          email: data.email,
-          fullName: stringValue(data.fullName),
-          membershipLevelId: data.membershipLevelId,
-          notes: data.notes,
-          openingBalance: numberValue(data.openingBalance),
-          outstandingBalance: numberValue(data.openingBalance),
-          phone,
-          qrMemberCode: memberCode,
-        },
-      });
-    },
-  });
+  const requestedCode = optionalString(data.customerCode);
+  if (requestedCode) {
+    return createCustomerRecord(data, phone, tenant, requestedCode);
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < CUSTOMER_CODE_RETRY_LIMIT; attempt += 1) {
+    try {
+      return await createCustomerRecord(data, phone, tenant);
+    } catch (error) {
+      lastError = error;
+      if (!isCustomerCodeUniqueCollision(error) || attempt === CUSTOMER_CODE_RETRY_LIMIT - 1) {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function updatePrismaCustomer(customerId: string, input: CustomerUpdateInput, tenant: TenantContext) {

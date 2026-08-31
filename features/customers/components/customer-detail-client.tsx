@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleDollarSign, CreditCard, Gift, Barcode, Phone, QrCode, ReceiptText, Star, Tags, User, } from "lucide-react";
+import { membershipDisplayLabel } from "@/features/customers/membership-display";
 import type { Customer, CustomerPayment, CustomerPurchase, } from "@/features/customers/types";
 import { CustomerStatusBadge } from "@/features/customers/components/customer-status-badge";
 import { MembershipBadge } from "@/features/customers/components/membership-badge";
@@ -107,7 +108,7 @@ export function CustomerDetailClient({ customer, payments, purchases, }: {
           </InfoCard>
 
           <InfoCard title="Membership" icon={Star}>
-            <Summary label="Level" value={customer.membershipLevel}/>
+            <Summary label="Level" value={membershipDisplayLabel(customer.membershipLevel)}/>
             <Summary label="Earned points" value={formatLak(customer.earnedPoints)}/>
             <Summary label="Redeemed points" value={formatLak(customer.redeemedPoints)}/>
             <Summary label="Available points" value={formatLak(availablePoints)}/>
@@ -301,7 +302,7 @@ function PointsHistory({ availablePoints, customer, purchases, }: {
       <div className="grid gap-3 md:grid-cols-4">
         <Summary label="Member Reference" value={customer.customerCode}/>
         <Summary label="Membership Status" value={customer.status === "active" ? "Active" : "Inactive"}/>
-        <Summary label="Membership Level" value={customer.membershipLevel}/>
+        <Summary label="Membership Level" value={membershipDisplayLabel(customer.membershipLevel)}/>
         <Summary label="Current Points" value={formatLak(availablePoints)}/>
       </div>
       <div className="max-w-full overflow-x-auto">
@@ -439,7 +440,7 @@ function StatisticCard({ label, value }: {
     </div>);
 }
 function getCustomerTags(customer: Customer) {
-    const tags = [customer.membershipLevel, customer.outstandingBalanceLak > 0 ? "Credit Customer" : "Paid Customer"];
+    const tags = [membershipDisplayLabel(customer.membershipLevel), customer.outstandingBalanceLak > 0 ? "Credit Customer" : "Paid Customer"];
     if (customer.totalPurchasesLak >= 15000000)
         tags.push("High Value");
     if (customer.status === "inactive")

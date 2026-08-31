@@ -1,10 +1,11 @@
 export type CustomerStatus = "active" | "inactive";
 
-export type MembershipLevelName = "Standard" | "Silver" | "Gold" | "Platinum";
+export type KnownMembershipLevelName = "Standard" | "Silver" | "Gold" | "Platinum";
+export type MembershipLevelName = string;
 
 export type MembershipLevel = {
   id: string;
-  name: MembershipLevelName;
+  name: string;
   minSpendLak: number;
   discountPercent: number;
 };
@@ -17,7 +18,7 @@ export type Customer = {
   email: string;
   address: string;
   birthday: string;
-  membershipLevel: MembershipLevelName;
+  membershipLevel: string | null;
   creditLimitLak: number;
   openingBalanceLak: number;
   outstandingBalanceLak: number;

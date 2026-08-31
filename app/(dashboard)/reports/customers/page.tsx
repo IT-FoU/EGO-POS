@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n/ui";
 import { Gift, TrendingUp, Users, WalletCards } from "lucide-react";
 import { BarChart, DataTable, MetricCard, ReportHeader, } from "@/features/reports/components/report-primitives";
 import { calculateAvailablePoints } from "@/features/customers/format";
+import { membershipDisplayLabel } from "@/features/customers/membership-display";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 export default async function CustomerReportPage() {
@@ -20,7 +21,7 @@ export default async function CustomerReportPage() {
       <BarChart rows={topCustomers.map((customer) => ({ label: customer.fullName, spending: customer.totalPurchasesLak }))} title="Customer Spending" valueKey="spending"/>
       <DataTable columns={["Customer", "Membership", "Total Purchases", "Earned Points", "Redeemed Points", "Available Points"]} rows={topCustomers.map((customer) => [
             customer.fullName,
-            customer.membershipLevel,
+            membershipDisplayLabel(customer.membershipLevel),
             `${formatLak(customer.totalPurchasesLak)} LAK`,
             formatNumber(customer.earnedPoints),
             formatNumber(customer.redeemedPoints),

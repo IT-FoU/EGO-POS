@@ -132,6 +132,7 @@
   "ui.move.customers.up.when.spend.threshold.is.re": "Move customers up when spend threshold is reached.",
   "ui.example.priority.support.special.discounts.b": "Example: Priority support, special discounts, birthday coupon eligibility",
   "ui.no.levels.found": "No levels found.",
+  "ui.no.membership": "ไม่มีสมาชิก",
   "ui.ego.pos.customer.display.state": "ego-pos:customer-display-state",
   "ui.10.student.member.discount": "10% student member discount",
   "ui.simple.smart.fast.for.every.business": "Simple. Smart. Fast. For Every Business.",
