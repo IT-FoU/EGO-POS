@@ -1,8 +1,13 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { DashboardInteractionsClient } from "@/features/dashboard/components/dashboard-interactions-client";
+import { DashboardAlertsLoader } from "@/features/dashboard/components/dashboard-alerts-loader";
 import {
-  getMiniMartDashboardSnapshot,
+  DashboardAlertsFallback,
+  DashboardInteractionsClient,
+} from "@/features/dashboard/components/dashboard-interactions-client";
+import {
+  getMiniMartDashboardCriticalSnapshot,
   shouldRouteToPos,
   type DashboardDateRange,
   type DashboardRangeKey,
@@ -63,7 +68,7 @@ export default async function DashboardPage({
   const copy = getDashboardCopy(locale);
   const params = await searchParams;
   const dateRange = parseDateRange(params);
-  const snapshot = await getMiniMartDashboardSnapshot(dateRange);
+  const snapshot = await getMiniMartDashboardCriticalSnapshot(dateRange);
   const periodStart = new Date(snapshot.period.start);
   const periodEnd = new Date(snapshot.period.end);
   const customStart = dateRange.start ? dateInputValue(dateRange.start) : dateInputValue(periodStart);
@@ -71,6 +76,16 @@ export default async function DashboardPage({
 
   return (
     <DashboardInteractionsClient
+      alertsSlot={
+        <Suspense fallback={<DashboardAlertsFallback copy={copy} />}>
+          <DashboardAlertsLoader
+            copy={copy}
+            dateRange={dateRange}
+            salesTodayLak={snapshot.cards.salesTodayLak}
+            shiftSummaries={snapshot.closeDay.shiftSummaries}
+          />
+        </Suspense>
+      }
       canViewProfit={canSessionViewProfit(session.user.roles ?? [])}
       copy={copy}
       customEnd={customEnd}

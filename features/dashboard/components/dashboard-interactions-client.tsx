@@ -23,6 +23,7 @@ import type { DashboardCopy } from "@/lib/i18n/dashboard-copy";
 type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "top_products";
 
 type DashboardInteractionsClientProps = {
+  alertsSlot?: ReactNode;
   canViewProfit: boolean;
   copy: DashboardCopy;
   customEnd: string;
@@ -56,6 +57,7 @@ function formatDateTime(value: string | null) {
 }
 
 export function DashboardInteractionsClient({
+  alertsSlot,
   canViewProfit,
   copy,
   customEnd,
@@ -210,10 +212,11 @@ export function DashboardInteractionsClient({
         <Panel actionLabel={copy.viewMore} onAction={() => setDetail("top_products")} title={copy.bestSellers}>
           <BestSellersList copy={copy} products={snapshot.topProducts.slice(0, 10)} />
         </Panel>
-
-        <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("alerts")} title={copy.importantAlerts}>
-          <AlertsList alerts={snapshot.alerts} copy={copy} />
-        </Panel>
+        {alertsSlot ?? (
+          <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("alerts")} title={copy.importantAlerts}>
+            <AlertsList alerts={snapshot.alerts} copy={copy} />
+          </Panel>
+        )}
       </section>
 
       <DetailDrawer content={activeDetail} copy={copy} onClose={() => setDetail(null)} />
@@ -614,4 +617,45 @@ function formatRangeLabel(range: DashboardRangeKey, copy: DashboardCopy) {
   if (range === "year") return copy.thisYear;
   if (range === "custom") return copy.customDate;
   return copy.today;
+}
+
+export function DashboardAlertsClient({
+  alerts,
+  copy,
+}: {
+  alerts: DashboardAlert[];
+  copy: DashboardCopy;
+}) {
+  const [open, setOpen] = useState(false);
+  const content = open
+    ? {
+        table: alerts.map((alert) => ({
+          label: alert.title,
+          meta: alert.message,
+          value: alert.value ?? alert.severity,
+        })),
+        title: copy.importantAlerts,
+      }
+    : null;
+
+  return (
+    <>
+      <Panel actionLabel={copy.viewDetails} onAction={() => setOpen(true)} title={copy.importantAlerts}>
+        <AlertsList alerts={alerts} copy={copy} />
+      </Panel>
+      <DetailDrawer content={content} copy={copy} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+export function DashboardAlertsFallback({ copy }: { copy: DashboardCopy }) {
+  return (
+    <article className="min-w-0 rounded-lg border border-border bg-card p-5">
+      <h2 className="text-xl font-semibold">{copy.importantAlerts}</h2>
+      <div className="mt-5 grid gap-3">
+        <div className="h-20 rounded-md border border-border bg-background" />
+        <div className="h-20 rounded-md border border-border bg-background" />
+      </div>
+    </article>
+  );
 }

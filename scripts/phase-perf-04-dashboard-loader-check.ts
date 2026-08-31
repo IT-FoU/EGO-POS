@@ -50,8 +50,9 @@ function check(name: string, ok: boolean, detail = "") {
 }
 
 const dash = readFileSync("features/dashboard/dashboard-service.ts", "utf8");
-const dashFn = dash.slice(
-  dash.indexOf("export async function getPrismaDashboardSnapshot"),
+const criticalFn = dash.slice(
+  dash.indexOf("async function loadDashboardCriticalSnapshot"),
+  dash.indexOf("async function loadDashboardSecondarySlice"),
 );
 const reportsSrc = readFileSync("features/reports/prisma-repository.ts", "utf8");
 const permissions = readFileSync("features/access-control/prisma-repository.ts", "utf8");
@@ -63,11 +64,12 @@ check("Dashboard uses lightweight sales KPI loader", dash.includes("getPrismaDas
 check("Dashboard does not embed full Reports snapshot", !dash.includes("getPrismaReportsSnapshot"));
 check("Dashboard does not load inventory/customer/product/supplier snapshots", !dash.includes("getPrismaInventorySnapshot") && !dash.includes("getPrismaCustomersSnapshot") && !dash.includes("getPrismaProducts(") && !dash.includes("getPrismaSuppliersSnapshot"));
 check("Dashboard KPI helper reuses netReportLifecycle", reportsSrc.includes("export async function getPrismaDashboardSalesKpis") && reportsSrc.includes("netReportLifecycle(refundRows, saleItemCostRows)"));
-check("Dashboard parallelizes first-paint reads", dashFn.includes("timedDashboardLoad(\"parallel-reads\"") && dashFn.includes("Promise.all"));
-check("Dashboard cash-session totals are not a sequential loop", dashFn.includes("timedDashboardLoad(\"cash-session-totals\"") && dashFn.includes("Promise.all"));
-check("Recent activity is limited to 20 netted sales", dashFn.includes("salesKpis.nettedSales.slice(0, 20)"));
-check("Expiry widgets use counts instead of full lot payloads", dashFn.includes("inventoryLot.count") && !dashFn.includes("inventoryLot.findMany"));
-check("Historical sales uses aggregate not row loading", dashFn.includes("sale.aggregate") && !dashFn.includes("historicalSales as Array"));
+check("Dashboard critical path runs sales KPIs before cash", criticalFn.includes("critical-sales-kpis") && criticalFn.includes("critical-cash-sessions") && criticalFn.indexOf("critical-sales-kpis") < criticalFn.indexOf("critical-cash-sessions"));
+check("Dashboard cash-session totals remain Promise.all", criticalFn.includes("timedDashboardLoad(\"critical-cash-totals\"") && criticalFn.includes("Promise.all"));
+check("Critical path does not query inventory lots or dead stock", !criticalFn.includes("inventoryLot.count") && !criticalFn.includes("deadStockCutoff") && !criticalFn.includes("inventoryBalance.findMany"));
+check("Recent activity is limited to 20 netted sales", criticalFn.includes("salesKpis.nettedSales.slice(0, 20)"));
+check("Expiry widgets use counts instead of full lot payloads", dash.includes("inventoryLot.count") && !dash.includes("inventoryLot.findMany"));
+check("Historical sales uses aggregate not row loading", dash.includes("sale.aggregate") && !dash.includes("historicalSales as Array"));
 check("Permission keys are request-cached for the default client", permissions.includes("getUserPermissionKeysCached"));
 check("PrismaPg max/maxUses unchanged", prismaSrc.includes("max: 1") && prismaSrc.includes("maxUses: 1"));
 check("Reports page loader is unchanged in this phase", reportsPage.includes("getPrismaReportsSnapshot"));
