@@ -29,6 +29,7 @@ import { APP_NAME, DEFAULT_LOCALE, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
+import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -100,6 +101,7 @@ export function DashboardShell({
   session: Session;
 }) {
   const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [storeName, setStoreName] = useState(
     normalizeStoreName(session.user.activeCompanyName ?? "Business"),
   );
@@ -123,6 +125,24 @@ export function DashboardShell({
     window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
     return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
   }, []);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    function clearPending() {
+      setPendingHref(null);
+    }
+    window.addEventListener("popstate", clearPending);
+    return () => window.removeEventListener("popstate", clearPending);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingHref) return;
+    const timer = window.setTimeout(() => setPendingHref(null), 15000);
+    return () => window.clearTimeout(timer);
+  }, [pendingHref]);
 
   useEffect(() => {
     if (session.user.activeCompanyName) {
@@ -156,20 +176,23 @@ export function DashboardShell({
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">
           {visibleNavigation.map((item) => {
             const Icon = item.icon;
-            const isActive =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : item.href !== "#" && pathname.startsWith(item.href);
+            const { isActive, isPending } = navVisualState(item.href, pathname, pendingHref);
 
             return (
               <Link
+                aria-busy={isPending || undefined}
+                aria-current={isActive && !isPending ? "page" : undefined}
                 className={
-                  isActive
+                  isActive || isPending
                     ? "flex items-center gap-3 rounded-md bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground"
                     : "flex items-center gap-3 rounded-md px-3 py-3 text-sm text-muted-foreground transition hover:bg-background hover:text-foreground"
                 }
+                data-nav-pending={isPending ? "true" : undefined}
                 href={item.href}
                 key={item.key}
+                onClick={(event) => {
+                  if (shouldMarkPendingNavigation(event, item.href)) setPendingHref(item.href);
+                }}
               >
                 <Icon aria-hidden="true" />
                 <span className="min-w-0 flex-1">{copy.nav[item.key]}</span>
@@ -209,20 +232,23 @@ export function DashboardShell({
               .filter((item) => item.href !== "#")
               .map((item) => {
                 const Icon = item.icon;
-                const isActive =
-                  item.href === "/dashboard"
-                    ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href);
+                const { isActive, isPending } = navVisualState(item.href, pathname, pendingHref);
 
                 return (
                   <Link
+                    aria-busy={isPending || undefined}
+                    aria-current={isActive && !isPending ? "page" : undefined}
                     className={
-                      isActive
+                      isActive || isPending
                         ? "inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground"
                         : "inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground"
                     }
+                    data-nav-pending={isPending ? "true" : undefined}
                     href={item.href}
                     key={item.key}
+                    onClick={(event) => {
+                      if (shouldMarkPendingNavigation(event, item.href)) setPendingHref(item.href);
+                    }}
                   >
                     <Icon aria-hidden="true" />
                     {copy.nav[item.key]}
