@@ -26,6 +26,10 @@ export function previewExpectedCashAfter(
   return type === "cash_in" ? expectedCashLak + amountLak : expectedCashLak - amountLak;
 }
 
+export function cashOutExceedsExpected(amountLak: number, expectedCashLak: number) {
+  return amountLak > expectedCashLak;
+}
+
 export function claimCashMovementSubmit(lock: { current: boolean }) {
   if (lock.current) return false;
   lock.current = true;

@@ -1399,6 +1399,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             );
         } catch (error) {
             setMessage(error instanceof Error ? error.message : t("ui.cash.movement.failed"));
+            await fetchCurrentCashSession().then(setActiveCashSession).catch(() => undefined);
             throw error;
         } finally {
             cashInOutInFlightRef.current = false;

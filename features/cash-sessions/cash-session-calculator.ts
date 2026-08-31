@@ -1,8 +1,20 @@
 import type { CashSessionTotals } from "@/features/cash-sessions/types";
 
+export const CASH_OUT_EXCEEDS_EXPECTED_MESSAGE = "Cash Out amount cannot exceed Expected Cash.";
+
 function amount(value: unknown) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function cashSessionLedgerLockKey(sessionId: string) {
+  return `cash_session:${sessionId}`;
+}
+
+export function assertCashOutWithinExpected(amountLak: number, expectedCashLak: number) {
+  if (amountLak > expectedCashLak) {
+    throw new Error(CASH_OUT_EXCEEDS_EXPECTED_MESSAGE);
+  }
 }
 
 export function calculateExpectedCash(input: {

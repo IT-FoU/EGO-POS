@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { calculateExpectedCash, sumCashTransactions } from "../features/cash-sessions/cash-session-calculator";
+import {
+  CASH_OUT_EXCEEDS_EXPECTED_MESSAGE,
+  assertCashOutWithinExpected,
+  calculateExpectedCash,
+  sumCashTransactions,
+} from "../features/cash-sessions/cash-session-calculator";
 import {
   NO_OPEN_CASH_SHIFT_MESSAGE,
   claimCashMovementSubmit,
@@ -96,6 +101,8 @@ check("Repository guards remain: amount, reason, closed session, owner session",
   assert(repoSrc.includes("Cash out reason is required."), "reason guard");
   assert(repoSrc.includes("Cash session is already closed."), "closed guard");
   assert(repoSrc.includes("session.cashierId !== tenant.userId"), "session owner guard");
+  assert(repoSrc.includes("assertCashOutWithinExpected"), "expected-cash overdraw guard");
+  assert(repoSrc.includes("pg_advisory_xact_lock"), "cash session ledger lock");
 });
 
 check("Amount parser rejects empty, zero, negative, NaN", () => {
@@ -144,6 +151,7 @@ check("Localization EN + TH required strings", () => {
     "ui.expected.cash",
     "ui.record.cash.in",
     "ui.record.cash.out",
+    "ui.cash.out.amount.cannot.exceed.expected.cas",
   ];
   for (const key of keys) {
     assert(Boolean(en[key]), `en missing ${key}`);
@@ -226,6 +234,33 @@ async function recordMovement(
   if (!session) throw new Error("Cash session was not found.");
   if (session.closedAt) throw new Error("Cash session is already closed.");
   if (session.cashierId !== tenant.userId) throw new Error("Permission denied: pos.cash_session.manage");
+  if (type === "cash_out") {
+    const cashInLak = sumCashTransactions(
+      (await prisma.cashTransaction.findMany({ where: { sessionId: session.id } })).map((row) => ({
+        amount: row.amount,
+        transactionType: row.transactionType,
+      })),
+      "cash_in",
+    );
+    const cashOutLak = sumCashTransactions(
+      (await prisma.cashTransaction.findMany({ where: { sessionId: session.id } })).map((row) => ({
+        amount: row.amount,
+        transactionType: row.transactionType,
+      })),
+      "cash_out",
+    );
+    assertCashOutWithinExpected(
+      movementAmount,
+      calculateExpectedCash({
+        cashInLak,
+        cashOutLak,
+        cashSalesLak: 0,
+        openingCashLak: money(session.openingCash),
+        refundLak: 0,
+        voidCashLak: 0,
+      }),
+    );
+  }
   await prisma.cashTransaction.create({
     data: {
       amount: movementAmount,
@@ -360,11 +395,19 @@ await checkAsync("Wrong user on same store blocked", async () => {
   }
 });
 
-await checkAsync("Cash Out greater than expected cash is currently allowed", async () => {
+await checkAsync("Cash Out greater than expected cash is rejected", async () => {
   const { tenant } = await createOwnerTenant("over");
   const opened = await openSession(tenant, 1000);
-  const after = await recordMovement(opened.id, "cash_out", { amountLak: 5000, reason: "overdraw policy" }, tenant);
-  assert(after.expectedCashLak === -4000, `expected=${after.expectedCashLak}`);
+  try {
+    await recordMovement(opened.id, "cash_out", { amountLak: 5000, reason: "overdraw policy" }, tenant);
+    throw new Error("overdraw was accepted");
+  } catch (error) {
+    assert(error instanceof Error && error.message === CASH_OUT_EXCEEDS_EXPECTED_MESSAGE, String(error));
+  }
+  const rows = await prisma.cashTransaction.count({
+    where: { sessionId: opened.id, transactionType: "cash_out" },
+  });
+  assert(rows === 0, `overdraw wrote ledger rows=${rows}`);
 });
 
 await checkAsync("Cash Out reason required", async () => {

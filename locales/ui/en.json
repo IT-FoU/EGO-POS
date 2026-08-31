@@ -551,6 +551,7 @@
   "ui.cash.in.cash.out": "Cash In / Cash Out",
   "ui.cash.movement.failed": "Cash movement failed.",
   "ui.cash.out": "Cash Out",
+  "ui.cash.out.amount.cannot.exceed.expected.cas": "Cash Out amount cannot exceed Expected Cash.",
   "ui.cash.shift.count": "Cash Shift Count",
   "ui.expected.after": "Expected after",
   "ui.expected.cash": "Expected Cash",

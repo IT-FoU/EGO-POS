@@ -35,6 +35,7 @@
     "test:pos-cart-summary": "tsx scripts/phase-fix-14b-cart-summary-check.ts",
     "test:pos-hold-resume": "tsx scripts/phase-fix-15-hold-resume-check.ts",
     "test:cash-in-out": "tsx scripts/phase-fix-16-cash-in-out-check.ts",
+    "test:cash-out-overdraw": "tsx scripts/phase-fix-18-cash-out-overdraw-check.ts",
     "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts"
   },
   "dependencies": {

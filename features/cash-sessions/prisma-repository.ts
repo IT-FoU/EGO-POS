@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db/prisma";
 import {
+  assertCashOutWithinExpected,
   buildCashSessionTotals,
   calculateExpectedCash,
   calculateVariance,
+  cashSessionLedgerLockKey,
   sumCashTransactions,
   summarizeSalePayments,
 } from "@/features/cash-sessions/cash-session-calculator";
@@ -23,6 +25,10 @@ const db = prisma as any;
 function amount(value: unknown) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function lockCashSessionLedger(tx: Record<string, any>, sessionId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionLedgerLockKey(sessionId)}))`;
 }
 
 function mapSessionSummary(
@@ -255,7 +261,12 @@ export async function recordCashSessionMovement(
     newData: { sessionId, type, ...input },
     tenant,
     write: async (tx) => {
+      await lockCashSessionLedger(tx, sessionId);
       const session = await getScopedSession(tx, tenant, sessionId);
+      if (type === "cash_out") {
+        const currentTotals = await loadSessionTotals(tx, session);
+        assertCashOutWithinExpected(movementAmount, currentTotals.expectedCashLak);
+      }
       await tx.cashTransaction.create({
         data: {
           amount: movementAmount,

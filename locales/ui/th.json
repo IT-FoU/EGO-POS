@@ -547,6 +547,7 @@
   "ui.cash.in.cash.out": "เงินเข้า / เงินออก",
   "ui.cash.movement.failed": "บันทึกเงินเข้าหรือเงินออกไม่สำเร็จ",
   "ui.cash.out": "เงินออก",
+  "ui.cash.out.amount.cannot.exceed.expected.cas": "จำนวนเงินออกต้องไม่เกินเงินสดที่ควรมี",
   "ui.cash.shift.count": "นับเงินปิดกะ",
   "ui.expected.after": "คาดว่าจะเหลือ",
   "ui.expected.cash": "เงินสดที่ควรมี",

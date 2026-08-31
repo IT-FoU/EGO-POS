@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import {
   NO_OPEN_CASH_SHIFT_MESSAGE,
+  cashOutExceedsExpected,
   parseCashMovementAmountLak,
   previewExpectedCashAfter,
   type CashMovementType,
@@ -52,6 +53,10 @@ export function CashInOutModal({
     }
     if (type === "cash_out" && !reason.trim()) {
       setError(t("ui.cash.out.reason.is.required.when.cash.out.am"));
+      return;
+    }
+    if (type === "cash_out" && cashOutExceedsExpected(parsed.amountLak, expectedCashLak)) {
+      setError(t("ui.cash.out.amount.cannot.exceed.expected.cas"));
       return;
     }
     try {

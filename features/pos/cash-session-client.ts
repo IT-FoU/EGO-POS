@@ -19,7 +19,7 @@ export async function fetchCurrentCashSession(): Promise<PosCashSessionContext> 
   const response = await fetch("/api/pos/cash-sessions/current");
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error?.message ?? payload.message ?? "Cash session request failed.");
+    throw new Error(cashSessionRequestError(payload));
   }
   if (!payload.data) {
     return {
@@ -37,10 +37,23 @@ export async function fetchCurrentCashSession(): Promise<PosCashSessionContext> 
   return mapToPosContext(payload.data as CashSessionSummary);
 }
 
+function cashSessionRequestError(payload: Record<string, any>) {
+  if (typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error;
+  }
+  if (typeof payload.error?.message === "string" && payload.error.message.trim()) {
+    return payload.error.message;
+  }
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message;
+  }
+  return "Cash session request failed.";
+}
+
 async function readJson(response: Response) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error?.message ?? payload.message ?? "Cash session request failed.");
+    throw new Error(cashSessionRequestError(payload));
   }
   return payload.data as CashSessionSummary;
 }
