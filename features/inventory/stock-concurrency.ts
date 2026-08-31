@@ -1,3 +1,9 @@
+import {
+  InventoryCountConflictError,
+  STOCK_COUNT_CHANGED_MESSAGE,
+  STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE,
+  stockCountQuantitiesMatch,
+} from "@/features/inventory/stock-count-errors";
 import { numberValue } from "@/lib/db/write-context";
 
 export async function lockInventoryMutationKey(tx: any, key: string) {
@@ -103,10 +109,12 @@ export async function applyAtomicStockDelta(tx: any, input: StockMutationInput):
 export async function setAtomicStockCount(tx: any, input: {
   companyId: string;
   countedQuantity: number;
+  expectedSystemQuantity: number;
   productId: string;
   warehouseId: string;
 }): Promise<StockBalance> {
   const countedQuantity = numberValue(input.countedQuantity);
+  const expectedSystemQuantity = numberValue(input.expectedSystemQuantity);
 
   if (countedQuantity < 0) {
     throw new Error("Counted stock quantity cannot be negative.");
@@ -130,6 +138,22 @@ export async function setAtomicStockCount(tx: any, input: {
     },
   });
   const beforeQty = numberValue(current?.quantity);
+
+  if (!stockCountQuantitiesMatch(beforeQty, expectedSystemQuantity)) {
+    throw new InventoryCountConflictError("INVENTORY_CHANGED", STOCK_COUNT_CHANGED_MESSAGE);
+  }
+
+  const activeLots = await tx.inventoryLot.count({
+    where: {
+      companyId: input.companyId,
+      productId: input.productId,
+      quantity: { gt: 0 },
+      warehouseId: input.warehouseId,
+    },
+  });
+  if (activeLots > 0) {
+    throw new InventoryCountConflictError("INVENTORY_LOT_COUNT_UNSUPPORTED", STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE);
+  }
 
   await tx.inventoryBalance.upsert({
     create: {

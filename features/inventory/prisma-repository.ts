@@ -434,6 +434,7 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
       const balance = await setAtomicStockCount(tx, {
         companyId: tenant.companyId,
         countedQuantity: data.countedQuantity,
+        expectedSystemQuantity: data.expectedSystemQuantity,
         productId: data.productId,
         warehouseId: data.warehouseId,
       });

@@ -8,6 +8,10 @@ import { ArrowLeft, Barcode, ClipboardCheck, PackagePlus, Save, SlidersHorizonta
 import type { InventoryItem, Warehouse } from "@/features/inventory/types";
 import { WarehouseSelector } from "@/features/inventory/components/warehouse-selector";
 import { stockAdjustmentAction, stockCountAction, stockInAction } from "@/features/inventory/actions";
+import {
+    STOCK_COUNT_CHANGED_MESSAGE,
+    STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE,
+} from "@/features/inventory/stock-count-errors";
 type Mode = "stock-in" | "adjustment" | "count";
 const modeConfig: Record<Mode, {
     title: string;
@@ -52,6 +56,7 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
     const [selectedUnitId, setSelectedUnitId] = useState("");
     const [quantity, setQuantity] = useState(0);
     const [message, setMessage] = useState<string | null>(null);
+    const [messageKind, setMessageKind] = useState<"success" | "error">("success");
     const warehouseItems = useMemo(() => items.filter((item) => item.warehouseId === selectedWarehouseId), [items, selectedWarehouseId]);
     const selectedItem = warehouseItems.find((item) => item.id === selectedItemId);
     const receivingUnits = (selectedItem?.units ?? []).filter((unit) => unit.status !== "inactive" && (mode !== "stock-in" || unit.isPurchaseUnit || unit.isBaseUnit));
@@ -61,12 +66,14 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (!selectedItem) {
+            setMessageKind("error");
             setMessage(t("ui.select.a.product.first"));
             return;
         }
         const formData = new FormData(event.currentTarget);
         const note = String(formData.get("note") ?? "").trim();
         if (mode === "adjustment" && !note) {
+            setMessageKind("error");
             setMessage("Adjustment reason is required.");
             return;
         }
@@ -83,14 +90,27 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
                     ? await stockAdjustmentAction({ ...payload, reason: note })
                     : await stockCountAction({
                         countedQuantity: quantity,
+                        expectedSystemQuantity: selectedItem.quantity,
                         note: note || undefined,
                         productId: selectedItem.productId,
                         warehouseId: selectedWarehouseId,
                     });
             if (!result.ok) {
-                setMessage(result.error ?? `${config.title} failed.`);
+                const errorMessage = result.error ?? `${config.title} failed.`;
+                setMessageKind("error");
+                setMessage(
+                    errorMessage === STOCK_COUNT_CHANGED_MESSAGE
+                        ? t("ui.stock.count.changed")
+                        : errorMessage === STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE
+                            ? t("ui.stock.count.lot.unsupported")
+                            : errorMessage,
+                );
+                if (mode === "count") {
+                    router.refresh();
+                }
                 return;
             }
+            setMessageKind("success");
             setMessage(`${config.title} saved successfully.`);
             router.refresh();
         });
@@ -118,7 +138,7 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
         </div>
       </section>
 
-      {message ? (<div className="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
+      {message ? (<div className={messageKind === "error" ? "rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive" : "rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success"}>
           {message}
         </div>) : null}
 

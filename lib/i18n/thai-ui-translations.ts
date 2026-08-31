@@ -62,6 +62,8 @@ const thaiUiTranslations: Record<string, string> = {
   "Print Receipt": "พิมพ์ใบเสร็จ",
   "Product revenue": "รายได้สินค้า",
   "After member pricing and product promotions; before points and bill-level discounts.": "หลังราคาสมาชิกและโปรโมชันสินค้า ก่อนใช้แต้มและส่วนลดท้ายบิล",
+  "Stock changed while you were counting. Refresh and recount before saving.": "สต็อกมีการเปลี่ยนแปลงระหว่างการนับ กรุณารีเฟรชและตรวจนับใหม่ก่อนบันทึก",
+  "This product has lot/expiry inventory. Use a lot-aware inventory workflow; Stock Count is not supported yet.": "สินค้านี้มีล็อตหรือวันหมดอายุ ยังไม่รองรับการนับสต็อกแบบรวม กรุณาใช้ขั้นตอนที่รองรับล็อต",
   "Products": "สินค้า",
   "Promotion": "โปรโมชัน",
   "Promotions": "โปรโมชัน",

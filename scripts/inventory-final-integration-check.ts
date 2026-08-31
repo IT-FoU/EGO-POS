@@ -382,14 +382,14 @@ check(
 );
 
 const countBefore = await stockOf(countP.id);
-const countPos = await createStockCount({ countedQuantity: countBefore + 8, note: "INV QA positive count", productId: countP.id, warehouseId: WAREHOUSE_ID }, ownerTenant);
+const countPos = await createStockCount({ countedQuantity: countBefore + 8, expectedSystemQuantity: countBefore, note: "INV QA positive count", productId: countP.id, warehouseId: WAREHOUSE_ID }, ownerTenant);
 check("10. Stock count positive variance", "Positive count posts once", near(await stockOf(countP.id), countBefore + 8) && near(countPos.afterQty - countPos.beforeQty, 8));
 const countMid = await stockOf(countP.id);
-const countNeg = await createStockCount({ countedQuantity: countMid - 3, note: "INV QA negative count", productId: countP.id, warehouseId: WAREHOUSE_ID }, ownerTenant);
+const countNeg = await createStockCount({ countedQuantity: countMid - 3, expectedSystemQuantity: countMid, note: "INV QA negative count", productId: countP.id, warehouseId: WAREHOUSE_ID }, ownerTenant);
 check("11. Stock count negative variance", "Negative count posts once", near(await stockOf(countP.id), countMid - 3) && near(countNeg.afterQty - countNeg.beforeQty, -3));
 const countSame = await stockOf(countP.id);
 const countMovesBeforeDup = await movementCount({ productId: countP.id, referenceType: "stock_count" });
-await createStockCount({ countedQuantity: countSame, note: "INV QA reconfirm", productId: countP.id, warehouseId: WAREHOUSE_ID }, ownerTenant);
+await createStockCount({ countedQuantity: countSame, expectedSystemQuantity: countSame, note: "INV QA reconfirm", productId: countP.id, warehouseId: WAREHOUSE_ID }, ownerTenant);
 const countMovesAfterDup = await movementCount({ productId: countP.id, referenceType: "stock_count" });
 check("11. Stock count negative variance", "Reconfirming same count does not duplicate adjustment", countMovesAfterDup === countMovesBeforeDup, `moves ${countMovesBeforeDup}→${countMovesAfterDup}`);
 

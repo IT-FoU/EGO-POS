@@ -611,5 +611,7 @@
   "ui.total": "Total",
   "ui.view.receipt": "View receipt",
   "ui.product.revenue": "Product revenue",
-  "ui.product.revenue.helper": "After member pricing and product promotions; before points and bill-level discounts."
+  "ui.product.revenue.helper": "After member pricing and product promotions; before points and bill-level discounts.",
+  "ui.stock.count.changed": "Stock changed while you were counting. Refresh and recount before saving.",
+  "ui.stock.count.lot.unsupported": "This product has lot/expiry inventory. Use a lot-aware inventory workflow; Stock Count is not supported yet."
 }

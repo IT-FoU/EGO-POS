@@ -1,3 +1,4 @@
+import { InventoryCountConflictError } from "@/features/inventory/stock-count-errors";
 import { NextResponse } from "next/server";
 import { ApiUnauthorizedError, requireApiSession } from "@/lib/auth/session";
 import { tenantFromSession, writeFailure, writeSuccess, type TenantContext } from "@/lib/db/write-context";
@@ -26,6 +27,9 @@ function apiStatusFromError(error: unknown): number {
   if (error instanceof PermissionDeniedError || error instanceof PermissionMatrixDeniedError) {
     return 403;
   }
+  if (error instanceof InventoryCountConflictError) {
+    return 409;
+  }
   return 400;
 }
 
@@ -38,6 +42,16 @@ function apiJsonFromError(error: unknown) {
         ok: false,
       },
       { status: 403 },
+    );
+  }
+  if (error instanceof InventoryCountConflictError) {
+    return NextResponse.json(
+      {
+        code: error.code,
+        error: error.message,
+        ok: false,
+      },
+      { status: 409 },
     );
   }
   return NextResponse.json(writeFailure(error), { status: apiStatusFromError(error) });
