@@ -27,11 +27,18 @@ function check(name: string, ok: boolean, detail = "") {
 
 function withQueryCounter<T extends object>(client: T) {
   let count = 0;
+  const rawKeys = new Set(["$queryRaw", "$queryRawUnsafe", "$executeRaw", "$executeRawUnsafe"]);
   const skip = new Set(["$connect", "$disconnect", "$on", "$use", "$extends", "$transaction", "then"]);
   const proxy = new Proxy(client, {
     get(target, prop, receiver) {
       if (prop === "__queryCount") return count;
       const value = Reflect.get(target, prop, receiver);
+      if (rawKeys.has(String(prop)) && typeof value === "function") {
+        return (...args: unknown[]) => {
+          count += 1;
+          return value.apply(target, args);
+        };
+      }
       if (skip.has(String(prop))) {
         return typeof value === "function" ? value.bind(target) : value;
       }
@@ -76,9 +83,9 @@ check("Critical path has no customer credit aggregate", !criticalFn.includes("ou
 check("Critical path has no supplier payables query", !criticalFn.includes("supplierPayable.aggregate"));
 check("Critical path has no promotion discount aggregate", !criticalFn.includes("_sum: { promotionDiscount: true }"));
 check("Critical path has no loyalty redeem aggregate", !criticalFn.includes("loyaltyPointLedger"));
-check("Critical path still loads sales KPIs", criticalFn.includes("getPrismaDashboardSalesKpis"));
-check("Critical path still loads cash sessions", criticalFn.includes("cashSession.findFirst") && criticalFn.includes("cashSession.findMany"));
-check("Critical path still uses computeCashSessionTotalsForShift", criticalFn.includes("computeCashSessionTotalsForShift"));
+check("Critical path still loads sales KPIs", criticalFn.includes("loadDashboardCriticalSalesKpis"));
+check("Critical path still loads cash sessions", criticalFn.includes("cashSession.findMany"));
+check("Critical path still uses batched cash-session totals", criticalFn.includes("computeCashSessionTotalsForShifts"));
 check("Secondary loader owns inventory/alerts queries", secondaryFn.includes("inventoryBalance.findMany") && secondaryFn.includes("inventoryLot.count") && secondaryFn.includes("deadStockCutoff"));
 check("KPI queries start before cash queries", criticalFn.indexOf("critical-sales-kpis") < criticalFn.indexOf("critical-cash-sessions"));
 check("PrismaPg max/maxUses unchanged", prismaSrc.includes("max: 1") && prismaSrc.includes("maxUses: 1"));

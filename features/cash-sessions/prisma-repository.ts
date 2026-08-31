@@ -57,6 +57,47 @@ function mapSessionSummary(
   };
 }
 
+function totalsFromLoadedSessionRows(
+  session: Record<string, any>,
+  payments: Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }>,
+  refundRows: Array<Record<string, any>>,
+) {
+  const paymentTotals = summarizeSalePayments(payments);
+  const cashInLak = sumCashTransactions(session.transactions ?? [], "cash_in");
+  const cashOutLak = sumCashTransactions(session.transactions ?? [], "cash_out");
+  let refundLak = 0;
+  let exchangeCashInLak = 0;
+  for (const refund of refundRows) {
+    const sale = refund.sale ?? {};
+    const saleStatus = String(sale.saleStatus);
+    const method = String(refund.refundMethod ?? "cash");
+    const refundAmount = amount(refund.refundAmount) || (String(refund.kind ?? "refund") === "refund" ? amount(refund.totalAmount) : 0);
+    const paymentAmount = amount(refund.paymentAmount);
+    if (!CASH_SESSION_SALE_STATUSES.includes(saleStatus as (typeof CASH_SESSION_SALE_STATUSES)[number])) {
+      continue;
+    }
+    if (method === "cash") {
+      refundLak += refundAmount;
+      exchangeCashInLak += paymentAmount;
+    }
+  }
+  refundLak = Math.round(refundLak);
+
+  return buildCashSessionTotals({
+    cashInLak,
+    cashOutLak,
+    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak),
+    nonCashSalesLak: paymentTotals.nonCashSalesLak,
+    openingCashLak: amount(session.openingCash),
+    refundLak,
+    voidCashLak: 0,
+  });
+}
+
+function inSessionWindow(value: Date, openedAt: Date, endAt: Date) {
+  return value.getTime() >= openedAt.getTime() && value.getTime() <= endAt.getTime();
+}
+
 async function loadSessionTotals(
   tx: Record<string, any>,
   session: Record<string, any>,
@@ -90,37 +131,126 @@ async function loadSessionTotals(
     }),
   ]);
 
-  const paymentTotals = summarizeSalePayments(payments);
-  const cashInLak = sumCashTransactions(session.transactions ?? [], "cash_in");
-  const cashOutLak = sumCashTransactions(session.transactions ?? [], "cash_out");
-  let refundLak = 0;
-  let exchangeCashInLak = 0;
-  for (const refund of refundRows as Array<Record<string, any>>) {
-    const sale = refund.sale ?? {};
-    const saleStatus = String(sale.saleStatus);
-    const method = String(refund.refundMethod ?? "cash");
-    const refundAmount = amount(refund.refundAmount) || (String(refund.kind ?? "refund") === "refund" ? amount(refund.totalAmount) : 0);
-    const paymentAmount = amount(refund.paymentAmount);
-    if (!CASH_SESSION_SALE_STATUSES.includes(saleStatus as (typeof CASH_SESSION_SALE_STATUSES)[number])) {
-      continue;
-    }
-    if (method === "cash") {
-      refundLak += refundAmount;
-      exchangeCashInLak += paymentAmount;
-    }
-  }
-  refundLak = Math.round(refundLak);
-  const voidCashLak = 0;
+  return totalsFromLoadedSessionRows(session, payments, refundRows as Array<Record<string, any>>);
+}
 
-  return buildCashSessionTotals({
-    cashInLak,
-    cashOutLak,
-    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak),
-    nonCashSalesLak: paymentTotals.nonCashSalesLak,
-    openingCashLak: amount(session.openingCash),
-    refundLak,
-    voidCashLak,
-  });
+export async function computeCashSessionTotalsForShifts(
+  shifts: Array<{ endAt?: Date; session: Record<string, any> }>,
+  client: any = db,
+) {
+  const totals = new Map<string, ReturnType<typeof buildCashSessionTotals>>();
+  if (shifts.length === 0) {
+    return totals;
+  }
+
+  const companyId = String(shifts[0].session.companyId);
+  const branchId = String(shifts[0].session.branchId);
+  const cashierIds = Array.from(new Set(shifts.map((shift) => String(shift.session.cashierId))));
+  const windows = shifts.map((shift) => ({
+    cashierId: String(shift.session.cashierId),
+    endAt: shift.endAt ?? new Date(),
+    openedAt: new Date(shift.session.openedAt),
+    session: shift.session,
+  }));
+  const minOpened = new Date(Math.min(...windows.map((window) => window.openedAt.getTime())));
+  const maxEnd = new Date(Math.max(...windows.map((window) => window.endAt.getTime())));
+
+  type CashTotalRow = {
+    amount: unknown;
+    changeAmount: unknown;
+    kind: string | null;
+    paymentAmount: unknown;
+    paymentMethod: string | null;
+    refundAmount: unknown;
+    refundCreatedAt: Date | string | null;
+    refundCreatedBy: string | null;
+    refundMethod: string | null;
+    rowKind: string;
+    saleCreatedAt: Date | string | null;
+    saleCreatedBy: string | null;
+    saleStatus: string | null;
+    totalAmount: unknown;
+  };
+  const rows = await client.$queryRaw<CashTotalRow[]>`
+    SELECT
+      'payment' AS "rowKind",
+      sp.amount,
+      sp.change_amount AS "changeAmount",
+      sp.payment_method::text AS "paymentMethod",
+      s.created_at AS "saleCreatedAt",
+      s.created_by AS "saleCreatedBy",
+      s.sale_status::text AS "saleStatus",
+      NULL::timestamptz AS "refundCreatedAt",
+      NULL::text AS "refundCreatedBy",
+      NULL::text AS kind,
+      NULL::numeric AS "paymentAmount",
+      NULL::numeric AS "refundAmount",
+      NULL::text AS "refundMethod",
+      NULL::numeric AS "totalAmount"
+    FROM sale_payments sp
+    JOIN sales s ON s.id = sp.sale_id
+    WHERE s.company_id = ${companyId}
+      AND s.branch_id = ${branchId}
+      AND s.created_at >= ${minOpened}
+      AND s.created_at <= ${maxEnd}
+      AND s.created_by = ANY(${cashierIds})
+      AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted')
+    UNION ALL
+    SELECT
+      'refund' AS "rowKind",
+      NULL::numeric,
+      NULL::numeric,
+      NULL::text,
+      NULL::timestamptz,
+      NULL::text,
+      s.sale_status::text,
+      r.created_at,
+      r.created_by,
+      r.kind::text,
+      r.payment_amount,
+      r.refund_amount,
+      r.refund_method::text,
+      r.total_amount
+    FROM refunds r
+    JOIN sales s ON s.id = r.sale_id
+    WHERE r.company_id = ${companyId}
+      AND r.created_at >= ${minOpened}
+      AND r.created_at <= ${maxEnd}
+      AND r.created_by = ANY(${cashierIds})
+  `;
+
+  for (const window of windows) {
+    const payments = (rows as CashTotalRow[])
+      .filter((row: CashTotalRow) => (
+        row.rowKind === "payment"
+        && String(row.saleCreatedBy ?? "") === window.cashierId
+        && row.saleCreatedAt
+        && inSessionWindow(new Date(row.saleCreatedAt), window.openedAt, window.endAt)
+      ))
+      .map((row: CashTotalRow) => ({
+        amount: row.amount,
+        changeAmount: row.changeAmount,
+        paymentMethod: String(row.paymentMethod ?? "cash"),
+      }));
+    const refundRows = (rows as CashTotalRow[])
+      .filter((row: CashTotalRow) => (
+        row.rowKind === "refund"
+        && String(row.refundCreatedBy ?? "") === window.cashierId
+        && row.refundCreatedAt
+        && inSessionWindow(new Date(row.refundCreatedAt), window.openedAt, window.endAt)
+      ))
+      .map((row: CashTotalRow) => ({
+        kind: row.kind,
+        paymentAmount: row.paymentAmount,
+        refundAmount: row.refundAmount,
+        refundMethod: row.refundMethod,
+        sale: { saleStatus: row.saleStatus },
+        totalAmount: row.totalAmount,
+      }));
+    totals.set(String(window.session.id), totalsFromLoadedSessionRows(window.session, payments, refundRows));
+  }
+
+  return totals;
 }
 
 async function getScopedSession(

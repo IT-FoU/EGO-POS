@@ -60,12 +60,12 @@ const prismaSrc = readFileSync("lib/db/prisma.ts", "utf8");
 const reportsPage = readFileSync("features/reports/report-service.ts", "utf8");
 const posRepo = readFileSync("features/pos/prisma-repository.ts", "utf8");
 
-check("Dashboard uses lightweight sales KPI loader", dash.includes("getPrismaDashboardSalesKpis"));
+check("Dashboard uses compact critical sales KPI loader", dash.includes("loadDashboardCriticalSalesKpis"));
 check("Dashboard does not embed full Reports snapshot", !dash.includes("getPrismaReportsSnapshot"));
 check("Dashboard does not load inventory/customer/product/supplier snapshots", !dash.includes("getPrismaInventorySnapshot") && !dash.includes("getPrismaCustomersSnapshot") && !dash.includes("getPrismaProducts(") && !dash.includes("getPrismaSuppliersSnapshot"));
-check("Dashboard KPI helper reuses netReportLifecycle", reportsSrc.includes("export async function getPrismaDashboardSalesKpis") && reportsSrc.includes("netReportLifecycle(refundRows, saleItemCostRows)"));
+check("Dashboard KPI assembly reuses netReportLifecycle", reportsSrc.includes("export function assembleDashboardSalesKpis") && reportsSrc.includes("netReportLifecycle(refundRows, saleItemCostRows)"));
 check("Dashboard critical path runs sales KPIs before cash", criticalFn.includes("critical-sales-kpis") && criticalFn.includes("critical-cash-sessions") && criticalFn.indexOf("critical-sales-kpis") < criticalFn.indexOf("critical-cash-sessions"));
-check("Dashboard cash-session totals remain Promise.all", criticalFn.includes("timedDashboardLoad(\"critical-cash-totals\"") && criticalFn.includes("Promise.all"));
+check("Dashboard cash-session totals use batched shift reads", criticalFn.includes("timedDashboardLoad(\"critical-cash-totals\"") && criticalFn.includes("computeCashSessionTotalsForShifts"));
 check("Critical path does not query inventory lots or dead stock", !criticalFn.includes("inventoryLot.count") && !criticalFn.includes("deadStockCutoff") && !criticalFn.includes("inventoryBalance.findMany"));
 check("Recent activity is limited to 20 netted sales", criticalFn.includes("salesKpis.nettedSales.slice(0, 20)"));
 check("Expiry widgets use counts instead of full lot payloads", dash.includes("inventoryLot.count") && !dash.includes("inventoryLot.findMany"));

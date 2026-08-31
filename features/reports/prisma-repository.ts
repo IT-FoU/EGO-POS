@@ -537,6 +537,85 @@ export type DashboardSalesKpis = {
   totalTransactions: number;
 };
 
+export function assembleDashboardSalesKpis(input: {
+  paymentRows: DashboardSalesKpis["paymentRows"];
+  products: Array<{ id: string; nameEn: string; nameLo: string }>;
+  refundRows: Array<Record<string, any>>;
+  saleItemCostRows: Array<Record<string, any>>;
+  salesByPeriod: Array<Record<string, any>>;
+}): DashboardSalesKpis {
+  const { paymentRows, products, refundRows, saleItemCostRows, salesByPeriod } = input;
+  const lifecycleNet = netReportLifecycle(refundRows, saleItemCostRows);
+  const nettedSalesByPeriod = applyLifecycleToSaleRows(salesByPeriod, refundRows, saleItemCostRows);
+  const grossSalesLak = salesByPeriod.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.totalAmount),
+    0,
+  );
+  const discountLak = salesByPeriod.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.discountAmount),
+    0,
+  );
+  const totalRevenue = grossSalesLak + lifecycleNet.revenueLak;
+  const totalProfit = salesByPeriod.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.profitAmount),
+    0,
+  ) + lifecycleNet.profitLak;
+  const totalCogsLak = saleItemCostRows.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.costPrice) * amount(row.quantity),
+    0,
+  ) + lifecycleNet.cogsLak;
+  const itemsSold = saleItemCostRows.reduce(
+    (total: number, row: Record<string, any>) => total + amount(row.quantity),
+    0,
+  ) + lifecycleNet.quantitySold;
+  const productById = new Map<string, { nameEn: string; nameLo: string }>(
+    products.map((product) => [product.id, product]),
+  );
+  const nettedProductTotals = buildNettedProductTotals(saleItemCostRows, refundRows);
+  const productRows = Array.from(nettedProductTotals.entries())
+    .map(([productId, totals]) => {
+      const product = productById.get(productId);
+      return {
+        name: product?.nameEn || product?.nameLo || productId,
+        quantity: totals.quantitySold,
+        totalLak: Math.round(totals.revenueLak),
+      };
+    })
+    .sort((left, right) => right.totalLak - left.totalLak)
+    .slice(0, 10);
+  const nettedPaymentGroups = netPaymentGroups(paymentTotalsFromRows(paymentRows), refundRows);
+  const paymentBreakdown = nettedPaymentGroups.map((row: Record<string, any>) => ({
+    label: reportPaymentLabel(String(row.paymentMethod ?? "cash")),
+    totalLak: Math.round(amount(row._sum.amount)),
+  }));
+
+  return {
+    cogsLak: Math.round(totalCogsLak),
+    discountLak,
+    grossSalesLak,
+    itemsSold,
+    missingSaleLineCosts: saleItemCostRows.some(
+      (row: Record<string, any>) => row.costPrice == null || !Number.isFinite(Number(row.costPrice)),
+    ),
+    nettedSales: nettedSalesByPeriod.map((row: Record<string, any>) => ({
+      createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
+      id: String(row.id),
+      paymentMethod: String(row.payments?.[0]?.paymentMethod ?? "cash"),
+      profitAmount: amount(row.profitAmount),
+      saleNo: String(row.saleNo ?? ""),
+      saleStatus: String(row.saleStatus ?? ""),
+      totalAmount: amount(row.totalAmount),
+    })),
+    paymentBreakdown,
+    paymentRows,
+    productRows,
+    refundLak: Math.round(refundRows.reduce((total: number, refund: Record<string, any>) => total + refundAmountOf(refund), 0)),
+    totalProfit,
+    totalRevenue,
+    totalTransactions: salesByPeriod.length,
+  };
+}
+
 export async function getPrismaDashboardSalesKpis(
   scope: BranchScope,
   range: { dateFrom: Date; dateTo: Date },
@@ -602,75 +681,13 @@ export async function getPrismaDashboardSalesKpis(
     }),
   ]);
 
-  const lifecycleNet = netReportLifecycle(refundRows, saleItemCostRows);
-  const nettedSalesByPeriod = applyLifecycleToSaleRows(salesByPeriod, refundRows, saleItemCostRows);
-  const grossSalesLak = salesByPeriod.reduce(
-    (total: number, row: Record<string, any>) => total + amount(row.totalAmount),
-    0,
-  );
-  const discountLak = salesByPeriod.reduce(
-    (total: number, row: Record<string, any>) => total + amount(row.discountAmount),
-    0,
-  );
-  const totalRevenue = grossSalesLak + lifecycleNet.revenueLak;
-  const totalProfit = salesByPeriod.reduce(
-    (total: number, row: Record<string, any>) => total + amount(row.profitAmount),
-    0,
-  ) + lifecycleNet.profitLak;
-  const totalCogsLak = saleItemCostRows.reduce(
-    (total: number, row: Record<string, any>) => total + amount(row.costPrice) * amount(row.quantity),
-    0,
-  ) + lifecycleNet.cogsLak;
-  const itemsSold = saleItemCostRows.reduce(
-    (total: number, row: Record<string, any>) => total + amount(row.quantity),
-    0,
-  ) + lifecycleNet.quantitySold;
-  const productById = new Map<string, { nameEn: string; nameLo: string }>(
-    products.map((product: { id: string; nameEn: string; nameLo: string }) => [product.id, product]),
-  );
-  const nettedProductTotals = buildNettedProductTotals(saleItemCostRows, refundRows);
-  const productRows = Array.from(nettedProductTotals.entries())
-    .map(([productId, totals]) => {
-      const product = productById.get(productId);
-      return {
-        name: product?.nameEn || product?.nameLo || productId,
-        quantity: totals.quantitySold,
-        totalLak: Math.round(totals.revenueLak),
-      };
-    })
-    .sort((left, right) => right.totalLak - left.totalLak)
-    .slice(0, 10);
-  const nettedPaymentGroups = netPaymentGroups(paymentTotalsFromRows(paymentRows), refundRows);
-  const paymentBreakdown = nettedPaymentGroups.map((row: Record<string, any>) => ({
-    label: reportPaymentLabel(String(row.paymentMethod ?? "cash")),
-    totalLak: Math.round(amount(row._sum.amount)),
-  }));
-
-  return {
-    cogsLak: Math.round(totalCogsLak),
-    discountLak,
-    grossSalesLak,
-    itemsSold,
-    missingSaleLineCosts: saleItemCostRows.some(
-      (row: Record<string, any>) => row.costPrice == null || !Number.isFinite(Number(row.costPrice)),
-    ),
-    nettedSales: nettedSalesByPeriod.map((row: Record<string, any>) => ({
-      createdAt: row.createdAt,
-      id: String(row.id),
-      paymentMethod: String(row.payments?.[0]?.paymentMethod ?? "cash"),
-      profitAmount: amount(row.profitAmount),
-      saleNo: String(row.saleNo ?? ""),
-      saleStatus: String(row.saleStatus ?? ""),
-      totalAmount: amount(row.totalAmount),
-    })),
-    paymentBreakdown,
+  return assembleDashboardSalesKpis({
     paymentRows,
-    productRows,
-    refundLak: Math.round(refundRows.reduce((total: number, refund: Record<string, any>) => total + refundAmountOf(refund), 0)),
-    totalProfit,
-    totalRevenue,
-    totalTransactions: salesByPeriod.length,
-  };
+    products,
+    refundRows,
+    saleItemCostRows,
+    salesByPeriod,
+  });
 }
 
 export async function getPrismaReportsSnapshot(

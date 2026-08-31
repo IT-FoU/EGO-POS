@@ -1,6 +1,9 @@
-import { computeCashSessionTotalsForShift } from "@/features/cash-sessions/prisma-repository";
+import { computeCashSessionTotalsForShifts } from "@/features/cash-sessions/prisma-repository";
+import {
+  loadDashboardCriticalSalesKpis,
+  resolveDashboardCriticalContext,
+} from "@/features/dashboard/critical-queries";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
-import { getPrismaDashboardSalesKpis } from "@/features/reports/prisma-repository";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
@@ -440,12 +443,13 @@ export async function getMiniMartDashboardSecondarySnapshot(
 /*
  * Dashboard calculation contract
  * - Revenue, transaction count, profit, COGS, payment totals, and top products
- *   come from getPrismaDashboardSalesKpis, which reuses the same sale filters and
- *   netReportLifecycle netting as Reports. Dashboard must not subtract refunds
- *   again from already-netted revenue.
- * - PERF-07: critical path is permission → scope → sales KPIs → cash sessions →
- *   cash-session totals. Secondary inventory/alert/history queries must not start
- *   until that path completes (PrismaPg max:1 serializes all queries).
+ *   come from loadDashboardCriticalSalesKpis + assembleDashboardSalesKpis, which
+ *   reuse the same sale filters and netReportLifecycle netting as Reports.
+ *   Dashboard must not subtract refunds again from already-netted revenue.
+ * - PERF-07/10: critical path is permission+scope → sales KPIs → cash sessions →
+ *   cash-session totals. Sales KPIs and cash totals use one bounded query each.
+ *   Secondary inventory/alert/history queries must not start until that path
+ *   completes (PrismaPg max:1 serializes all queries).
  * - Dashboard does not load the Reports page catalogues (products/inventory/
  *   customers/suppliers snapshots) on first paint.
  * - Query failures never produce mock metrics. The service returns an empty
@@ -537,7 +541,6 @@ export async function getPrismaDashboardCriticalSnapshot(
   range: DashboardDateRange,
   client: any = prisma,
 ): Promise<DashboardSnapshot> {
-  await assertPermission(tenant, READ_PERMISSIONS.dashboardView, client);
   return loadDashboardCriticalSnapshot(tenant, range, client);
 }
 
@@ -556,7 +559,6 @@ export async function getPrismaDashboardSnapshot(
   range: DashboardDateRange,
   client: any = prisma,
 ): Promise<DashboardSnapshot> {
-  await assertPermission(tenant, READ_PERMISSIONS.dashboardView, client);
   const started = dashboardLoadTimingEnabled() ? Date.now() : 0;
   const critical = await loadDashboardCriticalSnapshot(tenant, range, client);
   const secondary = await loadDashboardSecondarySlice(tenant, range, client, {
@@ -575,38 +577,35 @@ async function loadDashboardCriticalSnapshot(
   client: any = prisma,
 ): Promise<DashboardSnapshot> {
   const db = client as any;
-  const scope = await timedDashboardLoad("scope", () => resolveTenantScope(tenant, client));
+  const scope = await timedDashboardLoad("scope", () => resolveDashboardCriticalContext(tenant, client));
   const { end, label, start } = resolveDateRange(range);
   const dateTo = new Date(end.getTime() - 1);
-  const branchWhere = { branchId: scope.branchId };
 
-  const salesKpis = await timedDashboardLoad("critical-sales-kpis", () =>
-    getPrismaDashboardSalesKpis(scope, { dateFrom: start, dateTo }, db),
-  );
+  const salesKpis = (await timedDashboardLoad("critical-sales-kpis", () =>
+    loadDashboardCriticalSalesKpis(scope, { dateFrom: start, dateTo }, db),
+  )).kpis;
 
-  const [currentShift, todayShifts] = await timedDashboardLoad("critical-cash-sessions", () =>
-    Promise.all([
-      db.cashSession.findFirst({
-        include: { transactions: true },
-        orderBy: { openedAt: "desc" },
-        where: {
-          ...branchWhere,
-          cashierId: tenant.userId,
-          closedAt: null,
-          companyId: tenant.companyId,
-        },
-      }),
-      db.cashSession.findMany({
-        include: { transactions: true },
-        orderBy: { openedAt: "asc" },
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          openedAt: { gte: start, lt: end },
-        },
-      }),
-    ]),
-  );
+  const sessionRows = await timedDashboardLoad("critical-cash-sessions", () =>
+    db.cashSession.findMany({
+      include: { transactions: true },
+      orderBy: { openedAt: "asc" },
+      where: {
+        branchId: scope.branchId,
+        companyId: tenant.companyId,
+        OR: [
+          { cashierId: tenant.userId, closedAt: null },
+          { openedAt: { gte: start, lt: end } },
+        ],
+      },
+    }),
+  ) as Array<Record<string, any>>;
+  const currentShift = [...sessionRows]
+    .filter((shift) => !shift.closedAt && shift.cashierId === tenant.userId)
+    .sort((left, right) => new Date(right.openedAt).getTime() - new Date(left.openedAt).getTime())[0] ?? null;
+  const todayShifts = sessionRows.filter((shift) => {
+    const openedAt = new Date(shift.openedAt).getTime();
+    return openedAt >= start.getTime() && openedAt < end.getTime();
+  });
 
   const shiftTxns = (currentShift?.transactions ?? []) as DashTxn[];
   const grossSalesLak = salesKpis.grossSalesLak;
@@ -641,17 +640,16 @@ async function loadDashboardCriticalSnapshot(
   for (const shift of todayShifts as Array<Record<string, any>>) {
     shiftsForTotals.set(String(shift.id), shift);
   }
-  const shiftTotalsEntries = await timedDashboardLoad("critical-cash-totals", () =>
-    Promise.all(
-      Array.from(shiftsForTotals.values()).map(async (shift) => {
-        const shiftEnd = shift.closedAt ?? new Date();
-        const totals = await computeCashSessionTotalsForShift(shift, shiftEnd, db);
-        return [String(shift.id), totals] as const;
-      }),
+  const totalsByShiftId = await timedDashboardLoad("critical-cash-totals", () =>
+    computeCashSessionTotalsForShifts(
+      Array.from(shiftsForTotals.values()).map((shift) => ({
+        endAt: shift.closedAt ?? new Date(),
+        session: shift,
+      })),
+      db,
     ),
   );
   await timedDashboardLoad("critical-complete", async () => undefined);
-  const totalsByShiftId = new Map(shiftTotalsEntries);
   const currentShiftTotals = currentShift ? totalsByShiftId.get(String(currentShift.id)) ?? null : null;
   const expectedCashLak = currentShiftTotals?.expectedCashLak ?? openingCashLak;
   const hourlySales = emptySnapshot().hourlySales.map((point, hour) => ({

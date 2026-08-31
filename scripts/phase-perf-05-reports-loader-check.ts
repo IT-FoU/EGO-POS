@@ -94,7 +94,7 @@ check("Reports reuses canonical lifecycle netting", reportsFn.includes("netRepor
 check("Reports first-paint reads are one Promise.all", reportsFn.includes("timedReportsLoad(\"parallel-reads\"") && reportsFn.includes("Promise.all"));
 check("Reports does not sequentially gate on sales aggregate", !reportsFn.includes("hasCompletedSales"));
 check("Reports page avoids a second filter-options round trip", reportsPage.includes("snapshot.filterOptions") && !reportsPage.includes("Promise.all(["));
-check("Dashboard KPI helper is unchanged", dash.includes("getPrismaDashboardSalesKpis") && !dash.includes("getPrismaReportsSnapshot"));
+check("Dashboard KPI helper stays Reports-independent", dash.includes("loadDashboardCriticalSalesKpis") && !dash.includes("getPrismaReportsSnapshot"));
 check("Permission keys are request-cached for the default client", permissions.includes("getUserPermissionKeysCached"));
 check("Tenant scope is request-cached for the default client", tenantScope.includes("resolveTenantScopeCached"));
 check("PrismaPg max/maxUses unchanged", prismaSrc.includes("max: 1") && prismaSrc.includes("maxUses: 1"));

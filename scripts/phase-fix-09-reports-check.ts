@@ -238,7 +238,7 @@ function wiringPass() {
   assert(!reports.includes("getPrismaInventorySnapshot") && !reports.includes("getPrismaCustomersSnapshot") && !reports.includes("getPrismaProducts(") && !reports.includes("getPrismaSuppliersSnapshot"), "Reports still loads full catalogue snapshots");
   assert(reports.includes("timedReportsLoad(\"parallel-reads\"") && reports.includes("Promise.all"), "Reports first-paint reads are not parallel");
   assert(!reports.includes("salesAggregate") || !reports.includes("hasCompletedSales"), "Reports still gates on a sequential sales aggregate");
-  assert(dash.includes("getPrismaDashboardSalesKpis"), "Dashboard does not reuse canonical sales KPIs");
+  assert(dash.includes("loadDashboardCriticalSalesKpis") && reports.includes("assembleDashboardSalesKpis"), "Dashboard does not reuse canonical sales KPI assembly");
   assert(!dash.includes("getPrismaReportsSnapshot"), "Dashboard still loads the full Reports snapshot");
   assert(!dash.includes("getPrismaInventorySnapshot"), "Dashboard still loads the inventory snapshot");
   assert(!dash.includes("getPrismaCustomersSnapshot"), "Dashboard still loads the customers snapshot");
