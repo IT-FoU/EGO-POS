@@ -36,6 +36,7 @@
   "ui.near.threshold.campaigns.require.owner.admin": "Near-threshold campaigns require Owner/Admin approval.",
   "ui.unable.to.sign.in": "Unable to sign in.",
   "ui.width.900.height.720": "width=900,height=720",
+  "ui.allow.window.management.to.open.customer.di": "Allow window management to open Customer Display on the second screen.",
   "ui.several.demo.items.are.below.minimum.stock.l": "Several demo items are below minimum stock level.",
   "ui.check.expiry.dates.for.products.due.soon": "Check expiry dates for products due soon.",
   "ui.products.with.no.sales.activity.for.more.tha": "Products with no sales activity for more than 30 days need review.",

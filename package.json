@@ -44,7 +44,8 @@
     "test:cash-out-overdraw": "tsx scripts/phase-fix-18-cash-out-overdraw-check.ts",
     "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts",
     "test:product-revenue-label": "tsx scripts/phase-fix-19-product-revenue-label-check.ts",
-    "test:stock-count-guard": "tsx scripts/phase-fix-20-stock-count-guard-check.ts"
+    "test:stock-count-guard": "tsx scripts/phase-fix-20-stock-count-guard-check.ts",
+    "test:customer-display": "tsx scripts/phase-fix-customer-display-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",
