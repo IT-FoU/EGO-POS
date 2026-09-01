@@ -17,6 +17,7 @@ import {
 } from "@/features/qr-payments/actions";
 import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "@/features/qr-payments/types";
 import { CUSTOMER_DISPLAY_TEMPLATES, DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
+import { CUSTOMER_DISPLAY_THEME_OPTIONS, type CustomerDisplayThemeId } from "@/features/pos/customer-display-theme";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
@@ -74,6 +75,10 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     function updateDisplayTemplate(template: CustomerDisplayTemplate) {
         persistCustomerDisplaySettings({ ...displaySettings, template });
         setMessage({ text: t("ui.customer.display.template.updated"), tone: "success" });
+    }
+    function updateDisplayTheme(theme: CustomerDisplayThemeId) {
+        persistCustomerDisplaySettings({ ...displaySettings, theme });
+        setMessage({ text: t("ui.customer.display.theme.updated"), tone: "success" });
     }
     function updateDisplayAutoReturn(seconds: number) {
         persistCustomerDisplaySettings({ ...displaySettings, autoReturnSeconds: Math.max(1, seconds) });
@@ -253,6 +258,16 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
       <section className="rounded-lg border border-border bg-card p-5">
         <SectionTitle icon={MonitorPlay} title="Customer Display"/>
         <div className="mt-5 grid gap-5">
+          <div>
+            <div className="text-sm font-semibold">{t("ui.customer.display.theme")}</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {CUSTOMER_DISPLAY_THEME_OPTIONS.map((option) => (<button className={displaySettings.theme === option.id
+                ? "rounded-md border border-primary bg-primary/10 px-3 py-3 text-left text-sm font-semibold shadow-sm"
+                : "rounded-md border border-border bg-background px-3 py-3 text-left text-sm font-semibold transition hover:border-primary"} key={option.id} type="button" onClick={() => updateDisplayTheme(option.id)}>
+                  {t(option.labelKey)}
+                </button>))}
+            </div>
+          </div>
           <div>
             <div className="text-sm font-semibold">Display Template</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">

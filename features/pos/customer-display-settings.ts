@@ -1,5 +1,10 @@
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readJsonFromStorage, writeJsonToStorage } from "@/lib/demo/storage";
+import {
+  DEFAULT_CUSTOMER_DISPLAY_THEME,
+  parseCustomerDisplayTheme,
+  type CustomerDisplayThemeId,
+} from "@/features/pos/customer-display-theme";
 
 export const CUSTOMER_DISPLAY_SETTINGS_KEY = DemoStorageKeys.customerDisplaySettings;
 
@@ -22,6 +27,7 @@ export type CustomerDisplaySettings = {
   media: CustomerDisplayMedia[];
   promotionMessages: string[];
   template: CustomerDisplayTemplate;
+  theme: CustomerDisplayThemeId;
 };
 
 export const CUSTOMER_DISPLAY_TEMPLATES: Array<{
@@ -65,6 +71,7 @@ export const DEFAULT_CUSTOMER_DISPLAY_SETTINGS: CustomerDisplaySettings = {
     "Thank you for shopping with us",
   ],
   template: "classic_checkout",
+  theme: DEFAULT_CUSTOMER_DISPLAY_THEME,
 };
 
 export function readCustomerDisplaySettingsFromStorage(): CustomerDisplaySettings {
@@ -73,19 +80,27 @@ export function readCustomerDisplaySettingsFromStorage(): CustomerDisplaySetting
   }
 
   const parsed = readJsonFromStorage<Partial<CustomerDisplaySettings>>(CUSTOMER_DISPLAY_SETTINGS_KEY, {});
+  return normalizeCustomerDisplaySettings(parsed);
+}
+
+export function normalizeCustomerDisplaySettings(
+  parsed: Partial<CustomerDisplaySettings> | null | undefined,
+): CustomerDisplaySettings {
+  const source = parsed ?? {};
   return {
     autoReturnSeconds:
-      typeof parsed.autoReturnSeconds === "number" && parsed.autoReturnSeconds > 0
-        ? parsed.autoReturnSeconds
+      typeof source.autoReturnSeconds === "number" && source.autoReturnSeconds > 0
+        ? source.autoReturnSeconds
         : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds,
-    media: Array.isArray(parsed.media) ? parsed.media : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.media,
+    media: Array.isArray(source.media) ? source.media : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.media,
     promotionMessages:
-      Array.isArray(parsed.promotionMessages) && parsed.promotionMessages.length > 0
-        ? parsed.promotionMessages
+      Array.isArray(source.promotionMessages) && source.promotionMessages.length > 0
+        ? source.promotionMessages
         : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages,
-    template: CUSTOMER_DISPLAY_TEMPLATES.some((template) => template.id === parsed.template)
-      ? parsed.template as CustomerDisplayTemplate
+    template: CUSTOMER_DISPLAY_TEMPLATES.some((template) => template.id === source.template)
+      ? source.template as CustomerDisplayTemplate
       : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.template,
+    theme: parseCustomerDisplayTheme(source.theme),
   };
 }
 

@@ -1,6 +1,9 @@
 export const CUSTOMER_DISPLAY_PATH = "/customer-display";
 export const CUSTOMER_DISPLAY_WINDOW_NAME = "ego-pos-customer-display";
 export const CUSTOMER_DISPLAY_OPEN_FEATURES = "popup=yes,width=900,height=720";
+export const CUSTOMER_DISPLAY_PLACEMENT_RETRY_DELAY_MS = 180;
+export const CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES = 3;
+export const CUSTOMER_DISPLAY_PLACEMENT_TOLERANCE_PX = 64;
 
 export type CustomerDisplayScreen = {
   availHeight: number;
@@ -21,8 +24,29 @@ export type CustomerDisplayPlacement =
   | "unavailable"
   | "unsupported";
 
+export type CustomerDisplayBounds = {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+};
+
+export type CustomerDisplayPlacementClock = {
+  delay: (callback: () => void, ms: number) => void;
+  onLoad: (popup: Window, callback: () => void) => void;
+};
+
 type ScreenDetailsApi = {
   getScreenDetails?: () => Promise<CustomerDisplayScreenDetails>;
+};
+
+const defaultPlacementClock: CustomerDisplayPlacementClock = {
+  delay(callback, ms) {
+    setTimeout(callback, ms);
+  },
+  onLoad(popup, callback) {
+    popup.addEventListener?.("load", callback, { once: true });
+  },
 };
 
 export function isSameCustomerDisplayScreen(left: CustomerDisplayScreen, right: CustomerDisplayScreen) {
@@ -44,13 +68,66 @@ export function pickCustomerScreen(details: CustomerDisplayScreenDetails): Custo
   return other ?? null;
 }
 
-export function customerDisplayTargetBounds(screen: CustomerDisplayScreen) {
+export function customerDisplayTargetBounds(screen: CustomerDisplayScreen): CustomerDisplayBounds {
   return {
     height: Math.max(1, Math.round(screen.availHeight)),
     left: Math.round(screen.availLeft),
     top: Math.round(screen.availTop),
     width: Math.max(1, Math.round(screen.availWidth)),
   };
+}
+
+export function customerDisplayOpenFeatures(bounds?: CustomerDisplayBounds | null) {
+  if (!bounds) {
+    return CUSTOMER_DISPLAY_OPEN_FEATURES;
+  }
+
+  return `popup=yes,left=${bounds.left},top=${bounds.top},width=${bounds.width},height=${bounds.height}`;
+}
+
+export function applyCustomerDisplayBounds(
+  popup: Pick<Window, "closed" | "moveTo" | "resizeTo">,
+  bounds: CustomerDisplayBounds,
+) {
+  if (popup.closed) {
+    return false;
+  }
+
+  popup.moveTo(bounds.left, bounds.top);
+  popup.resizeTo(bounds.width, bounds.height);
+  popup.moveTo(bounds.left, bounds.top);
+  return true;
+}
+
+export function customerDisplayPlacementNeedsRetry(
+  popup: { outerHeight?: number; outerWidth?: number; screenX?: number; screenY?: number },
+  bounds: CustomerDisplayBounds,
+  tolerance = CUSTOMER_DISPLAY_PLACEMENT_TOLERANCE_PX,
+) {
+  const screenX = typeof popup.screenX === "number" ? popup.screenX : Number.NaN;
+  const screenY = typeof popup.screenY === "number" ? popup.screenY : Number.NaN;
+  const width = typeof popup.outerWidth === "number" ? popup.outerWidth : Number.NaN;
+  const height = typeof popup.outerHeight === "number" ? popup.outerHeight : Number.NaN;
+
+  if ([screenX, screenY, width, height].some((value) => Number.isNaN(value))) {
+    return true;
+  }
+
+  return (
+    Math.abs(screenX - bounds.left) > tolerance ||
+    Math.abs(screenY - bounds.top) > tolerance ||
+    Math.abs(width - bounds.width) > tolerance ||
+    Math.abs(height - bounds.height) > tolerance
+  );
+}
+
+export function scheduleCustomerDisplayPlacementRetries(
+  popup: Window,
+  apply: () => void,
+  clock: CustomerDisplayPlacementClock = defaultPlacementClock,
+) {
+  clock.onLoad(popup, apply);
+  clock.delay(apply, CUSTOMER_DISPLAY_PLACEMENT_RETRY_DELAY_MS);
 }
 
 export function openCustomerDisplayPopup(host: Window = window) {
@@ -60,6 +137,7 @@ export function openCustomerDisplayPopup(host: Window = window) {
 export async function placeCustomerDisplayWindow(
   popup: Window,
   host: ScreenDetailsApi & Pick<Window, "focus"> = window,
+  clock: CustomerDisplayPlacementClock = defaultPlacementClock,
 ): Promise<CustomerDisplayPlacement> {
   if (popup.closed) {
     return "unavailable";
@@ -80,8 +158,18 @@ export async function placeCustomerDisplayWindow(
     }
 
     const bounds = customerDisplayTargetBounds(target);
-    popup.moveTo(bounds.left, bounds.top);
-    popup.resizeTo(bounds.width, bounds.height);
+    let applies = 0;
+
+    const apply = () => {
+      if (applies >= CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES || popup.closed) {
+        return;
+      }
+      applies += 1;
+      applyCustomerDisplayBounds(popup, bounds);
+    };
+
+    apply();
+    scheduleCustomerDisplayPlacementRetries(popup, apply, clock);
     popup.focus();
     return "placed";
   } catch {

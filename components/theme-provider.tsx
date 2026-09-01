@@ -14,21 +14,43 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+function parseStoredTheme(value: string | null): Theme {
+  return value === "light" ? "light" : "dark";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("dark");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     runDemoStorageMigrations();
-    const savedTheme = readStringFromStorage(DemoStorageKeys.theme) as Theme | null;
-    const nextTheme = savedTheme === "light" ? "light" : "dark";
+    const nextTheme = parseStoredTheme(readStringFromStorage(DemoStorageKeys.theme));
     setTheme(nextTheme);
     document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
     document.documentElement.classList.toggle("dark", theme === "dark");
     writeStringToStorage(DemoStorageKeys.theme, theme);
-  }, [theme]);
+  }, [hydrated, theme]);
+
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key !== DemoStorageKeys.theme || event.newValue == null) {
+        return;
+      }
+
+      setTheme(parseStoredTheme(event.newValue));
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const value = useMemo(
     () => ({

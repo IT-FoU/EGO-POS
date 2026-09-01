@@ -545,5 +545,11 @@
   "ui.product.revenue": "ລາຍໄດ້ສິນຄ້າ",
   "ui.product.revenue.helper": "ຫຼັງລາຄາສະມາຊິກ ແລະ ໂປຣໂມຊັນສິນຄ້າ ກ່ອນໃຊ້ແຕ້ມ ແລະ ສ່ວນຫຼຸດທ້າຍບິນ",
   "ui.stock.count.changed": "ສະຕັອກປ່ຽນແປງລະຫວ່າງການນັບ ກະລຸນາຣີເຟຣຊ ແລະ ນັບໃໝ່ກ່ອນບັນທຶກ",
-  "ui.stock.count.lot.unsupported": "ສິນຄ້ານີ້ມີລັອດ ຫຼື ວັນໝົດອາຍຸ ຍັງບໍ່ຮອງຮັບການນັບສະຕັອກລວມ"
+  "ui.stock.count.lot.unsupported": "ສິນຄ້ານີ້ມີລັອດ ຫຼື ວັນໝົດອາຍຸ ຍັງບໍ່ຮອງຮັບການນັບສະຕັອກລວມ",
+  "ui.customer.display.theme": "ຮູບແບບສີຈໍລູກຄ້າ",
+  "ui.customer.display.theme.updated": "ອັບເດດຮູບແບບສີຈໍລູກຄ້າແລ້ວ",
+  "ui.follow.pos": "ຕາມ POS",
+  "ui.fresh.green": "ຂຽວສົດ",
+  "ui.sky.blue": "ຟ້າສົດ",
+  "ui.sunny.yellow": "ເຫຼືອງສົດ"
 }
