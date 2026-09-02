@@ -50,6 +50,13 @@ import {
 import { cancelHeldBill, createHeldBill, fetchHeldBills, resumeHeldBill } from "@/features/pos/held-bills-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
+import { readCompanyLogoUrl } from "@/features/brand/company-logo";
+import {
+    CUSTOMER_DISPLAY_QR_EVENT,
+    hideCustomerDisplayQr,
+    readCustomerDisplayQrIntent,
+    writeCustomerDisplayQrCatalog,
+} from "@/features/pos/customer-display-qr";
 import { readReceiptPrintModePreference } from "@/features/settings/receipt-print-mode";
 import {
     demoAuditLogRepository,
@@ -237,6 +244,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [pendingApprovals, setPendingApprovals] = useState<PosPendingApprovalRequest[]>([]);
     const [auditEntries, setAuditEntries] = useState<PosAuditEntry[]>([]);
     const [customerDisplayMode, setCustomerDisplayMode] = useState<PosDisplayState["displayMode"]>("advertising");
+    const [customerQrVisible, setCustomerQrVisible] = useState(false);
+    const [thankYouSnapshot, setThankYouSnapshot] = useState<PosDisplayState | null>(null);
     const [availableQrBanks, setAvailableQrBanks] = useState(qrBanks);
     const [selectedQrBankId, setSelectedQrBankId] = useState(qrBanks[0]?.id ?? "");
     const [visibleProducts, setVisibleProducts] = useState<PosProduct[]>(products);
@@ -266,7 +275,24 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setAvailableQrBanks(qrBanks);
         setSelectedQrBankId((current) => current || qrBanks[0]?.id || "");
+        writeCustomerDisplayQrCatalog(qrBanks);
     }, [qrBanks]);
+    useEffect(() => {
+        function syncQrIntent() {
+            const intent = readCustomerDisplayQrIntent();
+            setCustomerQrVisible(intent.visible);
+            if (intent.bankId) {
+                setSelectedQrBankId(intent.bankId);
+            }
+        }
+        syncQrIntent();
+        window.addEventListener("storage", syncQrIntent);
+        window.addEventListener(CUSTOMER_DISPLAY_QR_EVENT, syncQrIntent);
+        return () => {
+            window.removeEventListener("storage", syncQrIntent);
+            window.removeEventListener(CUSTOMER_DISPLAY_QR_EVENT, syncQrIntent);
+        };
+    }, []);
     useEffect(() => {
         setPendingApprovals(demoPendingApprovalRepository.listPendingApprovals<PosPendingApprovalRequest>());
         setAuditEntries(demoAuditLogRepository.listAuditEntries<PosAuditEntry>());
@@ -530,10 +556,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setMessage(`Approval request ${status}.`);
     }
     useEffect(() => {
+        if (customerDisplayMode === "thank_you" && thankYouSnapshot) {
+            writeJsonToStorage(DemoStorageKeys.customerDisplayState, { ...thankYouSnapshot, showQr: false, selectedQrBank: null });
+            return;
+        }
         const state: PosDisplayState = {
             appliedPromotions,
             customer: selectedCustomer,
-            displayMode: cartItems.length > 0 ? customerDisplayMode : "advertising",
+            displayMode: cartItems.length > 0 ? "checkout" : "advertising",
             items: cartItems,
             membershipDiscountLak: membershipSavings,
             membershipPoints: selectedCustomer?.pointsBalance ?? 0,
@@ -542,13 +572,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 : "Guest",
             pointsEarned,
             promotionDiscountLak: promotionDiscountTotal,
-            selectedQrBank,
-            storeLogoUrl: "",
+            selectedQrBank: customerQrVisible ? selectedQrBank : null,
+            showQr: customerQrVisible && Boolean(selectedQrBank),
+            storeLogoUrl: readCompanyLogoUrl() || "",
+            storeName: receiptSettings.companyName,
             subtotalLak: subtotal,
             totalLak: totalAmount,
         };
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
-    }, [appliedPromotions, cartItems, customerDisplayMode, membershipSavings, pointsEarned, promotionDiscountTotal, selectedCustomer, selectedQrBank, subtotal, totalAmount]);
+    }, [appliedPromotions, cartItems, customerDisplayMode, customerQrVisible, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
     function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
         const saleUnit = selectedUnit ?? resolvePosSaleUnits(product)[0];
         const unitProduct = saleUnit ? productWithSaleUnit(product, saleUnit) : product;
@@ -565,6 +597,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         cartItemsRef.current = planned.result.cart;
         setCartItems(planned.result.cart);
+        setThankYouSnapshot(null);
         setCustomerDisplayMode("checkout");
         setUnitSelectionProduct(null);
         setMessage(stockWarning ? `${stockWarning.label}: ${product.nameEn}` : `${product.nameEn} ${saleUnit?.unitName ?? ""} added to cart.`);
@@ -982,8 +1015,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setLastReceipt(receipt);
             setSaleCompletedReceipt(receipt);
             setMessage(`${assignedSaleNo} completed and saved.`);
-            setCustomerDisplayMode("thank_you");
-            clearSale();
+            beginThankYouDisplay();
+            clearSale({ keepThankYou: true });
             setBillNo(getFollowingPosSaleNo(assignedSaleNo, receiptSettings.receiptPrefix));
             try {
                 const session = await fetchCurrentCashSession();
@@ -995,6 +1028,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             router.refresh();
             const displaySettings = readCustomerDisplaySettingsFromStorage();
             window.setTimeout(() => {
+                setThankYouSnapshot(null);
                 setCustomerDisplayMode("advertising");
             }, displaySettings.autoReturnSeconds * 1000);
             } finally {
@@ -1044,12 +1078,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setSaleCompletedReceipt(receipt);
             recordPosAudit("create_sale", "allowed", "not_required", `${saleNo} completed. Stock, receipt, sales, and audit updated.`);
             setMessage(`${saleNo} completed and saved.`);
-            setCustomerDisplayMode("thank_you");
-            clearSale();
+            beginThankYouDisplay();
+            clearSale({ keepThankYou: true });
             setBillNo(getFollowingPosSaleNo(saleNo, receiptSettings.receiptPrefix));
             handleReceiptPrintModeAfterSale(receipt);
             const displaySettings = readCustomerDisplaySettingsFromStorage();
             window.setTimeout(() => {
+                setThankYouSnapshot(null);
                 setCustomerDisplayMode("advertising");
             }, displaySettings.autoReturnSeconds * 1000);
         }
@@ -1300,7 +1335,34 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setRecentSalesOpen(false);
         setMessage("Sale copied to cart.");
     }
-    function clearSale() {
+    function hideCustomerQrOverlay() {
+        setCustomerQrVisible(false);
+        hideCustomerDisplayQr(selectedQrBankId);
+    }
+    function beginThankYouDisplay() {
+        hideCustomerQrOverlay();
+        setThankYouSnapshot({
+            appliedPromotions,
+            customer: selectedCustomer,
+            displayMode: "thank_you",
+            items: cartItems,
+            membershipDiscountLak: membershipSavings,
+            membershipPoints: selectedCustomer?.pointsBalance ?? 0,
+            membershipStatus: selectedCustomer
+                ? `${selectedCustomer.membershipType} ${isMembershipActive(selectedCustomer) ? "Active" : "Expired"}`
+                : "Guest",
+            pointsEarned,
+            promotionDiscountLak: promotionDiscountTotal,
+            selectedQrBank: null,
+            showQr: false,
+            storeLogoUrl: readCompanyLogoUrl() || "",
+            storeName: receiptSettings.companyName,
+            subtotalLak: subtotal,
+            totalLak: totalAmount,
+        });
+        setCustomerDisplayMode("thank_you");
+    }
+    function clearSale(options?: { keepThankYou?: boolean }) {
         setCartItems([]);
         setDiscountAmount(0);
         setDiscountPercent(0);
@@ -1310,7 +1372,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setTransferAmount(0);
         setCardAmount(0);
         setPaymentMode("cash");
-        setCustomerDisplayMode("advertising");
+        hideCustomerQrOverlay();
+        if (!options?.keepThankYou) {
+            setThankYouSnapshot(null);
+            setCustomerDisplayMode("advertising");
+        }
     }
     function updateOpeningCashCount(denomination: number, quantity: number) {
         setOpeningCashCounts((current) => ({ ...current, [denomination]: Math.max(0, Math.floor(quantity)) }));
@@ -1423,6 +1489,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         setPaymentMode(nextMode);
+        if (nextMode !== "qr" && nextMode !== "transfer" && nextMode !== "mixed") {
+            hideCustomerQrOverlay();
+        }
         if (nextMode === "mixed") {
             setMixedPaymentOpen(true);
         }

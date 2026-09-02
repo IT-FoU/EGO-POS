@@ -106,7 +106,9 @@ export type QrBank = {
   bankName: string;
   accountName: string;
   accountNumber: string;
+  displayLabel?: string;
   qrImageUrl?: string;
+  showOnCustomerDisplay?: boolean;
 };
 
 export type PosReceiptSettings = {
@@ -179,7 +181,9 @@ export type PosDisplayState = {
   pointsEarned?: number;
   promotionDiscountLak?: number;
   selectedQrBank?: QrBank | null;
+  showQr?: boolean;
   storeLogoUrl?: string | null;
+  storeName?: string | null;
   subtotalLak?: number;
   totalLak: number;
 };

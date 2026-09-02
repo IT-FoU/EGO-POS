@@ -20,11 +20,13 @@ import {
 } from "lucide-react";
 import { NotificationCenter } from "@/components/layout/notification-center";
 import { CustomerDisplayToggle } from "@/components/layout/customer-display-toggle";
+import { CustomerDisplayQrToggle } from "@/components/layout/customer-display-qr-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { FullScreenToggle } from "@/components/layout/full-screen-toggle";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { LogoContainer } from "@/components/brand/logo-container";
+import { COMPANY_LOGO_CHANGE_EVENT, readCompanyLogoUrl } from "@/features/brand/company-logo";
 import { APP_NAME, DEFAULT_LOCALE, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
@@ -148,10 +150,22 @@ export function DashboardShell({
     if (session.user.activeCompanyName) {
       setStoreName(normalizeStoreName(session.user.activeCompanyName));
     }
-    setLogoUrl(null);
+    setLogoUrl(readCompanyLogoUrl() || null);
     setPlanName("Free Plan");
     setDaysLeft(null);
   }, [session.user.activeCompanyName]);
+
+  useEffect(() => {
+    function refreshLogo() {
+      setLogoUrl(readCompanyLogoUrl() || null);
+    }
+    window.addEventListener("storage", refreshLogo);
+    window.addEventListener(COMPANY_LOGO_CHANGE_EVENT, refreshLogo);
+    return () => {
+      window.removeEventListener("storage", refreshLogo);
+      window.removeEventListener(COMPANY_LOGO_CHANGE_EVENT, refreshLogo);
+    };
+  }, []);
 
   const showDaysLeft = planName.toLowerCase() !== "free plan" && daysLeft !== null;
   const copy = shellCopy[locale];
@@ -220,6 +234,7 @@ export function DashboardShell({
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <NotificationCenter locale={locale} />
+              <CustomerDisplayQrToggle />
               <CustomerDisplayToggle />
               <FullScreenToggle locale={locale} />
               <LanguageToggle locale={locale} onLocaleChange={setLocale} />

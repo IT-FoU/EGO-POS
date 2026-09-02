@@ -1,19 +1,17 @@
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readJsonFromStorage, writeJsonToStorage } from "@/lib/demo/storage";
 import {
-  DEFAULT_CUSTOMER_DISPLAY_THEME,
-  parseCustomerDisplayTheme,
-  type CustomerDisplayThemeId,
-} from "@/features/pos/customer-display-theme";
+  DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
+  parseCustomerDisplayTemplate,
+  type CustomerDisplayTemplate,
+} from "@/features/pos/customer-display-templates";
+import {
+  DEFAULT_CUSTOMER_DISPLAY_QR_STYLE,
+  parseCustomerDisplayQrStyle,
+  type CustomerDisplayQrStyle,
+} from "@/features/pos/customer-display-qr-style";
 
 export const CUSTOMER_DISPLAY_SETTINGS_KEY = DemoStorageKeys.customerDisplaySettings;
-
-export type CustomerDisplayTemplate =
-  | "classic_checkout"
-  | "qr_focus"
-  | "ads_checkout"
-  | "fullscreen_promotion"
-  | "vip_membership";
 
 export type CustomerDisplayMedia = {
   id: string;
@@ -26,41 +24,12 @@ export type CustomerDisplaySettings = {
   autoReturnSeconds: number;
   media: CustomerDisplayMedia[];
   promotionMessages: string[];
+  qrDisplayStyle: CustomerDisplayQrStyle;
   template: CustomerDisplayTemplate;
-  theme: CustomerDisplayThemeId;
 };
 
-export const CUSTOMER_DISPLAY_TEMPLATES: Array<{
-  description: string;
-  id: CustomerDisplayTemplate;
-  name: string;
-}> = [
-  {
-    description: "Balanced QR, items, promotions, and totals for standard checkout.",
-    id: "classic_checkout",
-    name: "Classic Checkout",
-  },
-  {
-    description: "Large payment QR first, with compact items and totals beside it.",
-    id: "qr_focus",
-    name: "QR Focus",
-  },
-  {
-    description: "Checkout with a stronger advertising and promotion panel.",
-    id: "ads_checkout",
-    name: "Ads + Checkout",
-  },
-  {
-    description: "Full-screen promotions when idle, checkout when sale starts.",
-    id: "fullscreen_promotion",
-    name: "Full Screen Promotion",
-  },
-  {
-    description: "Membership-first view for loyalty-focused stores.",
-    id: "vip_membership",
-    name: "VIP Membership",
-  },
-];
+export { CUSTOMER_DISPLAY_TEMPLATE_OPTIONS as CUSTOMER_DISPLAY_TEMPLATES } from "@/features/pos/customer-display-templates";
+export type { CustomerDisplayTemplate } from "@/features/pos/customer-display-templates";
 
 export const DEFAULT_CUSTOMER_DISPLAY_SETTINGS: CustomerDisplaySettings = {
   autoReturnSeconds: 5,
@@ -70,8 +39,8 @@ export const DEFAULT_CUSTOMER_DISPLAY_SETTINGS: CustomerDisplaySettings = {
     "Member discounts available today",
     "Thank you for shopping with us",
   ],
-  template: "classic_checkout",
-  theme: DEFAULT_CUSTOMER_DISPLAY_THEME,
+  qrDisplayStyle: DEFAULT_CUSTOMER_DISPLAY_QR_STYLE,
+  template: DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
 };
 
 export function readCustomerDisplaySettingsFromStorage(): CustomerDisplaySettings {
@@ -79,12 +48,15 @@ export function readCustomerDisplaySettingsFromStorage(): CustomerDisplaySetting
     return DEFAULT_CUSTOMER_DISPLAY_SETTINGS;
   }
 
-  const parsed = readJsonFromStorage<Partial<CustomerDisplaySettings>>(CUSTOMER_DISPLAY_SETTINGS_KEY, {});
+  const parsed = readJsonFromStorage<Partial<CustomerDisplaySettings> & { theme?: string }>(
+    CUSTOMER_DISPLAY_SETTINGS_KEY,
+    {},
+  );
   return normalizeCustomerDisplaySettings(parsed);
 }
 
 export function normalizeCustomerDisplaySettings(
-  parsed: Partial<CustomerDisplaySettings> | null | undefined,
+  parsed: (Partial<CustomerDisplaySettings> & { theme?: string }) | null | undefined,
 ): CustomerDisplaySettings {
   const source = parsed ?? {};
   return {
@@ -97,13 +69,27 @@ export function normalizeCustomerDisplaySettings(
       Array.isArray(source.promotionMessages) && source.promotionMessages.length > 0
         ? source.promotionMessages
         : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages,
-    template: CUSTOMER_DISPLAY_TEMPLATES.some((template) => template.id === source.template)
-      ? source.template as CustomerDisplayTemplate
-      : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.template,
-    theme: parseCustomerDisplayTheme(source.theme),
+    qrDisplayStyle: parseCustomerDisplayQrStyle(source.qrDisplayStyle),
+    template: parseCustomerDisplayTemplate(source.template ?? source.theme),
   };
 }
 
 export function writeCustomerDisplaySettingsToStorage(settings: CustomerDisplaySettings) {
   writeJsonToStorage(CUSTOMER_DISPLAY_SETTINGS_KEY, settings);
+}
+
+export function resetCustomerDisplayAppearanceSettings(current: CustomerDisplaySettings): CustomerDisplaySettings {
+  return {
+    ...current,
+    qrDisplayStyle: DEFAULT_CUSTOMER_DISPLAY_QR_STYLE,
+    template: DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
+  };
+}
+
+export function resetAllCustomerDisplaySettings(): CustomerDisplaySettings {
+  return {
+    ...DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
+    media: [],
+    promotionMessages: [...DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages],
+  };
 }

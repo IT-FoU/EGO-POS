@@ -2,6 +2,8 @@ export const DemoStorageKeys = {
   auditLogs: "ego.pos.auditLogs",
   categories: "ego.pos.categories",
   companyLogoUrl: "ego-pos:company-logo-url",
+  customerDisplayQr: "ego.pos.customerDisplay.qr",
+  customerDisplayQrCatalog: "ego.pos.customerDisplay.qrCatalog",
   customerDisplaySettings: "ego.pos.customerDisplay.settings",
   customerDisplayState: "ego.pos.customerDisplay.state",
   customers: "ego.pos.customers",

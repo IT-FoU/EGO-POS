@@ -16,8 +16,10 @@ import {
   setDefaultQrPaymentAccountAction,
 } from "@/features/qr-payments/actions";
 import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "@/features/qr-payments/types";
-import { CUSTOMER_DISPLAY_TEMPLATES, DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
-import { CUSTOMER_DISPLAY_THEME_OPTIONS, type CustomerDisplayThemeId } from "@/features/pos/customer-display-theme";
+import { DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, resetAllCustomerDisplaySettings, resetCustomerDisplayAppearanceSettings, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
+import { CUSTOMER_DISPLAY_TEMPLATE_OPTIONS } from "@/features/pos/customer-display-templates";
+import { CUSTOMER_DISPLAY_QR_STYLE_OPTIONS, type CustomerDisplayQrStyle } from "@/features/pos/customer-display-qr-style";
+import { readCompanyLogoUrl, writeCompanyLogoUrl } from "@/features/brand/company-logo";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
@@ -48,13 +50,14 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             receiptPrintMode: readReceiptPrintModePreference(current.receiptPrintMode),
         }));
         setDisplaySettings(readCustomerDisplaySettingsFromStorage());
+        setLogoUrl(readCompanyLogoUrl() || null);
     }, []);
     function update<K extends keyof SettingsFormData>(key: K, value: SettingsFormData[K]) {
         setSettings((current) => ({ ...current, [key]: value }));
     }
     function updateLogo(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
-        if (!file || !["image/png", t("ui.image.svg.xml"), "image/webp"].includes(file.type)) {
+        if (!file || !["image/png", "image/svg+xml", "image/webp", "image/jpeg"].includes(file.type)) {
             setMessage({ text: t("ui.company.logo.must.be.png.svg.or.webp"), tone: "error" });
             return;
         }
@@ -64,7 +67,8 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 return;
             }
             setLogoUrl(reader.result);
-            setMessage({ text: "Company logo preview updated.", tone: "success" });
+            writeCompanyLogoUrl(reader.result);
+            setMessage({ text: t("ui.company.logo.saved"), tone: "success" });
         };
         reader.readAsDataURL(file);
     }
@@ -76,9 +80,23 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         persistCustomerDisplaySettings({ ...displaySettings, template });
         setMessage({ text: t("ui.customer.display.template.updated"), tone: "success" });
     }
-    function updateDisplayTheme(theme: CustomerDisplayThemeId) {
-        persistCustomerDisplaySettings({ ...displaySettings, theme });
-        setMessage({ text: t("ui.customer.display.theme.updated"), tone: "success" });
+    function updateDisplayQrStyle(qrDisplayStyle: CustomerDisplayQrStyle) {
+        persistCustomerDisplaySettings({ ...displaySettings, qrDisplayStyle });
+        setMessage({ text: t("ui.qr.display.style.updated"), tone: "success" });
+    }
+    function resetAppearancePage() {
+        if (!window.confirm(t("ui.reset.this.page.confirm"))) {
+            return;
+        }
+        persistCustomerDisplaySettings(resetCustomerDisplayAppearanceSettings(displaySettings));
+        setMessage({ text: t("ui.customer.display.appearance.reset"), tone: "success" });
+    }
+    function resetAllDisplaySettings() {
+        if (!window.confirm(t("ui.reset.all.customer.display.settings.confirm"))) {
+            return;
+        }
+        persistCustomerDisplaySettings(resetAllCustomerDisplaySettings());
+        setMessage({ text: t("ui.customer.display.settings.reset"), tone: "success" });
     }
     function updateDisplayAutoReturn(seconds: number) {
         persistCustomerDisplaySettings({ ...displaySettings, autoReturnSeconds: Math.max(1, seconds) });
@@ -258,27 +276,33 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
       <section className="rounded-lg border border-border bg-card p-5">
         <SectionTitle icon={MonitorPlay} title="Customer Display"/>
         <div className="mt-5 grid gap-5">
-          <div>
-            <div className="text-sm font-semibold">{t("ui.customer.display.theme")}</div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {CUSTOMER_DISPLAY_THEME_OPTIONS.map((option) => (<button className={displaySettings.theme === option.id
-                ? "rounded-md border border-primary bg-primary/10 px-3 py-3 text-left text-sm font-semibold shadow-sm"
-                : "rounded-md border border-border bg-background px-3 py-3 text-left text-sm font-semibold transition hover:border-primary"} key={option.id} type="button" onClick={() => updateDisplayTheme(option.id)}>
-                  {t(option.labelKey)}
-                </button>))}
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm font-semibold">{t("ui.customer.display.appearance")}</div>
+            <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={resetAppearancePage}>
+              {t("ui.reset.this.page")}
+            </button>
           </div>
           <div>
-            <div className="text-sm font-semibold">Display Template</div>
+            <div className="text-sm font-semibold">{t("ui.display.template")}</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {CUSTOMER_DISPLAY_TEMPLATES.map((template) => (<button className={displaySettings.template === template.id
+              {CUSTOMER_DISPLAY_TEMPLATE_OPTIONS.map((template) => (<button className={displaySettings.template === template.id
                 ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm shadow-sm"
                 : "rounded-md border border-border bg-background p-3 text-left text-sm transition hover:border-primary"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
-                  <div className="font-semibold">{template.name}</div>
+                  <div className="font-semibold">{t(template.labelKey)}</div>
                   <div className="mt-2 text-xs leading-5 text-muted-foreground">{template.description}</div>
                   <div className="mt-3 text-xs font-semibold text-primary">
                     {displaySettings.template === template.id ? "Selected" : "Select"}
                   </div>
+                </button>))}
+            </div>
+          </div>
+          <div>
+            <div className="text-sm font-semibold">{t("ui.qr.display.style")}</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {CUSTOMER_DISPLAY_QR_STYLE_OPTIONS.map((option) => (<button className={displaySettings.qrDisplayStyle === option.id
+                ? "rounded-md border border-primary bg-primary/10 px-3 py-3 text-left text-sm font-semibold shadow-sm"
+                : "rounded-md border border-border bg-background px-3 py-3 text-left text-sm font-semibold transition hover:border-primary"} key={option.id} type="button" onClick={() => updateDisplayQrStyle(option.id)}>
+                  {t(option.labelKey)}
                 </button>))}
             </div>
           </div>
@@ -331,6 +355,13 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
               </div>
               <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-5 text-primary">{t("ui.auto.switch.is.enabled.advertising.mode.chan")}</div>
             </div>
+          </div>
+          <div className="rounded-md border border-danger/30 bg-danger/5 p-4">
+            <div className="text-sm font-semibold">{t("ui.reset.all.customer.display.settings")}</div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("ui.reset.all.customer.display.settings.help")}</p>
+            <button className="mt-3 h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={resetAllDisplaySettings}>
+              {t("ui.reset.all.customer.display.settings")}
+            </button>
           </div>
         </div>
       </section>

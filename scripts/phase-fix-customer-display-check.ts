@@ -2,21 +2,31 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { t } from "../lib/i18n/ui";
 import { formatLak } from "../features/pos/format";
+import { isSupportedCompanyLogoUrl, storeInitials } from "../features/brand/company-logo";
 import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
   normalizeCustomerDisplaySettings,
+  resetAllCustomerDisplaySettings,
+  resetCustomerDisplayAppearanceSettings,
 } from "../features/pos/customer-display-settings";
 import {
-  CUSTOMER_DISPLAY_PRIMARY_TEXT,
-  CUSTOMER_DISPLAY_THEME_OPTIONS,
-  DEFAULT_CUSTOMER_DISPLAY_THEME,
-  customerDisplayThemeTokens,
-  parseCustomerDisplayTheme,
-  parsePosAppearance,
-  resolveCustomerDisplayAppearance,
-  type CustomerDisplayThemeId,
-  type PosAppearance,
-} from "../features/pos/customer-display-theme";
+  CUSTOMER_DISPLAY_TEMPLATES,
+  DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
+  customerDisplayTemplateTokens,
+  parseCustomerDisplayTemplate,
+} from "../features/pos/customer-display-templates";
+import {
+  CUSTOMER_DISPLAY_QR_STYLES,
+  DEFAULT_CUSTOMER_DISPLAY_QR_STYLE,
+  parseCustomerDisplayQrStyle,
+} from "../features/pos/customer-display-qr-style";
+import {
+  customerDisplayQrBanks,
+  hideCustomerDisplayQr,
+  maskAccountReference,
+  readCustomerDisplayQrIntent,
+} from "../features/pos/customer-display-qr";
+import { parsePosAppearance } from "../features/pos/customer-display-theme";
 import {
   CUSTOMER_DISPLAY_OPEN_FEATURES,
   CUSTOMER_DISPLAY_PATH,
@@ -79,10 +89,13 @@ function createPopup() {
 
 const root = process.cwd();
 const toggle = readFileSync(join(root, "components/layout/customer-display-toggle.tsx"), "utf8");
+const qrToggle = readFileSync(join(root, "components/layout/customer-display-qr-toggle.tsx"), "utf8");
 const helper = readFileSync(join(root, "features/pos/customer-display-window.ts"), "utf8");
 const posClient = readFileSync(join(root, "features/pos/components/pos-page-client.tsx"), "utf8");
 const displayClient = readFileSync(join(root, "features/pos/components/customer-display-client.tsx"), "utf8");
 const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const logoContainer = readFileSync(join(root, "components/brand/logo-container.tsx"), "utf8");
+const dashboardShell = readFileSync(join(root, "components/layout/dashboard-shell.tsx"), "utf8");
 const themeProvider = readFileSync(join(root, "components/theme-provider.tsx"), "utf8");
 const prismaSrc = readFileSync(join(root, "lib/db/prisma.ts"), "utf8");
 const prismaSchema = readFileSync(join(root, "prisma/schema.prisma"), "utf8");
@@ -90,12 +103,29 @@ const en = JSON.parse(readFileSync(join(root, "locales/ui/en.json"), "utf8")) as
 const th = JSON.parse(readFileSync(join(root, "locales/ui/th.json"), "utf8")) as Record<string, string>;
 const lo = JSON.parse(readFileSync(join(root, "locales/ui/lo.json"), "utf8")) as Record<string, string>;
 const permissionKey = "ui.allow.window.management.to.open.customer.di";
-const themeKeys = [
-  "ui.customer.display.theme",
-  "ui.follow.pos",
-  "ui.fresh.green",
+const localeKeys = [
+  "ui.customer.display.appearance",
+  "ui.display.template",
+  "ui.qr.display.style",
+  "ui.reset.this.page",
+  "ui.reset.all.customer.display.settings",
+  "ui.hide.qr",
+  "ui.ocean.blue",
+  "ui.bold.green",
   "ui.sky.blue",
   "ui.sunny.yellow",
+  "ui.premium.dark",
+  "ui.emerald.dream",
+  "ui.coral.minimal",
+  "ui.premium.dark.green",
+  "ui.minimal.premium.red",
+  "ui.minimal.premium.purple",
+  "ui.green.clean",
+  "ui.blue.wave",
+  "ui.orange.modern",
+  "ui.black.gold",
+  "ui.purple.soft",
+  "ui.teal.gradient",
 ] as const;
 const cashier: CustomerDisplayScreen = { availHeight: 900, availLeft: 0, availTop: 0, availWidth: 1440 };
 const customer: CustomerDisplayScreen = { availHeight: 1080, availLeft: 1440, availTop: 0, availWidth: 1920 };
@@ -161,15 +191,20 @@ await check("source: ThemeProvider reuses POS storage and skips first write", ()
   assert(!themeProvider.includes("system"), "POS has no system theme mode");
 });
 
-await check("source: settings expose Customer Display Theme", () => {
-  assert(settingsForm.includes("updateDisplayTheme"), "theme setter missing");
-  assert(settingsForm.includes("CUSTOMER_DISPLAY_THEME_OPTIONS"), "theme options missing");
-  assert(settingsForm.includes('t("ui.customer.display.theme")'), "theme label missing");
-  assert(CUSTOMER_DISPLAY_THEME_OPTIONS.map((option) => option.id).join(",") === "follow-pos,fresh-green,sky-blue,sunny-yellow", "theme option ids changed");
+await check("source: settings expose templates, QR styles, and scoped resets", () => {
+  assert(settingsForm.includes("updateDisplayTemplate"), "template setter missing");
+  assert(settingsForm.includes("CUSTOMER_DISPLAY_TEMPLATE_OPTIONS"), "template options missing");
+  assert(settingsForm.includes("CUSTOMER_DISPLAY_QR_STYLE_OPTIONS"), "QR style options missing");
+  assert(settingsForm.includes("resetAppearancePage"), "Reset This Page missing");
+  assert(settingsForm.includes("resetAllDisplaySettings"), "Reset All Customer Display Settings missing");
+  assert(settingsForm.includes("resetCustomerDisplayAppearanceSettings"), "appearance reset helper missing");
+  assert(settingsForm.includes("resetAllCustomerDisplaySettings"), "full CD reset helper missing");
+  assert(settingsForm.includes("writeCompanyLogoUrl"), "company logo must persist to the existing storage key");
+  assert(!settingsForm.includes("updateDisplayTheme"), "old four-theme setter must not remain");
 });
 
 await check("source: localization keys for all supported UI locales", () => {
-  for (const key of themeKeys) {
+  for (const key of localeKeys) {
     assert(Boolean(en[key]), `en missing ${key}`);
     assert(Boolean(th[key]) && th[key] !== en[key], `th must translate ${key}`);
     assert(Boolean(lo[key]), `lo missing ${key}`);
@@ -372,82 +407,114 @@ await check("placement retry detector uses actual window geometry", () => {
   );
 });
 
-await check("theme default is Fresh Green, not Dark", () => {
-  assert(DEFAULT_CUSTOMER_DISPLAY_THEME === "fresh-green", DEFAULT_CUSTOMER_DISPLAY_THEME);
-  assert(DEFAULT_CUSTOMER_DISPLAY_SETTINGS.theme === "fresh-green", DEFAULT_CUSTOMER_DISPLAY_SETTINGS.theme);
-  assert(parseCustomerDisplayTheme(undefined) === "fresh-green", "missing preference must be Fresh Green");
-  assert(parseCustomerDisplayTheme("dark") === "fresh-green", "unknown values must not become Dark");
-  assert(normalizeCustomerDisplaySettings({}).theme === "fresh-green", "legacy settings JSON must default Fresh Green");
+await check("template default is Ocean Blue with legacy mapping", () => {
+  assert(DEFAULT_CUSTOMER_DISPLAY_TEMPLATE === "ocean-blue", DEFAULT_CUSTOMER_DISPLAY_TEMPLATE);
+  assert(DEFAULT_CUSTOMER_DISPLAY_SETTINGS.template === "ocean-blue", DEFAULT_CUSTOMER_DISPLAY_SETTINGS.template);
+  assert(parseCustomerDisplayTemplate(undefined) === "ocean-blue", "missing preference must be Ocean Blue");
+  assert(parseCustomerDisplayTemplate("dark") === "ocean-blue", "unknown values must not become Dark");
+  assert(parseCustomerDisplayTemplate("fresh-green") === "bold-green", "legacy Fresh Green maps to Bold Green");
+  assert(parseCustomerDisplayTemplate("classic_checkout") === "ocean-blue", "legacy classic_checkout maps to Ocean Blue");
+  assert(normalizeCustomerDisplaySettings({}).template === "ocean-blue", "legacy settings JSON must default Ocean Blue");
+  assert(normalizeCustomerDisplaySettings({ theme: "sky-blue" }).template === "sky-blue", "legacy theme field must map");
+  assert(CUSTOMER_DISPLAY_TEMPLATES.length === 10, String(CUSTOMER_DISPLAY_TEMPLATES.length));
 });
 
-await check("Follow POS initial Light and Dark", () => {
+await check("ten templates keep distinct tokens and layouts", () => {
+  const layouts = [
+    "OceanBlueLayout",
+    "BoldGreenLayout",
+    "SkyBlueLayout",
+    "SunnyYellowLayout",
+    "PremiumDarkLayout",
+    "EmeraldDreamLayout",
+    "CoralMinimalLayout",
+    "PremiumDarkGreenLayout",
+    "MinimalRedLayout",
+    "MinimalPurpleLayout",
+  ];
+  for (const layout of layouts) {
+    assert(displayClient.includes(`function ${layout}`), `${layout} missing`);
+  }
+  const signatures = CUSTOMER_DISPLAY_TEMPLATES.map((id) => {
+    const tokens = customerDisplayTemplateTokens(id);
+    return `${id}:${tokens.background}:${tokens.primary}:${tokens.totalBackground}:${tokens.totalText}`;
+  });
+  assert(new Set(signatures).size === 10, signatures.join(" | "));
+  const green = customerDisplayTemplateTokens("bold-green");
+  const ocean = customerDisplayTemplateTokens("ocean-blue");
+  const dark = customerDisplayTemplateTokens("premium-dark");
+  const darkGreen = customerDisplayTemplateTokens("premium-dark-green");
+  const red = customerDisplayTemplateTokens("minimal-premium-red");
+  const purple = customerDisplayTemplateTokens("minimal-premium-purple");
+  assert(green.totalBackground === "#15803D" && green.totalText === "#FFFFFF", JSON.stringify(green));
+  assert(ocean.totalBackground === "#0C4A6E" && ocean.background === "#FFFFFF", JSON.stringify(ocean));
+  assert(dark.background === "#020617" && dark.primary === "#22D3EE", JSON.stringify(dark));
+  assert(darkGreen.totalBackground === "#4ADE80" && darkGreen.background !== dark.surface, JSON.stringify(darkGreen));
+  assert(red.primary !== purple.primary && red.background !== purple.background, "red and purple must not be recolors");
+  assert(displayClient.includes("clamp(2.1rem,6vw,4.2rem)"), "grand total must stay the strongest type size");
+  assert(displayClient.includes("100dvh") && displayClient.includes("requestFullscreen"), "viewport / fullscreen hardening missing");
+});
+
+await check("POS appearance parse stays light/dark only", () => {
   assert(parsePosAppearance("light") === "light", "light");
   assert(parsePosAppearance("dark") === "dark", "dark");
   assert(parsePosAppearance("system") === "dark", "no system mode; unresolved values are dark");
-  assert(resolveCustomerDisplayAppearance("follow-pos", "light") === "light", "initial light");
-  assert(resolveCustomerDisplayAppearance("follow-pos", "dark") === "dark", "initial dark");
 });
 
-await check("Follow POS Light → Dark and Dark → Light", () => {
-  let pos: PosAppearance = "light";
-  assert(resolveCustomerDisplayAppearance("follow-pos", pos) === "light", "start light");
-  pos = "dark";
-  assert(resolveCustomerDisplayAppearance("follow-pos", pos) === "dark", "light to dark");
-  pos = "light";
-  assert(resolveCustomerDisplayAppearance("follow-pos", pos) === "light", "dark to light");
+await check("QR is hidden by default and only configured banks appear", () => {
+  assert(readCustomerDisplayQrIntent().visible === false, "default QR intent must be hidden");
+  assert(DEFAULT_CUSTOMER_DISPLAY_QR_STYLE === "green-clean", DEFAULT_CUSTOMER_DISPLAY_QR_STYLE);
+  assert(CUSTOMER_DISPLAY_QR_STYLES.join(",") === "green-clean,blue-wave,orange-modern,black-gold,purple-soft,teal-gradient", CUSTOMER_DISPLAY_QR_STYLES.join(","));
+  assert(parseCustomerDisplayQrStyle("unknown") === "green-clean", "unknown QR style must fall back");
+  const banks = customerDisplayQrBanks([
+    { id: "bcel", bankName: "BCEL", accountName: "Store", accountNumber: "12345678", showOnCustomerDisplay: true, qrImageUrl: "https://example.com/bcel.png" },
+    { id: "jdb", bankName: "JDB", accountName: "Store 2", accountNumber: "9999", showOnCustomerDisplay: false, qrImageUrl: "https://example.com/jdb.png" },
+    { id: "hidden", bankName: "Hidden", accountName: "X", accountNumber: "1", showOnCustomerDisplay: false },
+  ]);
+  assert(banks.map((bank) => bank.id).join(",") === "bcel", banks.map((bank) => bank.id).join(","));
+  assert(maskAccountReference("12345678") === "••••5678", maskAccountReference("12345678"));
+  assert(qrToggle.includes("writeCustomerDisplayQrIntent"), "header QR selector missing");
+  assert(dashboardShell.includes("CustomerDisplayQrToggle"), "QR control must sit in POS header controls");
+  assert(posClient.includes("showQr: customerQrVisible && Boolean(selectedQrBank)"), "POS must not write QR unless cashier shows it");
+  assert(posClient.includes("hideCustomerQrOverlay()"), "Hide QR / auto-hide path missing");
+  assert(displayClient.includes("showQr && displayState.selectedQrBank"), "QR overlay must be state-driven, not a permanent section");
 });
 
-await check("fixed themes ignore POS theme changes", () => {
-  const cases: Array<[CustomerDisplayThemeId, "fresh-green" | "sky-blue" | "sunny-yellow"]> = [
-    ["fresh-green", "fresh-green"],
-    ["sky-blue", "sky-blue"],
-    ["sunny-yellow", "sunny-yellow"],
-  ];
-  for (const [theme, expected] of cases) {
-    assert(resolveCustomerDisplayAppearance(theme, "light") === expected, `${theme} light`);
-    assert(resolveCustomerDisplayAppearance(theme, "dark") === expected, `${theme} dark`);
-  }
+await check("company logo uses persisted source and customer fallback", () => {
+  assert(storeInitials("EGO Market") === "EM", storeInitials("EGO Market"));
+  assert(storeInitials("") === "EG", storeInitials(""));
+  assert(isSupportedCompanyLogoUrl("data:image/png;base64,abc") === true, "data logo must be accepted");
+  assert(isSupportedCompanyLogoUrl("https://store.example/logo.jpg") === true, "jpeg logo must be accepted");
+  assert(isSupportedCompanyLogoUrl("not-a-logo") === false, "unsupported logo URL must fail closed");
+  assert(logoContainer.includes('variant === "customer"'), "customer logo variant missing");
+  assert(logoContainer.includes("storeInitials"), "initials fallback missing");
+  assert(!displayClient.includes("Upload Company Logo"), "customer screen must never show admin upload copy");
+  assert(!displayClient.includes("[ Logo ]"), "customer screen must never show admin placeholder text");
+  assert(displayClient.includes('variant="customer"'), "Customer Display must use customer logo variant");
+  assert(posClient.includes("readCompanyLogoUrl()"), "POS must publish the persisted company logo");
 });
 
-await check("theme persistence and live setting update", () => {
-  const stored = normalizeCustomerDisplaySettings({ theme: "sky-blue" });
-  assert(stored.theme === "sky-blue", stored.theme);
-  let preference: CustomerDisplayThemeId = stored.theme;
-  let pos: PosAppearance = "dark";
-  assert(resolveCustomerDisplayAppearance(preference, pos) === "sky-blue", "live sky blue");
-  preference = "sunny-yellow";
-  assert(resolveCustomerDisplayAppearance(preference, pos) === "sunny-yellow", "live sunny yellow");
-  preference = "follow-pos";
-  assert(resolveCustomerDisplayAppearance(preference, pos) === "dark", "live follow POS adopts current POS");
-  pos = "light";
-  assert(resolveCustomerDisplayAppearance(preference, pos) === "light", "follow POS still live after POS toggle");
-});
-
-await check("bright theme contrast keeps dark text", () => {
-  for (const appearance of ["fresh-green", "sky-blue", "sunny-yellow"] as const) {
-    const tokens = customerDisplayThemeTokens(appearance);
-    assert(tokens.background === "#FFFFFF", `${appearance} background`);
-    assert(tokens.text === CUSTOMER_DISPLAY_PRIMARY_TEXT, `${appearance} text`);
-    assert(tokens.totalText === CUSTOMER_DISPLAY_PRIMARY_TEXT, `${appearance} total text`);
-    assert(tokens.text !== tokens.primary, `${appearance} must not use accent as body text`);
-  }
-  const yellow = customerDisplayThemeTokens("sunny-yellow");
-  assert(yellow.primary === "#EAB308", yellow.primary);
-  assert(yellow.soft === "#FEF9C3", yellow.soft);
-  assert(yellow.totalBackground === "#FEF9C3", "yellow total must use soft highlight, not yellow text");
-  const green = customerDisplayThemeTokens("fresh-green");
-  assert(green.primary === "#16A34A" && green.soft === "#DCFCE7", JSON.stringify(green));
-  const blue = customerDisplayThemeTokens("sky-blue");
-  assert(blue.primary === "#0284C7" && blue.soft === "#E0F2FE", JSON.stringify(blue));
-});
-
-await check("Follow POS visual tokens and total prominence source", () => {
-  const light = customerDisplayThemeTokens("light");
-  const dark = customerDisplayThemeTokens("dark");
-  assert(light.background !== dark.background, "light and dark must differ");
-  assert(dark.totalBackground === "#FFD700", dark.totalBackground);
-  assert(displayClient.includes("clamp(2.8rem,5.2vw,5rem)"), "grand total must stay the strongest type size");
-  assert(displayClient.includes("storage") && displayClient.includes("readResolvedPosAppearance"), "live POS theme read missing");
+await check("reset this page vs reset all stays Customer Display only", () => {
+  const current = normalizeCustomerDisplaySettings({
+    autoReturnSeconds: 12,
+    media: [{ id: "m1", name: "promo.png", type: "image", url: "https://example.com/promo.png" }],
+    promotionMessages: ["Keep this"],
+    qrDisplayStyle: "black-gold",
+    template: "premium-dark-green",
+  });
+  const pageReset = resetCustomerDisplayAppearanceSettings(current);
+  assert(pageReset.template === "ocean-blue", pageReset.template);
+  assert(pageReset.qrDisplayStyle === "green-clean", pageReset.qrDisplayStyle);
+  assert(pageReset.autoReturnSeconds === 12, String(pageReset.autoReturnSeconds));
+  assert(pageReset.promotionMessages[0] === "Keep this", pageReset.promotionMessages.join(","));
+  assert(pageReset.media.length === 1, String(pageReset.media.length));
+  const allReset = resetAllCustomerDisplaySettings();
+  assert(allReset.template === "ocean-blue" && allReset.qrDisplayStyle === "green-clean", JSON.stringify(allReset));
+  assert(allReset.autoReturnSeconds === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds, String(allReset.autoReturnSeconds));
+  assert(allReset.media.length === 0, "full CD reset may clear CD media only");
+  assert(!settingsForm.includes("factory reset") && !settingsForm.includes("wipe database"), "do not add a global factory reset");
+  hideCustomerDisplayQr();
+  assert(true, "hide helper exists");
 });
 
 await check("cart qty 1/2/3 and clear stay display-state only", () => {
@@ -462,7 +529,7 @@ await check("cart qty 1/2/3 and clear stay display-state only", () => {
 await check("no database migration or realtime channel", () => {
   assert(!prismaSchema.includes("customerDisplayTheme"), "do not add a DB theme field");
   assert(!helper.includes("WebSocket") && !displayClient.includes("BroadcastChannel"), "no extra realtime channel");
-  assert(settingsForm.includes("writeCustomerDisplaySettingsToStorage"), "theme must persist with existing local settings");
+  assert(settingsForm.includes("writeCustomerDisplaySettingsToStorage"), "settings must persist with existing local settings");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

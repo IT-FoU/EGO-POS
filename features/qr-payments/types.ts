@@ -64,7 +64,9 @@ export function mapQrPaymentAccountToPosBank(
     accountName: account.accountName,
     accountNumber: account.accountNumber,
     bankName: account.bankName,
+    displayLabel: account.displayLabel,
     id: account.id,
+    showOnCustomerDisplay: account.showOnCustomerDisplay,
     ...(account.qrImageUrl ? { qrImageUrl: account.qrImageUrl } : {}),
   };
 }
