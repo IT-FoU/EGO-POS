@@ -78,12 +78,8 @@ export function writeCustomerDisplaySettingsToStorage(settings: CustomerDisplayS
   writeJsonToStorage(CUSTOMER_DISPLAY_SETTINGS_KEY, settings);
 }
 
-export function resetCustomerDisplayAppearanceSettings(current: CustomerDisplaySettings): CustomerDisplaySettings {
-  return {
-    ...current,
-    qrDisplayStyle: DEFAULT_CUSTOMER_DISPLAY_QR_STYLE,
-    template: DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
-  };
+export function resetCustomerDisplayAppearanceSettings(_current?: CustomerDisplaySettings): CustomerDisplaySettings {
+  return resetAllCustomerDisplaySettings();
 }
 
 export function resetAllCustomerDisplaySettings(): CustomerDisplaySettings {

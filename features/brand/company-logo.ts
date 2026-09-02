@@ -21,6 +21,10 @@ export function writeCompanyLogoUrl(value: string) {
   }
 }
 
+export function clearCompanyLogoUrl() {
+  writeCompanyLogoUrl("");
+}
+
 export function storeInitials(name: string | null | undefined) {
   const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) {

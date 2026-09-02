@@ -1,6 +1,7 @@
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readJsonFromStorage, writeJsonToStorage } from "@/lib/demo/storage";
 import type { QrBank } from "@/features/pos/types";
+import { mapQrPaymentAccountToPosBank, type QrPaymentAccountRecord, type QrPaymentBankRecord } from "@/features/qr-payments/types";
 
 export const CUSTOMER_DISPLAY_QR_EVENT = "ego-pos:customer-display-qr";
 export const CUSTOMER_DISPLAY_QR_CATALOG_EVENT = "ego-pos:customer-display-qr-catalog";
@@ -16,7 +17,7 @@ export const DEFAULT_CUSTOMER_DISPLAY_QR_INTENT: CustomerDisplayQrIntent = {
 };
 
 export function customerDisplayQrBanks(banks: QrBank[]) {
-  return banks.filter((bank) => bank.showOnCustomerDisplay !== false && Boolean(bank.qrImageUrl || bank.bankName));
+  return banks.filter((bank) => bank.showOnCustomerDisplay !== false && Boolean(bank.qrImageUrl));
 }
 
 export function readCustomerDisplayQrIntent(): CustomerDisplayQrIntent {
@@ -47,6 +48,38 @@ export function writeCustomerDisplayQrCatalog(banks: QrBank[]) {
   writeJsonToStorage(DemoStorageKeys.customerDisplayQrCatalog, customerDisplayQrBanks(banks));
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(CUSTOMER_DISPLAY_QR_CATALOG_EVENT));
+  }
+  syncCustomerDisplayQrAfterCatalogChange();
+}
+
+export function buildCustomerDisplayQrCatalog(
+  accounts: QrPaymentAccountRecord[],
+  banks: QrPaymentBankRecord[],
+) {
+  return customerDisplayQrBanks(
+    accounts
+      .filter((account) => account.isActive)
+      .map((account) =>
+        mapQrPaymentAccountToPosBank({
+          ...account,
+          bankName: banks.find((bank) => bank.id === account.bankId)?.bankName ?? "",
+        }),
+      ),
+  );
+}
+
+export function publishCustomerDisplayQrCatalog(
+  accounts: QrPaymentAccountRecord[],
+  banks: QrPaymentBankRecord[],
+) {
+  writeCustomerDisplayQrCatalog(buildCustomerDisplayQrCatalog(accounts, banks));
+}
+
+export function syncCustomerDisplayQrAfterCatalogChange() {
+  const catalog = readCustomerDisplayQrCatalog();
+  const intent = readCustomerDisplayQrIntent();
+  if (intent.visible && intent.bankId && !catalog.some((bank) => bank.id === intent.bankId)) {
+    hideCustomerDisplayQr(intent.bankId);
   }
 }
 

@@ -156,6 +156,26 @@ export function openCustomerDisplayPopup(host: Window = window) {
   return host.open(CUSTOMER_DISPLAY_PATH, CUSTOMER_DISPLAY_WINDOW_NAME, customerDisplayOpenFeatures(null, host));
 }
 
+export async function requestCustomerDisplayFullscreen(
+  popup: Window,
+): Promise<"denied" | "entered" | "unavailable"> {
+  if (popup.closed) {
+    return "unavailable";
+  }
+
+  const root = popup.document?.documentElement;
+  if (!root || typeof root.requestFullscreen !== "function") {
+    return "unavailable";
+  }
+
+  try {
+    await root.requestFullscreen();
+    return "entered";
+  } catch {
+    return "denied";
+  }
+}
+
 export async function placeCustomerDisplayWindow(
   popup: Window,
   host: ScreenDetailsApi & Pick<Window, "focus"> = window,

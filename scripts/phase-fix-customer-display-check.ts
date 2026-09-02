@@ -6,7 +6,20 @@ import { isSupportedCompanyLogoUrl, storeInitials } from "../features/brand/comp
 import {
   CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT,
   CUSTOMER_DISPLAY_LOGO_MAX_WIDTH,
+  SETTINGS_LOGO_PREVIEW_MAX_HEIGHT,
+  SETTINGS_LOGO_PREVIEW_MAX_WIDTH,
+  SIDEBAR_LOGO_MAX_SIZE,
 } from "../components/brand/logo-container";
+import {
+  cancelStagedImage,
+  confirmStagedImage,
+  emptyStagedImage,
+  isStagedImageDirty,
+  previewStagedImage,
+  removeStagedImage,
+  selectStagedImage,
+} from "../features/brand/staged-image";
+import { clearCompanyLogoUrl } from "../features/brand/company-logo";
 import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
   normalizeCustomerDisplaySettings,
@@ -28,6 +41,7 @@ import {
   customerDisplayQrBanks,
   hideCustomerDisplayQr,
   maskAccountReference,
+  buildCustomerDisplayQrCatalog,
   readCustomerDisplayQrIntent,
 } from "../features/pos/customer-display-qr";
 import { parsePosAppearance } from "../features/pos/customer-display-theme";
@@ -47,6 +61,7 @@ import {
   openCustomerDisplayPopup,
   pickCustomerScreen,
   placeCustomerDisplayWindow,
+  requestCustomerDisplayFullscreen,
   type CustomerDisplayPlacementClock,
   type CustomerDisplayScreen,
   type CustomerDisplayScreenDetails,
@@ -134,6 +149,10 @@ const localeKeys = [
   "ui.black.gold",
   "ui.purple.soft",
   "ui.teal.gradient",
+  "ui.confirm.logo",
+  "ui.remove.logo",
+  "ui.confirm.qr",
+  "ui.customer.display.fullscreen.denied",
 ] as const;
 const cashier: CustomerDisplayScreen = { availHeight: 900, availLeft: 0, availTop: 0, availWidth: 1440 };
 const customer: CustomerDisplayScreen = { availHeight: 1080, availLeft: 1440, availTop: 0, availWidth: 1920 };
@@ -491,7 +510,7 @@ await check("customer logo is a bounded chip, not an intrinsic hero", () => {
   assert(CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT === 56, String(CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT));
   assert(logoContainer.includes("max-h-[56px]") && logoContainer.includes("max-w-[104px]"), "customer logo CSS max box missing");
   assert(logoContainer.includes("maxHeight: customerHeight") && logoContainer.includes("maxWidth: customerWidth"), "customer logo style max box missing");
-  assert(logoContainer.includes('data-cd-logo={isCustomer ? "bounded"'), "bounded logo marker missing");
+  assert(logoContainer.includes('data-cd-logo={variant === "customer" ? "bounded"'), "bounded logo marker missing");
   assert(logoContainer.includes("object-contain"), "logo must keep object-contain");
   assert(!logoContainer.includes("object-cover"), "company logo must never use cover/hero crop");
 });
@@ -530,6 +549,7 @@ await check("QR is hidden by default and only configured banks appear", () => {
     { id: "bcel", bankName: "BCEL", accountName: "Store", accountNumber: "12345678", showOnCustomerDisplay: true, qrImageUrl: "https://example.com/bcel.png" },
     { id: "jdb", bankName: "JDB", accountName: "Store 2", accountNumber: "9999", showOnCustomerDisplay: false, qrImageUrl: "https://example.com/jdb.png" },
     { id: "hidden", bankName: "Hidden", accountName: "X", accountNumber: "1", showOnCustomerDisplay: false },
+    { id: "noqr", bankName: "No QR", accountName: "Y", accountNumber: "2", showOnCustomerDisplay: true },
   ]);
   assert(banks.map((bank) => bank.id).join(",") === "bcel", banks.map((bank) => bank.id).join(","));
   assert(maskAccountReference("12345678") === "••••5678", maskAccountReference("12345678"));
@@ -565,9 +585,9 @@ await check("reset this page vs reset all stays Customer Display only", () => {
   const pageReset = resetCustomerDisplayAppearanceSettings(current);
   assert(pageReset.template === "ocean-blue", pageReset.template);
   assert(pageReset.qrDisplayStyle === "green-clean", pageReset.qrDisplayStyle);
-  assert(pageReset.autoReturnSeconds === 12, String(pageReset.autoReturnSeconds));
-  assert(pageReset.promotionMessages[0] === "Keep this", pageReset.promotionMessages.join(","));
-  assert(pageReset.media.length === 1, String(pageReset.media.length));
+  assert(pageReset.autoReturnSeconds === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds, String(pageReset.autoReturnSeconds));
+  assert(pageReset.promotionMessages.join("|") === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages.join("|"), pageReset.promotionMessages.join(","));
+  assert(pageReset.media.length === 0, String(pageReset.media.length));
   const allReset = resetAllCustomerDisplaySettings();
   assert(allReset.template === "ocean-blue" && allReset.qrDisplayStyle === "green-clean", JSON.stringify(allReset));
   assert(allReset.autoReturnSeconds === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds, String(allReset.autoReturnSeconds));
@@ -584,6 +604,53 @@ await check("cart qty 1/2/3 and clear stay display-state only", () => {
   assert(formatLak(unitPrice * 3) === "33,000", formatLak(unitPrice * 3));
   const cleared = { items: [], totalLak: 0 };
   assert(cleared.items.length === 0 && cleared.totalLak === 0, "clear must empty display totals");
+});
+
+await check("company logo settings confirm before persist", () => {
+  const selected = selectStagedImage(emptyStagedImage(), "data:image/png;base64,draft");
+  assert(isStagedImageDirty(selected), "choose file must stay dirty");
+  assert(previewStagedImage(selected) === "data:image/png;base64,draft", "preview must show draft");
+  assert(selected.saved === null, "choose file must not persist");
+  const confirmed = confirmStagedImage(selected);
+  assert(confirmed.saved === "data:image/png;base64,draft" && confirmed.draft === null, JSON.stringify(confirmed));
+  const changed = selectStagedImage(confirmed, "data:image/png;base64,next");
+  assert(previewStagedImage(changed) === "data:image/png;base64,next", "change must preview next image");
+  assert(cancelStagedImage(changed).saved === "data:image/png;base64,draft", "cancel must keep saved logo");
+  assert(removeStagedImage().saved === null, "remove must clear logo");
+  assert(settingsForm.includes("confirmLogo") && settingsForm.includes("removeLogo"), "settings logo actions missing");
+  assert(settingsForm.includes("writeCompanyLogoUrl") && settingsForm.includes("clearCompanyLogoUrl"), "logo persist helpers missing");
+  assert(!settingsForm.includes("writeCompanyLogoUrl(reader.result)"), "file pick must not auto-save");
+  assert(logoContainer.includes("settings") && SETTINGS_LOGO_PREVIEW_MAX_WIDTH === 200 && SETTINGS_LOGO_PREVIEW_MAX_HEIGHT === 120, "settings preview bounds missing");
+  assert(dashboardShell.includes('variant="sidebar"') && SIDEBAR_LOGO_MAX_SIZE === 56, "sidebar logo must be bounded");
+  assert(typeof clearCompanyLogoUrl === "function", "clear helper missing");
+});
+
+await check("QR catalog publishes from settings and hides deleted display QR", () => {
+  assert(settingsForm.includes("publishCustomerDisplayQrCatalog"), "settings must publish the shared QR catalog");
+  assert(settingsForm.includes("data-cd-qr-preview=\"bounded\""), "QR preview must be bounded");
+  assert(settingsForm.includes("confirmStagedImage") && settingsForm.includes("ui.confirm.qr"), "QR confirm flow missing");
+  assert(settingsForm.includes("deleteQrPaymentAccountAction"), "delete QR account action missing");
+  const catalog = buildCustomerDisplayQrCatalog(
+    [
+      { id: "keep", accountName: "A", accountNumber: "1", bankId: "b1", branchId: "br1", displayLabel: "Keep", isActive: true, isDefault: false, printOnReceipt: true, qrImageUrl: "https://example.com/keep.png", showOnCustomerDisplay: true },
+      { id: "gone", accountName: "B", accountNumber: "2", bankId: "b1", branchId: "br1", displayLabel: "Gone", isActive: false, isDefault: false, printOnReceipt: true, qrImageUrl: "https://example.com/gone.png", showOnCustomerDisplay: true },
+      { id: "noimg", accountName: "C", accountNumber: "3", bankId: "b1", branchId: "br1", displayLabel: "No image", isActive: true, isDefault: false, printOnReceipt: true, showOnCustomerDisplay: true },
+    ],
+    [{ bankName: "BCEL", id: "b1", isActive: true, shortCode: "BCEL", sortOrder: 1 }],
+  );
+  assert(catalog.map((bank) => bank.id).join(",") === "keep", catalog.map((bank) => bank.id).join(","));
+});
+
+await check("customer display viewport fills without a dead top spacer", () => {
+  assert(displayClient.includes('data-cd-viewport="fill"'), "viewport fill marker missing");
+  assert(displayClient.includes('data-cd-welcome="start"'), "welcome content must start at the top of its panel");
+  assert(!displayClient.includes("justify-end"), "welcome must not park copy at the bottom of a dead band");
+  assert(displayClient.includes('data-cd-header="compact"') && displayClient.includes('data-cd-header="cart"'), "compact headers missing");
+  assert(displayClient.includes("h-[100dvh]"), "display must use the visible viewport height");
+  assert(displayClient.includes("FullscreenControl") && displayClient.includes('data-cd-fullscreen="control"'), "user-gesture fullscreen control missing");
+  assert(!displayClient.includes("requestFullscreen().catch(() => undefined);"), "do not auto-request fullscreen on mount");
+  assert(toggle.includes("requestCustomerDisplayFullscreen") && helper.includes("requestCustomerDisplayFullscreen"), "POS fullscreen action missing");
+  assert(typeof requestCustomerDisplayFullscreen === "function", "fullscreen helper missing");
 });
 
 await check("no database migration or realtime channel", () => {

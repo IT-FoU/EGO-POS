@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isSupportedCompanyLogoUrl, storeInitials } from "@/features/brand/company-logo";
 
 export const CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT = 56;
 export const CUSTOMER_DISPLAY_LOGO_MAX_WIDTH = 104;
+export const SETTINGS_LOGO_PREVIEW_MAX_HEIGHT = 120;
+export const SETTINGS_LOGO_PREVIEW_MAX_WIDTH = 200;
+export const SIDEBAR_LOGO_MAX_SIZE = 56;
+
+export type LogoSurface = "admin" | "customer" | "settings" | "sidebar";
 
 export function LogoContainer({
   alt = "Company logo",
@@ -21,34 +26,23 @@ export function LogoContainer({
   fallbackName?: string | null;
   logoUrl?: string | null;
   size?: number;
-  variant?: "admin" | "customer";
+  variant?: LogoSurface;
 }) {
   const [broken, setBroken] = useState(false);
   const hasSupportedLogo = Boolean(logoUrl && isSupportedCompanyLogoUrl(logoUrl) && !broken);
-  const isCustomer = variant === "customer";
-  const customerHeight = Math.min(size, CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT);
-  const customerWidth = Math.min(Math.round(customerHeight * 1.75), CUSTOMER_DISPLAY_LOGO_MAX_WIDTH);
+  const box = logoBoxStyle(variant, size);
 
   return (
     <div
       className={cn(
         "grid shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background text-center shadow-sm",
-        isCustomer && "max-h-[56px] max-w-[104px]",
+        variant === "customer" && "max-h-[56px] max-w-[104px]",
+        variant === "settings" && "max-h-[120px] max-w-[200px]",
+        variant === "sidebar" && "max-h-14 max-w-14",
         className,
       )}
-      data-cd-logo={isCustomer ? "bounded" : "admin"}
-      style={
-        isCustomer
-          ? {
-              height: customerHeight,
-              maxHeight: customerHeight,
-              maxWidth: customerWidth,
-              minHeight: customerHeight,
-              minWidth: Math.min(customerHeight, customerWidth),
-              width: customerWidth,
-            }
-          : { minHeight: size, minWidth: size }
-      }
+      data-cd-logo={variant === "customer" ? "bounded" : variant}
+      style={box}
     >
       {hasSupportedLogo && logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -58,7 +52,7 @@ export function LogoContainer({
           src={logoUrl}
           onError={() => setBroken(true)}
         />
-      ) : isCustomer ? (
+      ) : variant === "customer" || variant === "sidebar" ? (
         <div className="flex h-full w-full items-center justify-center text-lg font-black" aria-hidden="true">
           {storeInitials(fallbackName)}
         </div>
@@ -71,4 +65,40 @@ export function LogoContainer({
       )}
     </div>
   );
+}
+
+function logoBoxStyle(variant: LogoSurface, size: number): CSSProperties {
+  if (variant === "customer") {
+    const customerHeight = Math.min(size, CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT);
+    const customerWidth = Math.min(Math.round(customerHeight * 1.75), CUSTOMER_DISPLAY_LOGO_MAX_WIDTH);
+    return {
+      height: customerHeight,
+      maxHeight: customerHeight,
+      maxWidth: customerWidth,
+      minHeight: customerHeight,
+      minWidth: Math.min(customerHeight, customerWidth),
+      width: customerWidth,
+    };
+  }
+
+  if (variant === "settings") {
+    return {
+      height: SETTINGS_LOGO_PREVIEW_MAX_HEIGHT,
+      maxHeight: SETTINGS_LOGO_PREVIEW_MAX_HEIGHT,
+      maxWidth: SETTINGS_LOGO_PREVIEW_MAX_WIDTH,
+      minHeight: SETTINGS_LOGO_PREVIEW_MAX_HEIGHT,
+      minWidth: 160,
+      width: SETTINGS_LOGO_PREVIEW_MAX_WIDTH,
+    };
+  }
+
+  const sidebarSize = variant === "sidebar" ? Math.min(size, SIDEBAR_LOGO_MAX_SIZE) : size;
+  return {
+    height: sidebarSize,
+    maxHeight: sidebarSize,
+    maxWidth: sidebarSize,
+    minHeight: sidebarSize,
+    minWidth: sidebarSize,
+    width: sidebarSize,
+  };
 }

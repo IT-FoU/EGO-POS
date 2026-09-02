@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Gift, QrCode, ReceiptText, Sparkles, Store, Trophy } from "lucide-react";
+import { Gift, Maximize2, QrCode, ReceiptText, Sparkles, Store, Trophy } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { formatLak } from "@/features/pos/format";
 import type { PosDisplayState } from "@/features/pos/types";
@@ -72,13 +72,6 @@ export function CustomerDisplayClient() {
     return () => window.clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (!document.fullscreenElement && typeof root.requestFullscreen === "function") {
-      void root.requestFullscreen().catch(() => undefined);
-    }
-  }, []);
-
   const template = parseCustomerDisplayTemplate(settings.template);
   const tokens = useMemo(() => customerDisplayTemplateTokens(template), [template]);
   const showThankYou = displayState.displayMode === "thank_you";
@@ -94,6 +87,7 @@ export function CustomerDisplayClient() {
         className="fixed inset-0 h-[100dvh] w-screen overflow-hidden"
         data-cd-mode={mode}
         data-cd-template={template}
+        data-cd-viewport="fill"
         style={{ backgroundColor: tokens.background, color: tokens.text }}
       >
         {showThankYou ? (
@@ -112,6 +106,7 @@ export function CustomerDisplayClient() {
         {showQr && displayState.selectedQrBank ? (
           <QrOverlay amountLak={displayState.totalLak} bank={displayState.selectedQrBank} styleId={settings.qrDisplayStyle} />
         ) : null}
+        <FullscreenControl />
       </main>
     </ThemeContext.Provider>
   );
@@ -182,9 +177,9 @@ function OceanBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, st
   if (mode === "idle") {
     return (
       <div className="grid h-full min-h-0 grid-cols-[1.1fr_0.9fr] grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="ocean-blue">
-        <header className="col-span-2 flex items-center gap-3 px-3 py-2" style={{ backgroundColor: theme.surface, borderBottom: `3px solid ${theme.primary}` }}>
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <div className="min-w-0 truncate text-[clamp(1.2rem,2.6vw,1.9rem)] font-black">{storeName}</div>
+        <header className="col-span-2 flex items-center gap-2 px-2 py-1" data-cd-header="compact" style={{ backgroundColor: theme.surface, borderBottom: `3px solid ${theme.primary}` }}>
+          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
+          <div className="min-w-0 truncate text-[clamp(1rem,2vw,1.45rem)] font-black">{storeName}</div>
         </header>
         <WelcomePanel fill message={welcomeCopy(settings)} title="Welcome" />
         <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2 p-2">
@@ -196,9 +191,9 @@ function OceanBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, st
   }
   return (
     <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)]">
-      <header className="col-span-2 flex items-center gap-3 px-3 py-2" style={{ borderBottom: `2px solid ${theme.border}` }}>
-        <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-        <div className="min-w-0 truncate text-[clamp(1.2rem,2.4vw,1.8rem)] font-black">{storeName}</div>
+      <header className="col-span-2 flex items-center gap-2 px-2 py-1" data-cd-header="cart" style={{ borderBottom: `2px solid ${theme.border}` }}>
+        <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
+        <div className="min-w-0 truncate text-[clamp(0.95rem,1.8vw,1.3rem)] font-black">{storeName}</div>
       </header>
       <div className="min-h-0 overflow-hidden p-2">
         <ItemsList displayState={displayState} />
@@ -216,11 +211,11 @@ function BoldGreenLayout({ displayState, logoUrl, mode, settings, storeName, the
   if (mode === "idle") {
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-idle="bold-green">
-        <header className="flex items-center gap-3 px-3 py-3" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <div>
-            <div className="text-[clamp(1.4rem,3vw,2.1rem)] font-black">{storeName}</div>
-            <div className="text-sm font-semibold">Welcome</div>
+        <header className="flex items-center gap-2 px-2 py-1" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
+          <div className="min-w-0">
+            <div className="truncate text-[clamp(1.05rem,2.2vw,1.5rem)] font-black">{storeName}</div>
+            <div className="text-xs font-semibold">Welcome</div>
           </div>
         </header>
         <WelcomePanel fill message={welcomeCopy(settings)} title="Ready to serve" />
@@ -232,10 +227,10 @@ function BoldGreenLayout({ displayState, logoUrl, mode, settings, storeName, the
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <header className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-        <div className="flex items-center gap-3">
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <div className="text-[clamp(1.4rem,3vw,2rem)] font-black">{storeName}</div>
+      <header className="flex items-center justify-between px-2 py-1" data-cd-header="cart" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+        <div className="flex items-center gap-2">
+          <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
+          <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
         </div>
         <GuestOrMember displayState={displayState} compact light />
       </header>
@@ -263,7 +258,7 @@ function SkyBlueLayout({ displayState, logoUrl, mode, settings, storeName }: Lay
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2 p-2">
-      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
       <div className="grid grid-cols-3 gap-2">
         <MetricBox label="Items" value={String(displayState.items.reduce((total, item) => total + item.quantity, 0))} />
         <MetricBox label="Subtotal" value={`${formatLak(displayState.subtotalLak ?? 0)} LAK`} />
@@ -287,7 +282,7 @@ function SunnyYellowLayout({ displayState, logoUrl, mode, settings, slideIndex, 
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.28fr)_minmax(0,1fr)_auto]">
-      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
       <PromoPanel settings={settings} slideIndex={slideIndex} />
       <div className="min-h-0 overflow-hidden p-2">
         <ItemsList displayState={displayState} />
@@ -316,7 +311,7 @@ function PremiumDarkLayout({ displayState, logoUrl, mode, settings, storeName, t
   }
   return (
     <div className="grid h-full min-h-0 grid-cols-[0.9fr_1.1fr] grid-rows-[auto_minmax(0,1fr)] gap-2 p-2">
-      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
       <div className="row-span-2 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
         <TotalsBlock displayState={displayState} />
         <GuestOrMember displayState={displayState} />
@@ -342,7 +337,7 @@ function EmeraldDreamLayout({ displayState, logoUrl, mode, settings, slideIndex,
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.36fr)_minmax(0,1fr)_auto] gap-2 p-2">
-      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
       <div className="grid min-h-0 grid-cols-2 gap-2">
         <GuestOrMember displayState={displayState} />
         <PromoPanel settings={settings} slideIndex={slideIndex} />
@@ -357,9 +352,9 @@ function CoralMinimalLayout({ displayState, logoUrl, mode, settings, storeName, 
   if (mode === "idle") {
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-idle="coral-minimal">
-        <header className="flex items-center gap-3 px-3 py-2" style={{ borderBottom: `2px solid ${theme.border}` }}>
-          <StoreMark logoUrl={logoUrl} size={44} storeName={storeName} />
-          <div className="min-w-0 truncate text-[clamp(1.3rem,2.8vw,2rem)] font-black">{storeName}</div>
+        <header className="flex items-center gap-2 px-2 py-1" data-cd-header="compact" style={{ borderBottom: `2px solid ${theme.border}` }}>
+          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
+          <div className="min-w-0 truncate text-[clamp(1rem,2vw,1.45rem)] font-black">{storeName}</div>
         </header>
         <WelcomePanel fill message={welcomeCopy(settings)} title="Welcome" />
         <ServiceNote message={promoCopy(settings, 0)} />
@@ -368,7 +363,7 @@ function CoralMinimalLayout({ displayState, logoUrl, mode, settings, storeName, 
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
       <div className="min-h-0 overflow-hidden px-3 py-2">
         <ItemsList displayState={displayState} />
       </div>
@@ -398,7 +393,7 @@ function PremiumDarkGreenLayout({ displayState, logoUrl, mode, settings, storeNa
   return (
     <div className="grid h-full min-h-0 grid-cols-[1fr_0.7fr] grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-2">
       <header className="col-span-2">
-        <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
       </header>
       <ItemsList displayState={displayState} />
       <div className="grid min-h-0 gap-2">
@@ -417,14 +412,14 @@ function MinimalRedLayout({ displayState, logoUrl, mode, settings, storeName }: 
   if (mode === "idle") {
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]" data-cd-idle="minimal-premium-red">
-        <header className="flex items-end justify-between border-b-4 px-3 py-2" style={{ borderColor: theme.primary }}>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.2em]">Store</div>
-            <div className="text-[clamp(1.6rem,3vw,2.4rem)] font-black">{storeName}</div>
+        <header className="flex items-end justify-between border-b-4 px-2 py-1" data-cd-header="compact" style={{ borderColor: theme.primary }}>
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em]">Store</div>
+            <div className="truncate text-[clamp(1.1rem,2.2vw,1.6rem)] font-black">{storeName}</div>
           </div>
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
         </header>
-        <div className="px-3 pt-3 text-xs font-black uppercase tracking-[0.16em]" style={{ color: theme.secondaryText }}>Welcome</div>
+        <div className="px-2 pt-1 text-[10px] font-black uppercase tracking-[0.16em]" style={{ color: theme.secondaryText }}>Welcome</div>
         <WelcomePanel fill message={welcomeCopy(settings)} title="" />
         <div className="px-3 py-2 text-sm font-semibold" style={{ color: theme.secondaryText }}>{promoCopy(settings, 0)}</div>
       </div>
@@ -432,12 +427,12 @@ function MinimalRedLayout({ displayState, logoUrl, mode, settings, storeName }: 
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <header className="flex items-end justify-between border-b-4 px-3 py-2" style={{ borderColor: theme.primary }}>
-        <div>
-          <div className="text-xs font-bold uppercase tracking-[0.2em]">Store</div>
-          <div className="text-[clamp(1.6rem,3vw,2.4rem)] font-black">{storeName}</div>
+      <header className="flex items-end justify-between border-b-4 px-2 py-1" data-cd-header="cart" style={{ borderColor: theme.primary }}>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em]">Store</div>
+          <div className="truncate text-[clamp(1rem,2vw,1.4rem)] font-black">{storeName}</div>
         </div>
-        <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+        <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
       </header>
       <div className="min-h-0 overflow-hidden p-3">
         <ItemsList displayState={displayState} />
@@ -454,11 +449,11 @@ function MinimalPurpleLayout({ displayState, logoUrl, mode, settings, slideIndex
   if (mode === "idle") {
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]" data-cd-idle="minimal-premium-purple">
-        <div className="px-3 py-3 text-center text-[clamp(1.3rem,2.5vw,2rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+        <div className="px-2 py-1 text-center text-[clamp(1rem,2vw,1.4rem)] font-black" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
           {storeName}
         </div>
-        <div className="flex items-center justify-between px-3 py-2">
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+        <div className="flex items-center justify-between px-2 py-1">
+          <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
           <ServiceNote message="Welcome" />
         </div>
         <div className="grid min-h-0 grid-cols-[1.15fr_0.85fr] gap-2 px-3 pb-3">
@@ -470,11 +465,11 @@ function MinimalPurpleLayout({ displayState, logoUrl, mode, settings, slideIndex
   }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]">
-      <div className="px-3 py-3 text-center text-[clamp(1.3rem,2.5vw,2rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+      <div className="px-2 py-1 text-center text-[clamp(1rem,2vw,1.35rem)] font-black" data-cd-header="cart" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
         {storeName}
       </div>
-      <div className="flex items-center justify-between px-3 py-2">
-        <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+      <div className="flex items-center justify-between px-2 py-1">
+        <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
         <GuestOrMember displayState={displayState} compact />
       </div>
       <div className="grid min-h-0 grid-cols-[1.2fr_0.8fr] gap-2 px-3 pb-2">
@@ -486,12 +481,12 @@ function MinimalPurpleLayout({ displayState, logoUrl, mode, settings, slideIndex
   );
 }
 
-function BrandRow({ logoUrl, storeName }: { logoUrl: string; storeName: string }) {
+function BrandRow({ compact = false, logoUrl, storeName }: { compact?: boolean; logoUrl: string; storeName: string }) {
   const theme = useTheme();
   return (
-    <header className="flex items-center gap-3 px-3 py-2" style={{ borderBottom: `2px solid ${theme.border}` }}>
-      <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-      <div className="min-w-0 truncate text-[clamp(1.2rem,2.4vw,1.8rem)] font-black">{storeName}</div>
+    <header className={cn("flex items-center gap-2 px-2", compact ? "py-0.5" : "py-1")} data-cd-header={compact ? "cart" : "compact"} style={{ borderBottom: `2px solid ${theme.border}` }}>
+      <StoreMark logoUrl={logoUrl} size={compact ? 36 : 40} storeName={storeName} />
+      <div className="min-w-0 truncate text-[clamp(0.95rem,1.9vw,1.4rem)] font-black">{storeName}</div>
     </header>
   );
 }
@@ -508,7 +503,8 @@ function WelcomePanel({ fill = false, message, title }: { fill?: boolean; messag
   const theme = useTheme();
   return (
     <section
-      className={cn("flex min-h-0 flex-col justify-end overflow-hidden p-4", fill && "h-full")}
+      className={cn("flex min-h-0 flex-col justify-start overflow-hidden p-3", fill && "h-full")}
+      data-cd-welcome="start"
       style={{ backgroundColor: theme.soft, color: theme.text }}
     >
       {title ? <div className="text-sm font-black uppercase tracking-[0.14em]" style={{ color: theme.secondaryText }}>{title}</div> : null}
@@ -611,6 +607,36 @@ function MetricBox({ label, value }: { label: string; value: string }) {
   );
 }
 
+function FullscreenControl() {
+  const [active, setActive] = useState(Boolean(typeof document !== "undefined" && document.fullscreenElement));
+
+  useEffect(() => {
+    function sync() {
+      setActive(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  if (active) {
+    return null;
+  }
+
+  return (
+    <button
+      aria-label="Enter fullscreen"
+      className="absolute right-2 top-2 z-30 inline-flex size-8 items-center justify-center rounded-md border border-white/20 bg-black/35 text-white"
+      data-cd-fullscreen="control"
+      type="button"
+      onClick={() => {
+        void document.documentElement.requestFullscreen?.().catch(() => undefined);
+      }}
+    >
+      <Maximize2 className="size-4" aria-hidden="true" />
+    </button>
+  );
+}
+
 function ThankYouState({ displayState, logoUrl, settings, storeName }: {
   displayState: PosDisplayState;
   logoUrl: string;
@@ -673,7 +699,7 @@ function SlideContent({ slide }: { slide: CustomerDisplaySlide }) {
     return <img alt={slide.name} className="h-full min-h-0 w-full object-cover" src={slide.url} />;
   }
   return (
-    <div className="flex h-full min-h-0 flex-col justify-end p-3">
+    <div className="flex h-full min-h-0 flex-col justify-start p-3">
       <Gift className="size-7" style={{ color: theme.primary }} />
       <div className="mt-2 text-[clamp(1.1rem,2.2vw,1.7rem)] font-black leading-tight">{slide.type === "message" ? slide.message : ""}</div>
     </div>

@@ -14,6 +14,14 @@ import type { QrBank } from "@/features/pos/types";
 
 const db = prisma as any;
 
+function auditPayloadWithoutImages<T extends { logoUrl?: string; qrImageUrl?: string }>(input: T) {
+  return {
+    ...input,
+    ...(input.logoUrl ? { logoUrl: "[image]" } : {}),
+    ...(input.qrImageUrl ? { qrImageUrl: "[image]" } : {}),
+  };
+}
+
 function mapBank(row: Record<string, unknown>): QrPaymentBankRecord {
   return {
     bankName: String(row.bankName ?? ""),
@@ -97,7 +105,7 @@ export async function saveQrPaymentBank(input: SaveQrPaymentBankInput, tenant: T
   return withTenantTransaction({
     action: input.id ? "update" : "create",
     module: "settings",
-    newData: input,
+    newData: auditPayloadWithoutImages(input),
     tenant,
     write: async (tx) => {
       if (input.id) {
@@ -235,7 +243,7 @@ export async function saveQrPaymentAccount(input: SaveQrPaymentAccountInput, ten
   return withTenantTransaction({
     action: input.id ? "update" : "create",
     module: "settings",
-    newData: input,
+    newData: auditPayloadWithoutImages(input),
     tenant,
     write: async (tx) => {
       await assertBranchInScope(tx, tenant, branchId);

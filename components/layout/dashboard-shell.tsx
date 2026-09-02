@@ -180,7 +180,7 @@ export function DashboardShell({
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-border bg-card lg:flex lg:flex-col">
         <div className="border-b border-border p-6">
           <div className="flex items-center gap-3">
-            <LogoContainer logoUrl={logoUrl} size={56} />
+            <LogoContainer fallbackName={storeName} logoUrl={logoUrl} size={56} variant="sidebar" />
             <div>
               <div className="text-lg font-semibold">{APP_NAME}</div>
               <div className="text-xs text-muted-foreground">{SLOGAN}</div>

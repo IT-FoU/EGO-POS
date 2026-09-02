@@ -1,7 +1,7 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
@@ -19,7 +19,19 @@ import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "
 import { DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, resetAllCustomerDisplaySettings, resetCustomerDisplayAppearanceSettings, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
 import { CUSTOMER_DISPLAY_TEMPLATE_OPTIONS } from "@/features/pos/customer-display-templates";
 import { CUSTOMER_DISPLAY_QR_STYLE_OPTIONS, type CustomerDisplayQrStyle } from "@/features/pos/customer-display-qr-style";
-import { readCompanyLogoUrl, writeCompanyLogoUrl } from "@/features/brand/company-logo";
+import { clearCompanyLogoUrl, readCompanyLogoUrl, writeCompanyLogoUrl } from "@/features/brand/company-logo";
+import {
+  cancelStagedImage,
+  confirmStagedImage,
+  emptyStagedImage,
+  isStagedImageDirty,
+  previewStagedImage,
+  readImageFileAsDataUrl,
+  removeStagedImage,
+  selectStagedImage,
+  type StagedImageState,
+} from "@/features/brand/staged-image";
+import { publishCustomerDisplayQrCatalog } from "@/features/pos/customer-display-qr";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
@@ -36,7 +48,8 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());
+    const logoInputRef = useRef<HTMLInputElement>(null);
     const [displaySettings, setDisplaySettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
     const [promotionDraft, setPromotionDraft] = useState("");
     const [settings, setSettings] = useState(initialSettings);
@@ -50,27 +63,44 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             receiptPrintMode: readReceiptPrintModePreference(current.receiptPrintMode),
         }));
         setDisplaySettings(readCustomerDisplaySettingsFromStorage());
-        setLogoUrl(readCompanyLogoUrl() || null);
+        setLogoStage(emptyStagedImage(readCompanyLogoUrl() || null));
     }, []);
     function update<K extends keyof SettingsFormData>(key: K, value: SettingsFormData[K]) {
         setSettings((current) => ({ ...current, [key]: value }));
     }
-    function updateLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    async function chooseLogoFile(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
-        if (!file || !["image/png", "image/svg+xml", "image/webp", "image/jpeg"].includes(file.type)) {
-            setMessage({ text: t("ui.company.logo.must.be.png.svg.or.webp"), tone: "error" });
+        event.target.value = "";
+        if (!file) {
             return;
         }
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (typeof reader.result !== "string") {
-                return;
-            }
-            setLogoUrl(reader.result);
-            writeCompanyLogoUrl(reader.result);
-            setMessage({ text: t("ui.company.logo.saved"), tone: "success" });
-        };
-        reader.readAsDataURL(file);
+        try {
+            const dataUrl = await readImageFileAsDataUrl(file);
+            setLogoStage((current) => selectStagedImage(current, dataUrl));
+            setMessage({ text: t("ui.company.logo.preview.ready"), tone: "success" });
+        } catch {
+            setMessage({ text: t("ui.company.logo.must.be.png.svg.or.webp"), tone: "error" });
+        }
+    }
+    function confirmLogo() {
+        const next = confirmStagedImage(logoStage);
+        if (!next.saved) {
+            return;
+        }
+        writeCompanyLogoUrl(next.saved);
+        setLogoStage(next);
+        setMessage({ text: t("ui.company.logo.saved"), tone: "success" });
+    }
+    function cancelLogoDraft() {
+        setLogoStage((current) => cancelStagedImage(current));
+    }
+    function removeLogo() {
+        if (!window.confirm(t("ui.company.logo.remove.confirm"))) {
+            return;
+        }
+        clearCompanyLogoUrl();
+        setLogoStage(removeStagedImage());
+        setMessage({ text: t("ui.company.logo.removed"), tone: "success" });
     }
     function persistCustomerDisplaySettings(nextSettings: CustomerDisplaySettings) {
         setDisplaySettings(nextSettings);
@@ -122,7 +152,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     }
     function updateDisplayMedia(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
-        if (!file || !["image/jpeg", "image/png", "image/webp", t("ui.video.mp4")].includes(file.type)) {
+        if (!file || !["image/jpeg", "image/png", "image/webp", "video/mp4"].includes(file.type)) {
             setMessage({ text: t("ui.customer.display.media.must.be.jpg.png.webp."), tone: "error" });
             return;
         }
@@ -134,7 +164,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             const media: CustomerDisplayMedia = {
                 id: `display-media-${Date.now()}`,
                 name: file.name,
-                type: file.type === t("ui.video.mp4") ? "video" : "image",
+                type: file.type === "video/mp4" ? "video" : "image",
                 url: reader.result,
             };
             persistCustomerDisplaySettings({
@@ -208,13 +238,23 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         <SectionTitle icon={Building2} title="Company Profile"/>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
-            <div className="flex flex-col gap-4 rounded-md border border-border bg-background p-4 sm:flex-row sm:items-center">
-              <LogoContainer logoUrl={logoUrl} size={96}/>
-              <label className="grid flex-1 gap-2 text-sm font-medium">
+            <div className="flex flex-col gap-4 rounded-md border border-border bg-background p-4 sm:flex-row sm:items-start">
+              <LogoContainer fallbackName={settings.companyName} logoUrl={previewStagedImage(logoStage)} size={96} variant="settings"/>
+              <div className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
                 Company Logo
-                <input accept={t("ui.image.png.image.svg.xml.image.webp")} className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={updateLogo}/>
+                <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={logoInputRef} type="file" onChange={(event) => void chooseLogoFile(event)}/>
                 <span className="text-xs leading-5 text-muted-foreground">{t("ui.supports.png.svg.and.webp.for.sidebar.receip")}</span>
-              </label>
+                <div className="flex flex-wrap gap-2">
+                  {isStagedImageDirty(logoStage) ? (<>
+                    <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={confirmLogo}>{t("ui.confirm.logo")}</button>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{t("ui.change.image")}</button>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={cancelLogoDraft}>Cancel</button>
+                  </>) : (<>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{logoStage.saved ? t("ui.change.image") : t("ui.choose.image")}</button>
+                    {logoStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={removeLogo}>{t("ui.remove.logo")}</button> : null}
+                  </>)}
+                </div>
+              </div>
             </div>
           </div>
           <Field label="Company name">
@@ -314,7 +354,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 <h3 className="font-semibold">Advertisement Images and Videos</h3>
               </div>
               <label className="mt-3 block">
-                <input accept={t("ui.image.jpeg.image.png.image.webp.video.mp4")} className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={updateDisplayMedia}/>
+                <input accept="image/jpeg,image/png,image/webp,video/mp4" className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={updateDisplayMedia}/>
               </label>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {displaySettings.media.length === 0 ? (<div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">{t("ui.no.advertisement.media.uploaded.yet.the.disp")}</div>) : (displaySettings.media.map((media) => (<div className="overflow-hidden rounded-md border border-border bg-card" key={media.id}>
@@ -466,7 +506,7 @@ function buildEmptyAccountDraft(branches: BranchOption[]): AccountDraft {
         branchId: branches[0]?.id ?? "",
         displayLabel: "",
         id: "",
-        isActive: false,
+        isActive: true,
         isDefault: false,
         printOnReceipt: true,
         showOnCustomerDisplay: true,
@@ -494,15 +534,23 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
     const [bankToDelete, setBankToDelete] = useState<QrPaymentBankRecord | null>(null);
     const [accountToDelete, setAccountToDelete] = useState<QrPaymentAccountRecord | null>(null);
     const [previewAccount, setPreviewAccount] = useState<QrPaymentAccountRecord | null>(null);
+    const [qrImageStage, setQrImageStage] = useState<StagedImageState>(emptyStagedImage());
+    const qrImageInputRef = useRef<HTMLInputElement>(null);
     useEffect(() => {
         setBanks(initialBanks);
         setQrAccounts(initialAccounts);
+        publishCustomerDisplayQrCatalog(initialAccounts, initialBanks);
     }, [initialAccounts, initialBanks]);
     const sortedBanks = [...banks].sort((first, second) => first.sortOrder - second.sortOrder || first.bankName.localeCompare(second.bankName));
     const activeBanks = sortedBanks.filter((bank) => bank.isActive);
     const branchName = (branchId: string) => branches.find((branch) => branch.id === branchId)?.name ?? "Unknown branch";
     const sortedAccounts = [...qrAccounts].sort((first, second) => branchName(first.branchId).localeCompare(branchName(second.branchId)) || Number(second.isDefault) - Number(first.isDefault));
-    function runMutation(action: () => Promise<{ error?: string; ok: boolean }>, successMessage: string) {
+    function applyQrLists(nextAccounts: QrPaymentAccountRecord[], nextBanks: QrPaymentBankRecord[]) {
+        setQrAccounts(nextAccounts);
+        setBanks(nextBanks);
+        publishCustomerDisplayQrCatalog(nextAccounts, nextBanks);
+    }
+    function runMutation<T>(action: () => Promise<{ data?: T; error?: string; ok: boolean }>, successMessage: string, onSuccess?: (data: T) => void) {
         onNotify(null);
         startTransition(async () => {
             const result = await action();
@@ -510,23 +558,25 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                 onNotify({ text: result.error ?? t("ui.settings.save.failed"), tone: "error" });
                 return;
             }
+            if (result.data !== undefined) {
+                onSuccess?.(result.data);
+            }
             onNotify({ text: successMessage, tone: "success" });
             router.refresh();
         });
     }
-    function readImage(event: React.ChangeEvent<HTMLInputElement>, onLoaded: (url: string) => void) {
+    async function chooseQrImage(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
-        if (!file || !["image/png", "image/jpeg", "image/webp", t("ui.image.svg.xml")].includes(file.type)) {
-            onNotify({ text: t("ui.image.must.be.jpg.png.svg.or.webp"), tone: "error" });
+        event.target.value = "";
+        if (!file) {
             return;
         }
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (typeof reader.result === "string") {
-                onLoaded(reader.result);
-            }
-        };
-        reader.readAsDataURL(file);
+        try {
+            const dataUrl = await readImageFileAsDataUrl(file);
+            setQrImageStage((current) => selectStagedImage(current, dataUrl));
+        } catch {
+            onNotify({ text: t("ui.image.must.be.jpg.png.svg.or.webp"), tone: "error" });
+        }
     }
     function openAddBank() {
         setEditingBankId(null);
@@ -558,23 +608,46 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             logoUrl: bankDraft.logoUrl,
             shortCode: bankDraft.shortCode.trim() || bankNameValue.slice(0, 6).toUpperCase(),
             sortOrder: bankDraft.sortOrder,
-        }), editingBankId ? `Bank ${bankNameValue} updated.` : `Bank ${bankNameValue} added.`);
-        setBankModalOpen(false);
+        }), editingBankId ? `Bank ${bankNameValue} updated.` : `Bank ${bankNameValue} added.`, (saved) => {
+            const nextBanks = editingBankId
+                ? banks.map((bank) => bank.id === saved.id ? saved : bank)
+                : [...banks, saved];
+            applyQrLists(qrAccounts, nextBanks);
+            setBankModalOpen(false);
+        });
     }
     function confirmDeleteBank() {
         if (!bankToDelete) {
             return;
         }
-        runMutation(() => deleteQrPaymentBankAction(bankToDelete.id), `Bank ${bankToDelete.bankName} deleted.`);
-        setBankToDelete(null);
+        runMutation(() => deleteQrPaymentBankAction(bankToDelete.id), `Bank ${bankToDelete.bankName} deleted.`, () => {
+            applyQrLists(qrAccounts.filter((account) => account.bankId !== bankToDelete.id), banks.filter((bank) => bank.id !== bankToDelete.id));
+            setBankToDelete(null);
+        });
     }
     function disableBank(bank: QrPaymentBankRecord) {
-        runMutation(() => archiveQrPaymentBankAction(bank.id), `Bank ${bank.bankName} archived.`);
-        setBankToDelete(null);
+        runMutation(() => archiveQrPaymentBankAction(bank.id), `Bank ${bank.bankName} archived.`, (saved) => {
+            const nextAccounts = qrAccounts.map((account) => account.bankId === bank.id ? { ...account, isActive: false } : account);
+            applyQrLists(nextAccounts, banks.map((item) => item.id === saved.id ? saved : item));
+            setBankToDelete(null);
+        });
+    }
+    function enableBank(bank: QrPaymentBankRecord) {
+        runMutation(() => saveQrPaymentBankAction({
+            bankName: bank.bankName,
+            id: bank.id,
+            isActive: true,
+            logoUrl: bank.logoUrl,
+            shortCode: bank.shortCode,
+            sortOrder: bank.sortOrder,
+        }), `Bank ${bank.bankName} enabled.`, (saved) => {
+            applyQrLists(qrAccounts, banks.map((item) => item.id === saved.id ? saved : item));
+        });
     }
     function openAddAccount() {
         setEditingAccountId(null);
         setAccountDraft({ ...buildEmptyAccountDraft(branches), bankId: activeBanks[0]?.id ?? "" });
+        setQrImageStage(emptyStagedImage());
         setAccountModalOpen(true);
     }
     function openEditAccount(account: QrPaymentAccountRecord) {
@@ -592,6 +665,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             qrImageUrl: account.qrImageUrl,
             showOnCustomerDisplay: account.showOnCustomerDisplay,
         });
+        setQrImageStage(emptyStagedImage(account.qrImageUrl ?? null));
         setAccountModalOpen(true);
     }
     function saveQrAccount() {
@@ -613,7 +687,12 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             onNotify({ text: t("ui.account.number.is.required"), tone: "error" });
             return;
         }
-        if (accountDraft.isActive && !accountDraft.qrImageUrl) {
+        const confirmedQr = previewStagedImage(confirmStagedImage(qrImageStage)) ?? accountDraft.qrImageUrl;
+        if (isStagedImageDirty(qrImageStage)) {
+            onNotify({ text: t("ui.confirm.qr.before.save"), tone: "error" });
+            return;
+        }
+        if (accountDraft.isActive && !confirmedQr) {
             onNotify({ text: t("ui.qr.image.is.required.before.activating.qr.ac"), tone: "error" });
             return;
         }
@@ -627,20 +706,30 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             isActive: accountDraft.isActive,
             isDefault: accountDraft.isDefault,
             printOnReceipt: accountDraft.printOnReceipt,
-            qrImageUrl: accountDraft.qrImageUrl,
+            qrImageUrl: confirmedQr || undefined,
             showOnCustomerDisplay: accountDraft.showOnCustomerDisplay,
-        }), editingAccountId ? `QR account ${accountDraft.displayLabel || accountName} updated.` : `QR account ${accountDraft.displayLabel || accountName} added.`);
-        setAccountModalOpen(false);
+        }), editingAccountId ? `QR account ${accountDraft.displayLabel || accountName} updated.` : `QR account ${accountDraft.displayLabel || accountName} added.`, (saved) => {
+            const nextAccounts = editingAccountId
+                ? qrAccounts.map((account) => account.id === saved.id ? saved : account)
+                : [...qrAccounts, saved];
+            applyQrLists(nextAccounts, banks);
+            setAccountModalOpen(false);
+            setQrImageStage(emptyStagedImage(saved.qrImageUrl ?? null));
+        });
     }
     function confirmDeleteAccount() {
         if (!accountToDelete) {
             return;
         }
-        runMutation(() => deleteQrPaymentAccountAction(accountToDelete.id), `QR account ${accountToDelete.displayLabel} deleted.`);
-        setAccountToDelete(null);
+        runMutation(() => deleteQrPaymentAccountAction(accountToDelete.id), `QR account ${accountToDelete.displayLabel} deleted.`, () => {
+            applyQrLists(qrAccounts.filter((account) => account.id !== accountToDelete.id), banks);
+            setAccountToDelete(null);
+        });
     }
     function setDefaultQrAccount(account: QrPaymentAccountRecord) {
-        runMutation(() => setDefaultQrPaymentAccountAction(account.id), `Default QR account set for ${branchName(account.branchId)}.`);
+        runMutation(() => setDefaultQrPaymentAccountAction(account.id), `Default QR account set for ${branchName(account.branchId)}.`, (saved) => {
+            applyQrLists(qrAccounts.map((item) => item.branchId === saved.branchId ? { ...item, isDefault: item.id === saved.id } : item), banks);
+        });
     }
     function bankName(bankId: string) {
         return banks.find((bank) => bank.id === bankId)?.bankName ?? "Unknown bank";
@@ -691,6 +780,9 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                     <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditBank(bank)} aria-label={`Edit ${bank.bankName}`}>
                       <Edit3 className="size-4" aria-hidden="true"/>
                     </button>
+                    {bank.isActive ? null : (
+                      <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" type="button" onClick={() => enableBank(bank)}>Enable</button>
+                    )}
                     <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setBankToDelete(bank)} aria-label={`Delete ${bank.bankName}`}>
                       <Trash2 className="size-4" aria-hidden="true"/>
                     </button>
@@ -769,7 +861,12 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             <Toggle label="Active" checked={bankDraft.isActive} onChange={(value) => setBankDraft((current) => ({ ...current, isActive: value }))}/>
             <div className="md:col-span-2">
               <Field label="Bank logo">
-                <input accept={t("ui.image.png.image.jpeg.image.webp.image.svg.xm")} className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={(event) => readImage(event, (url) => setBankDraft((current) => ({ ...current, logoUrl: url })))}/>
+                <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  void readImageFileAsDataUrl(file).then((url) => setBankDraft((current) => ({ ...current, logoUrl: url }))).catch(() => onNotify({ text: t("ui.image.must.be.jpg.png.svg.or.webp"), tone: "error" }));
+                }}/>
               </Field>
             </div>
           </div>
@@ -805,7 +902,27 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             <Toggle label="Active" checked={accountDraft.isActive} onChange={(value) => setAccountDraft((current) => ({ ...current, isActive: value }))}/>
             <div className="md:col-span-2">
               <Field label="QR image">
-                <input accept={t("ui.image.png.image.jpeg.image.webp.image.svg.xm")} className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={(event) => readImage(event, (url) => setAccountDraft((current) => ({ ...current, qrImageUrl: url })))}/>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div className="grid size-28 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background" data-cd-qr-preview="bounded">
+                    {previewStagedImage(qrImageStage) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="QR preview" className="h-full w-full object-contain" src={previewStagedImage(qrImageStage) ?? ""}/>
+                    ) : <QrCode className="size-10 text-muted-foreground" aria-hidden="true"/>}
+                  </div>
+                  <div className="grid gap-2">
+                    <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={qrImageInputRef} type="file" onChange={(event) => void chooseQrImage(event)}/>
+                    <div className="flex flex-wrap gap-2">
+                      {isStagedImageDirty(qrImageStage) ? (<>
+                        <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setQrImageStage((current) => confirmStagedImage(current))}>{t("ui.confirm.qr")}</button>
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{t("ui.change.qr")}</button>
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setQrImageStage((current) => cancelStagedImage(current))}>Cancel</button>
+                      </>) : (<>
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{qrImageStage.saved ? t("ui.replace.qr") : t("ui.choose.qr")}</button>
+                        {qrImageStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={() => { setQrImageStage(removeStagedImage()); setAccountDraft((current) => ({ ...current, qrImageUrl: undefined })); }}>{t("ui.remove.qr")}</button> : null}
+                      </>)}
+                    </div>
+                  </div>
+                </div>
               </Field>
             </div>
           </div>
