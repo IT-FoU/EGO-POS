@@ -5,6 +5,9 @@ import { ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isSupportedCompanyLogoUrl, storeInitials } from "@/features/brand/company-logo";
 
+export const CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT = 56;
+export const CUSTOMER_DISPLAY_LOGO_MAX_WIDTH = 104;
+
 export function LogoContainer({
   alt = "Company logo",
   className,
@@ -22,24 +25,40 @@ export function LogoContainer({
 }) {
   const [broken, setBroken] = useState(false);
   const hasSupportedLogo = Boolean(logoUrl && isSupportedCompanyLogoUrl(logoUrl) && !broken);
+  const isCustomer = variant === "customer";
+  const customerHeight = Math.min(size, CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT);
+  const customerWidth = Math.min(Math.round(customerHeight * 1.75), CUSTOMER_DISPLAY_LOGO_MAX_WIDTH);
 
   return (
     <div
       className={cn(
         "grid shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background text-center shadow-sm",
+        isCustomer && "max-h-[56px] max-w-[104px]",
         className,
       )}
-      style={{ minHeight: size, minWidth: size }}
+      data-cd-logo={isCustomer ? "bounded" : "admin"}
+      style={
+        isCustomer
+          ? {
+              height: customerHeight,
+              maxHeight: customerHeight,
+              maxWidth: customerWidth,
+              minHeight: customerHeight,
+              minWidth: Math.min(customerHeight, customerWidth),
+              width: customerWidth,
+            }
+          : { minHeight: size, minWidth: size }
+      }
     >
       {hasSupportedLogo && logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt={alt}
-          className="h-full w-full object-contain"
+          className="h-full max-h-full w-full max-w-full object-contain"
           src={logoUrl}
           onError={() => setBroken(true)}
         />
-      ) : variant === "customer" ? (
+      ) : isCustomer ? (
         <div className="flex h-full w-full items-center justify-center text-lg font-black" aria-hidden="true">
           {storeInitials(fallbackName)}
         </div>

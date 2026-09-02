@@ -74,7 +74,7 @@ export function CustomerDisplayClient() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (!document.fullscreenElement && root.requestFullscreen) {
+    if (!document.fullscreenElement && typeof root.requestFullscreen === "function") {
       void root.requestFullscreen().catch(() => undefined);
     }
   }, []);
@@ -86,16 +86,28 @@ export function CustomerDisplayClient() {
   const showQr = Boolean(displayState.showQr && displayState.selectedQrBank);
   const storeName = displayState.storeName || "EGO POS";
   const resolvedLogo = displayState.storeLogoUrl || logoUrl;
+  const mode: TemplateMode = showThankYou ? "thank_you" : hasActiveSale ? "cart" : "idle";
 
   return (
     <ThemeContext.Provider value={tokens}>
-      <main className="fixed inset-0 h-[100dvh] w-screen overflow-hidden" data-cd-template={template} style={{ backgroundColor: tokens.background, color: tokens.text }}>
+      <main
+        className="fixed inset-0 h-[100dvh] w-screen overflow-hidden"
+        data-cd-mode={mode}
+        data-cd-template={template}
+        style={{ backgroundColor: tokens.background, color: tokens.text }}
+      >
         {showThankYou ? (
           <ThankYouState displayState={displayState} logoUrl={resolvedLogo} settings={settings} storeName={storeName} />
-        ) : hasActiveSale ? (
-          <ActiveTemplate displayState={displayState} logoUrl={resolvedLogo} settings={settings} slideIndex={slideIndex} storeName={storeName} template={template} />
         ) : (
-          <IdleState logoUrl={resolvedLogo} settings={settings} slideIndex={slideIndex} storeName={storeName} template={template} />
+          <SelectedTemplate
+            displayState={displayState}
+            logoUrl={resolvedLogo}
+            mode={hasActiveSale ? "cart" : "idle"}
+            settings={settings}
+            slideIndex={slideIndex}
+            storeName={storeName}
+            template={template}
+          />
         )}
         {showQr && displayState.selectedQrBank ? (
           <QrOverlay amountLak={displayState.totalLak} bank={displayState.selectedQrBank} styleId={settings.qrDisplayStyle} />
@@ -106,54 +118,31 @@ export function CustomerDisplayClient() {
 }
 
 function StoreMark({ logoUrl, size, storeName }: { logoUrl?: string | null; size: number; storeName: string }) {
-  return <LogoContainer alt={storeName} className="border-0 bg-transparent shadow-none" fallbackName={storeName} logoUrl={logoUrl} size={size} variant="customer" />;
-}
-
-function IdleState({ logoUrl, settings, slideIndex, storeName, template }: {
-  logoUrl: string;
-  settings: CustomerDisplaySettings;
-  slideIndex: number;
-  storeName: string;
-  template: CustomerDisplayTemplate;
-}) {
-  const theme = useTheme();
-  const slide = getActiveSlide(settings, slideIndex);
-  const promoHeavy = template === "sunny-yellow" || template === "coral-minimal" || template === "bold-green";
   return (
-    <div className={cn("grid h-full min-h-0", promoHeavy ? "grid-rows-[auto_minmax(0,1fr)]" : "grid-rows-[auto_minmax(0,1fr)_auto]")} style={{ gap: promoHeavy ? 0 : 8 }}>
-      <header className="flex items-center gap-3 px-3 py-2" style={{ backgroundColor: theme.surface, borderBottom: `3px solid ${theme.primary}` }}>
-        <StoreMark logoUrl={logoUrl} size={56} storeName={storeName} />
-        <div className="min-w-0">
-          <div className="truncate text-[clamp(1.4rem,3vw,2.2rem)] font-black">{storeName}</div>
-          <div className="text-sm font-semibold" style={{ color: theme.secondaryText }}>Welcome</div>
-        </div>
-      </header>
-      <section className="min-h-0 overflow-hidden">
-        <SlideContent large slide={slide} />
-      </section>
-      {promoHeavy ? null : (
-        <footer className="grid gap-2 px-3 pb-3 md:grid-cols-3">
-          {settings.promotionMessages.slice(0, 3).map((message) => (
-            <div className="rounded-xl px-3 py-2 text-sm font-black" key={message} style={{ backgroundColor: theme.soft, color: theme.text, border: `2px solid ${theme.border}` }}>
-              {message}
-            </div>
-          ))}
-        </footer>
-      )}
-    </div>
+    <LogoContainer
+      alt={storeName}
+      className="border-0 bg-transparent shadow-none"
+      fallbackName={storeName}
+      logoUrl={logoUrl}
+      size={size}
+      variant="customer"
+    />
   );
 }
 
-function ActiveTemplate({ displayState, logoUrl, settings, slideIndex, storeName, template }: {
+type TemplateMode = "cart" | "idle" | "thank_you";
+
+function SelectedTemplate({ displayState, logoUrl, mode, settings, slideIndex, storeName, template }: {
   displayState: PosDisplayState;
   logoUrl: string;
+  mode: "cart" | "idle";
   settings: CustomerDisplaySettings;
   slideIndex: number;
   storeName: string;
   template: CustomerDisplayTemplate;
 }) {
   const theme = useTheme();
-  const common = { displayState, logoUrl, settings, slideIndex, storeName, theme };
+  const common = { displayState, logoUrl, mode, settings, slideIndex, storeName, theme };
   switch (template) {
     case "bold-green":
       return <BoldGreenLayout {...common} />;
@@ -182,29 +171,65 @@ function ActiveTemplate({ displayState, logoUrl, settings, slideIndex, storeName
 type LayoutProps = {
   displayState: PosDisplayState;
   logoUrl: string;
+  mode: "cart" | "idle";
   settings: CustomerDisplaySettings;
   slideIndex: number;
   storeName: string;
   theme: CustomerDisplayThemeTokens;
 };
 
-function OceanBlueLayout({ displayState, logoUrl, settings, slideIndex, storeName }: LayoutProps) {
+function OceanBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-cols-[1.1fr_0.9fr] grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="ocean-blue">
+        <header className="col-span-2 flex items-center gap-3 px-3 py-2" style={{ backgroundColor: theme.surface, borderBottom: `3px solid ${theme.primary}` }}>
+          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+          <div className="min-w-0 truncate text-[clamp(1.2rem,2.6vw,1.9rem)] font-black">{storeName}</div>
+        </header>
+        <WelcomePanel fill message={welcomeCopy(settings)} title="Welcome" />
+        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2 p-2">
+          <PromoPanel settings={settings} slideIndex={slideIndex} />
+          <ServiceNote message={promoCopy(settings, 1)} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-0 lg:grid-cols-[1.15fr_0.85fr]">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
-      <div className="min-h-0 overflow-hidden p-2 lg:col-span-1 lg:row-start-2">
+    <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)]">
+      <header className="col-span-2 flex items-center gap-3 px-3 py-2" style={{ borderBottom: `2px solid ${theme.border}` }}>
+        <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+        <div className="min-w-0 truncate text-[clamp(1.2rem,2.4vw,1.8rem)] font-black">{storeName}</div>
+      </header>
+      <div className="min-h-0 overflow-hidden p-2">
         <ItemsList displayState={displayState} />
       </div>
-      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-2 lg:row-span-2">
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-2">
         <GuestOrMember displayState={displayState} compact />
-        <MessageCard settings={settings} slideIndex={slideIndex} />
+        <PromoPanel settings={settings} slideIndex={slideIndex} />
         <TotalsBlock displayState={displayState} />
       </div>
     </div>
   );
 }
 
-function BoldGreenLayout({ displayState, logoUrl, storeName, theme }: LayoutProps) {
+function BoldGreenLayout({ displayState, logoUrl, mode, settings, storeName, theme }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-idle="bold-green">
+        <header className="flex items-center gap-3 px-3 py-3" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+          <div>
+            <div className="text-[clamp(1.4rem,3vw,2.1rem)] font-black">{storeName}</div>
+            <div className="text-sm font-semibold">Welcome</div>
+          </div>
+        </header>
+        <WelcomePanel fill message={welcomeCopy(settings)} title="Ready to serve" />
+        <div className="px-3 py-3 text-[clamp(1.1rem,2.2vw,1.6rem)] font-black" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
+          {promoCopy(settings, 0)}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
       <header className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
@@ -222,11 +247,24 @@ function BoldGreenLayout({ displayState, logoUrl, storeName, theme }: LayoutProp
   );
 }
 
-function SkyBlueLayout({ displayState, logoUrl, storeName }: LayoutProps) {
+function SkyBlueLayout({ displayState, logoUrl, mode, settings, storeName }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2 p-2" data-cd-idle="sky-blue">
+        <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        <div className="grid grid-cols-3 gap-2">
+          <MetricBox label="Welcome" value="Guest" />
+          <MetricBox label="Store" value={storeName} />
+          <MetricBox label="Today" value={promoCopy(settings, 0)} />
+        </div>
+        <WelcomePanel fill message={welcomeCopy(settings)} title="Hello" />
+      </div>
+    );
+  }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2 p-2">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
-      <div className="grid gap-2 md:grid-cols-3">
+      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <div className="grid grid-cols-3 gap-2">
         <MetricBox label="Items" value={String(displayState.items.reduce((total, item) => total + item.quantity, 0))} />
         <MetricBox label="Subtotal" value={`${formatLak(displayState.subtotalLak ?? 0)} LAK`} />
         <GuestOrMember displayState={displayState} compact />
@@ -237,11 +275,20 @@ function SkyBlueLayout({ displayState, logoUrl, storeName }: LayoutProps) {
   );
 }
 
-function SunnyYellowLayout({ displayState, logoUrl, settings, slideIndex, storeName }: LayoutProps) {
+function SunnyYellowLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.42fr)_minmax(0,1fr)]" data-cd-idle="sunny-yellow">
+        <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        <PromoPanel large settings={settings} slideIndex={slideIndex} />
+        <WelcomePanel fill message={welcomeCopy(settings)} title="Today's offers" />
+      </div>
+    );
+  }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.28fr)_minmax(0,1fr)_auto]">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
-      <MessageCard settings={settings} slideIndex={slideIndex} />
+      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <PromoPanel settings={settings} slideIndex={slideIndex} />
       <div className="min-h-0 overflow-hidden p-2">
         <ItemsList displayState={displayState} />
       </div>
@@ -250,28 +297,55 @@ function SunnyYellowLayout({ displayState, logoUrl, settings, slideIndex, storeN
   );
 }
 
-function PremiumDarkLayout({ displayState, logoUrl, storeName }: LayoutProps) {
-  return (
-    <div className="grid h-full min-h-0 gap-2 p-2 lg:grid-cols-[0.9fr_1.1fr] lg:grid-rows-[auto_minmax(0,1fr)]">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
-      <div className="min-h-0 lg:row-span-2">
-        <TotalsBlock displayState={displayState} />
-        <div className="mt-2">
-          <GuestOrMember displayState={displayState} />
+function PremiumDarkLayout({ displayState, logoUrl, mode, settings, storeName, theme }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-cols-[0.85fr_1.15fr] gap-2 p-2" data-cd-idle="premium-dark">
+        <section className="grid min-h-0 place-items-center rounded-2xl border-2 p-3" style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
+          <div className="text-center">
+            <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
+            <div className="mt-3 text-[clamp(1.3rem,2.6vw,2rem)] font-black">{storeName}</div>
+          </div>
+        </section>
+        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2">
+          <WelcomePanel fill message={welcomeCopy(settings)} title="Good evening" />
+          <ServiceNote message={promoCopy(settings, 0)} />
         </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid h-full min-h-0 grid-cols-[0.9fr_1.1fr] grid-rows-[auto_minmax(0,1fr)] gap-2 p-2">
+      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <div className="row-span-2 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
+        <TotalsBlock displayState={displayState} />
+        <GuestOrMember displayState={displayState} />
       </div>
       <ItemsList displayState={displayState} />
     </div>
   );
 }
 
-function EmeraldDreamLayout({ displayState, logoUrl, settings, slideIndex, storeName }: LayoutProps) {
+function EmeraldDreamLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 p-2" data-cd-idle="emerald-dream">
+        <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-2">
+          <WelcomePanel fill message={welcomeCopy(settings)} title="Members welcome" />
+          <PromoPanel settings={settings} slideIndex={slideIndex} />
+          <ServiceNote message={promoCopy(settings, 0)} />
+          <ServiceNote message={promoCopy(settings, 1)} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.42fr)_minmax(0,1fr)_auto] gap-2 p-2">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
-      <div className="grid min-h-0 gap-2 md:grid-cols-2">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.36fr)_minmax(0,1fr)_auto] gap-2 p-2">
+      <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      <div className="grid min-h-0 grid-cols-2 gap-2">
         <GuestOrMember displayState={displayState} />
-        <MessageCard settings={settings} slideIndex={slideIndex} />
+        <PromoPanel settings={settings} slideIndex={slideIndex} />
       </div>
       <ItemsList displayState={displayState} />
       <TotalsBlock displayState={displayState} />
@@ -279,14 +353,26 @@ function EmeraldDreamLayout({ displayState, logoUrl, settings, slideIndex, store
   );
 }
 
-function CoralMinimalLayout({ displayState, logoUrl, storeName }: LayoutProps) {
+function CoralMinimalLayout({ displayState, logoUrl, mode, settings, storeName, theme }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-idle="coral-minimal">
+        <header className="flex items-center gap-3 px-3 py-2" style={{ borderBottom: `2px solid ${theme.border}` }}>
+          <StoreMark logoUrl={logoUrl} size={44} storeName={storeName} />
+          <div className="min-w-0 truncate text-[clamp(1.3rem,2.8vw,2rem)] font-black">{storeName}</div>
+        </header>
+        <WelcomePanel fill message={welcomeCopy(settings)} title="Welcome" />
+        <ServiceNote message={promoCopy(settings, 0)} />
+      </div>
+    );
+  }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-0">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
+      <BrandRow logoUrl={logoUrl} storeName={storeName} />
       <div className="min-h-0 overflow-hidden px-3 py-2">
         <ItemsList displayState={displayState} />
       </div>
-      <div className="grid gap-2 px-3 pb-3 md:grid-cols-[minmax(0,1fr)_1.4fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)_1.4fr] gap-2 px-3 pb-3">
         <GuestOrMember displayState={displayState} compact />
         <TotalsBlock displayState={displayState} />
       </div>
@@ -294,24 +380,56 @@ function CoralMinimalLayout({ displayState, logoUrl, storeName }: LayoutProps) {
   );
 }
 
-function PremiumDarkGreenLayout({ displayState, logoUrl, storeName }: LayoutProps) {
+function PremiumDarkGreenLayout({ displayState, logoUrl, mode, settings, storeName, theme }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-cols-[1fr_0.72fr] grid-rows-[auto_minmax(0,1fr)] gap-2 p-2" data-cd-idle="premium-dark-green">
+        <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        <section className="row-span-2 grid min-h-0 place-items-center rounded-2xl p-3" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
+          <div className="text-center">
+            <div className="text-xs font-black uppercase tracking-[0.18em]">Welcome</div>
+            <div className="mt-2 text-[clamp(1.6rem,4vw,2.8rem)] font-black leading-none">{storeName}</div>
+          </div>
+        </section>
+        <WelcomePanel fill message={welcomeCopy(settings)} title="Thank you for visiting" />
+      </div>
+    );
+  }
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-2 p-2 lg:grid-cols-[1fr_0.7fr] lg:grid-rows-[auto_minmax(0,1fr)_auto]">
-      <HeaderBar logoUrl={logoUrl} storeName={storeName} />
+    <div className="grid h-full min-h-0 grid-cols-[1fr_0.7fr] grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-2">
+      <header className="col-span-2">
+        <BrandRow logoUrl={logoUrl} storeName={storeName} />
+      </header>
       <ItemsList displayState={displayState} />
-      <div className="grid gap-2 lg:row-span-2">
+      <div className="grid min-h-0 gap-2">
         <GuestOrMember displayState={displayState} />
         <MetricBox label="Savings" value={`${formatLak((displayState.membershipDiscountLak ?? 0) + (displayState.promotionDiscountLak ?? 0))} LAK`} />
       </div>
-      <div className="lg:col-span-2">
+      <div className="col-span-2">
         <TotalsBlock displayState={displayState} />
       </div>
     </div>
   );
 }
 
-function MinimalRedLayout({ displayState, logoUrl, storeName }: LayoutProps) {
+function MinimalRedLayout({ displayState, logoUrl, mode, settings, storeName }: LayoutProps) {
   const theme = useTheme();
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]" data-cd-idle="minimal-premium-red">
+        <header className="flex items-end justify-between border-b-4 px-3 py-2" style={{ borderColor: theme.primary }}>
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.2em]">Store</div>
+            <div className="text-[clamp(1.6rem,3vw,2.4rem)] font-black">{storeName}</div>
+          </div>
+          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+        </header>
+        <div className="px-3 pt-3 text-xs font-black uppercase tracking-[0.16em]" style={{ color: theme.secondaryText }}>Welcome</div>
+        <WelcomePanel fill message={welcomeCopy(settings)} title="" />
+        <div className="px-3 py-2 text-sm font-semibold" style={{ color: theme.secondaryText }}>{promoCopy(settings, 0)}</div>
+      </div>
+    );
+  }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
       <header className="flex items-end justify-between border-b-4 px-3 py-2" style={{ borderColor: theme.primary }}>
@@ -319,12 +437,12 @@ function MinimalRedLayout({ displayState, logoUrl, storeName }: LayoutProps) {
           <div className="text-xs font-bold uppercase tracking-[0.2em]">Store</div>
           <div className="text-[clamp(1.6rem,3vw,2.4rem)] font-black">{storeName}</div>
         </div>
-        <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
+        <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
       </header>
       <div className="min-h-0 overflow-hidden p-3">
         <ItemsList displayState={displayState} />
       </div>
-      <div className="grid gap-2 p-3 md:grid-cols-[0.7fr_1.3fr]">
+      <div className="grid grid-cols-[0.7fr_1.3fr] gap-2 p-3">
         <GuestOrMember displayState={displayState} compact />
         <TotalsBlock displayState={displayState} />
       </div>
@@ -332,7 +450,24 @@ function MinimalRedLayout({ displayState, logoUrl, storeName }: LayoutProps) {
   );
 }
 
-function MinimalPurpleLayout({ displayState, logoUrl, settings, slideIndex, storeName, theme }: LayoutProps) {
+function MinimalPurpleLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]" data-cd-idle="minimal-premium-purple">
+        <div className="px-3 py-3 text-center text-[clamp(1.3rem,2.5vw,2rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+          {storeName}
+        </div>
+        <div className="flex items-center justify-between px-3 py-2">
+          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
+          <ServiceNote message="Welcome" />
+        </div>
+        <div className="grid min-h-0 grid-cols-[1.15fr_0.85fr] gap-2 px-3 pb-3">
+          <WelcomePanel fill message={welcomeCopy(settings)} title="A pleasure to serve you" />
+          <PromoPanel settings={settings} slideIndex={slideIndex} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto]">
       <div className="px-3 py-3 text-center text-[clamp(1.3rem,2.5vw,2rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
@@ -342,22 +477,62 @@ function MinimalPurpleLayout({ displayState, logoUrl, settings, slideIndex, stor
         <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
         <GuestOrMember displayState={displayState} compact />
       </div>
-      <div className="grid min-h-0 gap-2 px-3 pb-2 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid min-h-0 grid-cols-[1.2fr_0.8fr] gap-2 px-3 pb-2">
         <ItemsList displayState={displayState} />
-        <MessageCard settings={settings} slideIndex={slideIndex} />
+        <PromoPanel settings={settings} slideIndex={slideIndex} />
       </div>
       <TotalsBlock displayState={displayState} />
     </div>
   );
 }
 
-function HeaderBar({ logoUrl, storeName }: { logoUrl: string; storeName: string }) {
+function BrandRow({ logoUrl, storeName }: { logoUrl: string; storeName: string }) {
   const theme = useTheme();
   return (
     <header className="flex items-center gap-3 px-3 py-2" style={{ borderBottom: `2px solid ${theme.border}` }}>
       <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
       <div className="min-w-0 truncate text-[clamp(1.2rem,2.4vw,1.8rem)] font-black">{storeName}</div>
     </header>
+  );
+}
+
+function welcomeCopy(settings: CustomerDisplaySettings) {
+  return settings.promotionMessages[0]?.trim() || "Welcome";
+}
+
+function promoCopy(settings: CustomerDisplaySettings, index: number) {
+  return settings.promotionMessages[index]?.trim() || settings.promotionMessages[0]?.trim() || "Thank you";
+}
+
+function WelcomePanel({ fill = false, message, title }: { fill?: boolean; message: string; title: string }) {
+  const theme = useTheme();
+  return (
+    <section
+      className={cn("flex min-h-0 flex-col justify-end overflow-hidden p-4", fill && "h-full")}
+      style={{ backgroundColor: theme.soft, color: theme.text }}
+    >
+      {title ? <div className="text-sm font-black uppercase tracking-[0.14em]" style={{ color: theme.secondaryText }}>{title}</div> : null}
+      <div className="mt-2 text-[clamp(1.4rem,3.4vw,2.6rem)] font-black leading-tight">{message}</div>
+    </section>
+  );
+}
+
+function ServiceNote({ message }: { message: string }) {
+  const theme = useTheme();
+  return (
+    <div className="rounded-2xl border-2 px-3 py-2 text-sm font-black" style={{ borderColor: theme.border, backgroundColor: theme.surface, color: theme.text }}>
+      {message}
+    </div>
+  );
+}
+
+function PromoPanel({ large = false, settings, slideIndex }: { large?: boolean; settings: CustomerDisplaySettings; slideIndex: number }) {
+  const theme = useTheme();
+  const slide = getActiveSlide(settings, slideIndex);
+  return (
+    <section className={cn("min-h-0 overflow-hidden rounded-2xl border-2", large && "h-full")} style={{ borderColor: theme.border, backgroundColor: theme.soft }}>
+      <SlideContent slide={slide} />
+    </section>
   );
 }
 
@@ -429,20 +604,10 @@ function GuestOrMember({ compact = false, displayState, light = false }: { compa
 function MetricBox({ label, value }: { label: string; value: string }) {
   const theme = useTheme();
   return (
-    <div className="rounded-2xl border-2 px-3 py-2" style={{ borderColor: theme.border, backgroundColor: theme.soft }}>
+    <div className="min-w-0 rounded-2xl border-2 px-3 py-2" style={{ borderColor: theme.border, backgroundColor: theme.soft }}>
       <div className="text-xs font-bold uppercase" style={{ color: theme.secondaryText }}>{label}</div>
-      <div className="text-[clamp(1.1rem,2vw,1.6rem)] font-black">{value}</div>
+      <div className="truncate text-[clamp(1rem,1.8vw,1.4rem)] font-black">{value}</div>
     </div>
-  );
-}
-
-function MessageCard({ settings, slideIndex }: { settings: CustomerDisplaySettings; slideIndex: number }) {
-  const theme = useTheme();
-  const slide = getActiveSlide(settings, slideIndex);
-  return (
-    <section className="min-h-0 overflow-hidden rounded-2xl border-2" style={{ borderColor: theme.border, backgroundColor: theme.soft }}>
-      <SlideContent slide={slide} />
-    </section>
   );
 }
 
@@ -456,7 +621,7 @@ function ThankYouState({ displayState, logoUrl, settings, storeName }: {
   return (
     <div className="grid h-full place-items-center p-4 text-center">
       <div className="w-full max-w-3xl">
-        <StoreMark logoUrl={logoUrl} size={72} storeName={storeName} />
+        <StoreMark logoUrl={logoUrl} size={56} storeName={storeName} />
         <Sparkles className="mx-auto mt-3 size-12" style={{ color: theme.primary }} />
         <div className="mt-2 text-[clamp(2.4rem,8vw,5rem)] font-black">Thank You</div>
         <div className="mt-4 rounded-2xl px-4 py-3" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
@@ -499,7 +664,7 @@ function QrOverlay({ amountLak, bank, styleId }: {
 
 type CustomerDisplaySlide = CustomerDisplayMedia | { message: string; type: "message" };
 
-function SlideContent({ large = false, slide }: { large?: boolean; slide: CustomerDisplaySlide }) {
+function SlideContent({ slide }: { slide: CustomerDisplaySlide }) {
   const theme = useTheme();
   if (slide.type === "video") {
     return <video autoPlay className="h-full min-h-0 w-full object-cover" loop muted playsInline src={slide.url} />;
@@ -508,11 +673,9 @@ function SlideContent({ large = false, slide }: { large?: boolean; slide: Custom
     return <img alt={slide.name} className="h-full min-h-0 w-full object-cover" src={slide.url} />;
   }
   return (
-    <div className="grid h-full min-h-0 place-items-center p-4 text-center">
-      <div>
-        <Gift className={cn("mx-auto", large ? "size-14" : "size-8")} style={{ color: theme.primary }} />
-        <div className={cn("mt-2 font-black", large ? "text-[clamp(1.8rem,5vw,3.4rem)]" : "text-[clamp(1.1rem,2.4vw,1.8rem)]")}>{slide.type === "message" ? slide.message : ""}</div>
-      </div>
+    <div className="flex h-full min-h-0 flex-col justify-end p-3">
+      <Gift className="size-7" style={{ color: theme.primary }} />
+      <div className="mt-2 text-[clamp(1.1rem,2.2vw,1.7rem)] font-black leading-tight">{slide.type === "message" ? slide.message : ""}</div>
     </div>
   );
 }

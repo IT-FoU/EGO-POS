@@ -1,6 +1,8 @@
 export const CUSTOMER_DISPLAY_PATH = "/customer-display";
 export const CUSTOMER_DISPLAY_WINDOW_NAME = "ego-pos-customer-display";
-export const CUSTOMER_DISPLAY_OPEN_FEATURES = "popup=yes,width=900,height=720";
+export const CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH = 1280;
+export const CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT = 800;
+export const CUSTOMER_DISPLAY_OPEN_FEATURES = `popup=yes,width=${CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH},height=${CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT}`;
 export const CUSTOMER_DISPLAY_PLACEMENT_RETRY_DELAY_MS = 180;
 export const CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES = 3;
 export const CUSTOMER_DISPLAY_PLACEMENT_TOLERANCE_PX = 64;
@@ -77,12 +79,32 @@ export function customerDisplayTargetBounds(screen: CustomerDisplayScreen): Cust
   };
 }
 
-export function customerDisplayOpenFeatures(bounds?: CustomerDisplayBounds | null) {
-  if (!bounds) {
-    return CUSTOMER_DISPLAY_OPEN_FEATURES;
+export function customerDisplayFallbackOpenBounds(host?: { screen?: { availHeight?: number; availWidth?: number } }) {
+  const width = host?.screen?.availWidth;
+  const height = host?.screen?.availHeight;
+  if (typeof width === "number" && width >= 800 && typeof height === "number" && height >= 600) {
+    return {
+      height: Math.round(height),
+      left: 0,
+      top: 0,
+      width: Math.round(width),
+    } satisfies CustomerDisplayBounds;
   }
+  return {
+    height: CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT,
+    left: 0,
+    top: 0,
+    width: CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH,
+  } satisfies CustomerDisplayBounds;
+}
 
-  return `popup=yes,left=${bounds.left},top=${bounds.top},width=${bounds.width},height=${bounds.height}`;
+export function customerDisplayOpenFeatures(
+  bounds?: CustomerDisplayBounds | null,
+  host?: { screen?: { availHeight?: number; availWidth?: number } },
+) {
+  const resolved = bounds ?? customerDisplayFallbackOpenBounds(host);
+  const origin = bounds ? `left=${resolved.left},top=${resolved.top},` : "";
+  return `popup=yes,${origin}width=${resolved.width},height=${resolved.height}`;
 }
 
 export function applyCustomerDisplayBounds(
@@ -131,7 +153,7 @@ export function scheduleCustomerDisplayPlacementRetries(
 }
 
 export function openCustomerDisplayPopup(host: Window = window) {
-  return host.open(CUSTOMER_DISPLAY_PATH, CUSTOMER_DISPLAY_WINDOW_NAME, CUSTOMER_DISPLAY_OPEN_FEATURES);
+  return host.open(CUSTOMER_DISPLAY_PATH, CUSTOMER_DISPLAY_WINDOW_NAME, customerDisplayOpenFeatures(null, host));
 }
 
 export async function placeCustomerDisplayWindow(

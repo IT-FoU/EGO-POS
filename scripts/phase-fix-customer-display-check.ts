@@ -4,6 +4,10 @@ import { t } from "../lib/i18n/ui";
 import { formatLak } from "../features/pos/format";
 import { isSupportedCompanyLogoUrl, storeInitials } from "../features/brand/company-logo";
 import {
+  CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT,
+  CUSTOMER_DISPLAY_LOGO_MAX_WIDTH,
+} from "../components/brand/logo-container";
+import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
   normalizeCustomerDisplaySettings,
   resetAllCustomerDisplaySettings,
@@ -28,8 +32,12 @@ import {
 } from "../features/pos/customer-display-qr";
 import { parsePosAppearance } from "../features/pos/customer-display-theme";
 import {
+  CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT,
+  CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH,
   CUSTOMER_DISPLAY_OPEN_FEATURES,
   CUSTOMER_DISPLAY_PATH,
+  customerDisplayFallbackOpenBounds,
+  customerDisplayOpenFeatures,
   CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES,
   CUSTOMER_DISPLAY_PLACEMENT_RETRY_DELAY_MS,
   CUSTOMER_DISPLAY_WINDOW_NAME,
@@ -150,7 +158,7 @@ await check("source: reuse named window, never close on second click", () => {
   assert(helper.includes("CUSTOMER_DISPLAY_WINDOW_NAME"), "named window missing");
   assert(CUSTOMER_DISPLAY_WINDOW_NAME === "ego-pos-customer-display", CUSTOMER_DISPLAY_WINDOW_NAME);
   assert(CUSTOMER_DISPLAY_PATH === "/customer-display", CUSTOMER_DISPLAY_PATH);
-  assert(CUSTOMER_DISPLAY_OPEN_FEATURES.includes("width=900"), CUSTOMER_DISPLAY_OPEN_FEATURES);
+  assert(CUSTOMER_DISPLAY_OPEN_FEATURES.includes(`width=${CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH}`), CUSTOMER_DISPLAY_OPEN_FEATURES);
   assert(!toggle.includes(".close()"), "second click must not close the customer window");
 });
 
@@ -249,7 +257,7 @@ await check("openCustomerDisplayPopup uses stable name and path", () => {
   assert(opened.length === 1, `opens=${opened.length}`);
   assert(opened[0]?.url === "/customer-display", opened[0]?.url);
   assert(opened[0]?.name === "ego-pos-customer-display", opened[0]?.name);
-  assert(opened[0]?.features === "popup=yes,width=900,height=720", opened[0]?.features);
+  assert(opened[0]?.features === `popup=yes,width=${CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH},height=${CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT}`, opened[0]?.features);
 });
 
 await check("placeCustomerDisplayWindow: unsupported API focuses existing popup", async () => {
@@ -453,6 +461,58 @@ await check("ten templates keep distinct tokens and layouts", () => {
   assert(red.primary !== purple.primary && red.background !== purple.background, "red and purple must not be recolors");
   assert(displayClient.includes("clamp(2.1rem,6vw,4.2rem)"), "grand total must stay the strongest type size");
   assert(displayClient.includes("100dvh") && displayClient.includes("requestFullscreen"), "viewport / fullscreen hardening missing");
+});
+
+await check("idle uses selected template instead of one generic shell", () => {
+  assert(!displayClient.includes("function IdleState"), "generic IdleState shell must be removed");
+  assert(displayClient.includes('mode={hasActiveSale ? "cart" : "idle"}'), "selected template must render idle and cart");
+  const idleMarks = [
+    'data-cd-idle="ocean-blue"',
+    'data-cd-idle="bold-green"',
+    'data-cd-idle="sky-blue"',
+    'data-cd-idle="sunny-yellow"',
+    'data-cd-idle="premium-dark"',
+    'data-cd-idle="emerald-dream"',
+    'data-cd-idle="coral-minimal"',
+    'data-cd-idle="premium-dark-green"',
+    'data-cd-idle="minimal-premium-red"',
+    'data-cd-idle="minimal-premium-purple"',
+  ];
+  for (const mark of idleMarks) {
+    assert(displayClient.includes(mark), `${mark} missing`);
+  }
+  assert(displayClient.includes('data-cd-idle="ocean-blue"') && displayClient.includes('data-cd-idle="premium-dark"'), "ocean and premium dark idle must differ");
+  assert(!displayClient.includes("promotionMessages.slice(0, 3)"), "legacy 3-message ticker must not mount globally");
+  assert(!displayClient.includes("md:grid-cols-3"), "idle must not keep the old 3-column ticker footer");
+});
+
+await check("customer logo is a bounded chip, not an intrinsic hero", () => {
+  assert(CUSTOMER_DISPLAY_LOGO_MAX_WIDTH === 104, String(CUSTOMER_DISPLAY_LOGO_MAX_WIDTH));
+  assert(CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT === 56, String(CUSTOMER_DISPLAY_LOGO_MAX_HEIGHT));
+  assert(logoContainer.includes("max-h-[56px]") && logoContainer.includes("max-w-[104px]"), "customer logo CSS max box missing");
+  assert(logoContainer.includes("maxHeight: customerHeight") && logoContainer.includes("maxWidth: customerWidth"), "customer logo style max box missing");
+  assert(logoContainer.includes('data-cd-logo={isCustomer ? "bounded"'), "bounded logo marker missing");
+  assert(logoContainer.includes("object-contain"), "logo must keep object-contain");
+  assert(!logoContainer.includes("object-cover"), "company logo must never use cover/hero crop");
+});
+
+await check("core template structure does not require lg breakpoint", () => {
+  assert(!displayClient.includes("lg:grid-cols"), "core split layouts must not hide behind lg");
+  assert(!displayClient.includes("lg:row-span"), "core row spans must not hide behind lg");
+  assert(displayClient.includes("grid-cols-[1.15fr_0.85fr]"), "ocean split must exist without breakpoint");
+  assert(displayClient.includes("grid-cols-[0.9fr_1.1fr]"), "premium dark split must exist without breakpoint");
+  assert(displayClient.includes("grid-cols-[1fr_0.7fr]"), "premium dark green split must exist without breakpoint");
+  assert(displayClient.includes("grid-cols-3"), "sky blue card row must exist without breakpoint");
+});
+
+await check("popup open size uses screen when available and a safer fallback", () => {
+  assert(CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH === 1280, String(CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH));
+  assert(CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT === 800, String(CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT));
+  const fromScreen = customerDisplayFallbackOpenBounds({ screen: { availHeight: 768, availWidth: 1024 } });
+  assert(fromScreen.width === 1024 && fromScreen.height === 768, JSON.stringify(fromScreen));
+  const fallback = customerDisplayFallbackOpenBounds({});
+  assert(fallback.width === 1280 && fallback.height === 800, JSON.stringify(fallback));
+  assert(customerDisplayOpenFeatures(null).includes("width=1280"), customerDisplayOpenFeatures(null));
 });
 
 await check("POS appearance parse stays light/dark only", () => {
