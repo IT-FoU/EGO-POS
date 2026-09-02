@@ -85,12 +85,14 @@ export async function getPrismaPosQrBanks(tenant: TenantContext, branchId: strin
     },
   });
 
-  return accounts.map((account: Record<string, unknown>) =>
-    mapQrPaymentAccountToPosBank({
+  return accounts.map((account: Record<string, unknown>) => {
+    const bank = account.bank as Record<string, unknown> | undefined;
+    return mapQrPaymentAccountToPosBank({
       ...mapAccount(account),
-      bankName: String((account.bank as Record<string, unknown>)?.bankName ?? ""),
-    }),
-  );
+      bankName: String(bank?.bankName ?? ""),
+      ...(bank?.logoUrl ? { logoUrl: String(bank.logoUrl) } : {}),
+    });
+  });
 }
 
 export async function saveQrPaymentBank(input: SaveQrPaymentBankInput, tenant: TenantContext) {

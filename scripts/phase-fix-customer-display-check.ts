@@ -29,6 +29,7 @@ import {
 import {
   CUSTOMER_DISPLAY_TEMPLATES,
   DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
+  customerDisplayTemplateChrome,
   customerDisplayTemplateTokens,
   parseCustomerDisplayTemplate,
 } from "../features/pos/customer-display-templates";
@@ -40,12 +41,14 @@ import {
 import {
   customerDisplayQrBanks,
   hideCustomerDisplayQr,
+  isCustomerDisplayQrAccountEligible,
   maskAccountReference,
   buildCustomerDisplayQrCatalog,
   readCustomerDisplayQrIntent,
 } from "../features/pos/customer-display-qr";
 import { parsePosAppearance } from "../features/pos/customer-display-theme";
 import {
+  CUSTOMER_DISPLAY_BROWSER_CHROME_LIMITATION,
   CUSTOMER_DISPLAY_FALLBACK_OPEN_HEIGHT,
   CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH,
   CUSTOMER_DISPLAY_OPEN_FEATURES,
@@ -66,6 +69,13 @@ import {
   type CustomerDisplayScreen,
   type CustomerDisplayScreenDetails,
 } from "../features/pos/customer-display-window";
+import {
+  LEGACY_EGO_POS_WELCOME,
+  NEUTRAL_CUSTOMER_DISPLAY_WELCOME,
+  normalizeCustomerDisplayPromotionMessages,
+  resolveCustomerDisplayStoreName,
+} from "../features/pos/customer-display-copy";
+import { localizedProductName } from "../features/pos/product-display-name";
 
 const results: Array<{ detail?: string; name: string; status: "FAIL" | "PASS" }> = [];
 
@@ -153,6 +163,10 @@ const localeKeys = [
   "ui.remove.logo",
   "ui.confirm.qr",
   "ui.customer.display.fullscreen.denied",
+  "ui.show.qr",
+  "ui.enter.fullscreen",
+  "ui.exit.fullscreen",
+  "ui.customer.display.browser.limitation",
 ] as const;
 const cashier: CustomerDisplayScreen = { availHeight: 900, availLeft: 0, availTop: 0, availWidth: 1440 };
 const customer: CustomerDisplayScreen = { availHeight: 1080, availLeft: 1440, availTop: 0, availWidth: 1920 };
@@ -484,7 +498,8 @@ await check("ten templates keep distinct tokens and layouts", () => {
 
 await check("idle uses selected template instead of one generic shell", () => {
   assert(!displayClient.includes("function IdleState"), "generic IdleState shell must be removed");
-  assert(displayClient.includes('mode={hasActiveSale ? "cart" : "idle"}'), "selected template must render idle and cart");
+  assert(displayClient.includes("mode={mode}"), "selected template must render idle, cart, and thank-you");
+  assert(displayClient.includes('showThankYou ? "thank_you"'), "thank-you must use the selected template");
   const idleMarks = [
     'data-cd-idle="ocean-blue"',
     'data-cd-idle="bold-green"',
@@ -657,6 +672,93 @@ await check("no database migration or realtime channel", () => {
   assert(!prismaSchema.includes("customerDisplayTheme"), "do not add a DB theme field");
   assert(!helper.includes("WebSocket") && !displayClient.includes("BroadcastChannel"), "no extra realtime channel");
   assert(settingsForm.includes("writeCustomerDisplaySettingsToStorage"), "settings must persist with existing local settings");
+});
+
+await check("thank-you is per template and keeps QR hidden", () => {
+  assert(!displayClient.includes("function ThankYouState"), "shared ThankYouState must not remain");
+  for (const id of CUSTOMER_DISPLAY_TEMPLATES) {
+    assert(displayClient.includes(`data-cd-thankyou="${id}"`), `thank-you missing for ${id}`);
+  }
+  assert(displayClient.includes("Returning in {settings.autoReturnSeconds}s"), "auto-return copy missing");
+  assert(displayClient.includes("showQr && displayState.selectedQrBank"), "QR overlay must stay state-driven");
+  assert(posClient.includes("showQr: false") && posClient.includes("keepThankYou: true"), "sale complete must hide QR and keep thank-you");
+});
+
+await check("member shows real fields and guest stays minimal", () => {
+  assert(displayClient.includes('data-cd-guest="minimal"'), "guest must be a minimal indicator");
+  assert(displayClient.includes('data-cd-member="detail"'), "member detail block missing");
+  assert(displayClient.includes('data-cd-member-field="name"'), "member name missing");
+  assert(displayClient.includes('data-cd-member-field="status"'), "membership status missing");
+  assert(displayClient.includes('data-cd-member-field="points"'), "points balance missing");
+  assert(displayClient.includes('data-cd-member-field="earned"'), "points earned missing");
+  assert(displayClient.includes("meaningfulAmount"), "zero financial rows must be filtered");
+  assert(!displayClient.includes("GuestOrMember displayState={displayState} compact"), "compact must not hide member fields");
+});
+
+await check("store copy and product names use locale-aware fallbacks", () => {
+  assert(!displayClient.includes('storeName: "EGO POS"'), "hardcoded EGO POS fallback must be removed");
+  assert(DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages[0] === NEUTRAL_CUSTOMER_DISPLAY_WELCOME, DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages[0]);
+  assert(normalizeCustomerDisplayPromotionMessages([LEGACY_EGO_POS_WELCOME, "Member discounts available today", "Thank you for shopping with us"]) === null, "legacy default messages must rewrite");
+  assert(normalizeCustomerDisplayPromotionMessages(["Keep this store line"])?.[0] === "Keep this store line", "user-entered copy must stay");
+  assert(resolveCustomerDisplayStoreName("Superwin", ["Welcome"]) === "Superwin", resolveCustomerDisplayStoreName("Superwin", ["Welcome"]));
+  assert(resolveCustomerDisplayStoreName("", [LEGACY_EGO_POS_WELCOME]) === NEUTRAL_CUSTOMER_DISPLAY_WELCOME, "legacy welcome must not become the store name");
+  assert(localizedProductName({ nameEn: "Water", nameLo: "Nam" }, "en") === "Water", "en prefers nameEn");
+  assert(localizedProductName({ nameEn: "Water", nameLo: "Nam" }, "th") === "Nam", "th prefers nameLo");
+  assert(localizedProductName({ nameEn: "Water", nameLo: "" }, "th") === "Water", "missing local name falls back");
+  assert(displayClient.includes("localizedProductName(item, locale)"), "customer display must use localized product names");
+});
+
+await check("active QR opens selector, valid sources only, catalog hydrates without POS", () => {
+  assert(qrToggle.includes("getCustomerDisplayQrCatalogAction"), "header must hydrate the shared QR catalog");
+  assert(qrToggle.includes("setOpen((current) => !current)"), "QR button must open the selector, not toggle hide");
+  assert(!/intent\.visible \? hideQr\(\)/.test(qrToggle), "visible QR must not hide on the header button");
+  assert(qrToggle.includes('data-cd-qr-hide="true"'), "Hide QR must live inside the selector");
+  assert(qrToggle.includes("ui.show.qr") && qrToggle.includes("data-cd-qr-toggle"), "QR button label/state missing");
+  assert(qrToggle.includes("data-cd-qr-icon") && qrToggle.includes("logoUrl"), "provider icons missing");
+  assert(readFileSync(join(root, "features/qr-payments/actions.ts"), "utf8").includes("getCustomerDisplayQrCatalogAction"), "catalog action missing");
+  const catalog = buildCustomerDisplayQrCatalog(
+    [
+      { id: "keep", accountName: "A", accountNumber: "1", bankId: "b1", branchId: "br1", displayLabel: "Keep", isActive: true, isDefault: false, printOnReceipt: true, qrImageUrl: "https://example.com/keep.png", showOnCustomerDisplay: true },
+      { id: "noimg", accountName: "C", accountNumber: "3", bankId: "b1", branchId: "br1", displayLabel: "No image", isActive: true, isDefault: false, printOnReceipt: true, showOnCustomerDisplay: true },
+      { id: "disabled", accountName: "D", accountNumber: "4", bankId: "b1", branchId: "br1", displayLabel: "Disabled", isActive: false, isDefault: false, printOnReceipt: true, qrImageUrl: "https://example.com/d.png", showOnCustomerDisplay: true },
+      { id: "archived-bank", accountName: "E", accountNumber: "5", bankId: "b2", branchId: "br1", displayLabel: "Archived bank", isActive: true, isDefault: false, printOnReceipt: true, qrImageUrl: "https://example.com/e.png", showOnCustomerDisplay: true },
+    ],
+    [
+      { bankName: "BCEL", id: "b1", isActive: true, logoUrl: "https://example.com/bcel.svg", shortCode: "BCEL", sortOrder: 1 },
+      { bankName: "Old", id: "b2", isActive: false, shortCode: "OLD", sortOrder: 2 },
+    ],
+  );
+  assert(catalog.map((bank) => bank.id).join(",") === "keep", catalog.map((bank) => bank.id).join(","));
+  assert(catalog[0]?.logoUrl === "https://example.com/bcel.svg", "bank logo must pass through");
+  assert(isCustomerDisplayQrAccountEligible({ id: "noimg", accountName: "C", accountNumber: "3", bankId: "b1", branchId: "br1", displayLabel: "No image", isActive: true, isDefault: false, printOnReceipt: true, showOnCustomerDisplay: true }, { bankName: "BCEL", id: "b1", isActive: true, shortCode: "BCEL", sortOrder: 1 }) === false, "no QR source must be excluded");
+});
+
+await check("contrast tokens and chrome variants stay distinct", () => {
+  const ocean = customerDisplayTemplateTokens("ocean-blue");
+  const sky = customerDisplayTemplateTokens("sky-blue");
+  const sunny = customerDisplayTemplateTokens("sunny-yellow");
+  const emerald = customerDisplayTemplateTokens("emerald-dream");
+  const coral = customerDisplayTemplateTokens("coral-minimal");
+  const red = customerDisplayTemplateTokens("minimal-premium-red");
+  const purple = customerDisplayTemplateTokens("minimal-premium-purple");
+  assert(ocean.secondaryText === "#082F49" && ocean.primary === "#075985", JSON.stringify(ocean));
+  assert(sky.secondaryText === "#0C4A6E" && sky.background !== "#FFFFFF", JSON.stringify(sky));
+  assert(sunny.secondaryText === "#422006" && sunny.totalBackground === "#EAB308", JSON.stringify(sunny));
+  assert(emerald.text === "#F0FDF4" && emerald.primary === "#059669", JSON.stringify(emerald));
+  assert(coral.primary === "#E11D48" && coral.totalBackground === "#BE123C", JSON.stringify(coral));
+  assert(red.primary === "#B91C1C" && purple.primary === "#5B21B6", "red/purple must stay deep, not pale");
+  const chromes = CUSTOMER_DISPLAY_TEMPLATES.map((id) => `${id}:${JSON.stringify(customerDisplayTemplateChrome(id))}`);
+  assert(new Set(chromes).size === 10, chromes.join(" | "));
+  assert(displayClient.includes("data-cd-chrome") && displayClient.includes("chromeClass"), "template chrome variants missing");
+});
+
+await check("fullscreen stays user-gesture and documents browser limits", () => {
+  assert(helper.includes("CUSTOMER_DISPLAY_BROWSER_CHROME_LIMITATION"), "browser chrome limitation must be documented");
+  assert(CUSTOMER_DISPLAY_BROWSER_CHROME_LIMITATION.toLowerCase().includes("toolbar"), CUSTOMER_DISPLAY_BROWSER_CHROME_LIMITATION);
+  assert(displayClient.includes("toggleFullscreen") && displayClient.includes("setDenied"), "denied fullscreen fallback missing");
+  assert(displayClient.includes("fullscreenchange"), "exit fullscreen must keep the display usable");
+  assert(!displayClient.includes("requestFullscreen().catch(() => undefined);"), "do not auto-request fullscreen on mount");
+  assert(displayClient.includes("display-mode: standalone"), "installed app/PWA display-mode should be recognized");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

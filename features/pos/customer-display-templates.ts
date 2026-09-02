@@ -62,6 +62,39 @@ export type CustomerDisplayThemeTokens = {
   totalText: string;
 };
 
+export type CustomerDisplayChrome = {
+  items: "flat" | "outlined" | "square" | "thin";
+  member: "card" | "flat" | "outlined" | "square";
+  panel: "banner" | "card" | "flat" | "rail" | "thin";
+  totals: "banner" | "card" | "full-width" | "outlined";
+};
+
+export function customerDisplayTemplateChrome(template: CustomerDisplayTemplate): CustomerDisplayChrome {
+  switch (template) {
+    case "bold-green":
+      return { items: "flat", member: "flat", panel: "banner", totals: "full-width" };
+    case "sky-blue":
+      return { items: "thin", member: "card", panel: "card", totals: "card" };
+    case "sunny-yellow":
+      return { items: "flat", member: "square", panel: "banner", totals: "banner" };
+    case "premium-dark":
+      return { items: "square", member: "card", panel: "rail", totals: "outlined" };
+    case "emerald-dream":
+      return { items: "thin", member: "card", panel: "rail", totals: "card" };
+    case "coral-minimal":
+      return { items: "flat", member: "flat", panel: "flat", totals: "outlined" };
+    case "premium-dark-green":
+      return { items: "square", member: "square", panel: "rail", totals: "full-width" };
+    case "minimal-premium-red":
+      return { items: "outlined", member: "outlined", panel: "thin", totals: "outlined" };
+    case "minimal-premium-purple":
+      return { items: "thin", member: "flat", panel: "banner", totals: "banner" };
+    case "ocean-blue":
+    default:
+      return { items: "thin", member: "square", panel: "thin", totals: "outlined" };
+  }
+}
+
 const DARK_TEXT = "#111827";
 const WHITE = "#FFFFFF";
 
@@ -99,14 +132,14 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
       };
     case "sky-blue":
       return {
-        accent: "#0369A1",
-        background: "#F0F9FF",
-        badgeBackground: "#0284C7",
+        accent: "#075985",
+        background: "#E0F2FE",
+        badgeBackground: "#0369A1",
         badgeText: WHITE,
-        border: "#0284C7",
+        border: "#0369A1",
         muted: "#0C4A6E",
         primary: "#0369A1",
-        secondaryText: "#075985",
+        secondaryText: "#0C4A6E",
         soft: "#BAE6FD",
         surface: WHITE,
         text: DARK_TEXT,
@@ -115,18 +148,18 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
       };
     case "sunny-yellow":
       return {
-        accent: "#A16207",
-        background: "#FFFBEB",
-        badgeBackground: "#FEF08A",
+        accent: "#854D0E",
+        background: "#FEF9C3",
+        badgeBackground: "#FACC15",
         badgeText: DARK_TEXT,
-        border: "#CA8A04",
+        border: "#A16207",
         muted: "#422006",
         primary: "#CA8A04",
-        secondaryText: "#713F12",
-        soft: "#FEF08A",
+        secondaryText: "#422006",
+        soft: "#FDE047",
         surface: WHITE,
         text: DARK_TEXT,
-        totalBackground: "#FEF08A",
+        totalBackground: "#EAB308",
         totalText: DARK_TEXT,
       };
     case "premium-dark":
@@ -136,9 +169,9 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
         badgeBackground: "#164E63",
         badgeText: "#ECFEFF",
         border: "#22D3EE",
-        muted: "#E2E8F0",
+        muted: "#F8FAFC",
         primary: "#22D3EE",
-        secondaryText: "#A5F3FC",
+        secondaryText: "#67E8F9",
         soft: "#083344",
         surface: "#0B1224",
         text: "#F8FAFC",
@@ -147,34 +180,34 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
       };
     case "emerald-dream":
       return {
-        accent: "#34D399",
+        accent: "#6EE7B7",
         background: "#022C22",
-        badgeBackground: "#064E3B",
+        badgeBackground: "#065F46",
         badgeText: "#ECFDF5",
         border: "#34D399",
-        muted: "#D1FAE5",
-        primary: "#10B981",
-        secondaryText: "#A7F3D0",
+        muted: "#A7F3D0",
+        primary: "#059669",
+        secondaryText: "#D1FAE5",
         soft: "#064E3B",
         surface: "#04332A",
-        text: "#ECFDF5",
-        totalBackground: "#10B981",
-        totalText: "#022C22",
+        text: "#F0FDF4",
+        totalBackground: "#059669",
+        totalText: "#ECFDF5",
       };
     case "coral-minimal":
       return {
-        accent: "#E11D48",
-        background: "#FFF7F7",
-        badgeBackground: "#FFE4E6",
-        badgeText: "#9F1239",
+        accent: "#BE123C",
+        background: WHITE,
+        badgeBackground: "#FECDD3",
+        badgeText: "#881337",
         border: "#E11D48",
-        muted: "#881337",
+        muted: "#9F1239",
         primary: "#E11D48",
-        secondaryText: "#9F1239",
+        secondaryText: "#881337",
         soft: "#FFE4E6",
         surface: WHITE,
         text: DARK_TEXT,
-        totalBackground: "#E11D48",
+        totalBackground: "#BE123C",
         totalText: WHITE,
       };
     case "premium-dark-green":
@@ -184,9 +217,9 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
         badgeBackground: "#14532D",
         badgeText: "#DCFCE7",
         border: "#4ADE80",
-        muted: "#BBF7D0",
+        muted: "#DCFCE7",
         primary: "#4ADE80",
-        secondaryText: "#86EFAC",
+        secondaryText: "#BBF7D0",
         soft: "#052E16",
         surface: "#07140D",
         text: "#F8FAFC",
@@ -202,7 +235,7 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
         border: "#B91C1C",
         muted: "#7F1D1D",
         primary: "#B91C1C",
-        secondaryText: "#7F1D1D",
+        secondaryText: "#450A0A",
         soft: "#FEE2E2",
         surface: "#FFF7F7",
         text: DARK_TEXT,
@@ -211,14 +244,14 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
       };
     case "minimal-premium-purple":
       return {
-        accent: "#5B21B6",
+        accent: "#4C1D95",
         background: "#FAF5FF",
-        badgeBackground: "#6D28D9",
+        badgeBackground: "#5B21B6",
         badgeText: WHITE,
-        border: "#7C3AED",
-        muted: "#5B21B6",
-        primary: "#6D28D9",
-        secondaryText: "#5B21B6",
+        border: "#5B21B6",
+        muted: "#4C1D95",
+        primary: "#5B21B6",
+        secondaryText: "#3B0764",
         soft: "#EDE9FE",
         surface: WHITE,
         text: DARK_TEXT,
@@ -228,14 +261,14 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
     case "ocean-blue":
     default:
       return {
-        accent: "#0C4A6E",
+        accent: "#082F49",
         background: WHITE,
-        badgeBackground: "#0369A1",
+        badgeBackground: "#075985",
         badgeText: WHITE,
-        border: "#0369A1",
+        border: "#0C4A6E",
         muted: "#0F172A",
-        primary: "#0369A1",
-        secondaryText: "#0C4A6E",
+        primary: "#075985",
+        secondaryText: "#082F49",
         soft: "#E0F2FE",
         surface: "#F8FAFC",
         text: DARK_TEXT,

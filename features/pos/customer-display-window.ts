@@ -1,3 +1,13 @@
+/**
+ * Browser toolbar/taskbar cannot always be removed by normal web code.
+ * Customer Display fullscreen is user-gesture only (POS Maximize or the
+ * on-display control). Denied or exited fullscreen must leave the sale
+ * display usable. Installed app / PWA display-mode can hide browser chrome
+ * when the host already provides it; this phase does not add a desktop wrapper.
+ */
+export const CUSTOMER_DISPLAY_BROWSER_CHROME_LIMITATION =
+  "Browser toolbar and taskbar cannot always be removed by normal web code. Use a user-gesture fullscreen control or an installed app/PWA display mode when available.";
+
 export const CUSTOMER_DISPLAY_PATH = "/customer-display";
 export const CUSTOMER_DISPLAY_WINDOW_NAME = "ego-pos-customer-display";
 export const CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH = 1280;

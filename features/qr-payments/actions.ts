@@ -2,12 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
-import { writeFailure, writeSuccess } from "@/lib/db/write-context";
+import { requireSession } from "@/lib/auth/session";
+import { tenantFromSession, writeFailure, writeSuccess } from "@/lib/db/write-context";
+import { buildCustomerDisplayQrCatalog } from "@/features/pos/customer-display-qr";
 import {
   archiveQrPaymentAccount,
   archiveQrPaymentBank,
   deleteQrPaymentAccount,
   deleteQrPaymentBank,
+  getQrPaymentSettingsSnapshot,
   saveQrPaymentAccount,
   saveQrPaymentBank,
   setDefaultQrPaymentAccount,
@@ -74,6 +77,16 @@ export async function deleteQrPaymentAccountAction(accountId: string) {
     const data = await deleteQrPaymentAccount(accountId, await requireWritePermission(WRITE_PERMISSIONS.settingsManage));
     revalidateQrPaths();
     return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function getCustomerDisplayQrCatalogAction() {
+  try {
+    const session = await requireSession();
+    const snapshot = await getQrPaymentSettingsSnapshot(tenantFromSession(session));
+    return writeSuccess(buildCustomerDisplayQrCatalog(snapshot.accounts, snapshot.banks));
   } catch (error) {
     return writeFailure(error);
   }

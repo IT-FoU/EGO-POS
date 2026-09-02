@@ -38,6 +38,7 @@ function assert(condition: unknown, message: string): asserts condition {
 const root = process.cwd();
 const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
 const actions = readFileSync(join(root, "features/qr-payments/actions.ts"), "utf8");
+const qrToggle = readFileSync(join(root, "components/layout/customer-display-qr-toggle.tsx"), "utf8");
 const repo = readFileSync(join(root, "features/qr-payments/prisma-repository.ts"), "utf8");
 
 check("logo choose does not persist before confirm", () => {
@@ -93,6 +94,13 @@ check("QR image workflow and delete stay account-scoped", () => {
   );
   assert(catalog.map((bank) => bank.id).join(",") === "one,two", "multiple accounts must stay selectable");
   assert(customerDisplayQrBanks(catalog.filter((bank) => bank.id !== "two")).map((bank) => bank.id).join(",") === "one", "delete one account must keep the others");
+});
+
+check("cashier QR catalog hydrates from settings snapshot, not POS mount", () => {
+  assert(actions.includes("getCustomerDisplayQrCatalogAction"), "shared catalog action missing");
+  assert(actions.includes("getQrPaymentSettingsSnapshot"), "catalog must reuse the QR settings repository");
+  assert(qrToggle.includes("getCustomerDisplayQrCatalogAction"), "header selector must hydrate without POS page");
+  assert(!qrToggle.includes("writeCustomerDisplayQrCatalog(qrBanks)"), "header must not depend on POS page side effect");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

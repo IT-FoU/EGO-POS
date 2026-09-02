@@ -16,8 +16,16 @@ export const DEFAULT_CUSTOMER_DISPLAY_QR_INTENT: CustomerDisplayQrIntent = {
   visible: false,
 };
 
+export function hasPayableCustomerDisplayQrSource(bank: Pick<QrBank, "qrImageUrl">) {
+  return Boolean(bank.qrImageUrl?.trim());
+}
+
+export function isSelectableCustomerDisplayQr(bank: QrBank) {
+  return bank.showOnCustomerDisplay !== false && hasPayableCustomerDisplayQrSource(bank);
+}
+
 export function customerDisplayQrBanks(banks: QrBank[]) {
-  return banks.filter((bank) => bank.showOnCustomerDisplay !== false && Boolean(bank.qrImageUrl));
+  return banks.filter(isSelectableCustomerDisplayQr);
 }
 
 export function readCustomerDisplayQrIntent(): CustomerDisplayQrIntent {
@@ -52,19 +60,34 @@ export function writeCustomerDisplayQrCatalog(banks: QrBank[]) {
   syncCustomerDisplayQrAfterCatalogChange();
 }
 
+export function isCustomerDisplayQrAccountEligible(
+  account: QrPaymentAccountRecord,
+  bank?: QrPaymentBankRecord,
+) {
+  return Boolean(
+    account.isActive
+    && account.showOnCustomerDisplay !== false
+    && bank?.isActive
+    && hasPayableCustomerDisplayQrSource(account),
+  );
+}
+
 export function buildCustomerDisplayQrCatalog(
   accounts: QrPaymentAccountRecord[],
   banks: QrPaymentBankRecord[],
 ) {
+  const banksById = new Map(banks.map((bank) => [bank.id, bank]));
   return customerDisplayQrBanks(
     accounts
-      .filter((account) => account.isActive)
-      .map((account) =>
-        mapQrPaymentAccountToPosBank({
+      .filter((account) => isCustomerDisplayQrAccountEligible(account, banksById.get(account.bankId)))
+      .map((account) => {
+        const bank = banksById.get(account.bankId);
+        return mapQrPaymentAccountToPosBank({
           ...account,
-          bankName: banks.find((bank) => bank.id === account.bankId)?.bankName ?? "",
-        }),
-      ),
+          bankName: bank?.bankName ?? "",
+          ...(bank?.logoUrl ? { logoUrl: bank.logoUrl } : {}),
+        });
+      }),
   );
 }
 

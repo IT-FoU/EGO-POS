@@ -107,6 +107,7 @@ export type QrBank = {
   accountName: string;
   accountNumber: string;
   displayLabel?: string;
+  logoUrl?: string;
   qrImageUrl?: string;
   showOnCustomerDisplay?: boolean;
 };

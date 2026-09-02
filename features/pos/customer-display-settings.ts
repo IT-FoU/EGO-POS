@@ -10,6 +10,10 @@ import {
   parseCustomerDisplayQrStyle,
   type CustomerDisplayQrStyle,
 } from "@/features/pos/customer-display-qr-style";
+import {
+  NEUTRAL_CUSTOMER_DISPLAY_WELCOME,
+  normalizeCustomerDisplayPromotionMessages,
+} from "@/features/pos/customer-display-copy";
 
 export const CUSTOMER_DISPLAY_SETTINGS_KEY = DemoStorageKeys.customerDisplaySettings;
 
@@ -35,7 +39,7 @@ export const DEFAULT_CUSTOMER_DISPLAY_SETTINGS: CustomerDisplaySettings = {
   autoReturnSeconds: 5,
   media: [],
   promotionMessages: [
-    "Welcome to EGO POS",
+    NEUTRAL_CUSTOMER_DISPLAY_WELCOME,
     "Member discounts available today",
     "Thank you for shopping with us",
   ],
@@ -66,9 +70,8 @@ export function normalizeCustomerDisplaySettings(
         : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds,
     media: Array.isArray(source.media) ? source.media : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.media,
     promotionMessages:
-      Array.isArray(source.promotionMessages) && source.promotionMessages.length > 0
-        ? source.promotionMessages
-        : DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages,
+      normalizeCustomerDisplayPromotionMessages(source.promotionMessages)
+      ?? DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages,
     qrDisplayStyle: parseCustomerDisplayQrStyle(source.qrDisplayStyle),
     template: parseCustomerDisplayTemplate(source.template ?? source.theme),
   };

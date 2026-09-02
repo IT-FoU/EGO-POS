@@ -58,7 +58,7 @@ export type SaveQrPaymentAccountInput = {
 };
 
 export function mapQrPaymentAccountToPosBank(
-  account: QrPaymentAccountRecord & { bankName: string },
+  account: QrPaymentAccountRecord & { bankName: string; logoUrl?: string },
 ): QrBank {
   return {
     accountName: account.accountName,
@@ -67,6 +67,7 @@ export function mapQrPaymentAccountToPosBank(
     displayLabel: account.displayLabel,
     id: account.id,
     showOnCustomerDisplay: account.showOnCustomerDisplay,
+    ...(account.logoUrl ? { logoUrl: account.logoUrl } : {}),
     ...(account.qrImageUrl ? { qrImageUrl: account.qrImageUrl } : {}),
   };
 }
