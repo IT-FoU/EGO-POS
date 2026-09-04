@@ -6,8 +6,8 @@
   "terminals": [
     {
       "name": "dev-server",
-      "command": "npm run dev",
-      "description": "Next.js dev server for EGO POS on http://localhost:3000"
+      "command": "bash .cursor/start.sh && npm run dev",
+      "description": "Ensures PostgreSQL is running, then starts the Next.js dev server for EGO POS on http://localhost:3000"
     }
   ],
   "ports": [
