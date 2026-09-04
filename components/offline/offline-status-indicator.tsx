@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CloudOff, Cloud, RefreshCw, X } from "lucide-react";
 import { useConnectivity } from "@/features/offline/pwa/use-connectivity";
 import { getOfflineFeatureFlag } from "@/features/offline/feature-flags";
@@ -40,12 +40,21 @@ export function OfflineStatusIndicator(props: OfflineStatusIndicatorProps) {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const namespace = resolveNamespace(props);
-  const flag = getOfflineFeatureFlag(namespace ?? undefined);
-  const canManage = canManageStoreSettings(props.roles);
+  const { companyId, branchId, terminalId, roles } = props;
+  // Memoize by primitive identity so effects/callbacks don't loop each render.
+  const namespace = useMemo(
+    () => resolveNamespace({ companyId, branchId, terminalId, roles: null }),
+    [companyId, branchId, terminalId],
+  );
+  const writeEnabled = useMemo(
+    () => getOfflineFeatureFlag(namespace ?? undefined).writeEnabled,
+    [namespace],
+  );
+  const flag = { writeEnabled };
+  const canManage = canManageStoreSettings(roles);
 
   const loadDiagnostics = useCallback(async () => {
-    if (!namespace || !flag.writeEnabled) {
+    if (!namespace || !writeEnabled) {
       // Diagnostics without a live offline DB: report a safe empty snapshot.
       setDiagnostics({
         pending: 0,
@@ -97,7 +106,7 @@ export function OfflineStatusIndicator(props: OfflineStatusIndicatorProps) {
         error: error instanceof Error ? error.message : "Diagnostics unavailable",
       });
     }
-  }, [namespace, flag.writeEnabled]);
+  }, [namespace, writeEnabled]);
 
   useEffect(() => {
     if (open) void loadDiagnostics();
