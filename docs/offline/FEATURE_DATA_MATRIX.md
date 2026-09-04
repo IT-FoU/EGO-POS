@@ -12,7 +12,8 @@ Method: read-only static analysis of `app/`, `features/`, `lib/`, `prisma/schema
 
 | Item | Finding |
 |---|---|
-| Branch | `cursor/offline-first-phase-0-71b5` (off `main`) |
+| Branch | `cursor/offline-first-phase-0-71b5` |
+| PR base / compare | base `feature/offline-first-mini-mart` ← compare `cursor/offline-first-phase-0-71b5` (never `main`) |
 | Base commit | `a2b0d46` (`feat: polish customer display experience`) |
 | Framework | Next.js **16.2.12** App Router, React **19.2.7**, TypeScript |
 | Deploy target | Cloudflare Workers via OpenNext (`@opennextjs/cloudflare` 1.20.2, `wrangler` 4.126.0, `open-next.config.ts`, `wrangler.jsonc`) |
@@ -47,7 +48,7 @@ Route group `app/(dashboard)/**` plus `app/(dashboard)/pos` and the standalone `
 | Platform provisioning | `app/(platform)/**` (5 files) — business/store creation, plan/template setup |
 | Plans / subscriptions / platform users / platform audit / platform settings / cross-store analytics | `SuperAdmin`, `SetupAdmin`, `Plan`, `SaaSSubscription`, `PlatformSetting`, `PlatformAuditLog*`, `Backup`, `CompanyAccessLog` models and their routes |
 
-These are gated separately (see §8) and are **out of scope** for offline. No offline cache rule may expose them.
+These are gated separately (see §10) and are **out of scope** for offline. No offline cache rule may expose them.
 
 ## 4. Legend
 
@@ -81,7 +82,7 @@ These are gated separately (see §8) and are **out of scope** for offline. No of
 | `/pos` checkout (`app/(dashboard)/pos/page.tsx` → `PosPageClient`) | SC → client | `getPosSnapshot()`→`getPrismaPosSnapshot` (products+stock, settings, customers+membership, active promotions, membership levels, open cash session, QR banks) **SSR**; recent sales/held bills/current session via **API** after hydration | Complete sale: **SA** `completeSaleAction`→`writeCompletePrismaSale` | `Sale`, `SaleItem`, `SalePayment`, `Product`, `ProductUnit`, `InventoryBalance`, `StockMovement`, `InventoryLot`, `InventoryLotAllocation`, `Promotion`, `PromotionUsage`, `Customer`, `LoyaltyPointLedger`, `CashSession`, `CompanySetting` | `full` (cash); `limited` (QR/transfer/card → cashier-confirmed/pending verification) | Immutable sale command keyed by `operationId`; idempotent cloud accept; never duplicate/renumber; server re-validates price/tax/promotion/loyalty/stock |
 | Cart/units/tax/discount/promotion preview | client | in-memory from POS snapshot | n/a (preview) | — | `full` | Shared pure calc (see §7); server recomputes authoritatively |
 | Barcode search / product filter / category browse | client | POS snapshot (in-memory) | n/a | `Product` | `full` | Local IndexedDB lookup replaces in-memory once adapters land |
-| Local stock guard | client | `pos-cart.ts` (`maxSellQty`, `cartExceedsStock`) | n/a | `InventoryBalance` | `full` | Enforce **terminal stock allocation** (see §10), not a stale shared number |
+| Local stock guard | client | `pos-cart.ts` (`maxSellQty`, `cartExceedsStock`) | n/a | `InventoryBalance` | `full` | Enforce **terminal stock allocation** (see §11), not a stale shared number |
 | Customer Display (`/customer-display` → `CustomerDisplayClient`) | SC(thin)→client | **LS** mirror `ego.pos.customerDisplay.state` (800ms poll + `storage` event) + display settings/QR intent | none (display only) | none | `full` | No cloud dependency; keep same-device LS bridge |
 | Receipt reprint (POS) | client | `checkout-receipt.ts` snapshot; `/api/pos/sales/[id]/receipt`, `/reprint` **API** | reprint audit **API** | `Sale`, `AuditLog` | `full` (from local immutable receipt snapshot) | Reprint uses immutable local snapshot; never recompute past prices |
 
@@ -121,13 +122,13 @@ These are gated separately (see §8) and are **out of scope** for offline. No of
 |---|---|---|---|---|---|
 | `/customers` list | SSR `getCustomersSnapshot` | none (read-only list) | `Customer`, `MembershipLevel`, `LoyaltyPointLedger`, `CustomerPayment`, `Sale`, `CompanySetting` | `read-only` | — |
 | `/customers/new` | SSR `levels` | **SA** `createCustomerAction` (member code via advisory lock) | `Customer`, `MembershipLevel` | `full` | Field/version conflict; local id → cloud id |
-| `/customers/[id]` detail | SSR `getCustomerDetail` | **SA** `updateCustomerAction`, `createCustomerPaymentAction` (`adjustCustomerPointsAction` exists, unwired) | `Customer`, `CustomerPayment`, `Sale`, `LoyaltyPointLedger`, `MembershipLevel` | `full` (profile/payment); | Field-level merge, conflict on overlapping protected fields |
+| `/customers/[id]` detail | SSR `getCustomerDetail` | **SA** `updateCustomerAction`, `createCustomerPaymentAction` (`adjustCustomerPointsAction` exists, unwired) | `Customer`, `CustomerPayment`, `Sale`, `LoyaltyPointLedger`, `MembershipLevel` | `full` (profile/payment) | Field-level merge, conflict on overlapping protected fields |
 | `/membership-levels` | SSR `getMembershipLevels` | **SA** `create/update/archive/deleteMembershipLevelAction` | `MembershipLevel`, `Customer`(count), `PromotionMembershipLevel`(count) | `read-only` offline / `full` online | Base-version; archive `isActive:false`; delete→tombstone if unreferenced |
 | Loyalty earning | server at checkout (`writeCompletePrismaSale`→`applyLoyaltyLedger`) | ledger event | `LoyaltyPointLedger`, `Customer` | `full` | Idempotent ledger event tied to sale/operation id (`assertNoDuplicateLedgerEntry`) |
-| Loyalty redemption | server `calculateLoyaltyRedemption` (row lock) | ledger event | `LoyaltyPointLedger`, `Customer` | `limited` | Requires **server-issued offline redemption allowance** (see §10); block redemption when no allowance; never double-spend |
+| Loyalty redemption | server `calculateLoyaltyRedemption` (row lock) | ledger event | `LoyaltyPointLedger`, `Customer` | `limited` | Requires **server-issued offline redemption allowance** (see §11); block redemption when no allowance; never double-spend |
 | `/promotions` list/new/[id]/edit | SSR `getPromotionsSnapshot`/`getPromotionDetail` | **SA** `create/update/archivePromotionAction` | `Promotion`, `PromotionProduct`, `PromotionCategory`, `PromotionMembershipLevel`, `PromotionUsage` | `read-only` offline / `full` online | Versioned snapshot **must be added** (none today); editing terminal uses own version only after effective date; not distributed until synced |
 | Promotion evaluation at checkout | pure `promotion-checkout.ts` (client preview + server authoritative) | `recordPromotionUsage` (server) | `Promotion`, `PromotionUsage` | `full` | Record promotion id+version+inputs+result on sale; server never silently recomputes total |
-| `/promotions/{calendar,analytics,stack-rules,integration-map}` | SSR / static | none | `Promotion` | `read-only` / `online-only` (analytics/static) | — |
+| `/promotions/{calendar,analytics,stack-rules,integration-map}` | SSR / static | none | `Promotion` | `read-only` / `online-only` (see §12) | — |
 
 ### 6.5 Dashboard, reports, settings, QR payments, activity logs
 
@@ -137,7 +138,7 @@ These are gated separately (see §8) and are **out of scope** for offline. No of
 | `/reports` + sub-reports | SSR `getReportsPageData`/`getReportsSnapshot`; filters via `router.push`+`RR` (also `GET /api/reports`, unused by UI) | none | `Sale`, `SaleItem`, `Refund`, `SalePayment`, `Purchase`, `SupplierPayable`, `Customer`, `Product`, `InventoryBalance`, `InventoryLot`, `Supplier`, `Category`, `User` | `read-only` (bounded local history) | Coverage-labelled; export from local history only |
 | `/settings` (company/receipt/tax/currency/loyalty) | SSR `getPrismaSettings` (also `GET/PATCH /api/settings`, unused by UI) | **SA** `updateSettingsAction` | `Company`, `CompanySetting` | `read-only` offline / `full` online (queued w/ base version) | Base-version conflict; visibly pending until synced |
 | QR payment banks/accounts | SSR `getQrPaymentSettingsSnapshot`, `getPrismaPosQrBanks` | **SA** `save/archive/deleteQrPaymentBankAction`, account actions | `QrPaymentBank`, `QrPaymentAccount`, `Branch` | `read-only` offline / `full` online; display cache in **LS** | Base-version; catalogue cached to LS for Customer Display |
-| Customer Display settings / company logo / receipt-print-mode | **LS** only | **LS** only (`writeCustomerDisplaySettingsToStorage`, `writeCompanyLogoUrl`, `writeReceiptPrintModePreference`) | none (browser-local) | `full` | Client-only prefs; note: `receiptPrintMode` and logo are **not persisted to Postgres today** (gap) |
+| Customer Display settings / company logo / receipt-print-mode | **LS** only | **LS** only (`writeCustomerDisplaySettingsToStorage`, `writeCompanyLogoUrl`, `writeReceiptPrintModePreference`) | none (browser-local) | `full` | Client-only prefs; note: `receiptPrintMode` and logo are **not persisted to Postgres today** (see §15) |
 | Staff / roles / permissions / approval rules | SSR `getStaffAccessSnapshot` | **SA** `saveStaffMemberAction`, `deactivateStaffMemberAction`, `saveRolePermissionsAction`, `saveApprovalRuleAction`, `decideApprovalAction` | `CompanyUser`, `User`, `UserRole`, `Role`, `RolePermission`, `Permission`, `ApprovalRule`, `Approval` | `online-only` to modify; `read-only` cached policy snapshot offline | Cloud authoritative; no offline editing of controls governing other users/devices |
 | Store activity logs | **API** `GET /api/store/activity-logs` | none | `StoreActivityLog` | `read-only` (online pagination) / bounded local | — |
 
@@ -153,7 +154,7 @@ These already exist as pure/reusable TypeScript and should back both online and 
 | `features/pos/cash-movement.ts`, `features/cash-sessions/cash-session-calculator.ts` | expected-cash math, cash-out guard |
 | `features/pos/return-allocator.ts` | return amount allocation |
 | `features/promotions/promotion-checkout.ts` | `isPromotionScheduleActive`, `isPromotionEligibleForLine`, `calculatePromotionDiscount`, `applyLoadedPromotions` (pure) vs `applyActivePromotions` (server tx) |
-| `features/loyalty/loyalty-service.ts` | earn/redeem/tier logic — **server-only today**; redemption/earn math must be extracted into a shared pure calculator for offline preview while cloud stays authoritative |
+| `features/loyalty/loyalty-service.ts` | earn/redeem/tier logic — **server-only today**; redemption/earn math must be extracted into a shared pure calculator for offline preview while cloud stays authoritative (see §15) |
 
 Server-authoritative write cores that must remain the cloud rule layer and must **not** be imported into browser bundles: `features/pos/prisma-repository.ts`, `features/pos/return-repository.ts`, `features/pos/post-sale-repository.ts`, `features/inventory/stock-concurrency.ts`, `features/*/prisma-repository.ts`.
 
@@ -177,27 +178,106 @@ Every place Mini Mart UI currently reaches the network/server directly, with the
 
 **Prisma/server-only imports in client bundles:** none confirmed harmful. `features/pos/post-sale-client.ts` has **dead imports** of `post-sale-repository` symbols it never calls (uses `fetch` only) — these should be removed during Phase 5/6 to avoid pulling server code into the client graph.
 
-## 9. Existing identity, terminal and tenant context
+## 9. Authentication, tenant, branch, warehouse & terminal/PosDevice context
 
-| Concept | Source today | Offline implication |
+### 9.1 Authentication
+
+- Provider: NextAuth credentials (`app/api/auth/[...nextauth]/route.ts`, `lib/auth/options.ts`). Session strategy is JWT; `requireSession()` (`lib/auth/session.ts`) is the server gate for every store route.
+- Merchant login builds the session user from the database in `lib/auth/options.ts` (`buildSessionUserFromDatabase`, JWT/session callbacks at lines ~110, ~260, ~278); staff login path also present (`staffUser`, line ~145).
+- There is **no offline unlock** today. Offline requires a device-local lock credential + cached identity (requirements §5.3) — not implemented.
+
+### 9.2 Tenant / branch / warehouse resolution
+
+| Concept | Source | File |
 |---|---|---|
-| Tenant scope | JWT session → `tenantFromSession()` (`companyId`, `userId`, `branchId?`, `warehouseId?`); `resolveTenantScope()` validates branch/warehouse | Local DB namespace per `companyId+branchId+terminalId`; enforce isolation |
-| Terminal identity | `CompanyUser.assignedTerminal` (default `"POS-01"`) copied into JWT; `TERMINAL_OPTIONS` static list; POS policy `createPosPermissionPolicyFromDatabase` | **Not** a registered device. New `deviceId` + terminal registration/revocation required (requirements §5.3, §10) |
-| `PosDevice` model | Exists (`id, companyId, branchId, deviceName, deviceType, serialNumber, isActive`) but is **not** a registered offline terminal with policy/cursor/lease | May be extended or superseded by `TerminalDevice`; do not assume it covers offline needs |
-| Permissions | Two layers: static `STORE_PERMISSION_MATRIX` (UI/API store actions) + DB `Permission.key` rows (`assertPermission`) | Cache read-only policy snapshot + version + last security-sync timestamp; enforce grace expiry |
-| Approvals | `ApprovalRule` + `approval-engine.ts` (server) | Cache approval policy read-only; offline actions create pending commands using cached policy |
-| Auth enforcement | `middleware.ts` applies `withAuth` only to `/dashboard/*`; other store routes rely on layout `requireSession()`; admin cookie gates `/super-admin`, `/igo-admin` | Service worker/nav-fallback must not bypass auth or cache authenticated HTML unsafely |
+| Tenant scope object `{ companyId, userId, branchId?, warehouseId? }` | `tenantFromSession(session)` | `lib/db/write-context.ts` |
+| Branch/warehouse validation & scope | `resolveTenantScope(tenant)` (owner → all branches/warehouses; non-owner → assigned branch + its warehouses; validates provided ids) | `lib/db/tenant-scope.ts` |
+| Session fields | `activeCompanyId`, `activeBranchId`, `activeWarehouseId`, `activeCompanyName`, `roles`, `assignedTerminal`, `locale`, `allowPOSAccess`, `allowBackOfficeAccess` | `lib/auth/options.ts` |
+| Company switch | `POST /api/auth/select-company` rewrites JWT (branch/warehouse/terminal/roles) | `lib/auth/update-active-company-session.ts` |
 
-## 10. Cloud schema & sync-API additions required (planned, not implemented)
+**Offline implication:** the local database must be namespaced per `companyId + branchId + terminalId` and every bootstrap/pull/push must re-apply the same tenant + branch scope so one store's cache is never readable by another in the same browser profile.
+
+### 9.3 Terminal / `PosDevice` context (current) vs offline device (required)
+
+| Aspect | Current implementation | Evidence |
+|---|---|---|
+| Terminal identity | A string `assignedTerminal` on `CompanyUser`, default `"POS-01"`, copied into JWT/session | `lib/auth/options.ts:110,145,260,278`; `features/access-control/prisma-repository.ts:59` (`String(row.assignedTerminal ?? "POS-01")`) |
+| Terminal options | Static list `["POS-01","POS-02","POS-03","Back Office"]` in staff settings UI | `features/settings/components/staff-control-section.tsx` |
+| POS policy terminal | `createPosPermissionPolicyFromDatabase(... assignedTerminal ?? "POS-01")` | `features/access-control/pos-policy-loader.ts` |
+| `PosDevice` model | Exists: `{ id, companyId, branchId, deviceName, deviceType, serialNumber, isActive }`, indexed `(companyId, branchId)`, mapped `pos_devices` | `prisma/schema.prisma:1340` |
+| Registration / revocation / policy cursor / lease | **Not present** — `PosDevice` has no registration handshake, revocation state, policy version, sync cursor, receipt range, or stock lease | schema review |
+
+**Constraint:** `PosDevice` and `CompanyUser.assignedTerminal` are **insufficient** as an offline terminal identity. A registered `TerminalDevice` (non-secret `deviceId`, owner/manager activation, revocable state, policy version, sync cursor) is required per requirements §5.3/§10 (see §11 and §13). A browser profile must not be automatically trusted as a terminal.
+
+## 10. Security boundaries: middleware, route protection & service-worker cache rules
+
+### 10.1 Current middleware (`middleware.ts`)
+
+- `withAuth` (NextAuth) is applied **only** to `/dashboard/:path*` (see `dashboardAuth` and the final `if (!pathname.startsWith("/dashboard")) return NextResponse.next()`). Other store routes (`/pos`, `/reports`, `/settings`, `/customers`, …) are **not** protected by middleware; they rely on the `(dashboard)` layout `requireSession()` server gate instead.
+- Admin surfaces are cookie-gated in middleware: `/super-admin` and `/igo-admin` require `igo_super_admin_session` (`ADMIN_COOKIE`); login routes are allow-listed.
+- Dev-only host canonicalization (`127.0.0.1:3000` → `localhost:3000`) and stripping of `username`/`password` query params on `/login`.
+- `config.matcher`: `/login`, `/register`, `/auth`, `/dashboard/:path*`, `/super-admin/:path*`, `/api/super-admin/login`, `/igo-admin/:path*`, `/api/igo-admin/:path*`.
+
+### 10.2 Offline security boundaries (design constraints for later phases)
+
+- **Never cache authenticated server HTML** that could expose another user's/store's data. The service worker must cache only the immutable app shell + hashed static assets (`_next/static/*`, already `immutable` via `public/_headers`) + explicitly approved Mini Mart shell routes.
+- **Never cache** any excluded admin surface (§3.2), any `/api/**` response containing secrets/PII, or NextAuth endpoints.
+- The navigation fallback that lets an installed PWA open the POS shell offline must not bypass the `requireSession()` / offline-unlock gate: an unauthenticated/locked device shows the lock/login screen, not cached store data.
+- Because middleware auth does not cover all store routes, the offline runtime must enforce the offline authorization gate (registered device + unlock + non-expired grace + policy version) in the client shell and re-verify on the server at every sync (requirements §9). Client policy is a temporary gate, never the final authority.
+- Local data at rest: minimize cached sensitive fields; device-bound encrypted storage for the lock credential; **do not** cache plaintext passwords, tokens, DB URLs, Hyperdrive/Cloudflare/Supabase secrets, or `.env` values (requirements §9). Browser encryption limits must be documented, not overstated.
+
+## 11. Terminal/device & receipt-number design constraints
+
+### 11.1 Device / terminal (required, not implemented)
+
+- One non-secret persistent `deviceId` generated on first use, registered with the cloud when online; requires assigned terminal or explicit owner/manager activation before offline writes are enabled.
+- Revocable device registration with human-readable terminal name; server-side disable/role-change/forced-sign-out applied at next connection before further writes; UI shows last policy sync time.
+- Default 7-day offline authorization grace (configurable per company); on expiry, reads remain but new financial/inventory writes are blocked until online reauthorization.
+- New cloud records required (Prisma migration in a later phase): `TerminalDevice`, `OfflineSyncCursor` (see §13).
+
+### 11.2 Receipt / document numbers (current vs required)
+
+| Aspect | Current | Evidence |
+|---|---|---|
+| Sale number issuance/validation | `resolvePosSaleNo(tx, companyId, input.saleNo, prefix)` → reuse client `saleNo` if prefix matches & unused, else `getNextPosSaleNo` scans existing `sale.saleNo` for the prefix | `features/pos/prisma-repository.ts:76,92,115,367` |
+| Preview number | SSR `nextSaleNo=""` (display-only); client increments via `getFollowingPosSaleNo` | `features/pos/prisma-repository.ts:217`; `features/pos/sale-no.ts` |
+| Receipt number | Server sets `receiptNo: `RCPT-${saleNo}`` on create | `features/pos/prisma-repository.ts:563` |
+| Held-bill number | `createHoldReference()` → `HOLD-${Date.now().toString(36)}-${random}`; DB id is a separate UUID used in API paths | `features/pos/held-bills-repository.ts:22,171` |
+
+**Constraint:** the current "scan existing sale numbers for the next value" issuance **cannot** guarantee uniqueness across disconnected terminals. Offline requires a **server-reserved per-terminal receipt-number range** or an approved terminal-prefixed sequence (`TerminalReceiptRange`, §13). The cloud must preserve the printed offline reference on sync and never silently renumber a receipt the customer already holds; offline-printed receipts must show `Pending sync` without implying bank/payment verification.
+
+## 12. Non-functional / placeholder store flows (exact table)
+
+These flows exist in the UI but are placeholders, static, mock, or unwired today. Classification tells later phases whether to implement offline behavior or treat as excluded/out-of-scope. **Evidence lines are from the current source.**
+
+| Route / component | Current behavior | Evidence (file:line) | Offline classification | Excluded or must-implement |
+|---|---|---|---|---|
+| Promotions → import / export / bulk | Renders `PlaceholderPanel` "UI ready, backend … pending" | `features/promotions/components/promotions-list-client.tsx:264` (+ `PlaceholderPanel` def :481) | `online-only` | Excluded from offline (no backend) |
+| Promotions → minimum profit / auto-fix suggestion panels | Static `PlaceholderPanel` copy | `promotions-list-client.tsx:275,287` | `online-only` | Excluded (documentation UI) |
+| Promotions list "foundation/final enforcement" note | Static mock/demo note | `promotions-list-client.tsx:254` | n/a (label) | Excluded |
+| Promotion form live preview / forecast | Client mock math (`buildLivePosPreview`, forecast), not `promotion-checkout.ts` | `promotion-form.tsx:587` ("mock forecast … before backend"), `:800` ("mock promotion") | `online-only` (preview only) | Excluded from offline; real eval uses shared engine at checkout |
+| Promotion detail simulation | Empty placeholder `emptyPromotionSimulation()`; example uses mock product | `promotion-detail-client.tsx:191` ("mock prod…") | `read-only` | Excluded (display) |
+| `/promotions/stack-rules` | Hardcoded arrays; "Save Stack Rules" button has no handler; checkout uses `allowStacking:false` | `app/(dashboard)/promotions/stack-rules/page.tsx:52` | `online-only` | Excluded (not persisted/enforced) |
+| `/promotions/analytics` | Aggregates SSR data but member/non-member split hardcoded "62%/38%"; chart panels placeholder | `app/(dashboard)/promotions/analytics/page.tsx` | `read-only` (partial) | Implement offline read only for real aggregates; exclude mock panels |
+| `/promotions/integration-map` | Static documentation page | `app/(dashboard)/promotions/integration-map/page.tsx` | `online-only` | Excluded |
+| Reports → Export / Print / Schedule | `ExportModal` / `ScheduleModal` are UI-only; Print maps to export modal | `features/reports/components/reports-analytics-client.tsx:221,222,234,235,236` | `read-only` (export from local history only) | Implement offline export from bounded local history; schedule excluded |
+| `/reports/sales|inventory|products|customers|purchasing` sub-pages | Real SSR pages but not linked from the analytics hub (hub uses in-page modals) | audit of `app/(dashboard)/reports/**` | `read-only` | Implement offline read (bounded history) |
+| Customers → Import / Export | Modal shows "CSV and Excel workflow placeholder" | `features/customers/components/customers-list-client.tsx:336` | `online-only` | Excluded (no backend) |
+| Customer detail → points adjust | `adjustCustomerPointsAction` + `POST /api/customers/points-adjust` exist but **no UI wires them** | audit (`rg` found no `.tsx` caller) | `limited` | Implement offline only via loyalty allowance (§11.1); currently unwired |
+| Customer detail points history "redeem" column | Hardcoded `0` | audit of `customer-detail-client.tsx` | `read-only` | Fix as part of loyalty offline work |
+| Suppliers list → Pay / Deactivate | Buttons are placeholders; `archiveSupplierAction` exists but not wired | `features/suppliers/components/suppliers-list-client.tsx` (no mutation handlers); audit | `read-only` (list) | Implement supplier edit offline via `SupplierRepository`; list actions currently unwired |
+| Dashboard → `CloseDayPanel` | Implemented component but **not mounted** anywhere | `features/dashboard/components/close-day-panel.tsx` (only self-reference; no `.tsx` importer) | n/a | Excluded until wired |
+| `features/*/mock-data.ts` (`reports`, `customers`, `suppliers`, `promotions`) | Mock datasets present but **not imported** by live pages (all use Prisma) | `features/reports/mock-data.ts`, `features/customers/mock-data.ts`, `features/suppliers/mock-data.ts`, `features/promotions/mock-data.ts` | n/a | Excluded (dead/demo data; must not become offline source) |
+
+## 13. Cloud schema & sync-API additions required (planned, not implemented)
 
 Per requirements §10 (later phases, via Prisma migration + review; **no migration in Phase 0**):
 
 - Models: `TerminalDevice` (registration/state/revocation), `OfflineSyncCursor` (per device/store), `OfflineOperation` (unique `companyId + operationId`, status, actor/device metadata, result/error code), `TerminalReceiptRange` (stable receipt reference allocation), `TerminalStockAllocation` (offline sellable lease per product/unit/lot), `OfflineLoyaltyAllowance` (member/terminal redemption cap+expiry), optional conflict/repair records.
 - Sync API surface: device registration/activation + policy refresh; resumable bootstrap snapshot; cursor delta pull (versioned, tombstoned, ordered); batched idempotent command push (per-command result); sync diagnostics/status; conflict-resolution actions for Owner/Manager. All versioned, schema-validated, tenant-scoped, authorized.
 - Inventory safety: server-issued terminal sellable allocations; a terminal may sell only `allocated − local unsynced consumption`. GO BOX initial rollout = single-terminal gets the branch's approved allocation; design must already prevent multi-terminal oversell.
-- Receipt identity: server-reserved receipt-number range / terminal-prefixed sequence, preserved on sync; receipt shows `Pending sync` when printed offline.
 
-## 11. Conflict-policy summary (from requirements §6.4, mapped to this codebase)
+## 14. Conflict-policy summary (from requirements §6.4, mapped to this codebase)
 
 | Data/action | Offline behavior | Cloud resolution |
 |---|---|---|
@@ -211,7 +291,33 @@ Per requirements §10 (later phases, via Prisma migration + review; **no migrati
 | Refund/return/exchange/void | Only w/ local receipt + remaining qty + cached approval | Server validates original/remaining; conflict flagged |
 | Permission/role/security | Read cached snapshot only | Cloud authoritative; no offline edit |
 
-## 12. Recovery boundaries and guardrails (documented per Phase 0 task)
+## 15. Blockers and open questions (explicit)
+
+### 15.1 Stock / lot
+- **Terminal stock allocation does not exist.** Offline sales currently rely on the SSR snapshot's shared balance; two disconnected terminals could oversell. Requires `TerminalStockAllocation` leases (§13) and local consumption tracking; POS cart guard (`pos-cart.ts`) must enforce `allocated − local consumption`.
+- **Stock count rejects lot-tracked products** today (`INVENTORY_LOT_COUNT_UNSUPPORTED` in `features/inventory/prisma-repository.ts` / `stock-concurrency.ts`). Offline count needs a lot-aware workflow or an explicit block.
+- **Lot/expiry (FEFO)** consumption (`features/inventory/lot-reconciliation.ts`) must remain traceable in offline commands; adjustments/counts need `expectedSystemQuantity` (already used) preserved in the operation envelope.
+
+### 15.2 Loyalty
+- **Redemption is server-only and needs an allowance model.** `calculateLoyaltyRedemption` (`features/loyalty/loyalty-service.ts`, row-locked) cannot run safely offline; a server-issued `OfflineLoyaltyAllowance` (per member/terminal, capped, expiring) is required, and redemption must be **blocked** offline without a valid allowance (no double-spend). Earning is queueable/idempotent (`assertNoDuplicateLedgerEntry`).
+- **Loyalty math is not extracted as pure TS**, so an offline preview would risk drifting from the server. Earn/redeem calculators must be extracted into shared pure functions while cloud stays authoritative.
+- `adjustCustomerPointsAction` / `POST /api/customers/points-adjust` are unwired in the UI (§12); offline point adjustment is out-of-scope until wired.
+
+### 15.3 Payment
+- **QR/transfer/card cannot be cloud-verified offline.** They must be recorded as cashier-confirmed / pending verification per a store policy snapshot, and the receipt/sync status must say so; the system must never fabricate bank confirmation. Cash is fully supported offline.
+- **Receipt numbering cannot guarantee cross-terminal uniqueness offline** (§11.2) — needs `TerminalReceiptRange`.
+
+### 15.4 Approval
+- **Approval policy is server-evaluated** (`features/approvals/approval-engine.ts`, `ApprovalRule`, `evaluateApprovalRequirement`). Offline refund/return/void must use a **read-only cached approval policy snapshot** and create pending commands; no new privilege or manager approval may be inferred locally. Role/permission/approval **editing stays online-only** because it governs other users/devices.
+
+### 15.5 Architecture / other
+- **Two write patterns** (Server Actions for back office vs `/api/pos` for POS) must be unified behind the repositories in §8; parallel REST routes exist for back-office entities and can back sync.
+- **Promotion versioning does not exist** (in-place `Promotion` edits, `allowStacking:false`); offline requires a versioned promotion snapshot recorded on each sale.
+- **Terminal is not a registered device** (§9.3/§11.1).
+- **Some store prefs are browser-local only** (`receiptPrintMode`, company logo, customer-display appearance are not persisted to Postgres) — durability/tenancy decision needed.
+- **Middleware auth covers only `/dashboard/*`** (§10.1) — the SW/navigation-fallback design must not weaken auth or cache authenticated HTML unsafely.
+
+## 16. Recovery boundaries and guardrails (documented per Phase 0 task)
 
 - No clearing of the local queue/DB while unsynced commands exist; device-data removal requires online clean sync/export + owner confirmation.
 - No automatic reseeding; "empty list" never means "seed defaults" (existing code already uses explicit snapshots, not seed-on-empty).
@@ -219,22 +325,21 @@ Per requirements §10 (later phases, via Prisma migration + review; **no migrati
 - No user-visible false-success: distinguish `synced` / `syncing` / `offline_queued` / `needs_attention` / `blocked` (never imply cloud confirmation while queued).
 - Feature flag (design, default **disabled**): company + branch + terminal scoped, with read-only diagnostics available even when the write flag is off. Not implemented in Phase 0.
 
-## 13. Read-only checks performed (Phase 0)
+## 17. Read-only validation evidence (Phase 0)
 
-| Check | Command | Result |
-|---|---|---|
-| Type check | `npm run typecheck` (`tsc --noEmit`) | **PASS** (exit 0) |
-| Production build | `npm run build` (`next build`) | **PASS** (exit 0) only after exporting `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` to the local Postgres URL. Without it, `next build` fails with `no local hyperdrive connection string` (a pre-existing local build-env requirement; `npm run dev` sets this var automatically via `scripts/dev-local.cjs`, but `next build` does not). |
+Commands were run from `/workspace` on branch `cursor/offline-first-phase-0-71b5`. Exit codes captured via `$?`.
 
-No tests were modified and no runtime/production action was taken. Hardware/browser/device checks (POS computer, printer, scanner, customer monitor, Android, iPhone/PWA) are **WAITING** — not applicable in Phase 0 and never claimed as PASS without physical testing.
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Type check | `npm run typecheck` (`tsc --noEmit`) | **0 (PASS)** | No type errors emitted. |
+| Production build (no Hyperdrive var) | `npm run build` (`next build`) with `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` **unset** | **1 (FAIL)** | `unhandledRejection Error: … set the value of the 'CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE' variable …`; `telemetryMessage: 'no local hyperdrive connection string'`. Pre-existing local build-env requirement, not caused by Phase 0 docs. `npm run dev` sets this var automatically via `scripts/dev-local.cjs`; `next build` does not. |
+| Production build (with Hyperdrive var) | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgresql://postgres:postgres@127.0.0.1:5432/igo_pos?schema=public" npm run build` | **0 (PASS)** | `✓ Compiled successfully in 8.1s`; `✓ Generating static pages (90/90)`; route table printed (145 route lines incl. all `(dashboard)` and excluded admin routes as `ƒ` dynamic); `ƒ Proxy (Middleware)`. |
 
-## 14. Blockers and open questions (for later phases)
+No tests were modified and no runtime/production action was taken.
 
-1. **Promotion versioning does not exist** — checkout uses in-place `Promotion` edits with `allowStacking:false`; offline requires a versioned promotion snapshot recorded on each sale (schema/logic addition).
-2. **Loyalty logic is server-only** — `loyalty-service.ts` must have its pure earn/redeem math extracted for offline preview while cloud stays authoritative; redemption needs a new server-issued allowance model.
-3. **Terminal is not a registered device** — `CompanyUser.assignedTerminal` / `PosDevice` are insufficient; a real device registration/revocation + policy cursor is required.
-4. **Some store prefs are browser-local only** — `receiptPrintMode`, company logo, and customer-display appearance are not persisted to Postgres; offline durability/tenancy needs a decision.
-5. **Two write patterns** (Server Actions for back office, `/api/pos` for POS) — the offline layer must unify behind repositories; parallel REST routes exist for back-office entities and can be reused for sync.
-6. **Stock count rejects lot-tracked products today** — offline count needs a lot-aware workflow or an explicit block.
-7. **Mixed placeholder UI** — several promotion/report/customer modals are non-functional placeholders; offline scope should target real flows only.
-8. **Middleware auth scope** — only `/dashboard/*` uses `withAuth`; service-worker/navigation-fallback design must not weaken auth for other store routes or cache authenticated HTML unsafely.
+## 18. WAITING items (not validated in Phase 0)
+
+- **Physical hardware/device QA — WAITING.** POS computer, barcode scanner, receipt printer, customer-display monitor, Android, and iPhone/PWA were **not** physically tested (Phase 0 is documentation only). Never claimed PASS. Reason: no offline runtime exists yet and no physical devices are attached to this environment.
+- **Automated offline/sync tests — WAITING.** No offline runtime exists to test (Phase 1+ deliverable).
+- **Live PWA install / offline relaunch — WAITING.** No manifest/service worker exists yet (Phase 2 deliverable).
+- **CI regression suite — WAITING.** Existing `test:*` scripts (POS checkout, post-sale, cash, held bill, inventory, reports, Customer Display) require a live database/dev server; not run in Phase 0 because Phase 0 changes are documentation only and must not touch runtime/production. Reason recorded per instruction to mark unrun checks WAITING.
