@@ -22,27 +22,27 @@
 
 ## Phase 1 — Architecture foundations
 
-- [ ] Add `features/offline/` with typed modules for device identity, local database, schema migrations, outbox, inbox, sync coordinator, connectivity state, feature flags, diagnostics and common types.
-- [ ] Select a maintained IndexedDB wrapper compatible with React 19, Next.js 16 and the Cloudflare-deployed client runtime (Dexie or equivalent). Add only the required dependency and lockfile change.
-- [ ] Add a Local Store Database schema version table and migration runner. Failed migrations must preserve the old database and give a recovery/error state rather than erasing data.
-- [ ] Define isolated local-database names per `companyId + branchId + terminalId`; verify one store cannot read another store’s cache in the same browser profile.
-- [ ] Define base local entity fields: stable ID, tenant/branch/warehouse scope, server version, local version, created/updated timestamps, sync status, tombstone and source metadata.
-- [ ] Define a typed `OfflineOperationEnvelope` with UUID operationId, deviceId, terminalId, companyId, branchId, actorUserId, sequence, operation type, payload version, created time, dependencies and payload.
-- [ ] Implement atomic `commitLocalAndQueue`: a local business mutation and its outbox envelope must commit in one IndexedDB transaction or neither must commit.
-- [ ] Implement durable operation states: `pending`, `syncing`, `synced`, `retryable`, `blocked`, `rejected`, with attempts, error code, error detail and timestamps.
-- [ ] Implement safe local entity states: `synced`, `pending_create`, `pending_update`, `pending_delete`, `conflict`, `rejected`.
-- [ ] Add unit tests for local DB migration, atomic write/queue, operation ordering, duplicate operationId handling, database isolation and reload persistence.
+- [x] Add `features/offline/` with typed modules for device identity, local database, schema migrations, outbox, inbox, sync coordinator, connectivity state, feature flags, diagnostics and common types. <!-- features/offline/** (index.ts barrel); inbox + sync-coordinator are typed skeletons for Phases 4/11. -->
+- [x] Select a maintained IndexedDB wrapper compatible with React 19, Next.js 16 and the Cloudflare-deployed client runtime (Dexie or equivalent). Add only the required dependency and lockfile change. <!-- Chose the "equivalent small, tested abstraction" allowed by requirements §5.1: a typed pluggable backend (features/offline/local-db/backend.ts) with IndexedDB (browser) + in-memory (test/SSR) implementations. Rationale: deterministic Node tests with no new dependency, leaner Workers client bundle, and full control of migration-failure semantics. No dependency/lockfile change was needed. -->
+- [x] Add a Local Store Database schema version table and migration runner. Failed migrations must preserve the old database and give a recovery/error state rather than erasing data. <!-- features/offline/local-db/{schema,migrations,database}.ts; tested: "failed migration preserves old database and version". -->
+- [x] Define isolated local-database names per `companyId + branchId + terminalId`; verify one store cannot read another store’s cache in the same browser profile. <!-- offlineDatabaseName(); tested: "databases are isolated per company+branch+terminal". -->
+- [x] Define base local entity fields: stable ID, tenant/branch/warehouse scope, server version, local version, created/updated timestamps, sync status, tombstone and source metadata. <!-- BaseLocalEntity in features/offline/types.ts. -->
+- [x] Define a typed `OfflineOperationEnvelope` with UUID operationId, deviceId, terminalId, companyId, branchId, actorUserId, sequence, operation type, payload version, created time, dependencies and payload. <!-- features/offline/operations/envelope.ts + canonical payload hash. -->
+- [x] Implement atomic `commitLocalAndQueue`: a local business mutation and its outbox envelope must commit in one IndexedDB transaction or neither must commit. <!-- features/offline/commit.ts; tested atomic write+queue and rollback. -->
+- [x] Implement durable operation states: `pending`, `syncing`, `synced`, `retryable`, `blocked`, `rejected`, with attempts, error code, error detail and timestamps. <!-- features/offline/outbox/outbox.ts with guarded transitions. -->
+- [x] Implement safe local entity states: `synced`, `pending_create`, `pending_update`, `pending_delete`, `conflict`, `rejected`. <!-- LocalEntityStatus in features/offline/types.ts. -->
+- [x] Add unit tests for local DB migration, atomic write/queue, operation ordering, duplicate operationId handling, database isolation and reload persistence. <!-- features/offline/__tests__/*.test.ts; `npm run test:offline` → 38 passing. -->
 
 ## Phase 2 — PWA app shell and connectivity UX
 
-- [ ] Add a validated PWA manifest with EGO POS name, icons, theme color, start URL and display mode appropriate for the existing store app.
-- [ ] Add a Next.js 16/OpenNext-compatible service worker build configuration. Do not rely on an unsupported legacy plugin without proof that build and production Worker output pass.
-- [ ] Cache only the approved Mini Mart app shell and immutable assets. Exclude APIs, admin routes, credentials, dynamic server data and sensitive authenticated documents from unsafe cache rules.
-- [ ] Add navigation fallback so a previously bootstrapped installed app can open the POS shell with no internet.
-- [ ] Implement a connectivity store using browser online/offline events plus actual sync request health; `navigator.onLine` alone is insufficient.
-- [ ] Add a compact global Mini Mart status indicator with last-sync time and pending count. It must not obscure POS checkout controls.
-- [ ] Add a detail panel/Sync Center entry point for Owner/Manager with status, retry action and user-safe errors.
-- [ ] Test first online install, cached relaunch with network disabled, hard reload offline, update of service-worker version, and graceful behavior in unsupported/private browser storage modes.
+- [x] Add a validated PWA manifest with EGO POS name, icons, theme color, start URL and display mode appropriate for the existing store app. <!-- app/manifest.ts served at /manifest.webmanifest (HTTP 200); SVG icons in public/icons. PNG raster icons (192/512) are a WAITING design-asset item. -->
+- [x] Add a Next.js 16/OpenNext-compatible service worker build configuration. Do not rely on an unsupported legacy plugin without proof that build and production Worker output pass. <!-- Plain public/sw.js (no next-pwa/workbox plugin); `next build` passes; /sw.js served with application/javascript. -->
+- [x] Cache only the approved Mini Mart app shell and immutable assets. Exclude APIs, admin routes, credentials, dynamic server data and sensitive authenticated documents from unsafe cache rules. <!-- features/offline/pwa/cache-policy.ts (authoritative, unit-tested); sw.js mirrors it (guard test). Never caches admin/platform, /api incl. NextAuth, or authenticated HTML. -->
+- [x] Add navigation fallback so a previously bootstrapped installed app can open the POS shell with no internet. <!-- Network-first shell strategy falls back to pre-cached public /offline shell; app/offline exposes no store data. Full offline POS rendering from local data is Phase 5/6. -->
+- [x] Implement a connectivity store using browser online/offline events plus actual sync request health; `navigator.onLine` alone is insufficient. <!-- features/offline/pwa/connectivity.ts (online/offline/focus events + reportHealth hook) + useConnectivity. -->
+- [x] Add a compact global Mini Mart status indicator with last-sync time and pending count. It must not obscure POS checkout controls. <!-- components/offline/offline-status-indicator.tsx mounted as a small header pill in the dashboard shell (verified in-browser). -->
+- [x] Add a detail panel/Sync Center entry point for Owner/Manager with status, retry action and user-safe errors. <!-- Sync Center dropdown (Owner/Manager gated) with counts + "Sync now"; retry wired to the no-op coordinator until Phase 4/11. -->
+- [ ] Test first online install, cached relaunch with network disabled, hard reload offline, update of service-worker version, and graceful behavior in unsupported/private browser storage modes. <!-- PARTIAL/WAITING: status UI + Sync Center verified in-browser; unsupported-storage handled in code. Full installable-PWA install + offline relaunch + SW version-update QA needs an installable HTTPS/PWA context and physical device — tracked as WAITING in IMPLEMENTATION_PROGRESS. -->
 
 ## Phase 3 — Device, terminal and offline authentication
 

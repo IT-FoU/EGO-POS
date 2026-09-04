@@ -12,9 +12,9 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | Phase | Title | Status |
 |---|---|---|
 | 0 | Baseline audit and guardrails | **COMPLETE** (documentation only) |
-| 1 | Architecture foundations | Not started |
-| 2 | PWA app shell and connectivity UX | Not started |
-| 3 | Device, terminal and offline authentication | Not started |
+| 1 | Architecture foundations | **COMPLETE** (code + tests; default-off, no schema/migration) |
+| 2 | PWA app shell and connectivity UX | **COMPLETE** (code + tests + in-browser QA; default-off) |
+| 3 | Device, terminal and offline authentication | Not started (awaiting approval) |
 | 4 | Cloud sync protocol and server protection | Not started |
 | 5 | Local snapshot and repository adapters | Not started |
 | 6 | Receipt identity, local sales and POS checkout | Not started |
@@ -95,4 +95,85 @@ Run from `/workspace` on `cursor/offline-first-phase-0-71b5`; exit codes via `$?
 
 - Mini Mart scope only; platform admin surfaces (`/super-admin`, `/ego-admin`, `/igo-admin`, `(platform)`, plans/subscriptions) documented as excluded/online-only.
 - No production code, schema, migration, feature flag, deployment, or `main` change. PR targets `feature/offline-first-mini-mart`.
-- Phase 1 not started (awaiting review approval).
+
+## Phase 1 — Architecture foundations (COMPLETE)
+
+### Result
+
+Added the `features/offline/` foundations: common types, immutable operation envelope, a typed pluggable local-DB backend (IndexedDB for browser + in-memory for tests/SSR), namespace-isolated database, schema versioning + migration runner (failed migration preserves data), durable outbox with guarded transitions, atomic `commitLocalAndQueue`, device identity, feature flags (default disabled), read-only diagnostics, and inbox/sync-coordinator skeletons for later phases. Deterministic unit tests cover all required behaviors. Nothing is wired into production paths; online behavior is unchanged.
+
+### IndexedDB wrapper decision
+
+Requirements §5.1 allow "a maintained typed wrapper (for example Dexie) or an equivalent small, tested abstraction." We implemented the latter — a typed pluggable backend (`features/offline/local-db/backend.ts`) with `IndexedDbOfflineBackend` (browser) and `MemoryOfflineBackend` (tests/SSR). Rationale: deterministic Node tests with **no new dependency or lockfile churn**, a leaner Cloudflare Workers client bundle, and full control over migration-failure semantics. No dependency was added.
+
+### Files added
+
+- `features/offline/types.ts`, `features/offline/index.ts`
+- `features/offline/operations/envelope.ts`
+- `features/offline/local-db/{backend,memory-backend,indexeddb-backend,schema,migrations,database}.ts`
+- `features/offline/outbox/outbox.ts`
+- `features/offline/commit.ts`
+- `features/offline/device-identity.ts`, `features/offline/feature-flags.ts`, `features/offline/diagnostics.ts`
+- `features/offline/sync/{inbox,sync-coordinator}.ts`
+- `features/offline/__tests__/{envelope,local-db,commit}.test.ts`
+- `package.json` (added `test:offline` script)
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline unit tests | `npm run test:offline` (`node --import tsx --test features/offline/__tests__/*.test.ts`) | **0 (PASS)** | Phase 1: 23 tests pass (migration, failed-migration-preserves-data, isolation, reload persistence, atomic write/queue + rollback, sequence/ordering, duplicate operationId, status transitions). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`. |
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `4f1ca06` | feat(offline): Phase 1 architecture foundations + typed local DB |
+
+## Phase 2 — PWA app shell and connectivity UX (COMPLETE)
+
+### Result
+
+Added a safe, default-off PWA layer: manifest, a plain (plugin-free) service worker with unit-tested cache boundaries, a public offline shell route, connectivity detection, a global Offline/Sync status indicator, and an Owner/Manager Sync Center entry with read-only diagnostics. The service worker registers only when the offline flag is enabled (or `NEXT_PUBLIC_OFFLINE_SW=true`) and unregisters otherwise, so production online behavior is preserved by default. Cache rules never touch Super Admin/EGO Admin/IGO Admin/platform, `/api` (incl. NextAuth), or authenticated HTML.
+
+### Files added / changed
+
+- Added: `app/manifest.ts`, `app/offline/page.tsx`
+- Added: `public/sw.js`, `public/icons/icon.svg`, `public/icons/maskable-icon.svg`
+- Added: `features/offline/pwa/{cache-policy,connectivity,use-connectivity}.ts`
+- Added: `components/offline/{offline-shell,offline-status-indicator,service-worker-manager}.tsx`
+- Added: `features/offline/__tests__/{cache-policy,feature-status}.test.ts`
+- Changed: `components/layout/dashboard-shell.tsx` (mount indicator + SW manager, non-obstructive header pill)
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline unit tests | `npm run test:offline` | **0 (PASS)** | 38 tests pass (adds cache-policy exclusions incl. sw.js mirror guard, feature-status derivation, feature-flag resolution, connectivity snapshot). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`; routes include `○ /manifest.webmanifest` and `ƒ /offline`. |
+| Endpoint smoke (dev) | `curl` | 200 | `/manifest.webmanifest`, `/sw.js` (application/javascript), `/offline`, `/icons/icon.svg` all return 200. |
+| Manual GUI QA | computerUse | PASS | Logged in as `igo-admin`; "Online" pill visible in header; Sync Center opens with Connection/Offline-mode/Queued/Syncing/Needs-attention/Last-sync; "Sync now" shows the not-enabled-yet message; page stays stable (no flicker/reload) after fix. |
+
+### Bug found and fixed during QA
+
+The first QA run showed the dashboard blanking after opening the Sync Center. Root cause: the status indicator derived `namespace` as a new object each render, so `loadDiagnostics` + its effect looped ("Maximum update depth exceeded"). Fixed by memoizing `namespace` (by primitive ids) and the flag (by namespace). Re-verified in-browser: no flicker/crash; dev log shows no recurrence.
+
+### Commits
+
+| Commit | Description |
+|---|---|
+| `356fe68` | feat(offline): Phase 2 PWA app shell, service worker & connectivity UX |
+| `f692d8d` | fix(offline): prevent Sync Center render loop (memoize namespace/flag) |
+
+### Known limitations / WAITING (Phases 1–2)
+
+- **PNG raster icons (192/512, maskable) — WAITING.** Only SVG icons are provided (no binary asset generation). Chrome installability may be partial until PNGs are added by design/marketing.
+- **Live installable-PWA QA — WAITING.** First-install, offline relaunch of the installed app, and service-worker version-update QA need an installable HTTPS/PWA context and a physical device; the SW is default-off and untested as an installed app.
+- **Physical hardware/device QA — WAITING** (unchanged from Phase 0): POS computer, scanner, printer, customer monitor, Android, iPhone/PWA.
+- **Sync engine — not implemented (by design).** `NoopSyncCoordinator` and the inbox are typed skeletons; real device registration (Phase 3), sync protocol (Phase 4), and coordinator (Phase 11) are out of scope for Phases 1–2.
+- Offline writes remain **disabled by default**; enabling requires the per-scope flag / `NEXT_PUBLIC_OFFLINE_ENABLED`.
+
+- Phase 3 not started (awaiting review approval).
