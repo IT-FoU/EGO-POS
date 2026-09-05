@@ -30,13 +30,34 @@ import {
   type StockAllocationView,
 } from "./stock-allocation";
 import type { ReceiptRangeView } from "./receipt-range";
+import {
+  evaluateOfflineWriteAuthorization,
+  type DeviceAuthzView,
+} from "./authorization";
+import { DEFAULT_OFFLINE_GRACE_DAYS, OfflineDenyReason, type OfflineDenyReasonValue, type TerminalDeviceStatus } from "./types";
 import type { OfflineCashSalePayload } from "../checkout/cash-sale-types";
+
+/** Max clock skew tolerated for a sale timestamp ahead of server time (5 min). */
+export const MAX_FUTURE_SALE_SKEW_MS = 5 * 60 * 1000;
 
 // ---- Authoritative reference views the gateway supplies ----
 
 export interface CloudDeviceView {
-  status: string; // "active" | "pending" | "revoked"
+  status: TerminalDeviceStatus; // "pending" | "active" | "revoked"
   policyVersion: number;
+  /** The terminal this device is registered/bound to. */
+  terminalId: string;
+  offlineGraceDays: number;
+  /** ISO timestamp of the last successful security/policy sync, if any. */
+  lastPolicySyncAt: string | null;
+}
+
+/** The acting cashier's current account state. */
+export interface CloudActorView {
+  /** Account still enabled. */
+  active: boolean;
+  /** Still holds the POS sale permission. */
+  canSellPos: boolean;
 }
 
 export interface CloudCashSessionView {
@@ -119,6 +140,7 @@ export interface RejectedRecordInput {
 export interface CashSaleGateway {
   getExistingResult(companyId: string, operationId: string): Promise<StoredCashSaleResult | null>;
   getDevice(companyId: string, deviceId: string): Promise<CloudDeviceView | null>;
+  getActor(companyId: string, userId: string): Promise<CloudActorView | null>;
   getCashSession(companyId: string, sessionId: string): Promise<CloudCashSessionView | null>;
   getReceiptRange(companyId: string, deviceId: string): Promise<CloudReceiptRangeView | null>;
   getAllocation(
@@ -141,6 +163,8 @@ export interface ApplyContext {
   terminalId: string;
   deviceId: string;
   actorUserId: string;
+  /** Policy version the device had cached when the op was created (envelope). */
+  cachedPolicyVersion: number;
   now: Date;
 }
 
@@ -157,6 +181,42 @@ class RejectSale {
     public readonly code: SyncErrorCodeValue,
     public readonly detail: string,
   ) {}
+}
+
+function authzReasonToCode(reason: OfflineDenyReasonValue): SyncErrorCodeValue {
+  switch (reason) {
+    case OfflineDenyReason.policyStale:
+    case OfflineDenyReason.graceExpired:
+      return SyncErrorCode.stalePolicy;
+    case OfflineDenyReason.deviceNotFound:
+    case OfflineDenyReason.terminalMismatch:
+      return SyncErrorCode.invalidTerminal;
+    default:
+      return SyncErrorCode.permissionDenied;
+  }
+}
+
+/**
+ * The offline sale timestamp must be within the allowed offline window and must
+ * not be materially future-dated (guards a tampered/mis-set device clock).
+ */
+export function validateSaleTimestamp(
+  createdAt: string,
+  graceDays: number,
+  now: Date,
+): { ok: true } | { ok: false; code: SyncErrorCodeValue; detail: string } {
+  const t = new Date(createdAt).getTime();
+  if (Number.isNaN(t)) {
+    return { ok: false, code: SyncErrorCode.validationFailed, detail: "sale_timestamp_invalid" };
+  }
+  if (t > now.getTime() + MAX_FUTURE_SALE_SKEW_MS) {
+    return { ok: false, code: SyncErrorCode.validationFailed, detail: "future_dated_sale" };
+  }
+  const ageDays = (now.getTime() - t) / (24 * 60 * 60 * 1000);
+  if (ageDays > (graceDays ?? DEFAULT_OFFLINE_GRACE_DAYS)) {
+    return { ok: false, code: SyncErrorCode.stalePolicy, detail: "sale_outside_offline_window" };
+  }
+  return { ok: true };
 }
 
 function parseReceiptValue(reference: string, prefix: string): number | null {
@@ -265,13 +325,37 @@ export async function applyOfflineCashSale(
     // 2) Tenant / branch / warehouse / terminal / actor scope.
     assertScope(payload, ctx);
 
-    // 3) Device must be registered + active.
+    // 3) Device: registered AND bound to this terminal.
     const device = await gateway.getDevice(ctx.companyId, ctx.deviceId);
     if (!device) throw new RejectSale(SyncErrorCode.invalidTerminal, "device_not_registered");
-    if (device.status === "revoked") throw new RejectSale(SyncErrorCode.permissionDenied, "device_revoked");
-    if (device.status !== "active") throw new RejectSale(SyncErrorCode.permissionDenied, "device_not_active");
+    if (device.terminalId !== ctx.terminalId || device.terminalId !== payload.terminalId) {
+      throw new RejectSale(SyncErrorCode.invalidTerminal, "device_terminal_unbound");
+    }
 
-    // 4) Referenced cash session must be the correct active compatible session.
+    // 4) Cashier actor must still exist, be active, and hold POS-sale permission;
+    //    device status + cached policy version + offline grace must be valid.
+    const actor = await gateway.getActor(ctx.companyId, ctx.actorUserId);
+    if (!actor) throw new RejectSale(SyncErrorCode.permissionDenied, "actor_not_found");
+    const deviceView: DeviceAuthzView = {
+      status: device.status,
+      policyVersion: device.policyVersion,
+      offlineGraceDays: device.offlineGraceDays,
+      lastPolicySyncAt: device.lastPolicySyncAt,
+    };
+    const authz = evaluateOfflineWriteAuthorization({
+      device: deviceView,
+      cachedPolicyVersion: ctx.cachedPolicyVersion,
+      permissionGranted: actor.canSellPos,
+      userEnabled: actor.active,
+      now: ctx.now,
+    });
+    if (!authz.allowed) throw new RejectSale(authzReasonToCode(authz.reason), authz.reason);
+
+    // 5) Sale timestamp within the allowed offline window, not future-dated.
+    const timestampCheck = validateSaleTimestamp(payload.createdAt, device.offlineGraceDays, ctx.now);
+    if (!timestampCheck.ok) throw new RejectSale(timestampCheck.code, timestampCheck.detail);
+
+    // 6) Referenced cash session must be the correct active compatible session.
     const session = await gateway.getCashSession(ctx.companyId, payload.cashSessionId);
     const sessionCheck = validateCashSession(session, {
       companyId: ctx.companyId,

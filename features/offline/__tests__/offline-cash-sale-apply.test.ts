@@ -11,7 +11,8 @@ const META = { operationType: "pos.sale.complete", payloadHash: "hash-1" };
 
 function makeGateway(): InMemoryCashSaleGateway {
   const g = new InMemoryCashSaleGateway();
-  g.seedDevice("co-1", "dev-1", { status: "active", policyVersion: 1 });
+  g.seedDevice("co-1", "dev-1", { status: "active", policyVersion: 1, terminalId: "POS-01", offlineGraceDays: 7, lastPolicySyncAt: NOW.toISOString() });
+  g.seedActor("co-1", "u-1", { active: true, canSellPos: true });
   g.seedCashSession("co-1", { id: "cs-1", companyId: "co-1", branchId: "br-1", cashierId: "u-1", closedAt: null });
   g.seedReceiptRange("co-1", "dev-1", { id: "range-1", prefix: "GB-01-", rangeStart: 1, rangeEnd: 1000, nextValue: 1, status: "active" });
   g.seedAllocation("co-1", "dev-1", { id: "alloc-1", productId: "p1", lotId: null, allocatedQty: 10, consumedQty: 0, baseVersion: 0, status: "active", expiresAt: null });
@@ -26,6 +27,7 @@ function makeCtx(overrides: Partial<ApplyContext> = {}): ApplyContext {
     terminalId: "POS-01",
     deviceId: "dev-1",
     actorUserId: "u-1",
+    cachedPolicyVersion: 1,
     now: NOW,
     ...overrides,
   };
@@ -155,7 +157,7 @@ const REJECTIONS: Array<{
   code: string;
   detail: string;
 }> = [
-  { name: "revoked device", gateway: (g) => g.seedDevice("co-1", "dev-1", { status: "revoked", policyVersion: 1 }), code: SyncErrorCode.permissionDenied, detail: "device_revoked" },
+  { name: "revoked device", gateway: (g) => g.seedDevice("co-1", "dev-1", { status: "revoked", policyVersion: 1, terminalId: "POS-01", offlineGraceDays: 7, lastPolicySyncAt: NOW.toISOString() }), code: SyncErrorCode.permissionDenied, detail: "device_revoked" },
   { name: "unregistered device", gateway: (g) => (g as any).devices.clear(), code: SyncErrorCode.invalidTerminal, detail: "device_not_registered" },
   { name: "closed cash session", gateway: (g) => g.seedCashSession("co-1", { id: "cs-1", companyId: "co-1", branchId: "br-1", cashierId: "u-1", closedAt: NOW.toISOString() }), code: SyncErrorCode.validationFailed, detail: "cash_session_closed" },
   { name: "wrong cashier session", gateway: (g) => g.seedCashSession("co-1", { id: "cs-1", companyId: "co-1", branchId: "br-1", cashierId: "someone-else", closedAt: null }), code: SyncErrorCode.validationFailed, detail: "cash_session_incompatible" },
@@ -226,7 +228,7 @@ test("rejects missing allocation and expired/invalid lot", async () => {
 
 test("rejected response persists a rejected ledger + audit and stays idempotent", async () => {
   const g = makeGateway();
-  g.seedDevice("co-1", "dev-1", { status: "revoked", policyVersion: 1 });
+  g.seedDevice("co-1", "dev-1", { status: "revoked", policyVersion: 1, terminalId: "POS-01", offlineGraceDays: 7, lastPolicySyncAt: NOW.toISOString() });
   const first = await applyOfflineCashSale(g, "op-1", makePayload(), makeCtx(), META);
   assert.equal(first.status, "rejected");
   assert.equal(g.getLedger("co-1", "op-1")?.status, "rejected");

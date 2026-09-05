@@ -645,4 +645,39 @@ Required tests (all passing): (1) accepted queued cash sale creates exactly one 
 - The canonical cloud `saleNo`/`receiptNo` come from the existing online generator; the permanent offline **`receiptReference`** is preserved in the reconciliation + `OfflineOperation` result (mapping), not necessarily as the cloud `saleNo`.
 - Not in scope (later): QR/transfer/card, loyalty, holds/refunds/returns/voids, inventory back-office, cash-session sync (Phase 7), and client-side application of the reconciliation (Phase 6C).
 
+## Phase 6B.1 — server authorization hardening for offline cash-sale apply (COMPLETE)
+
+### Result
+
+Strengthened `applyOfflineCashSale` so that BEFORE any authoritative sale write it explicitly validates: (1) the device is active **and bound to the terminal**; (2) tenant/company/branch/warehouse/terminal scope; (3) the cashier actor is still active **and** permitted for POS sale; (4) the cached policy version and offline authorization/grace window; (5) the sale timestamp is within the allowed offline window and not materially future-dated. Invalid policy/grace/actor/device cases are rejected with existing machine-readable codes and create **no** sale/receipt/payment/stock movement/cash movement/duplicate audit. Idempotency is preserved (a repeat returns the stored original result without re-running validation or writes). Online checkout is unchanged; the Pay button stays disabled.
+
+### How it works
+
+- Reuses the Phase 3 pure `evaluateOfflineWriteAuthorization` (device revoked/not-active, user disabled, permission denied, **policy stale**, **grace expired**) with the actor's live `active` + `canSellPos` and the device's `policyVersion` + `offlineGraceDays` + `lastPolicySyncAt`; the envelope's cached `policyVersion` is compared against the server's. Reasons map to `permission_denied` / `stale_policy` / `invalid_terminal` codes.
+- New explicit checks: **device-bound-to-terminal** (`device.terminalId === terminalId` → else `invalid_terminal:device_terminal_unbound`) and **actor existence** (`getActor` → `permission_denied:actor_not_found`).
+- New pure `validateSaleTimestamp`: rejects `future_dated_sale` beyond a 5-minute skew and `sale_outside_offline_window` older than the device grace days (`stale_policy`).
+- Ordering guarantees no partial write: all authorization runs before receipt/allocation consumption and the atomic commit; any failure throws → the gateway records only a rejected ledger row.
+- `CashSaleGateway` gains `getActor`; `CloudDeviceView` gains `terminalId` + `offlineGraceDays` + `lastPolicySyncAt`; `ApplyContext` gains `cachedPolicyVersion` (wired from the envelope in `pushSync`). The `PrismaCashSaleGateway` resolves the actor from `company_users` + `users` and the device fields from `TerminalDevice`.
+
+### Files changed
+
+- Changed: `features/offline/server/cash-sale-apply.ts` (auth sequence + `validateSaleTimestamp` + `getActor`/device fields), `cash-sale-gateway.ts` (+actor), `prisma-cash-sale-gateway.ts` (device fields + `getActor`), `sync-service.ts` (pass `cachedPolicyVersion`)
+- Added: `features/offline/__tests__/offline-cash-sale-authz.test.ts`
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 205 tests pass (11 new Phase 6B.1). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Prisma client generate | `npx prisma generate` | **0** | Regenerated (no DB touched). |
+| Production build | `npm run build` | **0 (PASS)** | Compiled; routes built. |
+
+Required tests (all passing): (1) disabled cashier → `permission_denied:user_disabled`; (2) stale policy version → `stale_policy:policy_stale`; (3) expired offline grace → `stale_policy:grace_expired`; (4) revoked device → `permission_denied:device_revoked` (+ device-terminal-unbound → `invalid_terminal`); (5) materially future-dated sale → `validation_failed:future_dated_sale` (+ out-of-window → `stale_policy`); (6) valid path still accepts exactly one canonical sale. Plus: no-permission cashier rejected; idempotent repeat of a rejected/accepted op returns the stored result with no re-run/second sale; each rejection asserts no sale + range/lease untouched + rejected ledger kept.
+
+### Known limitations / WAITING (6B.1)
+
+- Still server-application only — no user-facing checkout; online checkout untouched.
+- The `PrismaCashSaleGateway` (incl. `getActor`) runs against a live DB in production/integration; orchestration + validation are covered by the in-memory tests.
+
 - Phase 6C / Phase 7 not started (awaiting review approval).

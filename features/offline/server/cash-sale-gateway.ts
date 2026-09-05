@@ -12,6 +12,7 @@ import type {
   AcceptedCommitInput,
   CashSaleGateway,
   CashSaleReconciliation,
+  CloudActorView,
   CloudAllocationView,
   CloudCashSessionView,
   CloudDeviceView,
@@ -42,6 +43,7 @@ interface AuditRecord {
 export class InMemoryCashSaleGateway implements CashSaleGateway {
   private ledger = new Map<string, StoredCashSaleResult>();
   private devices = new Map<string, CloudDeviceView>();
+  private actors = new Map<string, CloudActorView>();
   private sessions = new Map<string, CloudCashSessionView>();
   private ranges = new Map<string, CloudReceiptRangeView>();
   private allocations = new Map<string, CloudAllocationView>();
@@ -59,6 +61,9 @@ export class InMemoryCashSaleGateway implements CashSaleGateway {
   // ---- Seeders (tests) ----
   seedDevice(companyId: string, deviceId: string, device: CloudDeviceView): void {
     this.devices.set(this.key(companyId, deviceId), device);
+  }
+  seedActor(companyId: string, userId: string, actor: CloudActorView): void {
+    this.actors.set(this.key(companyId, userId), actor);
   }
   seedCashSession(companyId: string, session: CloudCashSessionView): void {
     this.sessions.set(this.key(companyId, session.id), session);
@@ -97,6 +102,10 @@ export class InMemoryCashSaleGateway implements CashSaleGateway {
 
   async getDevice(companyId: string, deviceId: string): Promise<CloudDeviceView | null> {
     return this.devices.get(this.key(companyId, deviceId)) ?? null;
+  }
+
+  async getActor(companyId: string, userId: string): Promise<CloudActorView | null> {
+    return this.actors.get(this.key(companyId, userId)) ?? null;
   }
 
   async getCashSession(companyId: string, sessionId: string): Promise<CloudCashSessionView | null> {

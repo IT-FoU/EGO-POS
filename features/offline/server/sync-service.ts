@@ -152,6 +152,9 @@ export async function pushSync(tenant: TenantContext, body: unknown): Promise<Pu
             terminalId: ctx.scope.terminalId,
             deviceId: ctx.deviceId,
             actorUserId: envelope.actorUserId,
+            cachedPolicyVersion: Number.isFinite(Number(envelope.policyVersion))
+              ? Number(envelope.policyVersion)
+              : ctx.device.policyVersion,
             now,
           },
           { operationType: envelope.operationType, payloadHash: envelope.payloadHash ?? null },

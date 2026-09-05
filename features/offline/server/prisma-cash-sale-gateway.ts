@@ -22,6 +22,7 @@ import type {
   AcceptedCommitInput,
   CashSaleGateway,
   CashSaleReconciliation,
+  CloudActorView,
   CloudAllocationView,
   CloudCashSessionView,
   CloudDeviceView,
@@ -58,9 +59,39 @@ export class PrismaCashSaleGateway implements CashSaleGateway {
   async getDevice(companyId: string, deviceId: string): Promise<CloudDeviceView | null> {
     const row = await db.terminalDevice.findUnique({
       where: { companyId_deviceId: { companyId, deviceId } },
-      select: { status: true, policyVersion: true },
+      select: {
+        status: true,
+        policyVersion: true,
+        terminalId: true,
+        offlineGraceDays: true,
+        lastPolicySyncAt: true,
+      },
     });
-    return row ? { status: row.status, policyVersion: row.policyVersion } : null;
+    if (!row) return null;
+    return {
+      status: row.status,
+      policyVersion: row.policyVersion,
+      terminalId: row.terminalId,
+      offlineGraceDays: row.offlineGraceDays,
+      lastPolicySyncAt: row.lastPolicySyncAt ? new Date(row.lastPolicySyncAt).toISOString() : null,
+    };
+  }
+
+  async getActor(companyId: string, userId: string): Promise<CloudActorView | null> {
+    const [membership, user] = await Promise.all([
+      db.companyUser.findFirst({
+        where: { companyId, userId },
+        select: { status: true, allowPosAccess: true },
+      }),
+      db.user.findUnique({ where: { id: userId }, select: { status: true } }),
+    ]);
+    if (!membership || !user) return null;
+    const userActive = String(user.status).toLowerCase() === "active";
+    const membershipActive = String(membership.status).toLowerCase() === "active";
+    return {
+      active: userActive && membershipActive,
+      canSellPos: membership.allowPosAccess === true,
+    };
   }
 
   async getCashSession(companyId: string, sessionId: string): Promise<CloudCashSessionView | null> {
