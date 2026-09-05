@@ -64,6 +64,9 @@ export const MetaKey = {
   syncCursor: "syncCursor",
   lastPolicySyncAt: "lastPolicySyncAt",
   createdAt: "createdAt",
+  deviceLock: "deviceLock",
+  securitySnapshot: "securitySnapshot",
+  policyVersion: "policyVersion",
 } as const;
 
 const NAME_PREFIX = "egopos.offline";
