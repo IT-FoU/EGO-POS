@@ -8,10 +8,11 @@ import { READ_PERMISSIONS } from "@/lib/auth/permissions";
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const deviceId = url.searchParams.get("deviceId") ?? "";
   const cursor = url.searchParams.get("cursor");
   const limit = url.searchParams.get("limit");
   return runRead(
-    (tenant) => bootstrapSync(tenant, { cursor, limit }),
+    (tenant) => bootstrapSync(tenant, { deviceId, cursor, limit }),
     READ_PERMISSIONS.posView,
   );
 }

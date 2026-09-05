@@ -20,3 +20,6 @@ export * from "./feature-flags";
 export * from "./diagnostics";
 export * from "./sync/inbox";
 export * from "./sync/sync-coordinator";
+export * from "./replica/reference-types";
+export * from "./replica/reference-snapshot";
+export * from "./replica/store-snapshot-repository";

@@ -12,12 +12,12 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { DeviceAuthzView, ScopeContext } from "./authorization";
 import {
-  bootstrap,
   processPush,
   pullDelta,
   syncStatus,
 } from "./sync-engine";
 import {
+  SYNC_SCHEMA_VERSION,
   validateBootstrapRequest,
   validatePullRequest,
   validatePushRequest,
@@ -28,6 +28,8 @@ import {
 } from "./sync-contract";
 import { PrismaSyncStore } from "./prisma-sync-store";
 import type { SyncStore } from "./sync-store";
+import { buildReferenceEntities } from "./prisma-reference-provider";
+import { paginateReferenceEntities } from "../replica/reference-snapshot";
 
 const db = prisma as any;
 
@@ -115,11 +117,28 @@ export async function pullSync(
 
 export async function bootstrapSync(
   tenant: TenantContext,
-  query: { cursor?: string | null; limit?: string | null },
+  query: { deviceId: string; cursor?: string | null; limit?: string | null },
 ): Promise<BootstrapResponse> {
   const validation = validateBootstrapRequest({ cursor: query.cursor, limit: query.limit });
   if (!validation.ok) throw new SyncRequestError(validation.error);
-  return bootstrap(getSyncStore(), tenant.companyId, validation.value);
+  if (!query.deviceId?.trim()) throw new SyncRequestError("deviceId is required");
+
+  // Reference snapshot is tenant/branch/warehouse/terminal scoped; empty means
+  // empty (paginateReferenceEntities never seeds defaults).
+  const entities = await buildReferenceEntities(tenant, query.deviceId);
+  const page = paginateReferenceEntities(entities, validation.value.cursor, validation.value.limit);
+  return {
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    entities: page.entities.map((entity) => ({
+      entityType: entity.entityType,
+      entityId: entity.entityId,
+      version: entity.version,
+      payload: entity.payload,
+    })),
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
+    complete: page.complete,
+  };
 }
 
 export async function statusSync(

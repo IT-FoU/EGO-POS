@@ -24,7 +24,16 @@ export const OfflineStore = {
   /** Local audit records. */
   auditLog: "audit_log",
 
-  // Reference / snapshot data (populated by bootstrap in later phases).
+  /**
+   * Read-only cloud reference snapshot (Phase 5). One uniform store keyed by
+   * `${entityType}:${entityId}` holds all bootstrapped/pulled reference entities
+   * (store context, security snapshot, products, categories, customers,
+   * promotions, settings, QR banks, stock levels, cash-session context) with a
+   * version + tombstone so deletes never reappear.
+   */
+  reference: "reference",
+
+  // Domain snapshot stores (kept for Phase 6 local documents).
   products: "products",
   categories: "categories",
   customers: "customers",
@@ -48,8 +57,9 @@ export const ALL_STORES: readonly OfflineStoreName[] = Object.freeze(
 /**
  * Structural version: increment whenever the SET of object stores changes.
  * (Data transformations do not change this — see CURRENT_SCHEMA_VERSION.)
+ * v2 adds the Phase 5 `reference` store.
  */
-export const STRUCTURAL_VERSION = 1;
+export const STRUCTURAL_VERSION = 2;
 
 /** App-level schema/data version, advanced by the migration runner. */
 export const CURRENT_SCHEMA_VERSION = 1;
@@ -67,6 +77,7 @@ export const MetaKey = {
   deviceLock: "deviceLock",
   securitySnapshot: "securitySnapshot",
   policyVersion: "policyVersion",
+  bootstrapComplete: "bootstrapComplete",
 } as const;
 
 const NAME_PREFIX = "egopos.offline";
