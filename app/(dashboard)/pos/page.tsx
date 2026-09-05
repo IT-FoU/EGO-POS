@@ -1,4 +1,5 @@
 import { PosPageClient } from "@/features/pos/components/pos-page-client";
+import { PosOfflineSync } from "@/components/offline/pos-offline-sync";
 import { getPosSnapshot } from "@/features/pos/pos-service";
 import { createPosPermissionPolicyFromDatabase } from "@/features/access-control/pos-policy-loader";
 import { requireSession } from "@/lib/auth/session";
@@ -29,6 +30,13 @@ export default async function PosPage() {
   const posPermissionPolicy = { ...loadedPolicy, branchName: snapshot.branchName };
 
   return (
+    <>
+      <PosOfflineSync
+        branchId={snapshot.branchId}
+        companyId={session.user.activeCompanyId ?? null}
+        terminalId={session.user.assignedTerminal ?? null}
+        warehouseId={snapshot.warehouseId || null}
+      />
       <PosPageClient
       branchId={snapshot.branchId}
       branchName={snapshot.branchName}
@@ -49,5 +57,6 @@ export default async function PosPage() {
       demoMode={isDemoMode()}
       devDebug={process.env.NEXT_PUBLIC_DEV_DEBUG === "true"}
     />
+    </>
   );
 }

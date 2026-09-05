@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CloudOff, Cloud, RefreshCw, X } from "lucide-react";
 import { useConnectivity } from "@/features/offline/pwa/use-connectivity";
 import { getOfflineFeatureFlag } from "@/features/offline/feature-flags";
 import type { StoreNamespace } from "@/features/offline/types";
+import { getPosOfflineStatusStore } from "@/features/offline/pos-read/pos-offline-status-store";
 import { canManageStoreSettings } from "@/features/permissions/store-ui-permissions";
 
 interface OfflineStatusIndicatorProps {
@@ -35,6 +36,12 @@ function resolveNamespace(props: OfflineStatusIndicatorProps): StoreNamespace | 
 export function OfflineStatusIndicator(props: OfflineStatusIndicatorProps) {
   const connectivity = useConnectivity();
   const online = connectivity.state === "online";
+  const posStatusStore = getPosOfflineStatusStore();
+  const posStatus = useSyncExternalStore(
+    posStatusStore.subscribe,
+    posStatusStore.getSnapshot,
+    posStatusStore.getServerSnapshot,
+  );
   const [open, setOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsView | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -125,6 +132,12 @@ export function OfflineStatusIndicator(props: OfflineStatusIndicatorProps) {
 
   const runSyncNow = useCallback(async () => {
     setSyncMessage(null);
+    // When the POS offline read-side sync is engaged, trigger a real sync.
+    if (posStatus.active) {
+      posStatusStore.triggerManualSync();
+      setSyncMessage("Syncing the local replica…");
+      return;
+    }
     const { NoopSyncCoordinator } = await import("@/features/offline/sync/sync-coordinator");
     const result = await new NoopSyncCoordinator().sync("manual");
     setSyncMessage(
@@ -132,7 +145,7 @@ export function OfflineStatusIndicator(props: OfflineStatusIndicatorProps) {
         ? "Sync complete."
         : "Sync engine is not enabled yet (arrives in a later phase).",
     );
-  }, []);
+  }, [posStatus.active, posStatusStore]);
 
   const pending = diagnostics?.pending ?? 0;
   const needsAttention = diagnostics?.needsAttention ?? 0;
@@ -184,6 +197,9 @@ export function OfflineStatusIndicator(props: OfflineStatusIndicatorProps) {
               label="Offline mode"
               value={flag.writeEnabled ? "Enabled" : "Disabled (default)"}
             />
+            {posStatus.active ? (
+              <Row label="POS state" value={posStatus.state.replace(/_/g, " ")} />
+            ) : null}
             {canManage ? (
               <>
                 <Row label="Queued" value={String(pending)} />
