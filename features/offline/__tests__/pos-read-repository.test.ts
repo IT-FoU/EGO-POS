@@ -141,7 +141,7 @@ test("missing store context (never bootstrapped) blocks offline reads", () => {
   assert.throws(
     () =>
       assertReplicaScope(
-        { storeContext: null, securitySnapshot: null, settings: null, categories: [], products: [], customers: [], promotions: [], qrBanks: [], stockLevels: [], cashSession: null, meta: { bootstrapCursor: 0, syncCursor: 0, bootstrapComplete: false } },
+        { storeContext: null, securitySnapshot: null, settings: null, categories: [], products: [], customers: [], promotions: [], qrBanks: [], stockLevels: [], cashSession: null, meta: { bootstrapCursor: 0, syncCursor: 0, bootstrapComplete: false, lastSyncAt: null } },
         { ...NS, warehouseId: "wh-1" },
       ),
     PosReplicaScopeError,

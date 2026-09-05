@@ -7,6 +7,7 @@ import type { StoreNamespace } from "@/features/offline/types";
 import { getConnectivityStore } from "@/features/offline/pwa/connectivity";
 import { getPosOfflineStatusStore } from "@/features/offline/pos-read/pos-offline-status-store";
 import { evaluatePosOfflineGate } from "@/features/offline/pos-read/pos-offline-gate";
+import { saveActiveTerminal } from "@/features/offline/pos-read/active-terminal";
 
 interface PosOfflineSyncProps {
   companyId: string | null;
@@ -67,7 +68,7 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
           replicaValid: !!ctx,
           terminalScopeOk,
           deviceStatus: "active",
-          lastSyncAt: snap?.meta?.updatedAt ?? null,
+          lastSyncAt: snap?.meta?.lastSyncAt ?? null,
           now: new Date(),
         });
         statusStore.set({
@@ -75,7 +76,7 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
           state: gate.state,
           source: gate.offlineReadsPermitted ? (online ? "online" : "offline") : online ? "online" : "blocked",
           syncing,
-          lastSyncAt: snap?.meta?.bootstrapComplete ? new Date().toISOString() : null,
+          lastSyncAt: snap?.meta?.lastSyncAt ?? null,
           reason: gate.reason,
         });
       } catch {
@@ -96,6 +97,15 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
 
     const onOnline = () => void run("reconnect");
     const onFocus = () => void run("focus");
+
+    // Persist the non-secret terminal pointer so the public offline shell can
+    // reopen the correct device-local replica after an offline reload.
+    saveActiveTerminal({
+      companyId: namespace.companyId,
+      branchId: namespace.branchId,
+      terminalId: namespace.terminalId,
+      warehouseId,
+    });
 
     void (async () => {
       try {

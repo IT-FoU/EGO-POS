@@ -78,6 +78,7 @@ export const MetaKey = {
   securitySnapshot: "securitySnapshot",
   policyVersion: "policyVersion",
   bootstrapComplete: "bootstrapComplete",
+  lastSyncAt: "lastSyncAt",
 } as const;
 
 const NAME_PREFIX = "egopos.offline";

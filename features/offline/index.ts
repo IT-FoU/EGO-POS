@@ -32,3 +32,5 @@ export * from "./pos-read/pos-read-provider";
 export * from "./pos-read/pos-sync-controller";
 export * from "./pos-read/network-client";
 export * from "./pos-read/pos-offline-status-store";
+export * from "./pos-read/pos-client-props";
+export * from "./pos-read/active-terminal";

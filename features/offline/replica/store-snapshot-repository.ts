@@ -83,6 +83,7 @@ export interface LocalPosSnapshot {
     bootstrapCursor: number;
     syncCursor: number;
     bootstrapComplete: boolean;
+    lastSyncAt: string | null;
   };
 }
 
@@ -165,6 +166,7 @@ export class StoreSnapshotRepository {
       if (!page.hasMore) break;
     }
     await this.writeMeta(MetaKey.bootstrapComplete, true);
+    await this.writeMeta(MetaKey.lastSyncAt, new Date().toISOString());
     return { stats, pages, cursor };
   }
 
@@ -185,6 +187,7 @@ export class StoreSnapshotRepository {
       await this.writeMeta(MetaKey.syncCursor, cursor);
       if (!page.hasMore) break;
     }
+    await this.writeMeta(MetaKey.lastSyncAt, new Date().toISOString());
     return { stats, pages, cursor };
   }
 
@@ -229,10 +232,11 @@ export class StoreSnapshotRepository {
         .sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0))
         .map((record) => record.payload as T);
 
-    const [bootstrapCursor, syncCursor, bootstrapComplete] = await Promise.all([
+    const [bootstrapCursor, syncCursor, bootstrapComplete, lastSyncAt] = await Promise.all([
       this.readMetaNumber(MetaKey.bootstrapCursor, 0),
       this.readMetaNumber(MetaKey.syncCursor, 0),
       this.readMetaBool(MetaKey.bootstrapComplete, false),
+      this.readMetaString(MetaKey.lastSyncAt),
     ]);
 
     return {
@@ -246,7 +250,7 @@ export class StoreSnapshotRepository {
       qrBanks: list<QrBankPayload>(ReferenceEntityType.qrBank),
       stockLevels: list<StockLevelPayload>(ReferenceEntityType.stockLevel),
       cashSession: singleton<CashSessionPayload>(ReferenceEntityType.cashSession),
-      meta: { bootstrapCursor, syncCursor, bootstrapComplete },
+      meta: { bootstrapCursor, syncCursor, bootstrapComplete, lastSyncAt },
     };
   }
 
@@ -260,6 +264,11 @@ export class StoreSnapshotRepository {
   private async readMetaBool(key: string, fallback: boolean): Promise<boolean> {
     const record = await this.db.read<{ id: string; value: boolean }>(OfflineStore.meta, key);
     return typeof record?.value === "boolean" ? record.value : fallback;
+  }
+
+  private async readMetaString(key: string): Promise<string | null> {
+    const record = await this.db.read<{ id: string; value: string }>(OfflineStore.meta, key);
+    return typeof record?.value === "string" ? record.value : null;
   }
 
   private async writeMeta(key: string, value: unknown): Promise<void> {
