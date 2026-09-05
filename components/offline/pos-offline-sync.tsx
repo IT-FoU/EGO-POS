@@ -47,6 +47,8 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
     let cancelled = false;
     let controller: { sync: (t: any) => Promise<any>; isSyncing: () => boolean } | null = null;
     let replica: { readLocalSnapshot: () => Promise<any>; close?: () => void } | null = null;
+    let repo: { cacheDeviceStatus: (s: string, v?: number | null) => Promise<void> } | null = null;
+    let statusFetcher: (() => Promise<{ deviceStatus: string | null; policyVersion: number | null }>) | null = null;
     const statusStore = getPosOfflineStatusStore();
     const connectivity = getConnectivityStore();
 
@@ -67,7 +69,7 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
           bootstrapComplete: Boolean(snap?.meta?.bootstrapComplete),
           replicaValid: !!ctx,
           terminalScopeOk,
-          deviceStatus: "active",
+          deviceStatus: (snap?.meta?.deviceStatus as any) ?? "active",
           lastSyncAt: snap?.meta?.lastSyncAt ?? null,
           now: new Date(),
         });
@@ -92,6 +94,18 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
       }
       await publish(true);
       await controller.sync(trigger as any);
+      // Apply device revocation + policy updates from the authoritative server
+      // before surfacing offline-ready state. Never blocks the page on failure.
+      if (statusFetcher && repo && connectivity.getSnapshot().state === "online") {
+        try {
+          const status = await statusFetcher();
+          if (status.deviceStatus) {
+            await repo.cacheDeviceStatus(status.deviceStatus, status.policyVersion);
+          }
+        } catch {
+          // Status is best-effort; the cached status remains authoritative.
+        }
+      }
       await publish(false);
     };
 
@@ -119,14 +133,16 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
         if (cancelled) return;
         const db = await OfflineDatabase.open({ namespace });
         replica = db as any;
-        const repo = new StoreSnapshotRepository(db, namespace);
-        replica = repo as any;
+        const repoInstance = new StoreSnapshotRepository(db, namespace);
+        replica = repoInstance as any;
+        repo = repoInstance as any;
         const deviceId = getOrCreateDeviceId();
         const fetchers = createPosSyncFetchers({
           deviceId,
           scope: { companyId: namespace.companyId, branchId: namespace.branchId, warehouseId },
         });
-        controller = new PosSyncController(repo, fetchers);
+        statusFetcher = fetchers.status;
+        controller = new PosSyncController(repoInstance, fetchers);
         statusStore.registerManualSync(() => void run("manual"));
 
         window.addEventListener("online", onOnline);

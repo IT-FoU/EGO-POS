@@ -492,4 +492,46 @@ Required tests (all passing): same-component props from an online repository/mod
 - `PosPageClient`'s secondary network effects (recent-sales/cash refresh) are best-effort and simply no-op offline; the primary grid/search/cart render from props. Deeper action-level disabling beyond the read-only policy is a later polish.
 - Migrations review-only/not applied; offline default-OFF.
 
+## Phase 6.2 — device-local PIN unlock + complete read-only UI blocking (COMPLETE)
+
+### Result
+
+The public offline workspace now **starts locked** and requires a successful device-local **PIN unlock** (Phase 3 PBKDF2 foundation) before any store data is read from IndexedDB. While locked it shows **only** a PIN prompt — no product names, prices, customers, stock, categories, or counts. A wrong PIN reveals nothing and never mutates the stored hash. Unlock is **in-memory only**, so a reload/new session returns to the locked state. Device **revocation + policy updates** are fetched from the secured status endpoint while online, cached, and enforced before the next offline session. Every POS write control is disabled in read-only mode via the restrictive permission policy (immediate client block, **no network write**), and the primary Pay/hold/resume controls are additionally `disabled`. Flag OFF preserves the online POS exactly.
+
+### How it works
+
+- **Lock gate.** `decideOfflineWorkspace` (pure) resolves the workspace to one of `flag_off | online | online_setup_pin | blocked | no_lock | locked`. Offline + gate-permitted + a stored lock → `locked` (never straight to `ready`). `OfflinePosWorkspace` computes the gate/scope/lock-set **without holding any store data in state**; store props are assembled **only after** a successful `unlockDevice`.
+- **PIN storage.** Reuses `features/offline/auth/device-unlock.ts` — only a salted **PBKDF2-SHA256** hash + salt is stored in the meta store; the plaintext PIN, tokens, passwords, and secrets are never persisted (verified by test). `unlockDevice` is read-only w.r.t. the stored hash; a wrong PIN cannot weaken/reset it.
+- **Namespace isolation.** A valid PIN unlocks only the currently active terminal's namespaced database; a sibling terminal DB on the same browser has no lock and returns `not_set`.
+- **Revocation.** `statusSync` now returns `deviceStatus` + `policyVersion`; the network client exposes a `status` fetcher; `PosOfflineSync` fetches it after each online sync and calls `repo.cacheDeviceStatus(...)`. The offline gate reads the cached `deviceStatus` (meta) — a revoked device is `blocked` (data hidden) on the next offline evaluation.
+- **Read-only UI.** `PosPageClient` gains a `readOnly` prop: the Pay button, Hold Bill, and Resume Bills are `disabled`, `completeSale` is guarded, and the focus/`storage` refetch effect no-ops. All other write actions already funnel through `enforcePosAction` → `evaluatePosPermission`, which the restrictive read-only policy denies **immediately** (no approval path, no network) — proven for every `PosPermissionAction`.
+
+### Files added / changed
+
+- Added: `features/offline/pos-read/offline-workspace-state.ts`; test `features/offline/__tests__/offline-workspace-pin.test.ts`
+- Changed: `components/offline/offline-pos-workspace.tsx` (PIN lock/unlock/setup gate + LockScreen), `features/pos/components/pos-page-client.tsx` (`readOnly` prop + guards), `features/offline/pos-read/pos-client-props.ts` (expose `readOnly`), `components/offline/pos-offline-sync.tsx` (fetch/cache device status), `features/offline/pos-read/network-client.ts` (`status` fetcher), `features/offline/replica/store-snapshot-repository.ts` (cache/read `deviceStatus`+`policyVersion`), `features/offline/local-db/schema.ts` (+`deviceStatus` meta), `features/offline/server/sync-contract.ts` + `sync-service.ts` (status returns `deviceStatus`+`policyVersion`), test `features/offline/__tests__/pos-read-repository.test.ts` (meta literal)
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npx prisma generate` | **0** | Regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 159 tests pass (19 new in 6.2). |
+| Production build | `npm run build` | **0 (PASS)** | Compiled; `/offline` route built. |
+
+Required tests (all passing): no replica data before unlock (only a lock meta record; no persisted unlocked flag); wrong PIN → `invalid_pin` and stored hash unchanged; correct PIN unlocks only the matching terminal namespace; reload returns to `locked`; revoked device → `blocked device_revoked` (offline) and no PIN-setup offer (online); every write action denied immediately with `approvalRequired:false` (no network); flag OFF → `flag_off`. Plus a default-PBKDF2 test proving the stored value is a 64-hex-char non-plaintext hash that verifies.
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| _(see PR)_ | feat(offline): Phase 6.2 device-local PIN unlock + read-only UI blocking |
+
+### Known limitations / WAITING (Phase 6.2)
+
+- **Live installable-PWA offline QA — WAITING.** The lock → unlock → replica render loop over a real service-worker offline reload needs an installable HTTPS/PWA context; covered here by deterministic tests + flag-off GUI.
+- Revocation caching happens during online `/pos` sessions (where `PosOfflineSync` mounts); the offline workspace enforces the last cached status.
+- Migrations review-only/not applied; offline default-OFF.
+
 - Phase 7 not started (awaiting review approval).

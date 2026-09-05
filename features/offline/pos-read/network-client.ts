@@ -37,9 +37,17 @@ async function getJson(fetchImpl: typeof fetch, url: string): Promise<any> {
   return body?.data ?? body;
 }
 
+export interface DeviceStatusResult {
+  deviceStatus: string | null;
+  policyVersion: number | null;
+}
+
+export type StatusFetcher = () => Promise<DeviceStatusResult>;
+
 export function createPosSyncFetchers(options: PosSyncNetworkOptions): {
   bootstrap: BootstrapFetcher;
   delta: DeltaFetcher;
+  status: StatusFetcher;
 } {
   const fetchImpl = options.fetchImpl ?? fetch;
   const deviceId = encodeURIComponent(options.deviceId);
@@ -69,5 +77,13 @@ export function createPosSyncFetchers(options: PosSyncNetworkOptions): {
     };
   };
 
-  return { bootstrap, delta };
+  const status: StatusFetcher = async () => {
+    const data = await getJson(fetchImpl, `/api/offline/sync/status?deviceId=${deviceId}`);
+    return {
+      deviceStatus: typeof data.deviceStatus === "string" ? data.deviceStatus : null,
+      policyVersion: typeof data.policyVersion === "number" ? data.policyVersion : null,
+    };
+  };
+
+  return { bootstrap, delta, status };
 }

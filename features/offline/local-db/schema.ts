@@ -77,6 +77,7 @@ export const MetaKey = {
   deviceLock: "deviceLock",
   securitySnapshot: "securitySnapshot",
   policyVersion: "policyVersion",
+  deviceStatus: "deviceStatus",
   bootstrapComplete: "bootstrapComplete",
   lastSyncAt: "lastSyncAt",
 } as const;

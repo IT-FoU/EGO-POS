@@ -176,5 +176,7 @@ export async function statusSync(
     ...status,
     singleWarehouseRollout: SINGLE_WAREHOUSE_ROLLOUT,
     warehouseScope: ctx.warehouseIds,
+    deviceStatus: ctx.device.status,
+    policyVersion: ctx.device.policyVersion,
   };
 }

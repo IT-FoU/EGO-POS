@@ -96,6 +96,7 @@ export interface PosClientData {
   promotionBanners: string[];
   promotions: PosPromotion[];
   qrBanks: QrBank[];
+  readOnly: boolean;
   receiptSettings: PosReceiptSettings;
   taxInclusive: boolean;
   taxRatePercent: number;
@@ -256,6 +257,7 @@ export function posReadModelToPosClientProps(
     promotionBanners: promotions.filter((p) => p.isActive).map((p) => p.promotionName).filter(Boolean),
     promotions,
     qrBanks: [] as QrBank[],
+    readOnly,
     receiptSettings,
     taxInclusive: settings?.taxInclusive ?? false,
     taxRatePercent: settings?.taxRatePercent ?? 0,

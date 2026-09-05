@@ -84,6 +84,13 @@ export interface LocalPosSnapshot {
     syncCursor: number;
     bootstrapComplete: boolean;
     lastSyncAt: string | null;
+    /**
+     * Device status as of the last online status fetch. Used to enforce
+     * revocation on the next offline session. `null` means never fetched
+     * (treated as active for a freshly bootstrapped device).
+     */
+    deviceStatus: string | null;
+    policyVersion: number | null;
   };
 }
 
@@ -232,12 +239,15 @@ export class StoreSnapshotRepository {
         .sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0))
         .map((record) => record.payload as T);
 
-    const [bootstrapCursor, syncCursor, bootstrapComplete, lastSyncAt] = await Promise.all([
-      this.readMetaNumber(MetaKey.bootstrapCursor, 0),
-      this.readMetaNumber(MetaKey.syncCursor, 0),
-      this.readMetaBool(MetaKey.bootstrapComplete, false),
-      this.readMetaString(MetaKey.lastSyncAt),
-    ]);
+    const [bootstrapCursor, syncCursor, bootstrapComplete, lastSyncAt, deviceStatus, policyVersion] =
+      await Promise.all([
+        this.readMetaNumber(MetaKey.bootstrapCursor, 0),
+        this.readMetaNumber(MetaKey.syncCursor, 0),
+        this.readMetaBool(MetaKey.bootstrapComplete, false),
+        this.readMetaString(MetaKey.lastSyncAt),
+        this.readMetaString(MetaKey.deviceStatus),
+        this.readMetaNumberOrNull(MetaKey.policyVersion),
+      ]);
 
     return {
       storeContext: singleton<StoreContextPayload>(ReferenceEntityType.storeContext),
@@ -250,8 +260,23 @@ export class StoreSnapshotRepository {
       qrBanks: list<QrBankPayload>(ReferenceEntityType.qrBank),
       stockLevels: list<StockLevelPayload>(ReferenceEntityType.stockLevel),
       cashSession: singleton<CashSessionPayload>(ReferenceEntityType.cashSession),
-      meta: { bootstrapCursor, syncCursor, bootstrapComplete, lastSyncAt },
+      meta: { bootstrapCursor, syncCursor, bootstrapComplete, lastSyncAt, deviceStatus, policyVersion },
     };
+  }
+
+  /**
+   * Cache the authoritative device status + policy version fetched from the
+   * secured status endpoint while online. Used to enforce device revocation and
+   * policy updates before the next offline session. Never stores secrets.
+   */
+  async cacheDeviceStatus(status: string, policyVersion?: number | null): Promise<void> {
+    await this.db.transaction([OfflineStore.meta], "readwrite", async (tx) => {
+      await tx.put(OfflineStore.meta, { id: MetaKey.deviceStatus, value: status });
+      if (typeof policyVersion === "number") {
+        await tx.put(OfflineStore.meta, { id: MetaKey.policyVersion, value: policyVersion });
+      }
+      await tx.put(OfflineStore.meta, { id: MetaKey.lastPolicySyncAt, value: new Date().toISOString() });
+    });
   }
 
   // ---- meta helpers ----
@@ -259,6 +284,11 @@ export class StoreSnapshotRepository {
   private async readMetaNumber(key: string, fallback: number): Promise<number> {
     const record = await this.db.read<{ id: string; value: number }>(OfflineStore.meta, key);
     return typeof record?.value === "number" ? record.value : fallback;
+  }
+
+  private async readMetaNumberOrNull(key: string): Promise<number | null> {
+    const record = await this.db.read<{ id: string; value: number }>(OfflineStore.meta, key);
+    return typeof record?.value === "number" ? record.value : null;
   }
 
   private async readMetaBool(key: string, fallback: boolean): Promise<boolean> {

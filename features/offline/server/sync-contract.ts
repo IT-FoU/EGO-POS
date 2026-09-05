@@ -119,6 +119,12 @@ export interface SyncStatusResponse {
   /** Diagnostics: single-warehouse rollout flag + this terminal's warehouse scope. */
   singleWarehouseRollout?: boolean;
   warehouseScope?: string[];
+  /**
+   * Authoritative device status + policy version so the client can enforce
+   * revocation and policy updates before the next offline session. Non-secret.
+   */
+  deviceStatus?: string;
+  policyVersion?: number;
 }
 
 // ---- Validation ----
