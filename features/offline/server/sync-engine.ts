@@ -265,8 +265,9 @@ export async function pullDelta(
   deviceId: string,
   req: PullRequest,
   now: Date = new Date(),
+  branchIds?: string[],
 ): Promise<PullResponse> {
-  const page = await store.listChangesSince(companyId, req.cursor, req.limit);
+  const page = await store.listChangesSince(companyId, req.cursor, req.limit, branchIds);
   await store.setCursorState(companyId, deviceId, {
     lastPullAt: now.toISOString(),
     syncCursor: page.nextCursor,

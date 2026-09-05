@@ -111,11 +111,21 @@ export class PrismaSyncStore implements SyncStore {
     return row?.seq ?? 0;
   }
 
-  async listChangesSince(companyId: string, cursor: number, limit: number): Promise<ChangesPage> {
+  async listChangesSince(
+    companyId: string,
+    cursor: number,
+    limit: number,
+    branchIds?: string[],
+  ): Promise<ChangesPage> {
+    const where: Record<string, unknown> = { companyId, seq: { gt: cursor } };
+    if (branchIds) {
+      // Company-wide changes (branchId null) plus this device's branch(es).
+      where.OR = [{ branchId: null }, { branchId: { in: branchIds } }];
+    }
     const rows = await db.offlineServerChange.findMany({
       orderBy: { seq: "asc" },
       take: limit + 1,
-      where: { companyId, seq: { gt: cursor } },
+      where,
     });
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;

@@ -112,7 +112,14 @@ export async function pullSync(
   const validation = validatePullRequest({ cursor: query.cursor, limit: query.limit });
   if (!validation.ok) throw new SyncRequestError(validation.error);
   const ctx = await resolveSyncContext(tenant, query.deviceId);
-  return pullDelta(getSyncStore(), tenant.companyId, ctx.deviceId, validation.value);
+  return pullDelta(
+    getSyncStore(),
+    tenant.companyId,
+    ctx.deviceId,
+    validation.value,
+    new Date(),
+    ctx.scope.branchIds,
+  );
 }
 
 export async function bootstrapSync(

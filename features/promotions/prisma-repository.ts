@@ -5,6 +5,7 @@ import { getPrismaCategories, getPrismaProducts } from "@/features/products/pris
 import { getPrismaCustomersSnapshot } from "@/features/customers/prisma-repository";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import { assertPermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { emitPromotionUpsert } from "@/features/offline/server/reference-emit";
 import { sumPromotionSalesLakByPromotionId } from "@/features/promotions/promotion-checkout";
 import { mapPrismaPromotion } from "@/features/promotions/dto-mapper";
 import type { Promotion, PromotionSimulation } from "@/features/promotions/types";
@@ -130,6 +131,7 @@ export async function createPrismaPromotion(input: PromotionCreateInput, tenant:
         status: data.status ?? "active",
       },
     }),
+    afterWrite: (result, tx) => emitPromotionUpsert(tx, tenant, (result as { id: string }).id),
   });
 }
 
@@ -189,6 +191,7 @@ export async function updatePrismaPromotion(promotionId: string, input: Promotio
 
       return updated;
     },
+    afterWrite: (_result, tx) => emitPromotionUpsert(tx, tenant, promotionId),
   });
 }
 

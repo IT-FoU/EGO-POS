@@ -4,6 +4,7 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { assertPermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { emitCustomerUpsert } from "@/features/offline/server/reference-emit";
 import {
   mapPrismaCustomer,
   mapPrismaCustomerPayment,
@@ -140,6 +141,7 @@ async function createCustomerRecord(
         },
       });
     },
+    afterWrite: (result, tx) => emitCustomerUpsert(tx, tenant, (result as { id: string }).id),
   });
 }
 
@@ -190,6 +192,7 @@ export async function updatePrismaCustomer(customerId: string, input: CustomerUp
         where: { id: existing.id },
       });
     },
+    afterWrite: (_result, tx) => emitCustomerUpsert(tx, tenant, customerId),
   });
 }
 

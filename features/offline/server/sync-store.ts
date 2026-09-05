@@ -62,7 +62,17 @@ export interface SyncStore {
   saveOperationResult(input: SaveOperationInput): Promise<void>;
   countOperations(companyId: string): Promise<OperationCounts>;
   latestChangeCursor(companyId: string): Promise<number>;
-  listChangesSince(companyId: string, cursor: number, limit: number): Promise<ChangesPage>;
+  /**
+   * Changes since `cursor`, ordered by cursor. When `branchIds` is provided,
+   * only company-wide changes (branchId null) and changes for those branches are
+   * returned (cross-branch isolation). Omit for no branch filter (Phase 4 default).
+   */
+  listChangesSince(
+    companyId: string,
+    cursor: number,
+    limit: number,
+    branchIds?: string[],
+  ): Promise<ChangesPage>;
   listBootstrapEntities(companyId: string, cursor: number, limit: number): Promise<BootstrapPage>;
   getCursorState(companyId: string, deviceId: string): Promise<CursorState>;
   setCursorState(companyId: string, deviceId: string, patch: Partial<CursorState>): Promise<void>;
@@ -72,6 +82,7 @@ export interface SyncStore {
 
 interface MemoryChange extends ServerChange {
   companyId: string;
+  branchId: string | null;
 }
 
 interface MemoryBootstrapEntity {
@@ -93,9 +104,13 @@ export class InMemorySyncStore implements SyncStore {
   }
 
   /** Test seam: seed the server change feed. */
-  seedChange(companyId: string, change: Omit<ServerChange, "cursor">): number {
+  seedChange(
+    companyId: string,
+    change: Omit<ServerChange, "cursor">,
+    branchId: string | null = null,
+  ): number {
     const cursor = this.changes.length + 1;
-    this.changes.push({ ...change, companyId, cursor });
+    this.changes.push({ ...change, companyId, branchId, cursor });
     return cursor;
   }
 
@@ -138,15 +153,24 @@ export class InMemorySyncStore implements SyncStore {
     return max;
   }
 
-  async listChangesSince(companyId: string, cursor: number, limit: number): Promise<ChangesPage> {
+  async listChangesSince(
+    companyId: string,
+    cursor: number,
+    limit: number,
+    branchIds?: string[],
+  ): Promise<ChangesPage> {
     const pending = this.changes
       .filter((change) => change.companyId === companyId && change.cursor > cursor)
+      .filter(
+        (change) =>
+          !branchIds || change.branchId === null || branchIds.includes(change.branchId),
+      )
       .sort((a, b) => a.cursor - b.cursor);
     const page = pending.slice(0, limit);
     const hasMore = pending.length > page.length;
     const nextCursor = page.length ? page[page.length - 1].cursor : cursor;
     return {
-      changes: page.map(({ companyId: _c, ...rest }) => rest),
+      changes: page.map(({ companyId: _c, branchId: _b, ...rest }) => rest),
       hasMore,
       nextCursor,
     };
