@@ -46,6 +46,18 @@ export const OfflineStore = {
   cashSessions: "cash_sessions",
   heldBills: "held_bills",
   inventoryEvents: "inventory_events",
+
+  /**
+   * Server-reserved per-terminal receipt-number ranges consumed locally (Phase
+   * 6A). Offline receipt references are drawn sequentially from a reserved range
+   * so they are permanent and cannot collide with cloud-issued numbers.
+   */
+  receiptRanges: "receipt_ranges",
+  /**
+   * Server-issued terminal sellable stock leases consumed locally (Phase 6A) so
+   * a disconnected terminal can never oversell shared inventory.
+   */
+  stockAllocations: "stock_allocations",
 } as const;
 
 export type OfflineStoreName = (typeof OfflineStore)[keyof typeof OfflineStore];
@@ -58,8 +70,9 @@ export const ALL_STORES: readonly OfflineStoreName[] = Object.freeze(
  * Structural version: increment whenever the SET of object stores changes.
  * (Data transformations do not change this — see CURRENT_SCHEMA_VERSION.)
  * v2 adds the Phase 5 `reference` store.
+ * v3 adds the Phase 6A `receipt_ranges` + `stock_allocations` stores.
  */
-export const STRUCTURAL_VERSION = 2;
+export const STRUCTURAL_VERSION = 3;
 
 /** App-level schema/data version, advanced by the migration runner. */
 export const CURRENT_SCHEMA_VERSION = 1;

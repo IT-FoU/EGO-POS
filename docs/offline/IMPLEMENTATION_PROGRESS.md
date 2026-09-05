@@ -565,4 +565,46 @@ New tests: `getServerSnapshot` returns the same frozen reference across calls; t
 
 - None. Scope was limited to the connectivity server-snapshot caching fix.
 
-- Phase 7 not started (awaiting review approval).
+## Documentation correction — prior "Phase 6" work was read-side + security sub-slices
+
+To keep the record accurate against the authoritative `offline-first-tasks.md`: the earlier Phase 6 / 6.1 / 6.2 / 6.3 iterations delivered the **read-side POS integration** (adapter/gate/provider + controlled bootstrap/delta sync), the **same-UI offline read-only render**, the **device-local PIN unlock + read-only blocking + revocation**, and a **connectivity fix**. They did **not** complete the write side of the task plan's Phase 6 (receipt identity, local checkout, offline sale/stock writes). Those Phase 6 checkboxes remain unchecked. The write side begins with **Phase 6A** below.
+
+## Phase 6A — local offline CASH checkout domain foundation (COMPLETE)
+
+### Result
+
+Implemented the **domain foundation** for offline CASH checkout: a permanent, collision-free terminal receipt reference; pure cart/price/tax/discount/safe-promotion math; the immutable cash-sale operation payload + local entities; and an **atomic, idempotent** `commitOfflineCashSale`. The Offline POS UI stays **read-only** in this slice — the Pay button is not enabled and nothing calls the commit from the UI yet. Cash-only: no QR/transfer/card, no sync application, no refunds/voids/returns/holds, no cash movement, no Recent Sales/receipt UI, no Customer Display. The cloud remains the final authority and re-validates on sync.
+
+### How it works
+
+- **Permanent, collision-free receipt reference.** `commitOfflineCashSale` draws the next reference from a cloud-**reserved** per-terminal range via the pure `allocateNextReceipt` (Phase 3) and advances the local range atomically with the sale. References are sequential within the reserved `[rangeStart, rangeEnd]` and never wrap/reuse, so they cannot collide with cloud-issued numbers (which live outside reserved ranges) and remain permanent after sync. Range exhaustion throws `ReceiptRangeExhaustedError`.
+- **Pure calculations** (`features/offline/checkout/cart-math.ts`): line totals, subtotal, best-single **safe promotion** (non-stacking, capped), manual discount (capped), tax (inclusive/exclusive), total, and change — reusing `roundLak` + `cartLineSubtotal`/`requiredBaseQty` from `features/pos`. Cloud re-validates.
+- **Immutable payload + local entities** (`cash-sale-types.ts`): `OfflineCashSalePayload` (sale, items, cash payment, terminal stock/lot consumption, immutable receipt snapshot, audit metadata) carried on a `pos.sale.complete` operation envelope with `clientEntityIds` + `dependencies`. Local `sales` + `inventory_events` records extend the Phase 1 base bookkeeping. The receipt snapshot is **deep-frozen** and self-contained, so later price/promotion changes never alter it.
+- **Atomic commit + idempotency** (`commit-cash-sale.ts`): one transaction over meta + outbox + sales + inventory_events + cash_sessions + receipt_ranges + stock_allocations. Keyed by `operationId`: a retry/reload with the same id returns the already-committed sale and performs **no** new writes → no duplicate sale, receipt reference, or stock movement. Any validation failure throws and rolls back the whole transaction (no partial write).
+- **Cash-session precondition** (`cash-session-guard.ts`): a sale is rejected unless a locally-**open, compatible** cash session exists for this company/branch/terminal.
+- **Terminal allocation + lot/expiry** (`stock-guard.ts` + `consumeAllocation`): cart quantities and checkout consume the terminal's sellable lease; a lot-scoped lease that is inactive/expired is an invalid lot; leases can never be over-consumed, so local available stock cannot go negative. Missing lease → `NoTerminalAllocationError`; insufficient → `InsufficientTerminalStockError`; expired lot → `InvalidLotError`.
+- **Isolation**: all records are written to the per-company/branch/terminal namespaced local DB (v3 adds `receipt_ranges` + `stock_allocations` stores), and the sale entity carries company/branch/warehouse scope. A different terminal's DB cannot see or consume another terminal's sale or lease.
+
+### Files added / changed
+
+- Added: `features/offline/checkout/{cart-math,cash-sale-types,terminal-provisioning,cash-session-guard,stock-guard,commit-cash-sale}.ts`; test `features/offline/__tests__/cash-checkout.test.ts`
+- Changed: `features/offline/local-db/schema.ts` (v3 stores: `receipt_ranges`, `stock_allocations`), `features/offline/index.ts` (barrel exports)
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 175 tests pass (12 new Phase 6A). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Prisma client generate | `npx prisma generate` | **0** | Regenerated (no DB touched). |
+| Production build | `npm run build` | **0 (PASS)** | Compiled; routes built. |
+
+Required tests (all passing): (1) a valid cash sale commits sale + outbox + movement atomically and advances the range/lease; (2) duplicate submit and reopen-after-reload are idempotent (no duplicate sale/receipt/movement, range + lease unchanged); (3) missing/closed cash session rejected with no write; (4) insufficient allocation / missing lease / invalid-expired lot / insufficient cash rejected with no partial write; (5) receipt snapshot immutable after a later price/promotion change; (6) operation dependency ordering (`topologicalOrder` places the sale after its cash-session-open) + per-company/branch/warehouse/terminal isolation. Plus pure cart-math + stock-guard unit tests.
+
+### Known limitations / WAITING (6A)
+
+- **UI intentionally read-only** — the Pay button is not enabled and no component calls `commitOfflineCashSale` yet (wiring is Phase 6B).
+- Server sale-number issuance/validation is unchanged; accepting reserved offline references on the server + actual sync application are later slices.
+- Not in scope (later phases): QR/transfer/card, loyalty redemption event, refunds/voids/returns/holds, cash movement, Recent Sales + receipt UI, Customer Display.
+
+- Phase 6B / Phase 7 not started (awaiting review approval).
