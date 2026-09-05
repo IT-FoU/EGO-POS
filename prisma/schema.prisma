@@ -1887,3 +1887,47 @@ model OfflineLoyaltyAllowance {
   @@index([companyId, terminalDeviceId])
   @@map("offline_loyalty_allowances")
 }
+
+// ---------------------------------------------------------------------------
+// Offline-first (Mini Mart) — Phase 4: cloud sync protocol persistence.
+// ---------------------------------------------------------------------------
+
+model OfflineOperation {
+  id               String    @id @default(cuid())
+  companyId        String    @map("company_id")
+  operationId      String    @map("operation_id")
+  deviceId         String    @map("device_id")
+  terminalDeviceId String?   @map("terminal_device_id")
+  actorUserId      String    @map("actor_user_id")
+  operationType    String    @map("operation_type")
+  sequence         Int       @default(0)
+  payloadHash      String?   @map("payload_hash")
+  status           String
+  resultCode       String    @map("result_code")
+  resultDetail     String?   @map("result_detail")
+  result           Json?
+  auditLogId       String?   @map("audit_log_id")
+  receivedAt       DateTime  @default(now()) @map("received_at")
+  processedAt      DateTime? @map("processed_at")
+
+  @@unique([companyId, operationId])
+  @@index([companyId, deviceId])
+  @@index([companyId, status])
+  @@map("offline_operations")
+}
+
+model OfflineServerChange {
+  seq        Int      @id @default(autoincrement())
+  companyId  String   @map("company_id")
+  branchId   String?  @map("branch_id")
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  version    Int      @default(0)
+  deleted    Boolean  @default(false)
+  payload    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, seq])
+  @@index([companyId, entityType, entityId])
+  @@map("offline_server_changes")
+}
