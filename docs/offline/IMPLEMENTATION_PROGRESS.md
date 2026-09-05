@@ -534,4 +534,35 @@ Required tests (all passing): no replica data before unlock (only a lock meta re
 - Revocation caching happens during online `/pos` sessions (where `PosOfflineSync` mounts); the offline workspace enforces the last cached status.
 - Migrations review-only/not applied; offline default-OFF.
 
+## Phase 6.3 — fix the React `getServerSnapshot` caching warning (COMPLETE)
+
+### Result
+
+Removed the React warning "The result of getServerSnapshot should be cached to avoid an infinite loop" emitted by the connectivity store during SSR/hydration. `getServerSnapshot` now returns a **frozen, module-level constant** (`SERVER_SNAPSHOT`) instead of a fresh object literal per call, so `useSyncExternalStore` sees a referentially stable server snapshot and cannot enter a render loop. No offline business logic, feature flags, UI behavior, permissions, replica data, sync protocol, or POS write behavior changed.
+
+### How it works
+
+- `features/offline/pwa/connectivity.ts`: added `const SERVER_SNAPSHOT = Object.freeze({ state: "online", navigatorOnline: true, lastHealthyAt: null, updatedAt: "1970-01-01T00:00:00.000Z" })` and returned it from `getServerSnapshot()`. It stays a neutral "online" default so server HTML never flashes offline before the client store hydrates real connectivity.
+- Client `getSnapshot()` was already referentially stable (the store only replaces its snapshot on a real change and skips redundant emits), so there is no render loop, no repeated sync, no stale status, and no false Online/Offline transition.
+
+### Files changed
+
+- Changed: `features/offline/pwa/connectivity.ts` (stable frozen server snapshot)
+- Added: `features/offline/__tests__/connectivity.test.ts`
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 163 tests pass (4 new connectivity tests). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Production build | `npm run build` | **0 (PASS)** | Compiled; routes built. |
+| Manual GUI | computerUse | PASS | Console shows NO `getServerSnapshot` warning; Phase 6.2 locked → wrong PIN → unlock → read-only POS still works. |
+
+New tests: `getServerSnapshot` returns the same frozen reference across calls; the singleton is shared; `getSnapshot` is stable until connectivity changes; subscribe wires window listeners exactly once; offline/online events transition state and notify once each; a redundant offline event neither re-emits nor flips state (no false transition); unsubscribe stops notifications; the server snapshot stays independent + stable through client transitions.
+
+### Known limitations / WAITING (6.3)
+
+- None. Scope was limited to the connectivity server-snapshot caching fix.
+
 - Phase 7 not started (awaiting review approval).

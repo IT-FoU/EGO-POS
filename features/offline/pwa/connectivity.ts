@@ -21,6 +21,23 @@ export interface ConnectivitySnapshot {
 
 type Listener = () => void;
 
+/**
+ * Stable server/hydration snapshot. `useSyncExternalStore` requires
+ * `getServerSnapshot` to return a referentially STABLE value across calls —
+ * returning a fresh object each call triggers React's "The result of
+ * getServerSnapshot should be cached to avoid an infinite loop" warning and can
+ * cause repeated re-renders. This frozen module-level constant is that cache.
+ *
+ * It represents a neutral "online" default so server-rendered HTML never flashes
+ * an offline state before the client store hydrates real connectivity.
+ */
+const SERVER_SNAPSHOT: ConnectivitySnapshot = Object.freeze({
+  state: "online",
+  navigatorOnline: true,
+  lastHealthyAt: null,
+  updatedAt: "1970-01-01T00:00:00.000Z",
+});
+
 function readNavigatorOnline(): boolean {
   try {
     if (typeof navigator === "undefined") return true;
@@ -99,12 +116,7 @@ class ConnectivityStore {
 
   getSnapshot = (): ConnectivitySnapshot => this.snapshot;
 
-  getServerSnapshot = (): ConnectivitySnapshot => ({
-    state: "online",
-    navigatorOnline: true,
-    lastHealthyAt: null,
-    updatedAt: "1970-01-01T00:00:00.000Z",
-  });
+  getServerSnapshot = (): ConnectivitySnapshot => SERVER_SNAPSHOT;
 
   /** Sync engine hook: report a confirmed healthy/unhealthy round-trip. */
   reportHealth(healthy: boolean): void {
