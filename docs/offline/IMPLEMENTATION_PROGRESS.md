@@ -16,7 +16,7 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | 2 | PWA app shell and connectivity UX | **COMPLETE** (code + tests + in-browser QA; default-off) |
 | 3 | Device, terminal and offline authentication | **COMPLETE** (models + reviewed migration [not applied] + tests) |
 | 4 | Cloud sync protocol and server protection | **COMPLETE** (models + reviewed migration [not applied] + engine + tests) |
-| 5 | Local snapshot and repository adapters | **PARTIAL** — reference replica + bootstrap/delta wiring + **real delta emission (5.1)** COMPLETE; adapters/client-refactor deferred |
+| 5 | Local snapshot and repository adapters | **PARTIAL** — reference replica + bootstrap/delta + real delta emission (5.1) + **concurrent-safe versioning & warehouse isolation (5.2)** COMPLETE; adapters/client-refactor deferred |
 | 6 | Receipt identity, local sales and POS checkout | Not started |
 | 7 | Cash sessions, held bills and post-sale | Not started |
 | 8 | Inventory, purchasing and suppliers | Not started |
@@ -349,6 +349,57 @@ Required repair tests (all passing): (1) online price change reaches another dev
 - **POS-sale stock consumption, cash-session open/close/movement, QR-account, and terminal-allocation emission — deferred.** These use non-`withTenantTransaction` paths (e.g. `writeCompletePrismaSale`'s own transaction) or a not-yet-online allocator; the identical emit mechanism applies and bootstrap already delivers this data. Deferred to keep the core sale path untouched (preserve online behavior).
 - **Per-entity server versioning** uses `max(existing seq-version)+1` at emit; multi-warehouse stock keyed by productId is simplified (single-warehouse POS).
 - **DB-backed integration** remains review-only; the emit path is exercised by build/typecheck (compiles into the real write paths) and the delta/apply path is proven by deterministic in-memory end-to-end tests.
+- Migrations remain review-only/not applied; offline remains disabled by default.
+
+## Phase 5.2 (repair) — concurrent-safe reference versioning + warehouse isolation (COMPLETE)
+
+### Result
+
+Replaced the racy `max existing + 1` version generation with a **database-safe atomic mechanism**, fixed stock/lot reference keys so the same product in different warehouses cannot overwrite or leak, made delta pulls **warehouse-scoped**, and **enforced** the single-warehouse rollout in code + diagnostics.
+
+### Concurrent-safe versioning
+
+- New `OfflineReferenceRevision` counter with a **unique `scope_key`**; version is allocated by a single atomic statement: `INSERT ... ON CONFLICT (scope_key) DO UPDATE SET version = version + 1 RETURNING version` (`prismaRevisionAllocator`). Two concurrent transactions serialize on the row and can never share a version.
+- `MemoryRevisionAllocator` mirrors the semantics for deterministic tests.
+- **Scope identity** = company + branch + warehouse + entity kind + entity id (`referenceScopeKey`). The `seq` auto-increment remains the **pagination cursor only**, never the per-entity version.
+- Tombstones still outrank older upserts; a stale lower-version event can never resurrect a deleted product/category (version-guarded client apply).
+
+### Warehouse correctness / isolation
+
+- Stock-level reference key is now **product + warehouse** (`stockLevelEntityId`) in both the emitter and the bootstrap provider — same product in different warehouses stays isolated.
+- `OfflineServerChange` gained `warehouse_id`; delta pull filters by **warehouse (plus branch)** so a terminal receives only its permitted warehouse/branch changes (company-wide null-scope changes still reach everyone).
+- **Single-warehouse rollout enforced** in code (`features/offline/config.ts`, `assertSingleWarehouseRollout`) — the sync context rejects a terminal resolving to >1 warehouse; the sync status surfaces `singleWarehouseRollout` + `warehouseScope` for diagnostics. Not assumed.
+
+### Files added / changed
+
+- Added: `features/offline/config.ts`, `features/offline/__tests__/reference-concurrency.test.ts`, migration `20260905_offline_phase52_reference_revision` (review-only)
+- Changed: `prisma/schema.prisma` (OfflineReferenceRevision + OfflineServerChange.warehouseId), `features/offline/server/{reference-change,reference-emit,prisma-reference-provider,sync-contract,sync-store,prisma-sync-store,sync-engine,sync-service}.ts`, `features/offline/replica/store-snapshot-repository.ts`, `features/offline/index.ts`, `features/offline/__tests__/reference-change.test.ts`
+
+### Migration list (review-only, NOT applied)
+
+- `20260905_offline_phase52_reference_revision` → adds `offline_reference_revisions` (unique `scope_key`) and `offline_server_changes.warehouse_id` (+ index).
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 114 tests pass (6 new). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`. |
+
+Required 5.2 tests (all passing): (1) concurrent same-entity updates → unique, ordered versions; (2) update-vs-delete race → replica matches authoritative final state (+ no resurrection); (3) same product in two warehouses isolated; (4) two terminal replicas receive only their permitted warehouse/branch changes; (5) all prior delta/tombstone/bootstrap/tenant-isolation tests still pass.
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `0348bd2` | fix(offline): Phase 5.2 concurrent-safe reference versioning + warehouse isolation |
+
+### Known limitations / WAITING (Phase 5.2)
+
+- **Concurrency proof is deterministic-in-memory** (`MemoryRevisionAllocator` mirrors the atomic upsert). The production guarantee comes from the single-statement Postgres `ON CONFLICT ... RETURNING`; a live DB concurrency test is deferred per the no-migration/no-production-data rule.
+- POS-sale stock consumption, cash-session, QR-account, and terminal-allocation emission remain deferred (Phase 5.1 note); they will reuse the same atomic allocator + warehouse-scoped keys.
 - Migrations remain review-only/not applied; offline remains disabled by default.
 
 - Phase 6 not started (awaiting review approval).
