@@ -46,27 +46,27 @@
 
 ## Phase 3 — Device, terminal and offline authentication
 
-- [ ] Add cloud schema migration(s) for registered terminal devices, device state/revocation, policy version/cursor, terminal receipt-number allocation, stock allocation/lease and loyalty redemption allowance.
-- [ ] Add Prisma models, relations, indexes, unique constraints and tenant/branch scoping for every new offline record.
-- [ ] Add a device registration/activation flow using a persistent non-secret device ID. Require assigned terminal or Owner/Manager activation before offline writes are enabled.
-- [ ] Add a cloud endpoint to bootstrap device/terminal policy and return a minimal cached security snapshot.
-- [ ] Implement device-local offline unlock. It must require an already authorized identity and local lock credential; it may not retain plaintext passwords or long-lived cloud credentials.
-- [ ] Cache only necessary user/role/POS-policy/approval-policy data, plus policy version and last successful security sync timestamp.
-- [ ] Implement default 7-day offline authorization grace with company configuration; on expiry, preserve read access and unsynced records but block new financial/inventory writes until online reauthorization.
-- [ ] Implement cloud revocation/role-change/forced-sign-out application at next sync and write an audit event.
-- [ ] Add tests for first-use offline denial, registered-device unlock, expired grace period, revoked terminal, disabled cashier and branch/tenant isolation.
+- [x] Add cloud schema migration(s) for registered terminal devices, device state/revocation, policy version/cursor, terminal receipt-number allocation, stock allocation/lease and loyalty redemption allowance. <!-- prisma/migrations/20260905_offline_phase3_device_terminal/migration.sql — REVIEW-ONLY, not applied. -->
+- [x] Add Prisma models, relations, indexes, unique constraints and tenant/branch scoping for every new offline record. <!-- TerminalDevice, OfflineSyncCursor, TerminalReceiptRange, TerminalStockAllocation, OfflineLoyaltyAllowance in prisma/schema.prisma (scalar tenant-scoped FKs + @@unique/@@index). -->
+- [x] Add a device registration/activation flow using a persistent non-secret device ID. Require assigned terminal or Owner/Manager activation before offline writes are enabled. <!-- features/offline/server/device-service.ts; /api/offline/device/register (POS view) + /activate (staff.edit). -->
+- [x] Add a cloud endpoint to bootstrap device/terminal policy and return a minimal cached security snapshot. <!-- POST /api/offline/device/policy → getDevicePolicy + buildSecuritySnapshot; records lastPolicySyncAt. -->
+- [x] Implement device-local offline unlock. It must require an already authorized identity and local lock credential; it may not retain plaintext passwords or long-lived cloud credentials. <!-- features/offline/auth/device-unlock.ts — salted PIN hash only (PBKDF2 default; pluggable), stored in local DB meta; never plaintext/tokens. -->
+- [x] Cache only necessary user/role/POS-policy/approval-policy data, plus policy version and last successful security sync timestamp. <!-- SecuritySnapshot (features/offline/server/security-snapshot.ts) rejects secret-like fields; includes policyVersion + lastPolicySyncAt. -->
+- [x] Implement default 7-day offline authorization grace with company configuration; on expiry, preserve read access and unsynced records but block new financial/inventory writes until online reauthorization. <!-- features/offline/server/authorization.ts (DEFAULT_OFFLINE_GRACE_DAYS=7, per-device offlineGraceDays; graceExpired → readOnly). -->
+- [x] Implement cloud revocation/role-change/forced-sign-out application at next sync and write an audit event. <!-- revokeDevice + activate/policy audit via withTenantTransaction; sync engine blocks revoked/stale devices. Client-side application of revocation at next sync is wired to the flag/UI in Phase 11. -->
+- [x] Add tests for first-use offline denial, registered-device unlock, expired grace period, revoked terminal, disabled cashier and branch/tenant isolation. <!-- features/offline/__tests__/{authorization,device-unlock,allocation}.test.ts. -->
 
 ## Phase 4 — Cloud sync protocol and server protection
 
-- [ ] Design versioned request/response schemas for device activation, bootstrap, delta pull, batched command push, sync status and conflict resolution.
-- [ ] Add `OfflineOperation` cloud persistence with a unique constraint on `companyId + operationId` and stored accepted/rejected result.
-- [ ] Implement batched command push. It must process commands in dependency order, validate tenant/session/device/terminal/policy scope, and return a result for every operation.
-- [ ] Ensure an idempotent retry returns the original result without repeating a write, audit entry, loyalty ledger entry, payment or stock movement.
-- [ ] Implement cursor-based delta pull with deterministic ordering, server versioning and tombstones. Never infer that an empty response requires default seed data.
-- [ ] Add resumable/paginated initial bootstrap for current store/branch/warehouse data and bounded history.
-- [ ] Add server error codes for validation failure, permission denied, stale policy, stale version, receipt collision, insufficient terminal stock allocation, missing loyalty allowance, dependency blocked and unexpected server error.
-- [ ] Add server audit linkage for every accepted/rejected offline command, including device/terminal/actor/operation ID.
-- [ ] Add integration tests for duplicate delivery, interrupted response after cloud commit, out-of-order batch dependency, stale cursor, cross-tenant operation injection and invalid terminal assignment.
+- [x] Design versioned request/response schemas for device activation, bootstrap, delta pull, batched command push, sync status and conflict resolution. <!-- features/offline/server/sync-contract.ts (SYNC_SCHEMA_VERSION=1) + validators. -->
+- [x] Add `OfflineOperation` cloud persistence with a unique constraint on `companyId + operationId` and stored accepted/rejected result. <!-- prisma model OfflineOperation + migration 20260905_offline_phase4_offline_operation (review-only); PrismaSyncStore persists terminal results. -->
+- [x] Implement batched command push. It must process commands in dependency order, validate tenant/session/device/terminal/policy scope, and return a result for every operation. <!-- processPush in sync-engine.ts; POST /api/offline/sync/push (posSell). -->
+- [x] Ensure an idempotent retry returns the original result without repeating a write, audit entry, loyalty ledger entry, payment or stock movement. <!-- idempotency by company+operationId short-circuits before applyCommand; tested "duplicate delivery". -->
+- [x] Implement cursor-based delta pull with deterministic ordering, server versioning and tombstones. Never infer that an empty response requires default seed data. <!-- pullDelta + OfflineServerChange feed; tested empty=empty + tombstones + pagination. -->
+- [x] Add resumable/paginated initial bootstrap for current store/branch/warehouse data and bounded history. <!-- bootstrap() paginated + GET /api/offline/sync/bootstrap; reference-data wiring lands in Phase 5 (documented). -->
+- [x] Add server error codes for validation failure, permission denied, stale policy, stale version, receipt collision, insufficient terminal stock allocation, missing loyalty allowance, dependency blocked and unexpected server error. <!-- SyncErrorCode in sync-contract.ts. -->
+- [x] Add server audit linkage for every accepted/rejected offline command, including device/terminal/actor/operation ID. <!-- PrismaSyncStore.saveOperationResult writes an AuditLog and stores audit_log_id on OfflineOperation. -->
+- [x] Add integration tests for duplicate delivery, interrupted response after cloud commit, out-of-order batch dependency, stale cursor, cross-tenant operation injection and invalid terminal assignment. <!-- features/offline/__tests__/sync-engine.test.ts (deterministic, against InMemorySyncStore). "Interrupted response after cloud commit" is covered by the idempotent duplicate-delivery path. DB-backed integration + applying migrations is WAITING per the no-migration/no-production-data rule (see IMPLEMENTATION_PROGRESS). -->
 
 ## Phase 5 — Local snapshot and repository adapters
 

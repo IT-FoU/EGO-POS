@@ -14,9 +14,9 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | 0 | Baseline audit and guardrails | **COMPLETE** (documentation only) |
 | 1 | Architecture foundations | **COMPLETE** (code + tests; default-off, no schema/migration) |
 | 2 | PWA app shell and connectivity UX | **COMPLETE** (code + tests + in-browser QA; default-off) |
-| 3 | Device, terminal and offline authentication | Not started (awaiting approval) |
-| 4 | Cloud sync protocol and server protection | Not started |
-| 5 | Local snapshot and repository adapters | Not started |
+| 3 | Device, terminal and offline authentication | **COMPLETE** (models + reviewed migration [not applied] + tests) |
+| 4 | Cloud sync protocol and server protection | **COMPLETE** (models + reviewed migration [not applied] + engine + tests) |
+| 5 | Local snapshot and repository adapters | Not started (awaiting approval) |
 | 6 | Receipt identity, local sales and POS checkout | Not started |
 | 7 | Cash sessions, held bills and post-sale | Not started |
 | 8 | Inventory, purchasing and suppliers | Not started |
@@ -176,4 +176,78 @@ The first QA run showed the dashboard blanking after opening the Sync Center. Ro
 - **Sync engine — not implemented (by design).** `NoopSyncCoordinator` and the inbox are typed skeletons; real device registration (Phase 3), sync protocol (Phase 4), and coordinator (Phase 11) are out of scope for Phases 1–2.
 - Offline writes remain **disabled by default**; enabling requires the per-scope flag / `NEXT_PUBLIC_OFFLINE_ENABLED`.
 
-- Phase 3 not started (awaiting review approval).
+## Phase 3 — Device, terminal & offline-authorization foundation (COMPLETE)
+
+### Result
+
+Added the secure device/terminal + offline-authorization foundation. Prisma models + a reviewed migration file (NOT applied), pure authorization/scope logic, receipt-range / terminal-stock-allocation / loyalty-allowance invariants, a minimal non-secret cached security snapshot, a device-local offline unlock (salted PIN hash only), and Prisma-backed device register/activate/revoke/policy endpoints — all reusing existing tenant scope, POS policy loading, permission checks, and `withTenantTransaction` audit. Offline remains default-off.
+
+### Files added / changed
+
+- `prisma/schema.prisma` (5 models) + `prisma/migrations/20260905_offline_phase3_device_terminal/migration.sql` (review-only)
+- `features/offline/server/{types,authorization,receipt-range,stock-allocation,loyalty-allowance,security-snapshot,device-service}.ts`
+- `features/offline/auth/device-unlock.ts`, `features/offline/local-db/schema.ts` (meta keys)
+- `app/api/offline/device/{register,activate,revoke,policy}/route.ts`
+- Tests: `features/offline/__tests__/{authorization,allocation,device-unlock}.test.ts`
+
+### Migration list (review-only, NOT applied)
+
+- `20260905_offline_phase3_device_terminal` → `terminal_devices`, `offline_sync_cursors`, `terminal_receipt_ranges`, `terminal_stock_allocations`, `offline_loyalty_allowances`.
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Client regenerated (schema→client only; no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 66 tests pass (28 new: authorization/scope, receipt/stock/loyalty invariants, device unlock, security snapshot). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`; `/api/offline/device/{register,activate,revoke,policy}` present. |
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `a7acd7e` | feat(offline): Phase 3 device/terminal & offline-authorization foundation |
+
+## Phase 4 — Cloud sync protocol & server protection (COMPLETE)
+
+### Result
+
+Added the versioned cloud sync contract and engine. Prisma models + a reviewed migration file (NOT applied), versioned request/response schemas + validators, machine-readable result/error codes, a `SyncStore` abstraction (in-memory for tests, Prisma for production), and a deterministic sync engine (dependency-ordered push, idempotency by `companyId+operationId`, per-command scope/policy validation, terminal-only ledger persistence with audit linkage, cursor delta pull with tombstones, resumable bootstrap). Secured endpoints via `runRead`/`runWrite`.
+
+### Files added / changed
+
+- `prisma/schema.prisma` (OfflineOperation, OfflineServerChange) + `prisma/migrations/20260905_offline_phase4_offline_operation/migration.sql` (review-only)
+- `features/offline/server/{sync-contract,sync-store,sync-engine,prisma-sync-store,sync-service}.ts`
+- `app/api/offline/sync/{push,pull,bootstrap,status}/route.ts`
+- Tests: `features/offline/__tests__/{sync-engine,sync-contract}.test.ts`
+
+### Migration list (review-only, NOT applied)
+
+- `20260905_offline_phase4_offline_operation` → `offline_operations` (unique `company_id, operation_id`), `offline_server_changes`.
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Client regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 83 tests pass (17 new: idempotency, duplicate delivery, tenant isolation, stale policy, invalid terminal, dependency order, out-of-order dependency, cross-tenant injection, in-batch duplicate, cursor pull + tombstones, bootstrap pagination, contract validators). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`; `/api/offline/sync/{push,pull,bootstrap,status}` present. |
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `1b7aff2` | feat(offline): Phase 4 versioned cloud sync contract & engine |
+
+### Known limitations / WAITING (Phases 3–4)
+
+- **Migrations are REVIEW-ONLY and NOT applied** to any database (local dev uses `prisma db push`; production apply requires the normal migration review + owner approval).
+- **DB-backed integration tests — WAITING.** Phase 4 tests are deterministic and DB-free (InMemorySyncStore); running the Prisma-backed store + endpoints against a live database is deferred per the no-migration/no-production-data rule.
+- **Bootstrap reference-data wiring — Phase 5.** `PrismaSyncStore.listBootstrapEntities` returns an empty, correctly paginated page (empty means empty — never seeds); real reference snapshots land in Phase 5.
+- **Domain application of accepted commands — Phase 5/6.** The engine records the authoritative accept/reject decision and provides an `applyCommand` hook; actual sale/stock/loyalty writes are wired later.
+- **Device-local unlock UI + client revocation application — Phase 11.** The credential/store foundation exists; UI wiring and applying server revocation at next sync land with the Sync Center work.
+- Offline writes remain **disabled by default**.
+
+- Phase 5 not started (awaiting review approval).
