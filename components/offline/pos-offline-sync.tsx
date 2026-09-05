@@ -49,6 +49,8 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
     let replica: { readLocalSnapshot: () => Promise<any>; close?: () => void } | null = null;
     let repo: { cacheDeviceStatus: (s: string, v?: number | null) => Promise<void> } | null = null;
     let statusFetcher: (() => Promise<{ deviceStatus: string | null; policyVersion: number | null }>) | null = null;
+    let flushDb: import("@/features/offline/local-db/database").OfflineDatabase | null = null;
+    let pushFetcher: import("@/features/offline/checkout/outbox-flush").PushFetcher | null = null;
     const statusStore = getPosOfflineStatusStore();
     const connectivity = getConnectivityStore();
 
@@ -93,6 +95,18 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
         return;
       }
       await publish(true);
+      // Phase 6C: flush queued offline sales FIRST (push), then pull deltas.
+      if (flushDb && pushFetcher && connectivity.getSnapshot().state === "online") {
+        try {
+          const { flushOutbox } = await import("@/features/offline/checkout/outbox-flush");
+          await flushOutbox(flushDb, {
+            push: pushFetcher,
+            isOnline: () => connectivity.getSnapshot().state === "online",
+          });
+        } catch {
+          // Flush is best-effort; queued ops remain and retry next cycle.
+        }
+      }
       await controller.sync(trigger as any);
       // Apply device revocation + policy updates from the authoritative server
       // before surfacing offline-ready state. Never blocks the page on failure.
@@ -123,7 +137,7 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
 
     void (async () => {
       try {
-        const [{ OfflineDatabase }, { StoreSnapshotRepository }, { PosSyncController }, { createPosSyncFetchers }] =
+        const [{ OfflineDatabase }, { StoreSnapshotRepository }, { PosSyncController }, { createPosSyncFetchers, createPosPushFetcher }] =
           await Promise.all([
             import("@/features/offline/local-db/database"),
             import("@/features/offline/replica/store-snapshot-repository"),
@@ -133,6 +147,7 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
         if (cancelled) return;
         const db = await OfflineDatabase.open({ namespace });
         replica = db as any;
+        flushDb = db;
         const repoInstance = new StoreSnapshotRepository(db, namespace);
         replica = repoInstance as any;
         repo = repoInstance as any;
@@ -142,6 +157,7 @@ export function PosOfflineSync(props: PosOfflineSyncProps) {
           scope: { companyId: namespace.companyId, branchId: namespace.branchId, warehouseId },
         });
         statusFetcher = fetchers.status;
+        pushFetcher = createPosPushFetcher({ deviceId });
         controller = new PosSyncController(repoInstance, fetchers);
         statusStore.registerManualSync(() => void run("manual"));
 

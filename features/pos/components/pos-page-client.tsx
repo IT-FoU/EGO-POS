@@ -147,8 +147,25 @@ type ResolvedPayment = {
 };
 const POS_PRODUCT_GRID_VISIBILITY_KEY = "ego.pos.productGridVisible";
 
-export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, readOnly = false, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, offlineCheckout, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, readOnly = false, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
     readOnly?: boolean;
+    /**
+     * Phase 6C offline CASH checkout. When `enabled`, the Pay button is active in
+     * an otherwise read-only offline session and clicking it routes to a LOCAL
+     * cash commit (never the online action). Absent/disabled → online behavior.
+     */
+    offlineCheckout?: {
+        enabled: boolean;
+        onCheckout: (args: {
+            items: Array<{ productId: string; unitId?: string; quantity: number; conversionQty: number; unitPriceLak: number; name: string; unitName: string }>;
+            subtotalLak: number;
+            discountTotalLak: number;
+            taxRatePercent: number;
+            taxInclusive: boolean;
+            totalLak: number;
+            paidCashLak: number;
+        }) => Promise<{ ok: true; receiptReference: string; saleNo: string } | { ok: false; error: string }>;
+    };
     branchId: string;
     branchName: string;
     cashierName: string;
@@ -971,6 +988,44 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         applyResolvedPayment(payment);
         const saleNo = billNo;
+        if (offlineCheckout?.enabled) {
+            // Phase 6C: local CASH checkout only. Never calls the online action.
+            checkoutInFlightRef.current = true;
+            startTransition(async () => {
+                try {
+                    const result = await offlineCheckout.onCheckout({
+                        items: cartItems.map((item) => ({
+                            productId: item.id,
+                            unitId: item.unitId,
+                            quantity: item.quantity,
+                            conversionQty: item.conversionQty ?? 1,
+                            unitPriceLak: item.priceLak,
+                            name: item.nameEn || item.nameLo || "Item",
+                            unitName: item.unitName,
+                        })),
+                        subtotalLak: subtotal,
+                        discountTotalLak: discountTotal,
+                        taxRatePercent: taxEnabled ? taxRatePercent : 0,
+                        taxInclusive,
+                        totalLak: totalAmount,
+                        paidCashLak: payment.cashAmount || payment.paidAmount,
+                    });
+                    if (!result.ok) {
+                        // Local validation failed: keep the cart unchanged, show the safe error.
+                        setMessage(result.error);
+                        return;
+                    }
+                    const receipt = { ...buildReceiptSnapshot(payment, result.saleNo), receiptNo: result.receiptReference };
+                    setLastReceipt(receipt);
+                    setSaleCompletedReceipt(receipt);
+                    setMessage(`Receipt ${result.receiptReference} — Pending sync.`);
+                    clearSale();
+                } finally {
+                    checkoutInFlightRef.current = false;
+                }
+            });
+            return;
+        }
         if (demoMode) {
             completeDemoSale(saleNo, payment);
             return;
@@ -1747,7 +1802,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               <Metric label={t("ui.due")} value={`${formatLak(dueAmount)} LAK`}/>
               <Metric label={t("ui.change")} value={`${formatLak(changeAmount)} LAK`}/>
             </dl>
-            <button className="mt-4 h-16 w-full rounded-xl bg-primary text-[40px] font-black leading-none text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-105 disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending || readOnly}>
+            <button className="mt-4 h-16 w-full rounded-xl bg-primary text-[40px] font-black leading-none text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-105 disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending || (readOnly && !offlineCheckout?.enabled)}>
               {isPending ? t("ui.completing") : t("ui.pay")}
             </button>
             </div>

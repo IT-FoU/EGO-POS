@@ -40,3 +40,5 @@ export * from "./checkout/terminal-provisioning";
 export * from "./checkout/cash-session-guard";
 export * from "./checkout/stock-guard";
 export * from "./checkout/commit-cash-sale";
+export * from "./checkout/offline-checkout-service";
+export * from "./checkout/outbox-flush";

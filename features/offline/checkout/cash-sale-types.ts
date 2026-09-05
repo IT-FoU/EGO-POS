@@ -117,6 +117,9 @@ export interface OfflineCashSalePayload {
   createdAt: string;
 }
 
+/** Sync lifecycle of a local offline sale (distinct from the entity syncStatus). */
+export type LocalSaleStatus = "pending" | "synced" | "rejected";
+
 /** Local persisted sale entity. Extends the base local record bookkeeping. */
 export interface LocalSaleEntity extends BaseLocalEntity {
   saleNo: string;
@@ -124,7 +127,7 @@ export interface LocalSaleEntity extends BaseLocalEntity {
   cashSessionId: string;
   customerId: string | null;
   operationId: string;
-  status: "pending";
+  status: LocalSaleStatus;
   lines: OfflineSaleLine[];
   payment: OfflineCashPayment;
   subtotalLak: number;
@@ -134,6 +137,13 @@ export interface LocalSaleEntity extends BaseLocalEntity {
   /** Immutable receipt snapshot — never recomputed from master data. */
   receiptSnapshot: OfflineReceiptSnapshot;
   audit: OfflineSaleAudit;
+  /** Reconciliation after an accepted sync (canonical cloud ids). */
+  cloudSaleId?: string | null;
+  canonicalSaleNo?: string | null;
+  syncedAt?: string | null;
+  /** Machine-readable reason when a sync is rejected (kept for review). */
+  rejectedReason?: string | null;
+  rejectedAt?: string | null;
 }
 
 /** Local stock-movement entity (one per consumed line). */

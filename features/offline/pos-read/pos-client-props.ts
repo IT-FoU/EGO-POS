@@ -82,6 +82,36 @@ export function restrictedReadOnlyPosPolicy(ctx: PosClientContext): PosPermissio
   };
 }
 
+/**
+ * Offline CASH-checkout permission policy (Phase 6C): grants ONLY the actions
+ * needed to build a cart and take a cash sale — `create_sale` and
+ * `delete_item_from_bill`. Everything else (holds, voids, refunds, returns,
+ * discounts, split/multi-currency payments, cash movements, recent-sales/receipt
+ * lookups) stays denied, so QR/Bank/Card/Mixed/transfer/loyalty and every other
+ * write workflow are blocked offline. `nextSaleNo`/amounts remain server-checked
+ * on sync.
+ */
+export function offlineCashCheckoutPosPolicy(ctx: PosClientContext): PosPermissionPolicy {
+  const permissions = Object.fromEntries(
+    POS_PERMISSION_ACTIONS.map((action) => [action, false]),
+  ) as Record<PosPermissionAction, boolean>;
+  permissions.create_sale = true;
+  permissions.delete_item_from_bill = true;
+  const role: PosRole = "Cashier";
+  return {
+    role,
+    userId: "offline-cashier",
+    username: "offline",
+    displayName: ctx.cashierName || "Offline",
+    branchName: ctx.branchName,
+    assignedTerminal: ctx.terminalId ?? "POS-01",
+    maxDiscountPercent: 0,
+    permissions,
+    approvalRules: {},
+    refundOwnerThresholdLak: 0,
+  };
+}
+
 /** The exact prop object consumed by `PosPageClient`. */
 export interface PosClientData {
   branchId: string;

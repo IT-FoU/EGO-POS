@@ -17,9 +17,12 @@ import {
   type OfflineWorkspaceDecision,
 } from "@/features/offline/pos-read/offline-workspace-state";
 import {
+  offlineCashCheckoutPosPolicy,
   posReadModelToPosClientProps,
   type PosClientData,
 } from "@/features/offline/pos-read/pos-client-props";
+import { getOrCreateDeviceId } from "@/features/offline/device-identity";
+import { newOperationId } from "@/features/offline/operations/envelope";
 
 const PosPageClient = dynamic(
   () => import("@/features/pos/components/pos-page-client").then((m) => m.PosPageClient),
@@ -34,7 +37,21 @@ type WorkspaceState =
   | { kind: "blocked"; reason: string | null }
   | { kind: "no_lock" }
   | { kind: "locked"; terminal: ActiveTerminal }
-  | { kind: "ready"; props: PosClientData };
+  | { kind: "ready"; props: PosClientData; checkout: OfflineCheckoutCtx };
+
+/** Non-secret context needed to run a local offline CASH checkout. */
+interface OfflineCheckoutCtx {
+  companyId: string;
+  branchId: string;
+  warehouseId: string | null;
+  terminalId: string;
+  deviceId: string;
+  actorUserId: string;
+  cashSessionId: string | null;
+  policyVersion: number;
+  branchName: string;
+  cashierName: string;
+}
 
 const BLOCKED_MESSAGES: Record<string, string> = {
   never_bootstrapped: "This terminal has not finished its first online setup. Connect to the internet and open the POS online once to prepare offline use.",
@@ -53,13 +70,21 @@ const BLOCKED_MESSAGES: Record<string, string> = {
  */
 async function loadReadyProps(
   terminal: ActiveTerminal,
-): Promise<{ ok: true; props: PosClientData } | { ok: false; reason: string | null }> {
-  const [{ OfflineDatabase }, { StoreSnapshotRepository }, { assertReplicaScope, PosReplicaScopeError }] =
-    await Promise.all([
-      import("@/features/offline/local-db/database"),
-      import("@/features/offline/replica/store-snapshot-repository"),
-      import("@/features/offline/pos-read/pos-read-repository"),
-    ]);
+): Promise<
+  | { ok: true; props: PosClientData; checkout: OfflineCheckoutCtx }
+  | { ok: false; reason: string | null }
+> {
+  const [
+    { OfflineDatabase },
+    { StoreSnapshotRepository },
+    { assertReplicaScope, PosReplicaScopeError },
+    { saveLocalCashSession },
+  ] = await Promise.all([
+    import("@/features/offline/local-db/database"),
+    import("@/features/offline/replica/store-snapshot-repository"),
+    import("@/features/offline/pos-read/pos-read-repository"),
+    import("@/features/offline/checkout/cash-session-guard"),
+  ]);
   const namespace = namespaceFromActiveTerminal(terminal);
   const db = await OfflineDatabase.open({ namespace });
   try {
@@ -93,17 +118,119 @@ async function loadReadyProps(
         reason: error instanceof PosReplicaScopeError ? "terminal_scope" : "invalid_replica",
       };
     }
-    const props = posReadModelToPosClientProps(model, {
+    const branchName = model.storeContext?.branchName ?? "";
+    const cashierName = "Offline";
+    const ctx = {
       branchId: model.storeContext?.branchId ?? terminal.branchId,
-      branchName: model.storeContext?.branchName ?? "",
+      branchName,
       warehouseId: model.storeContext?.warehouseId ?? terminal.warehouseId ?? "",
-      cashierName: "Offline",
+      cashierName,
       terminalId: terminal.terminalId,
+    };
+    // Phase 6C: offline CASH-checkout policy (create_sale + cart edits only).
+    const props = posReadModelToPosClientProps(model, ctx, {
+      readOnly: true,
+      policy: offlineCashCheckoutPosPolicy(ctx),
     });
-    return { ok: true, props };
+
+    // Bridge the replica's open cash-session context into a local session record
+    // so the Phase 6A precondition can be satisfied offline.
+    const cashSession = model.cashSession;
+    if (cashSession && cashSession.status === "open") {
+      await saveLocalCashSession(db, {
+        id: cashSession.id,
+        companyId: terminal.companyId,
+        branchId: ctx.branchId,
+        terminalId: terminal.terminalId,
+        status: "open",
+        openedAt: cashSession.openedAt,
+        openingFloatLak: cashSession.openingFloatLak,
+      });
+    }
+
+    const security = (snapshot.securitySnapshot ?? null) as { userId?: string } | null;
+    const checkout: OfflineCheckoutCtx = {
+      companyId: terminal.companyId,
+      branchId: ctx.branchId,
+      warehouseId: terminal.warehouseId,
+      terminalId: terminal.terminalId,
+      deviceId: getOrCreateDeviceId(),
+      actorUserId: security?.userId ?? "offline-cashier",
+      cashSessionId: cashSession && cashSession.status === "open" ? cashSession.id : null,
+      policyVersion: snapshot.meta.policyVersion ?? 0,
+      branchName,
+      cashierName,
+    };
+
+    return { ok: true, props, checkout };
   } finally {
     db.close();
   }
+}
+
+/**
+ * Build the local offline CASH-checkout handler passed to `PosPageClient`. Opens
+ * the device-local DB per attempt, generates one operationId per checkout, runs
+ * the atomic `commitOfflineCashSale`, and returns a permanent receipt reference.
+ */
+function makeOnCheckout(ctx: OfflineCheckoutCtx) {
+  return async (args: {
+    items: Array<{ productId: string; unitId?: string; quantity: number; conversionQty: number; unitPriceLak: number; name: string; unitName: string }>;
+    subtotalLak: number;
+    discountTotalLak: number;
+    taxRatePercent: number;
+    taxInclusive: boolean;
+    totalLak: number;
+    paidCashLak: number;
+  }): Promise<{ ok: true; receiptReference: string; saleNo: string } | { ok: false; error: string }> => {
+    if (!ctx.cashSessionId) {
+      return { ok: false, error: "No open cash session on this terminal. Open a shift before selling." };
+    }
+    const [{ OfflineDatabase }, { runOfflineCashCheckout }] = await Promise.all([
+      import("@/features/offline/local-db/database"),
+      import("@/features/offline/checkout/offline-checkout-service"),
+    ]);
+    const namespace = {
+      companyId: ctx.companyId,
+      branchId: ctx.branchId,
+      terminalId: ctx.terminalId,
+    };
+    const db = await OfflineDatabase.open({ namespace });
+    try {
+      const result = await runOfflineCashCheckout(db, {
+        operationId: newOperationId(),
+        companyId: ctx.companyId,
+        branchId: ctx.branchId,
+        warehouseId: ctx.warehouseId,
+        terminalId: ctx.terminalId,
+        deviceId: ctx.deviceId,
+        actorUserId: ctx.actorUserId,
+        policyVersion: ctx.policyVersion,
+        cashSessionId: ctx.cashSessionId,
+        saleNo: `${ctx.terminalId}-${Date.now()}`,
+        lines: args.items.map((item) => ({
+          productId: item.productId,
+          unitId: item.unitId ?? null,
+          lotId: null,
+          quantity: item.quantity,
+          conversionQty: item.conversionQty,
+          unitPriceLak: item.unitPriceLak,
+          name: item.name,
+          unitName: item.unitName,
+        })),
+        taxRatePercent: args.taxRatePercent,
+        taxInclusive: args.taxInclusive,
+        manualDiscountLak: args.discountTotalLak,
+        paidCashLak: args.paidCashLak,
+        branchName: ctx.branchName,
+        cashierName: ctx.cashierName,
+      });
+      if (!result.ok) return { ok: false, error: result.error };
+      return { ok: true, receiptReference: result.receiptReference, saleNo: result.saleNo };
+    } finally {
+      db.close();
+    }
+  };
 }
 
 /**
@@ -238,7 +365,7 @@ export function OfflinePosWorkspace() {
         const loaded = await loadReadyProps(terminal);
         if (loaded.ok) {
           setPin("");
-          setState({ kind: "ready", props: loaded.props });
+          setState({ kind: "ready", props: loaded.props, checkout: loaded.checkout });
         } else {
           setState({ kind: "blocked", reason: loaded.reason });
         }
@@ -284,12 +411,20 @@ export function OfflinePosWorkspace() {
   );
 
   if (state.kind === "ready") {
+    const checkoutCtx = state.checkout;
+    const canCheckout = !!checkoutCtx.cashSessionId;
     return (
       <div>
         <div className="sticky top-0 z-20 bg-amber-500/15 px-4 py-2 text-center text-sm font-medium text-amber-700">
-          Offline — read-only. Sales, payments, and other changes are disabled until you reconnect.
+          {canCheckout
+            ? "Offline — CASH only. Card/QR/transfer, refunds, holds, and other actions are disabled until you reconnect."
+            : "Offline — read-only. Open a cash shift to sell; other changes are disabled until you reconnect."}
         </div>
-        <PosPageClient {...state.props} demoMode={false} />
+        <PosPageClient
+          {...state.props}
+          demoMode={false}
+          offlineCheckout={{ enabled: canCheckout, onCheckout: makeOnCheckout(checkoutCtx) }}
+        />
       </div>
     );
   }

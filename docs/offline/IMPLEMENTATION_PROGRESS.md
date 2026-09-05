@@ -680,4 +680,41 @@ Required tests (all passing): (1) disabled cashier → `permission_denied:user_d
 - Still server-application only — no user-facing checkout; online checkout untouched.
 - The `PrismaCashSaleGateway` (incl. `getActor`) runs against a live DB in production/integration; orchestration + validation are covered by the in-memory tests.
 
-- Phase 6C / Phase 7 not started (awaiting review approval).
+## Phase 6C — Mini Mart offline CASH checkout UI + outbox flush + reconciliation (COMPLETE)
+
+### Result
+
+Enabled offline CASH checkout in the **existing** `PosPageClient` (no second POS), plus outbox flush + reconciliation. Flag OFF and Flag ON+online preserve the current online checkout exactly. Flag ON + a PIN-unlocked, authorized, offline-ready terminal **while offline** enables only the minimum: product add/remove, quantity change, barcode search, safe local calculation, and CASH checkout via `commitOfflineCashSale`. Card/QR/Bank/Mixed/transfer, loyalty, refunds, holds, voids, returns, stock actions, and cash movement stay disabled offline. On reconnect the outbox flushes one op at a time and reconciles pending → synced / rejected.
+
+### How it works
+
+- **Reused UI.** `PosPageClient` gains one optional prop `offlineCheckout`. When `enabled`, the Pay button is active in an otherwise read-only offline session and routes to a LOCAL cash commit (never the online action); absent/disabled → **online behavior is byte-for-byte unchanged**. The offline session uses `offlineCashCheckoutPosPolicy` (grants only `create_sale` + `delete_item_from_bill`; every other action — split/multi-currency payment, hold/void/refund/return, discount, cash in/out, recent-sales — is denied immediately), and `readOnly` stays true so secondary fetch effects remain off and non-cash controls are blocked.
+- **Checkout service** (`checkout/offline-checkout-service.ts`): one operationId per attempt; wraps the Phase 6A atomic `commitOfflineCashSale`; maps domain errors to exact safe messages (cart kept unchanged on failure); on success the workspace shows the **permanent receipt reference + “Pending sync”** and clears the cart exactly once. No network I/O.
+- **Outbox flush + reconciliation** (`checkout/outbox-flush.ts`): on startup/focus/reconnect/Sync Now (via `PosOfflineSync`), flushes READY ops in deterministic dependency order, **one at a time**, **never** touching the network while offline, with a single-flight guard (no parallel/duplicate flush). Accepted → outbox synced + local sale reconciled (local→cloud ids, pending → synced); rejected → outbox rejected + local sale rejected with the reason (immutable receipt/audit preserved, no silent retry/delete); an interrupted response keeps the op retryable and retries the **same operationId** (server idempotency → no duplicate cloud sale). Flush runs before delta pull.
+- **Network** (`network-client.ts`): `createPosPushFetcher` posts to `/api/offline/sync/push` (never SW-cached).
+- **Workspace bridge** (`OfflinePosWorkspace`): after PIN unlock + offline-ready, mirrors the replica's open cash-session into a local session record (satisfies the Phase 6A precondition), builds the checkout context (device id, actor from the security snapshot, policy version), and passes `offlineCheckout` to `PosPageClient`. Without an open session it stays read-only.
+
+### Files added / changed
+
+- Added: `features/offline/checkout/{offline-checkout-service,outbox-flush}.ts`; test `features/offline/__tests__/offline-checkout-flush.test.ts`
+- Changed: `features/pos/components/pos-page-client.tsx` (optional `offlineCheckout` prop + local Pay branch + Pay-enable), `components/offline/offline-pos-workspace.tsx` (checkout policy + session bridge + `onCheckout`), `components/offline/pos-offline-sync.tsx` (flush before pull), `features/offline/pos-read/network-client.ts` (push fetcher), `features/offline/pos-read/pos-client-props.ts` (`offlineCashCheckoutPosPolicy`), `features/offline/checkout/cash-sale-types.ts` (sale sync status + reconciliation fields)
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 213 tests pass (8 new Phase 6C). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Prisma client generate | `npx prisma generate` | **0** | Regenerated (no DB touched). |
+| Production build | `npm run build` | **0 (PASS)** | Compiled; routes built. |
+| Manual GUI | computerUse | see below | Unlocked offline POS with products; cash sale → permanent receipt + Pending sync; reconnect → synced. |
+
+Required tests (all passing): (2) offline cash checkout → exactly one local pending sale + receipt + outbox op; (3) reload/retry (same operationId) → no duplicate sale/receipt/movement/outbox; (4) reconnect flush → one canonical cloud sale + local ids reconciled (pending → synced); (5) interrupted response retried with the same operationId (no duplicate cloud sale); (6) rejected sync stays visible + intact (immutable receipt, no silent retry); (7) non-cash + unrelated write actions denied offline; (8) no network request while offline; plus a single-flight (no parallel flush) test. (1) flag-OFF online checkout unchanged is preserved by construction (online path untouched; `offlineCheckout` optional) and verified in GUI.
+
+### Known limitations / WAITING (6C)
+
+- Offline sales are CASH only; the offline `actorUserId` comes from the cached security snapshot (must match the pushing user for the server to accept on sync).
+- Cash-session **open/close** offline is Phase 7; 6C mirrors an already-open session from the replica to satisfy the sale precondition.
+- Live installable-PWA offline reload QA remains WAITING (needs an installable HTTPS/PWA context); GUI here uses a preloaded synthetic local replica.
+
+- Phase 7 not started (awaiting review approval).
