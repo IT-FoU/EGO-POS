@@ -47,6 +47,8 @@ export interface ServerChange {
   version: number;
   deleted: boolean;
   payload: unknown;
+  /** Warehouse scope for warehouse-specific reference data (e.g. stock levels). */
+  warehouseId?: string | null;
 }
 
 // ---- Push ----
@@ -114,6 +116,9 @@ export interface SyncStatusResponse {
   lastPushAt: string | null;
   lastPullAt: string | null;
   syncCursor: number;
+  /** Diagnostics: single-warehouse rollout flag + this terminal's warehouse scope. */
+  singleWarehouseRollout?: boolean;
+  warehouseScope?: string[];
 }
 
 // ---- Validation ----

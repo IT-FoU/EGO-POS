@@ -16,6 +16,7 @@ import {
   type ReferenceEntity,
   type ReferenceScope,
 } from "../replica/reference-types";
+import { stockLevelEntityId } from "./reference-change";
 
 const db = prisma as any;
 
@@ -151,10 +152,10 @@ export async function buildReferenceEntities(
       },
     });
 
-    // Read-only stock level per product (respecting terminal allocation).
+    // Read-only stock level per product+warehouse (respecting terminal allocation).
     entities.push({
       entityType: ReferenceEntityType.stockLevel,
-      entityId: String(product.id),
+      entityId: stockLevelEntityId(String(product.id), warehouseId ?? ""),
       version: BOOTSTRAP_VERSION,
       deleted: false,
       scope,

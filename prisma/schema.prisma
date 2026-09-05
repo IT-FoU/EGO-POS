@@ -1917,17 +1917,36 @@ model OfflineOperation {
 }
 
 model OfflineServerChange {
-  seq        Int      @id @default(autoincrement())
-  companyId  String   @map("company_id")
-  branchId   String?  @map("branch_id")
-  entityType String   @map("entity_type")
-  entityId   String   @map("entity_id")
-  version    Int      @default(0)
-  deleted    Boolean  @default(false)
-  payload    Json?
-  createdAt  DateTime @default(now()) @map("created_at")
+  seq         Int      @id @default(autoincrement())
+  companyId   String   @map("company_id")
+  branchId    String?  @map("branch_id")
+  warehouseId String?  @map("warehouse_id")
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  version     Int      @default(0)
+  deleted     Boolean  @default(false)
+  payload     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([companyId, seq])
   @@index([companyId, entityType, entityId])
+  @@index([companyId, warehouseId])
   @@map("offline_server_changes")
+}
+
+/**
+ * Atomic per-scope reference revision counter (Phase 5.2). A single upsert-
+ * increment statement guarantees two concurrent writes to the same scoped
+ * entity never receive the same version. `scopeKey` = company + branch +
+ * warehouse + entity kind + entity id (never null), unique-constrained.
+ */
+model OfflineReferenceRevision {
+  id        String   @id @default(cuid())
+  companyId String   @map("company_id")
+  scopeKey  String   @unique @map("scope_key")
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@map("offline_reference_revisions")
 }

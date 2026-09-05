@@ -72,6 +72,7 @@ export interface SyncStore {
     cursor: number,
     limit: number,
     branchIds?: string[],
+    warehouseIds?: string[],
   ): Promise<ChangesPage>;
   listBootstrapEntities(companyId: string, cursor: number, limit: number): Promise<BootstrapPage>;
   getCursorState(companyId: string, deviceId: string): Promise<CursorState>;
@@ -108,9 +109,16 @@ export class InMemorySyncStore implements SyncStore {
     companyId: string,
     change: Omit<ServerChange, "cursor">,
     branchId: string | null = null,
+    warehouseId: string | null = null,
   ): number {
     const cursor = this.changes.length + 1;
-    this.changes.push({ ...change, companyId, branchId, cursor });
+    this.changes.push({
+      ...change,
+      companyId,
+      branchId,
+      warehouseId: change.warehouseId ?? warehouseId,
+      cursor,
+    });
     return cursor;
   }
 
@@ -158,6 +166,7 @@ export class InMemorySyncStore implements SyncStore {
     cursor: number,
     limit: number,
     branchIds?: string[],
+    warehouseIds?: string[],
   ): Promise<ChangesPage> {
     const pending = this.changes
       .filter((change) => change.companyId === companyId && change.cursor > cursor)
@@ -165,6 +174,10 @@ export class InMemorySyncStore implements SyncStore {
         (change) =>
           !branchIds || change.branchId === null || branchIds.includes(change.branchId),
       )
+      .filter((change) => {
+        const wh = change.warehouseId ?? null;
+        return !warehouseIds || wh === null || warehouseIds.includes(wh);
+      })
       .sort((a, b) => a.cursor - b.cursor);
     const page = pending.slice(0, limit);
     const hasMore = pending.length > page.length;

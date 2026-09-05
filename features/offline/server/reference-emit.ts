@@ -18,6 +18,7 @@ import {
   promotionPayloadFromRow,
   ReferenceEntityType,
   settingsPayloadFromRow,
+  stockLevelEntityId,
   stockLevelPayloadFromRow,
   tombstone,
 } from "./reference-change";
@@ -187,7 +188,9 @@ export async function emitStockLevelChange(
   await emitReferenceChanges(tx, tenant.companyId, [
     {
       entityType: ReferenceEntityType.stockLevel,
-      entityId: productId,
+      // Key by product + warehouse so the same product in different warehouses
+      // never overwrites or leaks into another terminal's replica.
+      entityId: stockLevelEntityId(productId, warehouseId),
       deleted: false,
       branchId: scope.branchId,
       warehouseId,

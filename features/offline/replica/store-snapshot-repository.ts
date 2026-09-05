@@ -197,7 +197,10 @@ export class StoreSnapshotRepository {
         typeof payload.branchId === "string"
           ? payload.branchId
           : this.namespace.branchId,
-      warehouseId: typeof payload.warehouseId === "string" ? payload.warehouseId : null,
+      // Prefer the authoritative warehouse scope carried on the change.
+      warehouseId:
+        change.warehouseId ??
+        (typeof payload.warehouseId === "string" ? payload.warehouseId : null),
     };
     return {
       entityType: change.entityType as ReferenceEntityTypeValue,

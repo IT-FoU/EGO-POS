@@ -30,6 +30,7 @@ import { PrismaSyncStore } from "./prisma-sync-store";
 import type { SyncStore } from "./sync-store";
 import { buildReferenceEntities } from "./prisma-reference-provider";
 import { paginateReferenceEntities } from "../replica/reference-snapshot";
+import { assertSingleWarehouseRollout, SINGLE_WAREHOUSE_ROLLOUT } from "../config";
 
 const db = prisma as any;
 
@@ -50,6 +51,8 @@ interface ResolvedSyncContext {
   scope: ScopeContext;
   device: DeviceAuthzView;
   deviceId: string;
+  /** Warehouses this terminal is permitted to receive warehouse-scoped changes for. */
+  warehouseIds: string[];
 }
 
 async function resolveSyncContext(
@@ -66,10 +69,24 @@ async function resolveSyncContext(
   ]);
   if (!deviceRow) throw new SyncRequestError("Terminal device is not registered for this company");
 
+  // A terminal receives warehouse-scoped changes for ITS warehouse only. Prefer
+  // the device's bound warehouse; otherwise fall back to the tenant scope. The
+  // single-warehouse rollout limitation is enforced here (not assumed).
+  const warehouseIds = deviceRow.warehouseId
+    ? [deviceRow.warehouseId]
+    : scope.warehouseIds;
+  try {
+    assertSingleWarehouseRollout(warehouseIds);
+  } catch (error) {
+    throw new SyncRequestError(
+      error instanceof Error ? error.message : "Single-warehouse rollout violation",
+    );
+  }
+
   const scopeContext: ScopeContext = {
     companyId: tenant.companyId,
     branchIds: scope.branchIds,
-    warehouseIds: scope.warehouseIds,
+    warehouseIds,
     terminalId: deviceRow.terminalId,
     deviceId: trimmed,
     userId: scope.userId,
@@ -82,7 +99,7 @@ async function resolveSyncContext(
       ? new Date(deviceRow.lastPolicySyncAt).toISOString()
       : null,
   };
-  return { scope: scopeContext, device, deviceId: trimmed };
+  return { scope: scopeContext, device, deviceId: trimmed, warehouseIds };
 }
 
 export async function pushSync(tenant: TenantContext, body: unknown): Promise<PushResponse> {
@@ -119,6 +136,7 @@ export async function pullSync(
     validation.value,
     new Date(),
     ctx.scope.branchIds,
+    ctx.warehouseIds,
   );
 }
 
@@ -153,5 +171,10 @@ export async function statusSync(
   query: { deviceId: string },
 ): Promise<SyncStatusResponse> {
   const ctx = await resolveSyncContext(tenant, query.deviceId);
-  return syncStatus(getSyncStore(), tenant.companyId, ctx.deviceId);
+  const status = await syncStatus(getSyncStore(), tenant.companyId, ctx.deviceId);
+  return {
+    ...status,
+    singleWarehouseRollout: SINGLE_WAREHOUSE_ROLLOUT,
+    warehouseScope: ctx.warehouseIds,
+  };
 }

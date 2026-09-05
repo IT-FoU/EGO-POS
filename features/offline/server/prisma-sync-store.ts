@@ -116,16 +116,21 @@ export class PrismaSyncStore implements SyncStore {
     cursor: number,
     limit: number,
     branchIds?: string[],
+    warehouseIds?: string[],
   ): Promise<ChangesPage> {
-    const where: Record<string, unknown> = { companyId, seq: { gt: cursor } };
+    const and: Array<Record<string, unknown>> = [{ companyId }, { seq: { gt: cursor } }];
     if (branchIds) {
       // Company-wide changes (branchId null) plus this device's branch(es).
-      where.OR = [{ branchId: null }, { branchId: { in: branchIds } }];
+      and.push({ OR: [{ branchId: null }, { branchId: { in: branchIds } }] });
+    }
+    if (warehouseIds) {
+      // Non-warehouse changes (warehouseId null) plus this terminal's warehouse(s).
+      and.push({ OR: [{ warehouseId: null }, { warehouseId: { in: warehouseIds } }] });
     }
     const rows = await db.offlineServerChange.findMany({
       orderBy: { seq: "asc" },
       take: limit + 1,
-      where,
+      where: { AND: and },
     });
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
@@ -138,6 +143,7 @@ export class PrismaSyncStore implements SyncStore {
         version: row.version,
         deleted: row.deleted,
         payload: row.payload ?? null,
+        warehouseId: row.warehouseId ?? null,
       })),
       hasMore,
       nextCursor,

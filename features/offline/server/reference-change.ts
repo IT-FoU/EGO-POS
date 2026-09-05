@@ -25,6 +25,7 @@ import {
   type StockLotPayload,
 } from "../replica/reference-types";
 import type { ReferenceEntityTypeValue } from "../replica/reference-types";
+import { newOperationId } from "../operations/envelope";
 
 export interface ReferenceChangeInput {
   entityType: ReferenceEntityTypeValue;
@@ -38,13 +39,10 @@ export interface ReferenceChangeInput {
 /** Minimal transaction surface used by the emitter (enables deterministic tests). */
 export interface ReferenceChangeTx {
   offlineServerChange: {
-    findFirst(args: {
-      where: { companyId: string; entityType: string; entityId: string };
-      orderBy: { version: "desc" };
-      select: { version: true };
-    }): Promise<{ version: number } | null>;
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
   };
+  /** Present in production (Prisma tx); used by the default atomic allocator. */
+  $queryRawUnsafe?<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
 }
 
 export interface EmittedChange {
@@ -52,30 +50,103 @@ export interface EmittedChange {
   entityId: string;
   version: number;
   deleted: boolean;
+  scopeKey: string;
+}
+
+/**
+ * Canonical scope key for per-entity versioning: company + branch + warehouse +
+ * entity kind + entity id. Branch/warehouse use "*" when not applicable so the
+ * key is never null and can carry a single UNIQUE constraint. Warehouse is part
+ * of the identity, so the same product in two warehouses has independent
+ * versions and never overwrites the other.
+ */
+/**
+ * Composite local key for a stock-level reference record: product + warehouse.
+ * Ensures the same product in different warehouses is stored/synced separately.
+ */
+export function stockLevelEntityId(productId: string, warehouseId: string): string {
+  return `${productId}::${warehouseId}`;
+}
+
+export function referenceScopeKey(companyId: string, change: {
+  branchId: string | null;
+  warehouseId: string | null;
+  entityType: string;
+  entityId: string;
+}): string {
+  const branch = change.branchId ?? "*";
+  const warehouse = change.warehouseId ?? "*";
+  return `${companyId}::${branch}::${warehouse}::${change.entityType}::${change.entityId}`;
+}
+
+/**
+ * Allocates strictly-increasing, per-scope-unique reference versions.
+ * Production uses a single atomic SQL upsert-increment; tests use an in-memory
+ * atomic counter with identical semantics.
+ */
+export interface RevisionAllocator {
+  next(companyId: string, scopeKey: string): Promise<number>;
+}
+
+/** In-memory atomic counter (tests). Increment is a single synchronous op. */
+export class MemoryRevisionAllocator implements RevisionAllocator {
+  private readonly counters = new Map<string, number>();
+  async next(companyId: string, scopeKey: string): Promise<number> {
+    const key = `${companyId}::${scopeKey}`;
+    const version = (this.counters.get(key) ?? 0) + 1;
+    this.counters.set(key, version);
+    return version;
+  }
+}
+
+/**
+ * Production allocator: `INSERT ... ON CONFLICT (scope_key) DO UPDATE SET
+ * version = version + 1 RETURNING version` — a single atomic statement, so two
+ * concurrent transactions serialize on the row and can never share a version.
+ */
+export function prismaRevisionAllocator(tx: ReferenceChangeTx): RevisionAllocator {
+  return {
+    async next(companyId: string, scopeKey: string): Promise<number> {
+      if (!tx.$queryRawUnsafe) {
+        throw new Error("prismaRevisionAllocator requires a Prisma transaction with $queryRawUnsafe");
+      }
+      const rows = await tx.$queryRawUnsafe<Array<{ version: number | bigint }>>(
+        `INSERT INTO "offline_reference_revisions" ("id", "company_id", "scope_key", "version", "updated_at")
+         VALUES ($1, $2, $3, 1, now())
+         ON CONFLICT ("scope_key")
+         DO UPDATE SET "version" = "offline_reference_revisions"."version" + 1, "updated_at" = now()
+         RETURNING "version"`,
+        newOperationId(),
+        companyId,
+        scopeKey,
+      );
+      return Number(rows[0]?.version ?? 1);
+    },
+  };
 }
 
 /**
  * Emit reference changes inside an existing transaction. Each change gets a
- * strictly-newer per-entity version (max existing + 1), guaranteeing a stale
- * older upsert can never resurrect a deleted entity on the device.
+ * per-scope atomic version from {@link RevisionAllocator}, so concurrent writes
+ * to the same scoped entity always receive distinct, ordered versions and a
+ * stale older event can never resurrect a deleted entity. The `seq` ordering
+ * cursor (auto-increment) is used only for pagination, never as the version.
  */
 export async function emitReferenceChanges(
   tx: ReferenceChangeTx,
   companyId: string,
   changes: ReferenceChangeInput[],
+  allocator: RevisionAllocator = prismaRevisionAllocator(tx),
 ): Promise<EmittedChange[]> {
   const emitted: EmittedChange[] = [];
   for (const change of changes) {
-    const last = await tx.offlineServerChange.findFirst({
-      where: { companyId, entityType: change.entityType, entityId: change.entityId },
-      orderBy: { version: "desc" },
-      select: { version: true },
-    });
-    const version = (last?.version ?? 0) + 1;
+    const scopeKey = referenceScopeKey(companyId, change);
+    const version = await allocator.next(companyId, scopeKey);
     await tx.offlineServerChange.create({
       data: {
         companyId,
         branchId: change.branchId,
+        warehouseId: change.warehouseId,
         entityType: change.entityType,
         entityId: change.entityId,
         version,
@@ -88,6 +159,7 @@ export async function emitReferenceChanges(
       entityId: change.entityId,
       version,
       deleted: change.deleted,
+      scopeKey,
     });
   }
   return emitted;

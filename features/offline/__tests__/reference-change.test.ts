@@ -5,9 +5,12 @@ import {
   categoryPayloadFromRow,
   customerPayloadFromRow,
   emitReferenceChanges,
+  MemoryRevisionAllocator,
   productPayloadFromRow,
   promotionPayloadFromRow,
+  referenceScopeKey,
   settingsPayloadFromRow,
+  stockLevelEntityId,
   stockLevelPayloadFromRow,
   tombstone,
   type ReferenceChangeInput,
@@ -20,16 +23,6 @@ function fakeTx() {
   const tx: ReferenceChangeTx & { rows: typeof rows } = {
     rows,
     offlineServerChange: {
-      async findFirst({ where }) {
-        const matching = rows.filter(
-          (r) =>
-            r.companyId === where.companyId &&
-            r.entityType === where.entityType &&
-            r.entityId === where.entityId,
-        );
-        if (!matching.length) return null;
-        return { version: Math.max(...matching.map((r) => r.version as number)) };
-      },
       async create({ data }) {
         rows.push(data);
         return data;
@@ -39,8 +32,9 @@ function fakeTx() {
   return tx;
 }
 
-test("emitReferenceChanges assigns strictly-newer per-entity versions", async () => {
+test("emitReferenceChanges assigns strictly-newer per-scope versions", async () => {
   const tx = fakeTx();
+  const allocator = new MemoryRevisionAllocator();
   const upsert = (id: string): ReferenceChangeInput => ({
     entityType: ReferenceEntityType.product,
     entityId: id,
@@ -50,9 +44,9 @@ test("emitReferenceChanges assigns strictly-newer per-entity versions", async ()
     payload: { id },
   });
 
-  await emitReferenceChanges(tx, "co-1", [upsert("p1")]);
-  await emitReferenceChanges(tx, "co-1", [upsert("p1")]);
-  await emitReferenceChanges(tx, "co-1", [upsert("p2")]);
+  await emitReferenceChanges(tx, "co-1", [upsert("p1")], allocator);
+  await emitReferenceChanges(tx, "co-1", [upsert("p1")], allocator);
+  await emitReferenceChanges(tx, "co-1", [upsert("p2")], allocator);
 
   const p1Versions = tx.rows.filter((r) => r.entityId === "p1").map((r) => r.version);
   assert.deepEqual(p1Versions, [1, 2]);
@@ -60,11 +54,32 @@ test("emitReferenceChanges assigns strictly-newer per-entity versions", async ()
   assert.deepEqual(p2Versions, [1]);
 });
 
+test("scope key includes company, branch, warehouse, kind, id", () => {
+  const key = referenceScopeKey("co-1", {
+    branchId: "br-1",
+    warehouseId: "wh-1",
+    entityType: "stock_level",
+    entityId: stockLevelEntityId("p1", "wh-1"),
+  });
+  assert.equal(key, "co-1::br-1::wh-1::stock_level::p1::wh-1");
+  // Same product, different warehouse -> different scope key.
+  const other = referenceScopeKey("co-1", {
+    branchId: "br-1",
+    warehouseId: "wh-2",
+    entityType: "stock_level",
+    entityId: stockLevelEntityId("p1", "wh-2"),
+  });
+  assert.notEqual(key, other);
+});
+
 test("tombstone emits deleted change with null payload", async () => {
   const tx = fakeTx();
-  await emitReferenceChanges(tx, "co-1", [
-    tombstone(ReferenceEntityType.product, "p1", { branchId: "br-1" }),
-  ]);
+  await emitReferenceChanges(
+    tx,
+    "co-1",
+    [tombstone(ReferenceEntityType.product, "p1", { branchId: "br-1" })],
+    new MemoryRevisionAllocator(),
+  );
   assert.equal(tx.rows[0].deleted, true);
   assert.equal(tx.rows[0].payload, null);
   assert.equal(tx.rows[0].version, 1);

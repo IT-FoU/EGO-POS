@@ -23,3 +23,4 @@ export * from "./sync/sync-coordinator";
 export * from "./replica/reference-types";
 export * from "./replica/reference-snapshot";
 export * from "./replica/store-snapshot-repository";
+export * from "./config";
