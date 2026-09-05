@@ -17,7 +17,7 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | 3 | Device, terminal and offline authentication | **COMPLETE** (models + reviewed migration [not applied] + tests) |
 | 4 | Cloud sync protocol and server protection | **COMPLETE** (models + reviewed migration [not applied] + engine + tests) |
 | 5 | Local snapshot and repository adapters | **PARTIAL** — reference replica + bootstrap/delta + real delta emission (5.1) + **concurrent-safe versioning & warehouse isolation (5.2)** COMPLETE; adapters/client-refactor deferred |
-| 6 | Receipt identity, local sales and POS checkout | **PARTIAL** — read-side POS integration (flag-gated replica reads + controlled sync) COMPLETE; offline checkout/writes deferred to a later phase |
+| 6 | Receipt identity, local sales and POS checkout | **PARTIAL** — read-side POS integration + **same-UI offline render (6.1)** COMPLETE; offline checkout/writes deferred to a later phase |
 | 7 | Cash sessions, held bills and post-sale | Not started |
 | 8 | Inventory, purchasing and suppliers | Not started |
 | 9 | Customers, membership, loyalty and promotions | Not started |
@@ -447,6 +447,49 @@ Required tests (all passing): online behavior unchanged with flag off (provider 
 - **Offline POS rendering of the full `/pos` page from the replica is not swapped in.** The adapter/gate/provider/controller are complete and the online path is untouched; mounting a replica-backed POS renderer on the offline shell is a follow-on UI step. Offline checkout/writes are explicitly out of scope (later phase).
 - **Client device-status/revocation gating** in the read gate currently assumes an active registered device (registration is a precondition for the secured sync endpoints); full client revocation application lands with the Phase 11 Sync Center. The server already blocks revoked devices for writes.
 - Live installable-PWA offline POS QA remains WAITING (needs an installable PWA context).
+- Migrations review-only/not applied; offline default-OFF.
+
+## Phase 6.1 — render the same POS UI read-only from the local replica offline (COMPLETE)
+
+### Result
+
+Connected the existing Mini Mart POS UI to the approved read-side adapter so the **same `PosPageClient`** renders read-only from the device-local replica while offline — no second POS app, no duplicate UI. Flag OFF preserves online `/pos` and the minimal `/offline` shell exactly (verified in-browser). No offline writes; no admin surfaces; `/api` + authenticated HTML are never SW-cached.
+
+### How it works
+
+- `posReadModelToPosClientProps` (pure): maps a POS read model — from the online SSR snapshot **or** the offline replica — into the **exact** `PosPageClient` props, plus a **restrictive read-only permission policy** so the existing permission gate blocks every write action (checkout/hold/void/etc.). `nextSaleNo` is empty and `maxDiscountPercent` is 0.
+- `OfflinePosWorkspace` (public `/offline` client shell): server HTML carries **no store data**; on the client, when the flag is on and the terminal is offline-ready, it opens the device-local replica, runs the gate, and renders the **same** `PosPageClient` read-only (with an "Offline — read-only" banner). Otherwise it shows the minimal safe shell, an "Open POS" link (when online), or a **clear blocked message** (never bootstrapped / stale / revoked / invalid / scope-mismatch).
+- `active-terminal` pointer (non-secret ids only) is persisted by `PosOfflineSync` so the public offline shell can reopen the correct namespaced replica after an offline reload.
+- The replica now records `lastSyncAt` (on bootstrap/pull) for staleness gating.
+
+### Files added / changed
+
+- Added: `features/offline/pos-read/{pos-client-props,active-terminal}.ts`, `components/offline/offline-pos-workspace.tsx`, test `features/offline/__tests__/pos-client-props.test.ts`
+- Changed: `app/offline/page.tsx` (render the workspace), `components/offline/pos-offline-sync.tsx` (persist active terminal; use `lastSyncAt`), `features/offline/local-db/schema.ts` (+`lastSyncAt` meta), `features/offline/replica/store-snapshot-repository.ts` (write/expose `lastSyncAt`), `features/offline/index.ts`
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 140 tests pass (4 new). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`. |
+| Manual GUI (flag OFF) | computerUse | PASS | Online POS unchanged (search works, "Online" pill); `/offline` shows only the minimal safe shell — no products/prices/customers. |
+
+Required tests (all passing): same-component props from an online repository/model; equivalent props from a preloaded offline replica; tombstoned products/categories absent from the mapped UI props; blocked/stale/revoked/scope-invalid cannot display usable POS data (gate + workspace); flag OFF has no new effects (online `/pos` + `/offline` shell unchanged, verified); no tenant/branch/warehouse/terminal leakage (scope enforcement + replica isolation + safe HTML shell).
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `6438b88` | feat(offline): Phase 6.1 render the same POS UI read-only from the local replica offline |
+
+### Known limitations / WAITING (Phase 6.1)
+
+- **Live installable-PWA offline QA — WAITING.** Deterministic tests + flag-off GUI are done; exercising a real offline reload of the installed PWA (SW navigation fallback → `/offline` → replica render) needs an installable HTTPS/PWA context and is deferred.
+- **Device unlock UI** (PIN) is not part of this phase; the gate uses replica presence + scope + `bootstrapComplete` + device-active. Full lock/unlock + client revocation application land with Phase 3/11.
+- `PosPageClient`'s secondary network effects (recent-sales/cash refresh) are best-effort and simply no-op offline; the primary grid/search/cart render from props. Deeper action-level disabling beyond the read-only policy is a later polish.
 - Migrations review-only/not applied; offline default-OFF.
 
 - Phase 7 not started (awaiting review approval).
