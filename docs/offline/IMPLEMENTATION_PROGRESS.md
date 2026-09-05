@@ -16,7 +16,7 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | 2 | PWA app shell and connectivity UX | **COMPLETE** (code + tests + in-browser QA; default-off) |
 | 3 | Device, terminal and offline authentication | **COMPLETE** (models + reviewed migration [not applied] + tests) |
 | 4 | Cloud sync protocol and server protection | **COMPLETE** (models + reviewed migration [not applied] + engine + tests) |
-| 5 | Local snapshot and repository adapters | Not started (awaiting approval) |
+| 5 | Local snapshot and repository adapters | **PARTIAL** — reference-data replica + bootstrap/delta wiring COMPLETE; adapters/client-refactor deferred |
 | 6 | Receipt identity, local sales and POS checkout | Not started |
 | 7 | Cash sessions, held bills and post-sale | Not started |
 | 8 | Inventory, purchasing and suppliers | Not started |
@@ -250,4 +250,52 @@ Added the versioned cloud sync contract and engine. Prisma models + a reviewed m
 - **Device-local unlock UI + client revocation application — Phase 11.** The credential/store foundation exists; UI wiring and applying server revocation at next sync land with the Sync Center work.
 - Offline writes remain **disabled by default**.
 
-- Phase 5 not started (awaiting review approval).
+## Phase 5 (scoped slice) — Mini Mart reference-data replica + bootstrap/delta wiring (COMPLETE)
+
+### Result
+
+Implemented the read-only Mini Mart reference-data local replica and wired it to the Phase 4 bootstrap/delta contract + `PrismaSyncStore`/POS snapshot. Only POS-required, non-secret data is stored; no admin data, tokens, secrets, passwords, or unrelated reports. This slice deliberately excludes the broader Phase 5 items (back-office reference/document data, image caching, full module repository adapters, client-component refactor, parity harness), which are deferred to a later slice / Phase 6.
+
+### Scope stored (POS-required only)
+
+Store context (company/branch/warehouse/terminal), settings (receipt/tax/loyalty/currency), categories, products (units/barcodes/prices/category/stock-display), customers/member lookup, safe-offline promotion policy, QR banks, read-only stock/lot levels (with terminal allocation), active cash-session context. Security/permission snapshot is delivered by `/api/offline/device/policy` (Phase 3).
+
+### Files added / changed
+
+- Added: `features/offline/replica/{reference-types,reference-snapshot,store-snapshot-repository}.ts`
+- Added: `features/offline/server/prisma-reference-provider.ts`
+- Changed: `features/offline/server/sync-service.ts` (bootstrapSync → real reference snapshot), `app/api/offline/sync/bootstrap/route.ts` (accepts `deviceId`), `features/offline/local-db/schema.ts` (new `reference` store; structural v2), `features/offline/index.ts`
+- Tests: `features/offline/__tests__/{reference-snapshot,store-snapshot-repository}.test.ts`
+
+### Design notes (rules honored)
+
+- Reuses the Phase 4 bootstrap/pull contract + `PrismaSyncStore` + the existing tenant/branch/warehouse-scoped `getPrismaPosSnapshot` (isolation + POS rules already enforced) + Phase 3 terminal stock allocation.
+- **Never seeds defaults** when cloud data is empty (empty bootstrap/delta → empty snapshot).
+- **Tombstones retained** with version, so deleted categories/products never reappear from a stale re-delivery; **stale updates ignored** (older version never overwrites).
+- **Tenant/branch/warehouse/terminal isolation**: local DB is namespaced per company+branch+terminal, every reference record carries scope, and apply rejects out-of-tenant records.
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Client regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 97 tests pass (14 new: bootstrap pagination, delta price update, product/category deletion tombstones, empty response, stale snapshot handling, tenant isolation, namespace isolation, ordering/pagination/scope helpers). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`; `/api/offline/sync/bootstrap` present. |
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `d354c40` | feat(offline): Phase 5 Mini Mart reference-data replica + bootstrap/delta wiring |
+
+### Known limitations / WAITING (Phase 5 slice)
+
+- **Change-feed emission — WAITING.** Delta pull reads `OfflineServerChange`; emitting change rows on every reference mutation (products/categories/etc.) is deferred (would touch existing services). Bootstrap delivers the full current snapshot; delta apply is fully implemented + tested against the in-memory feed.
+- **Per-entity server versioning — foundation.** Bootstrap assigns version 1 uniformly today; incrementing per-entity versions land with the change-feed wiring. Client versioned/stale/tombstone apply is complete + tested.
+- **Bootstrap network client (fetch glue) + client-component consumption — Phase 6.** The repository, mapping helpers, provider, and secured endpoint are complete; wiring a React data path is Phase 6.
+- **Lot detail + QR-account detail** in stock/settings payloads arrive with the change-feed wiring.
+- **DB-backed integration + migrations** remain review-only/not applied; deterministic tests are DB-free.
+- Offline remains **disabled by default**.
+
+- Phase 6 not started (awaiting review approval).

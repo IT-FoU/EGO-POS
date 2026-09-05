@@ -70,15 +70,16 @@
 
 ## Phase 5 — Local snapshot and repository adapters
 
-- [ ] Create `StoreSnapshotRepository` with `bootstrap`, `pullDelta`, `readLocalSnapshot` and local apply methods.
-- [ ] Cache POS-required data: branch/warehouse context, active products, categories, units, barcodes, sellable stock/lot data, customers/membership, promotions, settings, QR banks/accounts, receipt configuration, cash-session context and permission policy.
-- [ ] Cache Mini Mart Back Office reference/document data: suppliers, purchase orders, receiving data, product/category history, inventory counts/adjustments and bounded report/recent-sale history.
-- [ ] Provide progressive product image caching with an offline placeholder. A failed image cache may never block a sale.
-- [ ] Create typed repository interfaces for POS, cash session, held bills, post-sale, inventory, products, customers, promotions, purchasing, suppliers, reports and settings.
-- [ ] Implement online adapters that preserve existing routes/business behavior and offline adapters that read/write the local database and outbox.
-- [ ] Refactor Mini Mart client components to use adapters rather than directly calling `fetch` or Server Actions. Do not import Prisma/server-only files into client bundles.
-- [ ] Keep existing online API routes compatible until all consumers are migrated and regression tests pass.
-- [ ] Add parity tests proving an online snapshot and its local hydrated snapshot produce the same normalized POS/cart inputs.
+<!-- Scoped slice implemented: Mini Mart reference-data local replica + bootstrap/delta wiring (POS-required data only). Remaining Phase 5 items (back-office reference/document data, image caching, full module repository adapters, client-component refactor, parity harness) are intentionally deferred to a later Phase 5 slice / Phase 6. -->
+- [x] Create `StoreSnapshotRepository` with `bootstrap`, `pullDelta`, `readLocalSnapshot` and local apply methods. <!-- features/offline/replica/store-snapshot-repository.ts — versioned apply, tombstones, isolation; stored in the local `reference` store. -->
+- [x] Cache POS-required data: branch/warehouse context, active products, categories, units, barcodes, sellable stock/lot data, customers/membership, promotions, settings, QR banks/accounts, receipt configuration, cash-session context and permission policy. <!-- features/offline/replica/reference-types.ts + PrismaReferenceSnapshotProvider (reuses getPrismaPosSnapshot). Security/permission snapshot delivered via /api/offline/device/policy (Phase 3). QR accounts are covered under settings/QR-bank scope; full QR-account detail arrives with the change-feed wiring. -->
+- [ ] Cache Mini Mart Back Office reference/document data: suppliers, purchase orders, receiving data, product/category history, inventory counts/adjustments and bounded report/recent-sale history. <!-- Deferred: out of the "offline POS reference data only" slice. -->
+- [ ] Provide progressive product image caching with an offline placeholder. A failed image cache may never block a sale. <!-- Deferred to a later Phase 5 slice. -->
+- [ ] Create typed repository interfaces for POS, cash session, held bills, post-sale, inventory, products, customers, promotions, purchasing, suppliers, reports and settings. <!-- Deferred: adapter layer lands with Phase 6 checkout wiring. -->
+- [ ] Implement online adapters that preserve existing routes/business behavior and offline adapters that read/write the local database and outbox. <!-- Deferred to Phase 6. -->
+- [ ] Refactor Mini Mart client components to use adapters rather than directly calling `fetch` or Server Actions. Do not import Prisma/server-only files into client bundles. <!-- Deferred to Phase 6 (no client components changed in this slice; online behavior preserved). -->
+- [ ] Keep existing online API routes compatible until all consumers are migrated and regression tests pass. <!-- Preserved: no existing route changed; only new /api/offline/* endpoints added. -->
+- [ ] Add parity tests proving an online snapshot and its local hydrated snapshot produce the same normalized POS/cart inputs. <!-- Deferred: lands with the Phase 6 adapter/parity harness. -->
 
 ## Phase 6 — Receipt identity, local sales and POS checkout
 
