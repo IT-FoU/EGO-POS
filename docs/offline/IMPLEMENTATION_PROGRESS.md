@@ -607,4 +607,42 @@ Required tests (all passing): (1) a valid cash sale commits sale + outbox + move
 - Server sale-number issuance/validation is unchanged; accepting reserved offline references on the server + actual sync application are later slices.
 - Not in scope (later phases): QR/transfer/card, loyalty redemption event, refunds/voids/returns/holds, cash movement, Recent Sales + receipt UI, Customer Display.
 
-- Phase 6B / Phase 7 not started (awaiting review approval).
+## Phase 6B — authoritative server application + reconciliation for queued offline CASH sales (COMPLETE)
+
+### Result
+
+Implemented the **authoritative server handler** for accepted `pos.sale.complete` offline operations. It validates the operation, applies the **canonical cloud sale by REUSING the existing online write path** (`writeCompletePrismaSale` — no parallel/weaker sale path), advances the terminal receipt range + stock leases, and records the accepted `OfflineOperation` with a local→cloud id mapping — all in one authoritative transaction. Duplicate delivery returns the original result with no repeats; rejections return a precise machine-readable reason and keep a rejected ledger row for review. CASH only. No user-facing checkout action is enabled.
+
+### How it works
+
+- **Pure handler + gateway boundary.** `applyOfflineCashSale` (`server/cash-sale-apply.ts`) orchestrates: idempotency (by companyId+operationId) → CASH-only guard → tenant/branch/warehouse/terminal/actor scope → device active → **referenced active-compatible cloud cash session** → **terminal-reserved receipt reference** (`validateReceiptReference`: parses under the reserved prefix, in `[start,end]`, not behind the cursor → else `receipt_collision`) → **terminal stock allocation + lot/expiry** (`consumeAllocation`; expired lot-scoped lease → `invalid_lot`; over-consumption → `insufficient_stock_allocation`). Persistence lives behind a `CashSaleGateway` so the flow is deterministically testable.
+- **Atomic accept.** `PrismaCashSaleGateway.commitAccepted` runs ONE `withTenantTransaction`: `writeCompletePrismaSale(tx, …)` (canonical sale + items + cash payment + stock movement + receipt + audit, server-authoritative re-pricing) → advance `TerminalReceiptRange` + `TerminalStockAllocation` (optimistic base version) → create the accepted `OfflineOperation` (with the reconciliation `result`) + audit link. So the sale and its idempotency ledger commit together (a crash before commit leaves nothing; the retry re-applies safely).
+- **Idempotency.** The engine already short-circuits a stored operation; the handler also re-checks the ledger. `CommandResult` now carries `result`, returned on both a fresh accept and a duplicate, so the client can always reconcile. A duplicate creates no second sale/receipt/payment/stock movement/audit.
+- **Reconciliation.** Accept returns `{ localSaleId, cloudSaleId, saleNo, receiptNo, receiptReference, totalLak, itemIdMap: [{localLineId, cloudItemId}] }` so the local outbox/recent-sale record can transition pending → synced.
+- **Rejections.** A precise `SyncErrorCode` + `detail` (e.g. `cash_session_incompatible`, `receipt_reference_already_used`, `insufficient_stock_allocation`, `invalid_lot`, `terminal_mismatch`) is returned and a **rejected** `OfflineOperation` is recorded (no sale) so the client can transition pending → rejected and a human can review. The local sale is never silently dropped, altered, or duplicated.
+- **Wiring.** `pushSync` passes an `applyCommand` that routes only `pos.sale.complete` through `applyOfflineCashSale` (other types unchanged). Online checkout files are untouched.
+
+### Files added / changed
+
+- Added: `features/offline/server/{cash-sale-apply,cash-sale-gateway,prisma-cash-sale-gateway}.ts`; test `features/offline/__tests__/offline-cash-sale-apply.test.ts`
+- Changed: `features/offline/server/sync-contract.ts` (`CommandResult.result`), `sync-engine.ts` (return `result` on fresh + duplicate), `sync-service.ts` (`applyCommand` wiring + `getCashSaleGateway`)
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 194 tests pass (19 new Phase 6B). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors (incl. `writeCompletePrismaSale` reuse). |
+| Prisma client generate | `npx prisma generate` | **0** | Regenerated (no DB touched). |
+| Production build | `npm run build` | **0 (PASS)** | Compiled; routes built. |
+
+Required tests (all passing): (1) accepted queued cash sale creates exactly one canonical cloud sale + advances range/lease; (2) duplicate delivery/retry after an interrupted response creates nothing twice and returns the original result; (3) invalid receipt range/reference, cash session (missing/closed/incompatible), allocation (missing/insufficient), lot (expired), device (revoked/unregistered), tenant/company, branch, warehouse, terminal, and non-cash payment are each rejected with a machine-readable code + detail and **no partial server write**; (4) accepted response reconciles local sale/item ids to canonical cloud ids; (5) a rejected response persists a rejected ledger + audit and stays idempotent on re-delivery; (6) the offline applier is isolated and online checkout files are unchanged (git diff + build/typecheck).
+
+### Known limitations / WAITING (6B)
+
+- **No user-facing checkout action** — the Pay button stays disabled; this is server application only.
+- The `PrismaCashSaleGateway` requires the offline Prisma tables + a live DB, so it is exercised in production/integration (the offline tables are intentionally not migrated in this dev DB per the task rules); the orchestration + validation are covered by the in-memory tests.
+- The canonical cloud `saleNo`/`receiptNo` come from the existing online generator; the permanent offline **`receiptReference`** is preserved in the reconciliation + `OfflineOperation` result (mapping), not necessarily as the cloud `saleNo`.
+- Not in scope (later): QR/transfer/card, loyalty, holds/refunds/returns/voids, inventory back-office, cash-session sync (Phase 7), and client-side application of the reconciliation (Phase 6C).
+
+- Phase 6C / Phase 7 not started (awaiting review approval).

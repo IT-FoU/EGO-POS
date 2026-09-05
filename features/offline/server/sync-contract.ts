@@ -38,6 +38,13 @@ export interface CommandResult {
   detail: string | null;
   /** true when this result was returned from the idempotent ledger (not re-run). */
   duplicate: boolean;
+  /**
+   * Machine-readable application result (Phase 6B): for an accepted sale this is
+   * the reconciliation mapping (local sale/item ids -> canonical cloud ids, plus
+   * canonical receipt/sale numbers + totals). Present on both a fresh accept and
+   * an idempotent duplicate so the client can always reconcile.
+   */
+  result?: unknown;
 }
 
 export interface ServerChange {

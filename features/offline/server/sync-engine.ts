@@ -168,6 +168,7 @@ export async function processPush(
         code: existing.code,
         detail: existing.detail,
         duplicate: true,
+        result: existing.result ?? undefined,
       };
       continue;
     }
@@ -244,6 +245,7 @@ export async function processPush(
       code: decision.code,
       detail: decision.detail,
       duplicate: false,
+      result: decision.result ?? undefined,
     };
   }
 

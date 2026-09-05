@@ -31,6 +31,11 @@ import type { SyncStore } from "./sync-store";
 import { buildReferenceEntities } from "./prisma-reference-provider";
 import { paginateReferenceEntities } from "../replica/reference-snapshot";
 import { assertSingleWarehouseRollout, SINGLE_WAREHOUSE_ROLLOUT } from "../config";
+import { SyncErrorCode } from "./sync-contract";
+import { OperationType } from "../types";
+import { applyOfflineCashSale, type CashSaleGateway } from "./cash-sale-apply";
+import { PrismaCashSaleGateway } from "./prisma-cash-sale-gateway";
+import type { OfflineCashSalePayload } from "../checkout/cash-sale-types";
 
 const db = prisma as any;
 
@@ -38,6 +43,12 @@ let sharedStore: SyncStore | null = null;
 export function getSyncStore(): SyncStore {
   if (!sharedStore) sharedStore = new PrismaSyncStore();
   return sharedStore;
+}
+
+let sharedCashSaleGateway: CashSaleGateway | null = null;
+export function getCashSaleGateway(): CashSaleGateway {
+  if (!sharedCashSaleGateway) sharedCashSaleGateway = new PrismaCashSaleGateway();
+  return sharedCashSaleGateway;
 }
 
 export class SyncRequestError extends Error {
@@ -110,16 +121,51 @@ export async function pushSync(tenant: TenantContext, body: unknown): Promise<Pu
   const cachedPolicyVersion = Number(
     (body as Record<string, unknown>)?.policyVersion ?? ctx.device.policyVersion,
   );
-  return processPush(getSyncStore(), {
-    companyId: tenant.companyId,
-    deviceId: ctx.deviceId,
-    scope: ctx.scope,
-    device: ctx.device,
-    cachedPolicyVersion: Number.isFinite(cachedPolicyVersion)
-      ? cachedPolicyVersion
-      : ctx.device.policyVersion,
-    now: new Date(),
-  }, request.operations);
+  const now = new Date();
+  const cashSaleGateway = getCashSaleGateway();
+
+  return processPush(
+    getSyncStore(),
+    {
+      companyId: tenant.companyId,
+      deviceId: ctx.deviceId,
+      scope: ctx.scope,
+      device: ctx.device,
+      cachedPolicyVersion: Number.isFinite(cachedPolicyVersion)
+        ? cachedPolicyVersion
+        : ctx.device.policyVersion,
+      now,
+      // Phase 6B: authoritative application of accepted offline CASH sales.
+      applyCommand: async (envelope) => {
+        if (envelope.operationType !== OperationType.posSaleComplete) {
+          // Other operation types are not applied in this phase (recorded only).
+          return { status: "accepted", code: SyncErrorCode.ok, detail: null };
+        }
+        const decision = await applyOfflineCashSale(
+          cashSaleGateway,
+          envelope.operationId,
+          envelope.payload as OfflineCashSalePayload,
+          {
+            companyId: tenant.companyId,
+            branchIds: ctx.scope.branchIds,
+            warehouseIds: ctx.warehouseIds,
+            terminalId: ctx.scope.terminalId,
+            deviceId: ctx.deviceId,
+            actorUserId: envelope.actorUserId,
+            now,
+          },
+          { operationType: envelope.operationType, payloadHash: envelope.payloadHash ?? null },
+        );
+        return {
+          status: decision.status,
+          code: decision.code,
+          detail: decision.detail,
+          result: decision.result ?? undefined,
+        };
+      },
+    },
+    request.operations,
+  );
 }
 
 export async function pullSync(
