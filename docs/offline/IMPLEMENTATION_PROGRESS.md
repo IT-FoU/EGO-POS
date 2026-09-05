@@ -16,7 +16,7 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | 2 | PWA app shell and connectivity UX | **COMPLETE** (code + tests + in-browser QA; default-off) |
 | 3 | Device, terminal and offline authentication | **COMPLETE** (models + reviewed migration [not applied] + tests) |
 | 4 | Cloud sync protocol and server protection | **COMPLETE** (models + reviewed migration [not applied] + engine + tests) |
-| 5 | Local snapshot and repository adapters | **PARTIAL** — reference-data replica + bootstrap/delta wiring COMPLETE; adapters/client-refactor deferred |
+| 5 | Local snapshot and repository adapters | **PARTIAL** — reference replica + bootstrap/delta wiring + **real delta emission (5.1)** COMPLETE; adapters/client-refactor deferred |
 | 6 | Receipt identity, local sales and POS checkout | Not started |
 | 7 | Cash sessions, held bills and post-sale | Not started |
 | 8 | Inventory, purchasing and suppliers | Not started |
@@ -297,5 +297,58 @@ Store context (company/branch/warehouse/terminal), settings (receipt/tax/loyalty
 - **Lot detail + QR-account detail** in stock/settings payloads arrive with the change-feed wiring.
 - **DB-backed integration + migrations** remain review-only/not applied; deterministic tests are DB-free.
 - Offline remains **disabled by default**.
+
+## Phase 5.1 (repair) — real reference-data delta sync end-to-end (COMPLETE)
+
+### Result
+
+Made reference-data delta sync real: POS-relevant Mini Mart reference changes now emit an `OfflineServerChange` **atomically in the same tenant transaction** as the existing online write (business write + audit), so another device receives them through `pullDelta`. Delete/archive emit tombstones; a stale older upsert can never resurrect a deleted product/category. Cross-tenant and cross-branch data never leak. Only POS reference data is emitted — no admin/token/secret/report data. All existing online behavior, permission checks, audit, and tenant-transaction patterns are preserved.
+
+### Mechanism
+
+- `withTenantTransaction` gained a generic in-transaction `afterWrite(result, tx)` hook (no offline coupling in the core lib).
+- `features/offline/server/reference-change.ts` — pure payload builders (product/category/customer/promotion/settings/stock) + `tombstone` + `emitReferenceChanges` (strictly-newer per-entity version = max existing + 1; ordering via `OfflineServerChange.seq`).
+- `features/offline/server/reference-emit.ts` — tx-scoped emit helpers reusing `resolveTenantScope`.
+- Branch-scoped delta: `listChangesSince(..., branchIds?)` returns company-wide (null-branch) changes plus the device's branch(es) only → cross-branch isolation; wired through `pullDelta` → `pullSync`.
+
+### Wired online write paths (emit on change)
+
+| Module | Writes wired |
+|---|---|
+| Products | create, update, duplicate, bulk price update, archive→tombstone, delete→tombstone |
+| Categories | upsert, delete→tombstone |
+| Customers | create, update, archive→tombstone (via update) |
+| Promotions | create, update, archive→tombstone (via update) |
+| Settings | update (company-wide) |
+| Inventory | stock-in, adjustment, count → stock_level |
+
+### Files added / changed
+
+- Added: `features/offline/server/{reference-change,reference-emit}.ts`, `features/offline/__tests__/{reference-change,reference-delta-e2e}.test.ts`
+- Changed: `lib/db/write-context.ts` (afterWrite hook), `features/offline/server/{sync-store,sync-engine,sync-service,prisma-sync-store}.ts` (branch-scoped pull), and the wired repositories: `features/{products,customers,promotions,settings,inventory}/prisma-repository.ts`
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 108 tests pass (11 new). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`. |
+
+Required repair tests (all passing): (1) online price change reaches another device via delta; (2) product/category deletion reaches device and never reappears; (3) cross-tenant and cross-branch never leak; (4) duplicate delivery harmless; (5) cursor pagination/order stable; (6) bootstrap == bootstrap+delta replica parity. Plus pure builder + strictly-newer version tests.
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `64e43b8` | feat(offline): Phase 5.1 real reference-data delta sync (emit OfflineServerChange) |
+
+### Known limitations / WAITING (Phase 5.1)
+
+- **POS-sale stock consumption, cash-session open/close/movement, QR-account, and terminal-allocation emission — deferred.** These use non-`withTenantTransaction` paths (e.g. `writeCompletePrismaSale`'s own transaction) or a not-yet-online allocator; the identical emit mechanism applies and bootstrap already delivers this data. Deferred to keep the core sale path untouched (preserve online behavior).
+- **Per-entity server versioning** uses `max(existing seq-version)+1` at emit; multi-warehouse stock keyed by productId is simplified (single-warehouse POS).
+- **DB-backed integration** remains review-only; the emit path is exercised by build/typecheck (compiles into the real write paths) and the delta/apply path is proven by deterministic in-memory end-to-end tests.
+- Migrations remain review-only/not applied; offline remains disabled by default.
 
 - Phase 6 not started (awaiting review approval).
