@@ -83,6 +83,9 @@
 
 ## Phase 6 — Receipt identity, local sales and POS checkout
 
+<!-- Read-side slice implemented (approved separately): the reference replica is wired into the Mini Mart POS read path behind a feature flag, with a scope-enforced online/offline read adapter, a pure offline gate (online/syncing/offline_ready/stale/blocked/read_only), a provider selector (flag-off/online -> online; offline+permitted -> replica; blocked -> none), and controlled bootstrap/delta sync (startup/reconnect/focus/Sync Now) via the secured /api/offline/sync endpoints. Flag OFF preserves online POS exactly (verified). See docs/offline/IMPLEMENTATION_PROGRESS.md "Phase 6 (read-side slice)". The write-side items below (receipt identity, local checkout, offline sale/stock/loyalty writes) are intentionally deferred to a later phase. -->
+
+
 - [ ] Implement cloud-reserved per-terminal receipt number ranges or an approved unique terminal-prefixed receipt reference. The printed offline receipt number must remain permanent after sync.
 - [ ] Update the current sale-number validation/issuance logic so valid reserved offline references are accepted safely and cannot collide with cloud-issued references.
 - [ ] Extract/reuse pure cart, unit, tax, discount and promotion calculation functions. Preserve existing server validation as final authority.

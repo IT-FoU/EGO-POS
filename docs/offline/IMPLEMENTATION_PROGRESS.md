@@ -17,7 +17,7 @@ Single source of truth for phase-by-phase progress of the Offline-first initiati
 | 3 | Device, terminal and offline authentication | **COMPLETE** (models + reviewed migration [not applied] + tests) |
 | 4 | Cloud sync protocol and server protection | **COMPLETE** (models + reviewed migration [not applied] + engine + tests) |
 | 5 | Local snapshot and repository adapters | **PARTIAL** — reference replica + bootstrap/delta + real delta emission (5.1) + **concurrent-safe versioning & warehouse isolation (5.2)** COMPLETE; adapters/client-refactor deferred |
-| 6 | Receipt identity, local sales and POS checkout | Not started |
+| 6 | Receipt identity, local sales and POS checkout | **PARTIAL** — read-side POS integration (flag-gated replica reads + controlled sync) COMPLETE; offline checkout/writes deferred to a later phase |
 | 7 | Cash sessions, held bills and post-sale | Not started |
 | 8 | Inventory, purchasing and suppliers | Not started |
 | 9 | Customers, membership, loyalty and promotions | Not started |
@@ -402,4 +402,51 @@ Required 5.2 tests (all passing): (1) concurrent same-entity updates → unique,
 - POS-sale stock consumption, cash-session, QR-account, and terminal-allocation emission remain deferred (Phase 5.1 note); they will reuse the same atomic allocator + warehouse-scoped keys.
 - Migrations remain review-only/not applied; offline remains disabled by default.
 
-- Phase 6 not started (awaiting review approval).
+## Phase 6 (read-side slice) — POS read-path integration + controlled client sync (COMPLETE)
+
+> Scope note: the task plan's "Phase 6" header is the write side (receipt identity / local checkout). This iteration implemented the approved **read-side integration only**; offline checkout/sales/refunds/voids/holds/stock/cash/loyalty writes are deferred to a later phase.
+
+### Result
+
+Wired the approved reference replica into the Mini Mart **POS read path** behind a feature flag, with controlled bootstrap/delta client sync and clear state. With the flag OFF, online POS behavior is unchanged (verified in-browser). No offline writes; no admin surfaces; no migration/flag/deploy.
+
+### Delivered
+
+- **Adapter boundary** (`features/offline/pos-read/`): `PosReadRepository` with `OnlinePosReadRepository` (wraps the existing SSR snapshot — online reads unchanged in meaning) and `OfflinePosReadRepository` (reads the local replica). Terminal/company/branch/warehouse scope is **enforced at the boundary** (`assertReplicaScope`). Shared pure search/barcode helpers give identical results from either source.
+- **Read model + mapper**: `posSnapshotToReadModel` normalizes the SSR snapshot; the offline repo reads the Phase 5 replica payloads directly — products (units/barcodes/prices), categories, customers/members, safe promotions, stock display, cash-session.
+- **Gate** (`pos-offline-gate.ts`, pure): surfaces `online | syncing | offline_ready | stale | blocked | read_only` and **blocks** offline use when never-bootstrapped, stale-beyond-policy, device revoked, terminal-scope mismatch, or invalid replica.
+- **Provider** (`pos-read-provider.ts`): flag OFF or online → online repo; offline + permitted → replica; blocked → none.
+- **Controlled sync** (`pos-sync-controller.ts` + `network-client.ts`): bootstrap when needed, then delta pull, on startup / reconnect / focus / Sync Now, via the secured `/api/offline/sync/*` endpoints (which the SW never caches). Single run per controller.
+- **Client wiring**: `<PosOfflineSync/>` mounted on the POS page is a **strict no-op when the flag is off** (returns null, registers no effects) so online behavior is preserved; when enabled it runs the controller and publishes POS offline state to a shared store surfaced in the Sync Center indicator, whose "Sync now" triggers a real sync.
+
+### Files added / changed
+
+- Added: `features/offline/pos-read/{pos-search,pos-read-types,pos-read-repository,pos-offline-gate,pos-read-provider,pos-sync-controller,network-client,pos-offline-status-store}.ts`, `components/offline/pos-offline-sync.tsx`, tests `features/offline/__tests__/{pos-read-repository,pos-offline-gate,pos-read-provider,pos-sync-controller}.test.ts`
+- Changed: `app/(dashboard)/pos/page.tsx` (mount no-op sync component), `components/offline/offline-status-indicator.tsx` (show POS state + real Sync Now), `features/offline/index.ts`
+
+### Validation evidence
+
+| Check | Exact command | Exit code | Output summary |
+|---|---|---|---|
+| Prisma client generate | `npm run prisma:generate` | **0** | Regenerated (no DB touched). |
+| Type check | `npm run typecheck` | **0 (PASS)** | No type errors. |
+| Offline tests | `npm run test:offline` | **0 (PASS)** | 136 tests pass (22 new). |
+| Production build | `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=… npm run build` | **0 (PASS)** | `✓ Compiled successfully`. |
+| Manual GUI (flag OFF) | computerUse | PASS | Online POS loads/searches normally; header "Online"; no errors/blank/crash. |
+
+Required tests (all passing): online behavior unchanged with flag off (provider selection + online reads); offline product search + barcode from replica; offline category/price/member reads; bootstrap→delta reaches the POS adapter; tombstone hides deleted product/category; stale/revoked/never-bootstrapped/scope-mismatched terminal blocked; no tenant/branch/warehouse leakage (scope enforcement + replica isolation).
+
+### Commit
+
+| Commit | Description |
+|---|---|
+| `970b4e6` | feat(offline): Phase 6 read-side POS integration (flag-gated replica reads + controlled sync) |
+
+### Known limitations / WAITING (Phase 6 read-side)
+
+- **Offline POS rendering of the full `/pos` page from the replica is not swapped in.** The adapter/gate/provider/controller are complete and the online path is untouched; mounting a replica-backed POS renderer on the offline shell is a follow-on UI step. Offline checkout/writes are explicitly out of scope (later phase).
+- **Client device-status/revocation gating** in the read gate currently assumes an active registered device (registration is a precondition for the secured sync endpoints); full client revocation application lands with the Phase 11 Sync Center. The server already blocks revoked devices for writes.
+- Live installable-PWA offline POS QA remains WAITING (needs an installable PWA context).
+- Migrations review-only/not applied; offline default-OFF.
+
+- Phase 7 not started (awaiting review approval).
