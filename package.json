@@ -51,7 +51,8 @@
     "test:lao-02": "tsx scripts/phase-lao-02-pos-language-check.ts",
     "test:lao-03": "tsx scripts/phase-lao-03-products-language-check.ts",
     "test:lao-03-repair": "tsx scripts/phase-lao-03-categories-repair-check.ts",
-    "test:lao-04": "tsx scripts/phase-lao-04-inventory-language-check.ts"
+    "test:lao-04": "tsx scripts/phase-lao-04-inventory-language-check.ts",
+    "test:lao-04-repair": "tsx scripts/phase-lao-04-inventory-repair-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

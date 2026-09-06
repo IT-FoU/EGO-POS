@@ -134,16 +134,6 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             <WarehouseSelector locale={locale} selectedWarehouseId={selectedWarehouseId} warehouses={warehouses} onChange={(next) => { setSelectedWarehouseId(next); setPage(1); }}/>
-            <div className="flex gap-2">
-              <Link className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90" href="/inventory/quick-stock-in">
-                <PackagePlus aria-hidden="true"/>
-                {t("quickStockIn")}
-              </Link>
-              <Link className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" href="/inventory/count">
-                <ClipboardCheck aria-hidden="true"/>
-                {t("count")}
-              </Link>
-            </div>
           </div>
         </div>
       </section>
