@@ -1,33 +1,55 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { StockMovement } from "@/features/inventory/types";
-const movementLabels: Record<StockMovement["movementType"], string> = {
-    quick_stock_in: "Quick Stock In",
-    stock_in: "Stock in",
-    adjustment: "Adjustment",
-    count: "Count",
-    transfer_in: "Transfer in",
-    transfer_out: "Transfer out",
-    expired: "Expired",
-};
+import { localizedProductName } from "@/features/pos/product-display-name";
+import { inventoryMovementLabel, inventoryPaymentLabel, tInventory } from "@/lib/i18n/inventory-copy";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+
 type MovementFilter = "all" | "quick_stock_in" | "adjustment" | "count" | "purchase_receive" | "transfer";
-const filters: Array<{
-    label: string;
-    value: MovementFilter;
-}> = [
-    { label: "All", value: "all" },
-    { label: "Quick Stock In", value: "quick_stock_in" },
-    { label: "Adjustment", value: "adjustment" },
-    { label: "Stock Count", value: "count" },
-    { label: "Purchase Receive", value: "purchase_receive" },
-    { label: "Transfer", value: "transfer" },
-];
-export function StockMovementHistory({ movements, }: {
+
+function movementProductName(movement: StockMovement, locale: SupportedLocale) {
+    if (movement.productNameEn || movement.productNameLo) {
+        return localizedProductName({ nameEn: movement.productNameEn, nameLo: movement.productNameLo }, locale);
+    }
+    return movement.productName;
+}
+
+export function StockMovementHistory({ movements, locale: localeProp }: {
     movements: StockMovement[];
+    locale?: SupportedLocale;
 }) {
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const t = (key: string) => tInventory(key, locale);
     const [filter, setFilter] = useState<MovementFilter>("all");
+
+    useEffect(() => {
+        if (localeProp) {
+            setLocale(localeProp);
+        }
+    }, [localeProp]);
+
+    useEffect(() => {
+        function handleLocaleChange(event: Event) {
+            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+            if (isSupportedLocale(detail?.locale)) {
+                setLocale(detail.locale);
+            }
+        }
+        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+
+    const filters: Array<{ label: string; value: MovementFilter }> = [
+        { label: t("all"), value: "all" },
+        { label: t("quickStockIn"), value: "quick_stock_in" },
+        { label: t("adjustment"), value: "adjustment" },
+        { label: t("stockCount"), value: "count" },
+        { label: t("filterPurchaseReceive"), value: "purchase_receive" },
+        { label: t("transfer"), value: "transfer" },
+    ];
+
     const filteredMovements = useMemo(() => {
         if (filter === "all")
             return movements;
@@ -38,12 +60,13 @@ export function StockMovementHistory({ movements, }: {
         }
         return movements.filter((movement) => movement.movementType === filter);
     }, [filter, movements]);
+
     return (<section className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="border-b border-border p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Stock movement history</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("ui.audit.trail.for.quick.stock.in.stock.changes")}</p>
+            <h2 className="text-lg font-semibold">{t("stockMovementHistory")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("movementHistoryHint")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {filters.map((item) => (<button className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${filter === item.value
@@ -58,29 +81,33 @@ export function StockMovementHistory({ movements, }: {
         <table className="w-full min-w-[1320px] text-left text-sm">
           <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">{t("ui.stock.in.no")}</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Unit</th>
-              <th className="px-4 py-3 text-right">Entered Qty</th>
-              <th className="px-4 py-3">SKU</th>
-              <th className="px-4 py-3 text-right">Before</th>
-              <th className="px-4 py-3 text-right">Base Qty</th>
-              <th className="px-4 py-3 text-right">After</th>
-              <th className="px-4 py-3">Supplier</th>
-              <th className="px-4 py-3">Payment</th>
-              <th className="px-4 py-3">Invoice</th>
-              <th className="px-4 py-3">Note</th>
-              <th className="px-4 py-3">By</th>
+              <th className="px-4 py-3">{t("time")}</th>
+              <th className="px-4 py-3">{t("stockInNo")}</th>
+              <th className="px-4 py-3">{t("type")}</th>
+              <th className="px-4 py-3">{t("product")}</th>
+              <th className="px-4 py-3">{t("unit")}</th>
+              <th className="px-4 py-3 text-right">{t("enteredQty")}</th>
+              <th className="px-4 py-3">{t("sku")}</th>
+              <th className="px-4 py-3 text-right">{t("before")}</th>
+              <th className="px-4 py-3 text-right">{t("baseQty")}</th>
+              <th className="px-4 py-3 text-right">{t("after")}</th>
+              <th className="px-4 py-3">{t("supplier")}</th>
+              <th className="px-4 py-3">{t("payment")}</th>
+              <th className="px-4 py-3">{t("invoice")}</th>
+              <th className="px-4 py-3">{t("note")}</th>
+              <th className="px-4 py-3">{t("by")}</th>
             </tr>
           </thead>
           <tbody>
-            {filteredMovements.map((movement) => (<tr className="border-b border-border last:border-b-0" key={movement.id}>
+            {filteredMovements.length === 0 ? (
+              <tr className="border-b border-border last:border-b-0">
+                <td className="px-4 py-4 text-muted-foreground" colSpan={15}>{t("noMovements")}</td>
+              </tr>
+            ) : filteredMovements.map((movement) => (<tr className="border-b border-border last:border-b-0" key={movement.id}>
                 <td className="px-4 py-4 text-muted-foreground">{movement.createdAt}</td>
                 <td className="px-4 py-4 font-mono text-xs">{movement.stockInNo ?? "-"}</td>
-                <td className="px-4 py-4 font-semibold">{movementLabels[movement.movementType]}</td>
-                <td className="px-4 py-4">{movement.productName}</td>
+                <td className="px-4 py-4 font-semibold">{inventoryMovementLabel(movement.movementType, locale)}</td>
+                <td className="px-4 py-4">{movementProductName(movement, locale)}</td>
                 <td className="px-4 py-4">{movement.unitName ?? "-"}</td>
                 <td className="px-4 py-4 text-right">{movement.enteredQuantity ?? "-"}</td>
                 <td className="px-4 py-4 font-mono text-xs">{movement.sku}</td>
@@ -90,7 +117,7 @@ export function StockMovementHistory({ movements, }: {
                 </td>
                 <td className="px-4 py-4 text-right">{movement.afterQty}</td>
                 <td className="px-4 py-4">{movement.supplierName ?? "-"}</td>
-                <td className="px-4 py-4 capitalize">{movement.paymentStatus ?? "-"}</td>
+                <td className="px-4 py-4 capitalize">{inventoryPaymentLabel(movement.paymentStatus, locale)}</td>
                 <td className="px-4 py-4">{movement.invoiceNo ?? "-"}</td>
                 <td className="px-4 py-4 text-muted-foreground">{movement.note}</td>
                 <td className="px-4 py-4">{movement.createdBy}</td>

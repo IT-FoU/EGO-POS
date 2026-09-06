@@ -1,7 +1,6 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Barcode, ClipboardCheck, PackagePlus, Save, SlidersHorizontal } from "lucide-react";
@@ -12,43 +11,60 @@ import {
     STOCK_COUNT_CHANGED_MESSAGE,
     STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE,
 } from "@/features/inventory/stock-count-errors";
+import { localizedProductName } from "@/features/pos/product-display-name";
+import { localizeInventoryError, tInventory } from "@/lib/i18n/inventory-copy";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+
 type Mode = "stock-in" | "adjustment" | "count";
-const modeConfig: Record<Mode, {
-    title: string;
-    subtitle: string;
-    icon: typeof PackagePlus;
-    quantityLabel: string;
-    noteLabel: string;
-}> = {
-    "stock-in": {
-        title: "Stock In",
-        subtitle: t("ui.receive.products.into.a.selected.warehouse"),
-        icon: PackagePlus,
-        quantityLabel: "Quantity received",
-        noteLabel: "Receiving note",
-    },
-    adjustment: {
-        title: "Stock Adjustment",
-        subtitle: t("ui.adjust.stock.for.damaged.expired.lost.or.cor"),
-        icon: SlidersHorizontal,
-        quantityLabel: "Adjustment quantity",
-        noteLabel: "Adjustment reason",
-    },
-    count: {
-        title: "Stock Count",
-        subtitle: t("ui.record.counted.quantity.and.calculate.varian"),
-        icon: ClipboardCheck,
-        quantityLabel: "Counted quantity",
-        noteLabel: "Count note",
-    },
-};
-export function InventoryActionForm({ items, mode, warehouses, }: {
+
+export function InventoryActionForm({ items, mode, warehouses, locale: localeProp, }: {
     items: InventoryItem[];
     mode: Mode;
     warehouses: Warehouse[];
+    locale?: SupportedLocale;
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const t = (key: string) => tInventory(key, locale);
+    const modeConfig: Record<Mode, {
+        title: string;
+        subtitle: string;
+        icon: typeof PackagePlus;
+        quantityLabel: string;
+        noteLabel: string;
+        saved: string;
+        failedEnglish: string;
+    }> = {
+        "stock-in": {
+            title: t("stockIn"),
+            subtitle: t("stockInSubtitle"),
+            icon: PackagePlus,
+            quantityLabel: t("quantityReceived"),
+            noteLabel: t("receivingNote"),
+            saved: t("stockInSaved"),
+            failedEnglish: "Stock In failed.",
+        },
+        adjustment: {
+            title: t("stockAdjustment"),
+            subtitle: t("adjustmentSubtitle"),
+            icon: SlidersHorizontal,
+            quantityLabel: t("adjustmentQuantity"),
+            noteLabel: t("adjustmentReason"),
+            saved: t("adjustmentSaved"),
+            failedEnglish: "Stock Adjustment failed.",
+        },
+        count: {
+            title: t("stockCount"),
+            subtitle: t("countSubtitle"),
+            icon: ClipboardCheck,
+            quantityLabel: t("countedQuantity"),
+            noteLabel: t("countNote"),
+            saved: t("countSaved"),
+            failedEnglish: "Stock Count failed.",
+        },
+    };
     const config = modeConfig[mode];
     const Icon = config.icon;
     const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id ?? "all");
@@ -63,18 +79,36 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
     const selectedUnit = receivingUnits.find((unit) => unit.id === selectedUnitId) ?? receivingUnits.find((unit) => unit.isBaseUnit) ?? receivingUnits[0];
     const baseQuantityPreview = quantity * (selectedUnit?.conversionQty ?? 1);
     const variance = selectedItem ? quantity - selectedItem.quantity : 0;
+
+    useEffect(() => {
+        if (localeProp) {
+            setLocale(localeProp);
+        }
+    }, [localeProp]);
+
+    useEffect(() => {
+        function handleLocaleChange(event: Event) {
+            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+            if (isSupportedLocale(detail?.locale)) {
+                setLocale(detail.locale);
+            }
+        }
+        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (!selectedItem) {
             setMessageKind("error");
-            setMessage(t("ui.select.a.product.first"));
+            setMessage(t("selectProductFirst"));
             return;
         }
         const formData = new FormData(event.currentTarget);
         const note = String(formData.get("note") ?? "").trim();
         if (mode === "adjustment" && !note) {
             setMessageKind("error");
-            setMessage("Adjustment reason is required.");
+            setMessage(t("adjustmentReasonRequired"));
             return;
         }
         const payload = {
@@ -96,14 +130,14 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
                         warehouseId: selectedWarehouseId,
                     });
             if (!result.ok) {
-                const errorMessage = result.error ?? `${config.title} failed.`;
+                const errorMessage = result.error ?? config.failedEnglish;
                 setMessageKind("error");
                 setMessage(
                     errorMessage === STOCK_COUNT_CHANGED_MESSAGE
-                        ? t("ui.stock.count.changed")
+                        ? t("stockCountChanged")
                         : errorMessage === STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE
-                            ? t("ui.stock.count.lot.unsupported")
-                            : errorMessage,
+                            ? t("stockCountLotUnsupported")
+                            : localizeInventoryError(errorMessage, locale),
                 );
                 if (mode === "count") {
                     router.refresh();
@@ -111,7 +145,7 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
                 return;
             }
             setMessageKind("success");
-            setMessage(`${config.title} saved successfully.`);
+            setMessage(config.saved);
             router.refresh();
         });
     }
@@ -119,7 +153,7 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
       <section className="rounded-lg border border-border bg-card p-6">
         <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/inventory">
           <ArrowLeft aria-hidden="true"/>
-          Back to inventory
+          {t("backToInventory")}
         </Link>
         <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -133,7 +167,7 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
           </div>
           <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" disabled={isPending} type="submit">
             <Save aria-hidden="true"/>
-            {isPending ? t("ui.saving") : "Save"}
+            {isPending ? t("saving") : t("save")}
           </button>
         </div>
       </section>
@@ -144,27 +178,27 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
 
       <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Transaction details</h2>
+          <h2 className="text-lg font-semibold">{t("transactionDetails")}</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <WarehouseSelector selectedWarehouseId={selectedWarehouseId} warehouses={warehouses} onChange={(warehouseId) => {
+            <WarehouseSelector locale={locale} selectedWarehouseId={selectedWarehouseId} warehouses={warehouses} onChange={(warehouseId) => {
             setSelectedWarehouseId(warehouseId);
             setSelectedItemId("");
             setSelectedUnitId("");
         }}/>
             <label className="flex flex-col gap-2 text-sm font-medium">
-              Product
+              {t("product")}
               <select className="field-input" value={selectedItemId} onChange={(event) => {
             setSelectedItemId(event.target.value);
             setSelectedUnitId("");
         }} required>
-                <option value="">Select product</option>
+                <option value="">{t("selectProduct")}</option>
                 {warehouseItems.map((item) => (<option value={item.id} key={item.id}>
-                    {item.productNameEn} / {item.sku}
+                    {localizedProductName({ nameEn: item.productNameEn, nameLo: item.productNameLo }, locale)} / {item.sku}
                   </option>))}
               </select>
             </label>
             {mode === "stock-in" ? (<label className="flex flex-col gap-2 text-sm font-medium">
-                Receiving unit
+                {t("receivingUnit")}
                 <select className="field-input" value={selectedUnit?.id ?? ""} onChange={(event) => setSelectedUnitId(event.target.value)} required>
                   {receivingUnits.map((unit) => (<option value={unit.id} key={unit.id}>
                       {unit.unitName} x {unit.conversionQty}
@@ -172,10 +206,10 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
                 </select>
               </label>) : null}
             <label className="flex flex-col gap-2 text-sm font-medium">
-              Barcode / SKU
+              {t("barcodeSku")}
               <div className="relative">
                 <Barcode aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"/>
-                <input className="field-input pl-10 font-mono" value={selectedItem ? `${selectedItem.barcode} / ${selectedItem.sku}` : ""} readOnly placeholder="Select product to fill"/>
+                <input className="field-input pl-10 font-mono" value={selectedItem ? `${selectedItem.barcode} / ${selectedItem.sku}` : ""} readOnly placeholder={t("selectProductToFill")}/>
               </div>
             </label>
             <label className="flex flex-col gap-2 text-sm font-medium">
@@ -184,23 +218,23 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
             </label>
             <label className="flex flex-col gap-2 text-sm font-medium md:col-span-2">
               {config.noteLabel}
-              <textarea className="min-h-28 rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="note" placeholder="Add a short note for stock movement history"/>
+              <textarea className="min-h-28 rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="note" placeholder={t("notePlaceholder")}/>
             </label>
           </div>
         </div>
 
         <aside className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Preview</h2>
+          <h2 className="text-lg font-semibold">{t("preview")}</h2>
           <dl className="mt-5 flex flex-col gap-4 text-sm">
             <div>
-              <dt className="text-muted-foreground">Current quantity</dt>
+              <dt className="text-muted-foreground">{t("currentQuantity")}</dt>
               <dd className="mt-1 font-semibold">
-                {selectedItem ? `${selectedItem.quantity} ${selectedItem.baseUnit}` : "Select product"}
+                {selectedItem ? `${selectedItem.quantity} ${selectedItem.baseUnit}` : t("selectProduct")}
               </dd>
             </div>
             <div>
               <dt className="text-muted-foreground">
-                {mode === "count" ? "Variance" : "New quantity preview"}
+                {mode === "count" ? t("variance") : t("newQuantityPreview")}
               </dt>
               <dd className="mt-1 font-semibold">
                 {selectedItem
@@ -209,20 +243,20 @@ export function InventoryActionForm({ items, mode, warehouses, }: {
                 : mode === "stock-in"
                     ? `${selectedItem.quantity + baseQuantityPreview} ${selectedItem.baseUnit}`
                     : `${selectedItem.quantity + quantity} ${selectedItem.baseUnit}`
-            : "Select product"}
+            : t("selectProduct")}
               </dd>
             </div>
             {mode === "stock-in" ? (<div>
-                <dt className="text-muted-foreground">Conversion preview</dt>
+                <dt className="text-muted-foreground">{t("conversionPreview")}</dt>
                 <dd className="mt-1 font-semibold">
                   {selectedItem && selectedUnit
                 ? `${quantity} ${selectedUnit.unitName} x ${selectedUnit.conversionQty} = ${baseQuantityPreview} ${selectedItem.baseUnit}`
-                : "Select product and unit"}
+                : t("selectProductAndUnit")}
                 </dd>
               </div>) : null}
             <div>
-              <dt className="text-muted-foreground">Database status</dt>
-              <dd className="mt-1 font-semibold text-success">Real database</dd>
+              <dt className="text-muted-foreground">{t("databaseStatus")}</dt>
+              <dd className="mt-1 font-semibold text-success">{t("realDatabase")}</dd>
             </div>
           </dl>
         </aside>

@@ -16,6 +16,8 @@ export type InventoryItem = {
   sku: string;
   productCode?: string;
   category: string;
+  categoryNameEn?: string;
+  categoryNameLo?: string;
   baseUnit: string;
   quantity: number;
   supplierId?: string;
@@ -46,6 +48,8 @@ export type StockMovement = {
   productId?: string;
   warehouseId: string;
   productName: string;
+  productNameEn?: string;
+  productNameLo?: string;
   sku: string;
   movementType:
     | "quick_stock_in"

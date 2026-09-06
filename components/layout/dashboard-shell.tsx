@@ -32,6 +32,7 @@ import type { SupportedLocale } from "@/lib/constants";
 import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
+import { tInventory } from "@/lib/i18n/inventory-copy";
 import { tProducts } from "@/lib/i18n/products-copy";
 
 const navigation = [
@@ -63,7 +64,7 @@ const shellCopy: Record<SupportedLocale, {
     nav: {
       customers: "Customers",
       dashboard: "Dashboard",
-      inventory: "Inventory",
+      inventory: tInventory("inventory", "en"),
       membership: "Membership",
       pos: "POS",
       products: tProducts("products", "en"),
@@ -81,7 +82,7 @@ const shellCopy: Record<SupportedLocale, {
     nav: {
       customers: "Customers",
       dashboard: "ໜ້າຫຼັກ",
-      inventory: "Inventory",
+      inventory: tInventory("inventory", "lo"),
       membership: "Membership",
       pos: "POS",
       products: tProducts("products", "lo"),

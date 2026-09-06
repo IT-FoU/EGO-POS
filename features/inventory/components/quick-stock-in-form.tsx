@@ -1,6 +1,5 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Camera, CheckCircle2, FileDown, Printer, Search } from "lucide-react";
@@ -8,7 +7,11 @@ import { stockInAction } from "@/features/inventory/actions";
 import { InventoryImage } from "@/features/inventory/components/inventory-image";
 import type { InventoryItem, Warehouse } from "@/features/inventory/types";
 import type { Supplier } from "@/features/suppliers/types";
-type Unit = NonNullable<InventoryItem["units"]>[number];
+import { localizedProductName } from "@/features/pos/product-display-name";
+import { fillInventoryCopy, inventoryPaymentLabel, localizeInventoryError, tInventory } from "@/lib/i18n/inventory-copy";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+
 function formatLak(value: number) {
     return `${Math.round(value).toLocaleString("en-US")} LAK`;
 }
@@ -27,11 +30,17 @@ function readBarcodeQueryParam() {
     }
     return new URLSearchParams(window.location.search).get("barcode")?.trim() ?? "";
 }
-export function QuickStockInForm({ items, suppliers, warehouses, }: {
+function itemProductName(item: InventoryItem, locale: SupportedLocale) {
+    return localizedProductName({ nameEn: item.productNameEn, nameLo: item.productNameLo }, locale);
+}
+export function QuickStockInForm({ items, suppliers, warehouses, locale: localeProp, }: {
     items: InventoryItem[];
     suppliers: Supplier[];
     warehouses: Warehouse[];
+    locale?: SupportedLocale;
 }) {
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const t = (key: string) => tInventory(key, locale);
     const [barcodeQuery, setBarcodeQuery] = useState("");
     const [query, setQuery] = useState("");
     const [selectedItemId, setSelectedItemId] = useState("");
@@ -52,6 +61,21 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     const [isPending, startTransition] = useTransition();
+    useEffect(() => {
+        if (localeProp) {
+            setLocale(localeProp);
+        }
+    }, [localeProp]);
+    useEffect(() => {
+        function handleLocaleChange(event: Event) {
+            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+            if (isSupportedLocale(detail?.locale)) {
+                setLocale(detail.locale);
+            }
+        }
+        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
     useEffect(() => {
         setStockInNo((current) => current || generateClientStockInNo());
         const nextBarcodeQuery = readBarcodeQueryParam();
@@ -106,21 +130,21 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
         }
         const matchingUnit = (item.units ?? []).find((unit) => unit.barcode?.toLowerCase() === term || unit.unitName?.toLowerCase() === term);
         if (matchingUnit?.barcode?.toLowerCase() === term) {
-            return { label: "Matched unit barcode", value: `${matchingUnit.unitName}: ${matchingUnit.barcode}` };
+            return { label: t("matchedUnitBarcode"), value: `${matchingUnit.unitName}: ${matchingUnit.barcode}` };
         }
         if (matchingUnit) {
-            return { label: "Matched unit", value: matchingUnit.unitName };
+            return { label: t("matchedUnit"), value: matchingUnit.unitName };
         }
         if (item.barcode?.toLowerCase() === term) {
-            return { label: "Matched main barcode", value: item.barcode };
+            return { label: t("matchedMainBarcode"), value: item.barcode };
         }
         if (item.productCode?.toLowerCase() === term) {
-            return { label: "Matched product code", value: item.productCode };
+            return { label: t("matchedProductCode"), value: item.productCode };
         }
         if (item.sku?.toLowerCase() === term) {
-            return { label: "Matched SKU", value: item.sku };
+            return { label: t("matchedSku"), value: item.sku };
         }
-        return { label: "Receiving check", value: "Check the unit before receiving stock." };
+        return { label: t("receivingCheck"), value: t("checkUnitBeforeReceiving") };
     }
     function selectItem(item: InventoryItem) {
         setSelectedItemId(item.id);
@@ -138,23 +162,23 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     }
     function validate() {
         if (!selectedItem)
-            return t("ui.product.is.required");
+            return t("productRequired");
         if (!warehouseId)
-            return t("ui.warehouse.is.required");
+            return t("warehouseRequired");
         if (!selectedUnit)
-            return t("ui.receiving.unit.is.required");
+            return t("receivingUnitRequired");
         if (enteredQty <= 0)
-            return t("ui.quantity.must.be.greater.than.zero");
+            return t("quantityMustBePositive");
         if (cost < 0)
-            return t("ui.cost.must.be.zero.or.greater");
+            return t("costMustBeZeroOrGreater");
         if (!paymentStatus)
-            return t("ui.payment.status.is.required");
+            return t("paymentStatusRequired");
         if (!stockInNo.trim())
-            return t("ui.stock.in.number.is.required");
+            return t("stockInNumberRequired");
         if (selectedItem.expiryTrackingEnabled && !expiryDate)
-            return t("ui.expiry.date.is.required.for.this.product");
+            return t("expiryRequired");
         if (selectedItem.expiryTrackingEnabled && !lotNumber.trim())
-            return t("ui.lot.number.is.required.for.this.product");
+            return t("lotRequired");
         return "";
     }
     function handlePreview() {
@@ -166,7 +190,7 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
     function handleConfirm() {
         const validationError = validate();
         if (validationError || !selectedItem || !selectedUnit) {
-            setError(validationError || t("ui.missing.stock.in.details"));
+            setError(validationError || t("missingStockInDetails"));
             return;
         }
         startTransition(async () => {
@@ -190,10 +214,10 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
                 warehouseId,
             });
             if (!result.ok) {
-                setError(result.error ?? t("ui.quick.stock.in.failed"));
+                setError(localizeInventoryError(result.error ?? "Quick Stock In failed.", locale));
                 return;
             }
-            setMessage(`Quick Stock In ${stockInNo} saved successfully.`);
+            setMessage(fillInventoryCopy(t("quickStockInSaved"), { no: stockInNo }));
             setIsConfirming(false);
             setQuantity("");
             setNote("");
@@ -207,13 +231,13 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
           <div>
             <Link className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground" href="/inventory">
               <ArrowLeft className="size-4" aria-hidden="true"/>
-              Back to inventory
+              {t("backToInventory")}
             </Link>
-            <h1 className="mt-3 text-2xl font-semibold">Quick Stock In</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("ui.receive.stock.quickly.with.unit.conversion.l")}</p>
+            <h1 className="mt-3 text-2xl font-semibold">{t("quickStockIn")}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{t("quickStockInSubtitle")}</p>
           </div>
           <div className="rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
-            <div className="text-muted-foreground">{t("ui.stock.in.no")}</div>
+            <div className="text-muted-foreground">{t("stockInNo")}</div>
             <div className="font-mono font-semibold text-primary">{stockInNo}</div>
           </div>
         </div>
@@ -227,11 +251,11 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
           <div className="flex gap-2">
             <button className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-semibold opacity-60" type="button" disabled>
               <Printer className="size-4" aria-hidden="true"/>
-              Print - Coming soon
+              {t("printComingSoon")}
             </button>
             <button className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 font-semibold opacity-60" type="button" disabled>
               <FileDown className="size-4" aria-hidden="true"/>
-              Download PDF - Coming soon
+              {t("downloadPdfComingSoon")}
             </button>
           </div>
         </div>) : null}
@@ -240,30 +264,31 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
         <section className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Scan or Search Product</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Search by barcode, product code, SKU, product name, or unit barcode.</p>
+          <h2 className="text-lg font-semibold">{t("scanOrSearch")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("searchByBarcodeHint")}</p>
           <div className="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-3">
             <Search className="size-4 text-muted-foreground" aria-hidden="true"/>
-            <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder={t("ui.search.barcode.unit.barcode.sku.product.name")} value={query} onChange={(event) => setQuery(event.target.value)}/>
+            <input aria-label={t("scanOrSearch")} className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder={t("searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </div>
-          {barcodeQuery ? (<p className="mt-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">Received from Create Product. Review the matched product before adding stock.</p>) : null}
-          <div className="mt-4 text-sm font-semibold">Product Match / Product Not Found</div>
+          {barcodeQuery ? (<p className="mt-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">{t("receivedFromCreateProduct")}</p>) : null}
+          <div className="mt-4 text-sm font-semibold">{t("productMatchOrNotFound")}</div>
           <div className="mt-4 grid max-h-[430px] gap-3 overflow-y-auto pr-1 md:grid-cols-2">
             {showProductNotFound ? (<div className="rounded-lg border border-dashed border-warning/40 bg-warning/10 p-4 md:col-span-2">
-                <div className="text-sm font-semibold text-foreground">Product not found</div>
+                <div className="text-sm font-semibold text-foreground">{t("productNotFound")}</div>
                 <div className="mt-1 font-mono text-sm text-warning">{searchedValue}</div>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">No stock can be received until this product exists. Create it first, then return to Inventory to receive stock.</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("productNotFoundHint")}</p>
                 <Link className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href={createProductHref}>
-                  Create Product
+                  {t("createProduct")}
                 </Link>
               </div>) : null}
             {filteredItems.map((item) => {
             const matchContext = getMatchContext(item);
+            const productName = itemProductName(item, locale);
             return (<button className={`flex items-center gap-3 rounded-lg border p-3 text-left transition hover:border-primary ${selectedItemId === item.id ? "border-primary bg-primary/10" : "border-border bg-background"}`} key={item.id} type="button" onClick={() => selectItem(item)}>
-                <InventoryImage imageKey={item.imageKey} label={item.productNameEn}/>
+                <InventoryImage imageKey={item.imageKey} label={productName}/>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{item.productNameEn || item.productNameLo}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">Code: {item.productCode || "-"} - SKU: {item.sku || "-"} - Barcode: {item.barcode || "-"}</div>
+                  <div className="truncate text-sm font-semibold">{productName}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{fillInventoryCopy(t("codeSkuBarcode"), { code: item.productCode || "-", sku: item.sku || "-", barcode: item.barcode || "-" })}</div>
                   {matchContext ? (<div className="mt-1 text-xs text-muted-foreground">{matchContext.label}: <span className="font-semibold text-foreground">{matchContext.value}</span></div>) : null}
                   <div className="mt-1 text-xs font-semibold text-primary">
                     {formatQuantity(item.quantity, item.baseUnit)}
@@ -275,119 +300,124 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
         </section>
 
         <section className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Receive Details</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Select a product, choose the receiving unit, then review the conversion before confirming stock in.</p>
+          <h2 className="text-lg font-semibold">{t("receiveDetails")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("receiveDetailsIntro")}</p>
           {selectedItem ? (<div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-background p-3">
-              <InventoryImage imageKey={selectedItem.imageKey} label={selectedItem.productNameEn}/>
+              <InventoryImage imageKey={selectedItem.imageKey} label={itemProductName(selectedItem, locale)}/>
               <div>
-                <div className="font-semibold">{selectedItem.productNameEn || selectedItem.productNameLo}</div>
+                <div className="font-semibold">{itemProductName(selectedItem, locale)}</div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  Current stock: {formatQuantity(selectedItem.quantity, selectedItem.baseUnit)}
+                  {fillInventoryCopy(t("currentStockPrefix"), { qty: formatQuantity(selectedItem.quantity, selectedItem.baseUnit) })}
                 </div>
               </div>
-            </div>) : (<div className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Select a product before entering receiving details.</div>)}
+            </div>) : (<div className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{t("selectProductBeforeDetails")}</div>)}
 
           <div className="mt-4 grid gap-4">
             <div className="rounded-lg border border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">Receive Details</h3>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">Choose the warehouse, receiving unit, and quantity. Nothing is saved until Confirm Stock In.</p>
+              <h3 className="text-sm font-semibold">{t("receiveDetails")}</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("receiveDetailsHint")}</p>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <label className="text-sm font-semibold">
-                  Warehouse
+                  {t("warehouse")}
                   <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
                     {warehouses.map((warehouse) => (<option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>))}
                   </select>
                 </label>
                 <label className="text-sm font-semibold">
-                  Receiving Unit
+                  {t("receivingUnit")}
                   <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={selectedUnitId} onChange={(event) => selectUnit(event.target.value)}>
-                    <option value="">Select unit every time</option>
+                    <option value="">{t("selectUnitEveryTime")}</option>
                     {receivingUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.unitName}</option>))}
                   </select>
                 </label>
                 <label className="text-sm font-semibold">
-                  Quantity
+                  {t("quantity")}
                   <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0"/>
                 </label>
               </div>
             </div>
 
             <div className="rounded-lg border border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">Supplier & Cost</h3>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">Unit cost is used for this receiving record. Changing product cost is optional.</p>
+              <h3 className="text-sm font-semibold">{t("supplierAndCost")}</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("supplierCostHint")}</p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <label className="text-sm font-semibold">
-                  Supplier
+                  {t("supplier")}
                   <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
-                    <option value="">No supplier</option>
+                    <option value="">{t("noSupplier")}</option>
                     {suppliers.map((supplier) => (<option key={supplier.id} value={supplier.id}>{supplier.companyName}</option>))}
                   </select>
                 </label>
                 <label className="text-sm font-semibold">
-                  Unit Cost
+                  {t("unitCost")}
                   <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" inputMode="decimal" value={unitCost} onChange={(event) => setUnitCost(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0"/>
                 </label>
                 <label className="text-sm font-semibold">
-                  Payment Status
+                  {t("paymentStatus")}
                   <select className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value as "paid" | "credit")}>
-                    <option value="paid">Paid</option>
-                    <option value="credit">Credit</option>
+                    <option value="paid">{t("paid")}</option>
+                    <option value="credit">{t("credit")}</option>
                   </select>
                 </label>
-                <label className="text-sm font-semibold">{t("ui.invoice.no")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} placeholder="INV-2026-0618-001"/>
+                <label className="text-sm font-semibold">{t("invoiceNo")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} placeholder="INV-2026-0618-001"/>
                 </label>
-                <label className="text-sm font-semibold md:col-span-2">{t("ui.stock.in.no")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 font-mono text-sm" value={stockInNo} onChange={(event) => setStockInNo(event.target.value)}/>
+                <label className="text-sm font-semibold md:col-span-2">{t("stockInNo")}<input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 font-mono text-sm" value={stockInNo} onChange={(event) => setStockInNo(event.target.value)}/>
                 </label>
               </div>
               <label className="mt-3 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm font-semibold text-warning">
                 <input className="mt-1 size-4" type="checkbox" checked={updateProductCost} onChange={(event) => setUpdateProductCost(event.target.checked)}/>
                 <span>
-                  Update Product Cost
-                  <span className="mt-1 block text-xs font-normal leading-5">If enabled, this will update the saved product/unit cost after confirmation.</span>
+                  {t("updateProductCost")}
+                  <span className="mt-1 block text-xs font-normal leading-5">{t("updateProductCostHint")}</span>
                 </span>
               </label>
             </div>
 
             <div className="rounded-lg border border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">Lot & Expiry</h3>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">Lot and expiry are used to track product batches. Some products may require lot number and expiry date before receiving.</p>
-              {selectedItem?.expiryTrackingEnabled ? (<p className="mt-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">This product requires lot number and expiry date.</p>) : null}
+              <h3 className="text-sm font-semibold">{t("lotAndExpiry")}</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("lotExpiryHint")}</p>
+              {selectedItem?.expiryTrackingEnabled ? (<p className="mt-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">{t("lotRequiredNotice")}</p>) : null}
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <label className="text-sm font-semibold">
-                  Lot Number
+                  {t("lotNumber")}
                   <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" value={lotNumber} onChange={(event) => setLotNumber(event.target.value)} placeholder="ABC240618"/>
                 </label>
                 <label className="text-sm font-semibold">
-                  Expiry Date
+                  {t("expiryDate")}
                   <input className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-sm" type="date" value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)}/>
                 </label>
               </div>
             </div>
 
             <div className="rounded-lg border border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">Conversion Preview</h3>
+              <h3 className="text-sm font-semibold">{t("conversionPreviewTitle")}</h3>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Receiving {enteredQty || 0} {selectedUnit?.unitName ?? "units"} x {conversionQty || 0} = {formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? "Base")} added to base stock.
+                {fillInventoryCopy(t("receivingConversion"), {
+                    qty: enteredQty || 0,
+                    unit: selectedUnit?.unitName ?? t("units"),
+                    conv: conversionQty || 0,
+                    base: formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? t("base")),
+                })}
               </p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <div>
-                  <div className="text-xs text-muted-foreground">Received Quantity</div>
-                  <div className="mt-1 font-semibold">{enteredQty || 0} {selectedUnit?.unitName ?? "units"}</div>
+                  <div className="text-xs text-muted-foreground">{t("receivedQuantity")}</div>
+                  <div className="mt-1 font-semibold">{enteredQty || 0} {selectedUnit?.unitName ?? t("units")}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Converted Base Quantity</div>
-                  <div className="mt-1 font-semibold">{formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? "Base")}</div>
+                  <div className="text-xs text-muted-foreground">{t("convertedBaseQuantity")}</div>
+                  <div className="mt-1 font-semibold">{formatQuantity(baseQtyAdded, selectedItem?.baseUnit ?? t("base"))}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Current Stock</div>
-                  <div className="mt-1 font-semibold">{formatQuantity(currentStock, selectedItem?.baseUnit ?? "Base")}</div>
+                  <div className="text-xs text-muted-foreground">{t("currentStock")}</div>
+                  <div className="mt-1 font-semibold">{formatQuantity(currentStock, selectedItem?.baseUnit ?? t("base"))}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">After Stock</div>
-                  <div className="mt-1 text-xl font-bold text-success">{formatQuantity(afterStock, selectedItem?.baseUnit ?? "Base")}</div>
+                  <div className="text-xs text-muted-foreground">{t("afterStock")}</div>
+                  <div className="mt-1 text-xl font-bold text-success">{formatQuantity(afterStock, selectedItem?.baseUnit ?? t("base"))}</div>
                 </div>
                 <div className="md:col-span-2">
-                  <div className="text-xs text-muted-foreground">Total Cost</div>
+                  <div className="text-xs text-muted-foreground">{t("totalCost")}</div>
                   <div className="mt-1 font-semibold">{formatLak(totalCost)}</div>
                 </div>
               </div>
@@ -397,22 +427,22 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
           <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-4">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Camera className="size-4" aria-hidden="true"/>
-              Receiving Photos
+              {t("receivingPhotos")}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{t("ui.upload.ui.is.ready.storage.can.be.connected.")}</p>
-            <input className="mt-3 text-sm" multiple type="file" accept={t("ui.image.png.image.jpeg.image.webp")} onChange={(event) => setPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))}/>
-            {photoNames.length ? <div className="mt-2 text-xs text-muted-foreground">{photoNames.length}{t("ui.photo.s")}{photoNames.join(", ")}</div> : null}
+            <p className="mt-1 text-xs text-muted-foreground">{t("uploadReady")}</p>
+            <input className="mt-3 text-sm" multiple type="file" accept={t("acceptImages")} onChange={(event) => setPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))}/>
+            {photoNames.length ? <div className="mt-2 text-xs text-muted-foreground">{fillInventoryCopy(t("photosCount"), { count: photoNames.length })}{photoNames.join(", ")}</div> : null}
           </div>
 
           <label className="mt-4 block text-sm font-semibold">
-            Note
-            <textarea className="mt-1 min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional receiving note"/>
+            {t("note")}
+            <textarea className="mt-1 min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm" value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("optionalReceivingNote")}/>
           </label>
 
           <div className="mt-5 flex justify-end gap-2">
-            <Link className="inline-flex h-11 items-center rounded-md border border-border px-4 text-sm font-semibold" href="/inventory">Cancel</Link>
+            <Link className="inline-flex h-11 items-center rounded-md border border-border px-4 text-sm font-semibold" href="/inventory">{t("cancel")}</Link>
             <button className="inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={handlePreview}>
-              Preview Confirmation
+              {t("previewConfirmation")}
             </button>
           </div>
         </section>
@@ -421,56 +451,56 @@ export function QuickStockInForm({ items, suppliers, warehouses, }: {
       {isConfirming && selectedItem && selectedUnit ? (<section className="rounded-lg border border-primary/30 bg-card p-5 shadow-sm">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold">Preview Confirmation</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Review these details before running Confirm Stock In. Nothing has been saved yet.</p>
+              <h2 className="text-lg font-semibold">{t("previewConfirmation")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t("previewConfirmationHint")}</p>
             </div>
-            <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">Manual confirmation required</div>
+            <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary">{t("manualConfirmationRequired")}</div>
           </div>
-          {updateProductCost ? (<p className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">Update Product Cost is enabled. This will update product/unit cost after confirmation.</p>) : null}
+          {updateProductCost ? (<p className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">{t("updateCostEnabledWarning")}</p>) : null}
           <div className="mt-4 grid gap-4 text-sm xl:grid-cols-2">
             <div className="rounded-md border border-border bg-background p-3">
-              <h3 className="text-sm font-semibold">Product</h3>
+              <h3 className="text-sm font-semibold">{t("product")}</h3>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <SummaryField label="Product" value={selectedItem.productNameEn || selectedItem.productNameLo}/>
-                <SummaryField label={t("ui.stock.in.no")} value={stockInNo}/>
-                <SummaryField label="Warehouse" value={warehouses.find((warehouse) => warehouse.id === warehouseId)?.name ?? "-"}/>
-                <SummaryField label="Receiving Unit" value={selectedUnit.unitName}/>
+                <SummaryField label={t("product")} value={itemProductName(selectedItem, locale)}/>
+                <SummaryField label={t("stockInNo")} value={stockInNo}/>
+                <SummaryField label={t("warehouse")} value={warehouses.find((warehouse) => warehouse.id === warehouseId)?.name ?? "-"}/>
+                <SummaryField label={t("receivingUnit")} value={selectedUnit.unitName}/>
               </div>
             </div>
             <div className="rounded-md border border-border bg-background p-3">
-              <h3 className="text-sm font-semibold">Quantity & Conversion</h3>
+              <h3 className="text-sm font-semibold">{t("quantityAndConversion")}</h3>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <SummaryField label="Entered Quantity" value={enteredQty.toLocaleString("en-US")}/>
-                <SummaryField label="Conversion" value={`${enteredQty} x ${conversionQty}`}/>
-                <SummaryField label="Base Quantity Added" value={formatQuantity(baseQtyAdded, selectedItem.baseUnit)}/>
-                <SummaryField label="After Stock" value={formatQuantity(afterStock, selectedItem.baseUnit)}/>
+                <SummaryField label={t("enteredQuantity")} value={enteredQty.toLocaleString("en-US")}/>
+                <SummaryField label={t("conversion")} value={`${enteredQty} x ${conversionQty}`}/>
+                <SummaryField label={t("baseQuantityAdded")} value={formatQuantity(baseQtyAdded, selectedItem.baseUnit)}/>
+                <SummaryField label={t("afterStock")} value={formatQuantity(afterStock, selectedItem.baseUnit)}/>
               </div>
             </div>
             <div className="rounded-md border border-border bg-background p-3">
-              <h3 className="text-sm font-semibold">Supplier & Cost</h3>
+              <h3 className="text-sm font-semibold">{t("supplierAndCost")}</h3>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <SummaryField label="Supplier" value={selectedSupplier?.companyName ?? "No supplier"}/>
-                <SummaryField label="Payment Status" value={paymentStatus}/>
-                <SummaryField label={t("ui.invoice.no")} value={invoiceNo || "-"}/>
-                <SummaryField label="Unit Cost" value={formatLak(cost)}/>
-                <SummaryField label="Total Cost" value={formatLak(totalCost)}/>
-                <SummaryField label="Update Product Cost" value={updateProductCost ? "Yes" : "No"}/>
+                <SummaryField label={t("supplier")} value={selectedSupplier?.companyName ?? t("noSupplier")}/>
+                <SummaryField label={t("paymentStatus")} value={inventoryPaymentLabel(paymentStatus, locale)}/>
+                <SummaryField label={t("invoiceNo")} value={invoiceNo || "-"}/>
+                <SummaryField label={t("unitCost")} value={formatLak(cost)}/>
+                <SummaryField label={t("totalCost")} value={formatLak(totalCost)}/>
+                <SummaryField label={t("updateProductCost")} value={updateProductCost ? t("yes") : t("no")}/>
               </div>
             </div>
             <div className="rounded-md border border-border bg-background p-3">
-              <h3 className="text-sm font-semibold">Lot & Expiry</h3>
+              <h3 className="text-sm font-semibold">{t("lotAndExpiry")}</h3>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <SummaryField label="Lot Number" value={lotNumber || "-"}/>
-                <SummaryField label="Expiry Date" value={expiryDate || "-"}/>
-                <SummaryField label="Photos Count" value={String(photoNames.length)}/>
-                <SummaryField label="Note" value={note || "-"}/>
+                <SummaryField label={t("lotNumber")} value={lotNumber || "-"}/>
+                <SummaryField label={t("expiryDate")} value={expiryDate || "-"}/>
+                <SummaryField label={t("photosCountLabel")} value={String(photoNames.length)}/>
+                <SummaryField label={t("note")} value={note || "-"}/>
               </div>
             </div>
           </div>
           <div className="mt-5 flex justify-end gap-2">
-            <button className="inline-flex h-11 items-center rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setIsConfirming(false)}>Cancel</button>
+            <button className="inline-flex h-11 items-center rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setIsConfirming(false)}>{t("cancel")}</button>
             <button className="inline-flex h-11 items-center rounded-md bg-success px-4 text-sm font-semibold text-success-foreground disabled:opacity-60" type="button" disabled={isPending} onClick={handleConfirm}>
-              {isPending ? t("ui.saving") : "Confirm Stock In"}
+              {isPending ? t("saving") : t("confirmStockIn")}
             </button>
           </div>
         </section>) : null}

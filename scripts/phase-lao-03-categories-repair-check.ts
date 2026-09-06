@@ -52,10 +52,12 @@ check(
 );
 
 check(
-  "A2. Other sidebar modules stay English in Lao and Thai is unavailable",
-  shell.includes('inventory: "Inventory"') &&
+  "A2. Later sidebar modules stay English in Lao and Thai is unavailable",
+  shell.includes('tInventory("inventory", "en")') &&
+    shell.includes('tInventory("inventory", "lo")') &&
     shell.includes('customers: "Customers"') &&
     shell.includes('settings: "Settings"') &&
+    shell.includes('promotions: "Promotions"') &&
     !toggle.includes('updateLocale("th")') &&
     !toggle.includes("TH") &&
     tProducts("products", "th") === en.products,
