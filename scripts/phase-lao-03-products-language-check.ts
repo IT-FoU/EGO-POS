@@ -110,9 +110,8 @@ check(
   "10. Existing Product CRUD/business behavior remains unchanged",
   !repository.includes("products-copy") &&
     !actions.includes("products-copy") &&
-    !categoriesClient.includes("products-copy") &&
-    !categoriesPage.includes("products-copy") &&
-    categoriesClient.includes('from "@/lib/i18n/ui"') &&
+    categoriesClient.includes('from "@/lib/i18n/products-copy"') &&
+    categoriesPage.includes("getServerLocale") &&
     listClient.includes('from "@/lib/i18n/products-copy"') &&
     productsPage.includes("getProductsCopy") &&
     statusBadge.includes("productStatusLabel") &&

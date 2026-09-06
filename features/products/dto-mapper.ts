@@ -84,6 +84,8 @@ export function mapPrismaCategory(category: PrismaCategory): Category {
     nameEn: category.nameEn ?? "",
     nameLo: category.nameLo,
     parentName: category.parent?.nameEn ?? category.parent?.nameLo ?? undefined,
+    parentNameEn: category.parent?.nameEn ?? "",
+    parentNameLo: category.parent?.nameLo ?? "",
     productCount: category._count?.products ?? 0,
     status: category.isActive === false ? "inactive" : "active",
   };

@@ -32,6 +32,7 @@ import type { SupportedLocale } from "@/lib/constants";
 import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
+import { tProducts } from "@/lib/i18n/products-copy";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -65,7 +66,7 @@ const shellCopy: Record<SupportedLocale, {
       inventory: "Inventory",
       membership: "Membership",
       pos: "POS",
-      products: "Products",
+      products: tProducts("products", "en"),
       promotions: "Promotions",
       purchasing: "Purchasing",
       reports: "Reports",
@@ -83,7 +84,7 @@ const shellCopy: Record<SupportedLocale, {
       inventory: "Inventory",
       membership: "Membership",
       pos: "POS",
-      products: "Products",
+      products: tProducts("products", "lo"),
       promotions: "Promotions",
       purchasing: "Purchasing",
       reports: "Reports",

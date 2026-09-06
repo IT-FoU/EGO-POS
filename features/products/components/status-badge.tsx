@@ -10,8 +10,10 @@ const statusStyles: Record<ProductStatus | "active" | "inactive", string> = {
 };
 
 export function StatusBadge({
+  locale,
   status,
 }: {
+  locale?: string | null;
   status: ProductStatus | "active" | "inactive";
 }) {
   return (
@@ -21,7 +23,7 @@ export function StatusBadge({
         statusStyles[status],
       )}
     >
-      {productStatusLabel(status)}
+      {productStatusLabel(status, locale)}
     </span>
   );
 }

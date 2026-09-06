@@ -68,6 +68,8 @@ export type Category = {
   nameLo: string;
   nameEn: string;
   parentName?: string;
+  parentNameEn?: string;
+  parentNameLo?: string;
   productCount: number;
   status: "active" | "inactive";
 };

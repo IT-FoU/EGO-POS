@@ -523,6 +523,34 @@ const en = {
   expiredStatus: "Expired",
   promoTagOptional: "Promo tag optional",
   custom: "Custom",
+  productManagement: "Product Management",
+  categoriesPageSubtitle: "Add, edit, archive, and delete product categories.",
+  categoriesSearchPlaceholder: "Search categories by Lao or English name",
+  categoriesSearchAria: "Search categories",
+  parent: "Parent",
+  parentCategory: "Parent category",
+  root: "Root",
+  rootCategory: "Root category",
+  categoryNameEnglish: "English Name",
+  categoryNameLao: "Lao Name",
+  createCategory: "Create category",
+  saveCategory: "Save category",
+  saving: "Saving...",
+  archiveCategory: "Archive category",
+  archiveCategoryUnavailable: "Category archive is not available in the current version.",
+  categoryCreated: "Category created successfully.",
+  categoryUpdated: "Category updated successfully.",
+  categoryDeleteFailed: "Category delete failed.",
+  categoryRequired: "Category name is required.",
+  duplicateCategoryName: "A category with this name already exists.",
+  failedToLoadCategories: "Failed to load categories.",
+  loadingCategories: "Loading categories...",
+  noCategories: "No categories",
+  noCategoryResults: "No matching categories",
+  closeCategoryForm: "Close category form",
+  parentInvalid: "Selected parent category is invalid.",
+  restore: "Restore",
+  categoriesFormHint: "Saves category names and parent category.",
 } as const;
 
 const lo = {
@@ -1048,6 +1076,34 @@ const lo = {
   expiredStatus: "ໝົດອາຍຸ",
   promoTagOptional: "ແທັກໂປຣໂມບໍ່ບັງຄັບ",
   custom: "ກຳນົດເອງ",
+  productManagement: "ຈັດການສິນຄ້າ",
+  categoriesPageSubtitle: "ເພີ່ມ ແກ້ ເກັບຖາວອນ ແລະ ລຶບໝວດສິນຄ້າ.",
+  categoriesSearchPlaceholder: "ຄົ້ນຫາໝວດຕາມຊື່ລາວ ຫຼື ອັງກິດ",
+  categoriesSearchAria: "ຄົ້ນຫາໝວດ",
+  parent: "ແມ່",
+  parentCategory: "ໝວດແມ່",
+  root: "ຫຼັກ",
+  rootCategory: "ໝວດຫຼັກ",
+  categoryNameEnglish: "ຊື່ອັງກິດ",
+  categoryNameLao: "ຊື່ລາວ",
+  createCategory: "ເພີ່ມໝວດ",
+  saveCategory: "ບັນທຶກໝວດ",
+  saving: "ກຳລັງບັນທຶກ...",
+  archiveCategory: "ເກັບໝວດ",
+  archiveCategoryUnavailable: "ຍັງເກັບໝວດບໍ່ໄດ້ ໃນເວີຊັນນີ້.",
+  categoryCreated: "ເພີ່ມໝວດແລ້ວ.",
+  categoryUpdated: "ແກ້ໝວດແລ້ວ.",
+  categoryDeleteFailed: "ລຶບໝວດບໍ່ສຳເລັດ.",
+  categoryRequired: "ຕ້ອງໃສ່ຊື່ໝວດ.",
+  duplicateCategoryName: "ຊື່ໝວດນີ້ມີແລ້ວ.",
+  failedToLoadCategories: "ໂຫຼດໝວດບໍ່ສຳເລັດ.",
+  loadingCategories: "ກຳລັງໂຫຼດໝວດ...",
+  noCategories: "ຍັງບໍ່ມີໝວດ",
+  noCategoryResults: "ບໍ່ພົບໝວດ",
+  closeCategoryForm: "ປິດຟອມໝວດ",
+  parentInvalid: "ໝວດແມ່ບໍ່ຖືກຕ້ອງ.",
+  restore: "ຄືນໃຊ້",
+  categoriesFormHint: "ບັນທຶກຊື່ໝວດ ແລະ ໝວດແມ່.",
 } as Record<keyof typeof en, string>;
 export type ProductsCopyKey = keyof typeof en;
 export type ProductsCopy = Record<ProductsCopyKey, string>;
@@ -1107,6 +1163,20 @@ const knownErrors: Record<string, ProductsCopyKey> = {
 export function localizeProductError(error?: string | null, locale?: string | null) {
   if (!error) {
     return tProducts("productSaveFailed", locale);
+  }
+  if (error.startsWith("Permission denied")) {
+    return tProducts("permissionDenied", locale);
+  }
+  const key = knownErrors[error];
+  if (key) {
+    return tProducts(key, locale);
+  }
+  return error;
+}
+
+export function localizeCategoryError(error?: string | null, locale?: string | null) {
+  if (!error) {
+    return tProducts("categorySaveFailed", locale);
   }
   if (error.startsWith("Permission denied")) {
     return tProducts("permissionDenied", locale);
