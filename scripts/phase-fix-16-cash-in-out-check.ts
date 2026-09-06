@@ -72,7 +72,6 @@ const cashInRoute = readFileSync(join(process.cwd(), "app/api/pos/cash-sessions/
 const cashOutRoute = readFileSync(join(process.cwd(), "app/api/pos/cash-sessions/cash-out/route.ts"), "utf8");
 const catalogSrc = readFileSync(join(process.cwd(), "features/access-control/permission-catalog.ts"), "utf8");
 const en = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/en.json"), "utf8")) as Record<string, string>;
-const th = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/th.json"), "utf8")) as Record<string, string>;
 
 check("More → Cash In/Out opens ledger modal, not Cash Shift Count", () => {
   const handler = posClientSrc.slice(posClientSrc.indexOf('label={t("ui.cash.in.cash.out")}'));
@@ -142,7 +141,7 @@ check("No-open-session copy is explicit", () => {
   assert(modalSrc.includes("NO_OPEN_CASH_SHIFT_MESSAGE"), "modal uses block copy");
 });
 
-check("Localization EN + TH required strings", () => {
+check("Localization EN required strings", () => {
   const keys = [
     "ui.cash.in",
     "ui.cash.out",
@@ -155,9 +154,9 @@ check("Localization EN + TH required strings", () => {
   ];
   for (const key of keys) {
     assert(Boolean(en[key]), `en missing ${key}`);
-    assert(Boolean(th[key]), `th missing ${key}`);
     assert(t(key, "en") === en[key], `en t() ${key}`);
-    assert(t(key, "th") === th[key], `th t() ${key}`);
+    assert(t(key, "th") === en[key], `legacy th t() ${key}`);
+    assert(t(key, "lo") === en[key], `lo stays English this phase ${key}`);
   }
 });
 

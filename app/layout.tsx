@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Noto_Sans_Lao } from "next/font/google";
 import { cookies } from "next/headers";
 import "./globals.css";
 import { LocalizationRepairRuntime } from "@/components/i18n/localization-repair-runtime";
@@ -6,6 +7,13 @@ import { LocaleBootstrap } from "@/components/i18n/locale-bootstrap";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DEFAULT_LOCALE } from "@/lib/constants";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+
+const notoSansLao = Noto_Sans_Lao({
+  display: "swap",
+  subsets: ["lao"],
+  variable: "--font-noto-sans-lao",
+  weight: ["400", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "EGO POS",
@@ -21,7 +29,12 @@ export default async function RootLayout({
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value, DEFAULT_LOCALE);
 
   return (
-    <html lang={locale} data-locale={locale} suppressHydrationWarning>
+    <html
+      className={locale === "lo" ? `${notoSansLao.className} ${notoSansLao.variable}` : undefined}
+      data-locale={locale}
+      lang={locale}
+      suppressHydrationWarning
+    >
       <body>
         <ThemeProvider>
           <LocaleBootstrap initialLocale={locale} />

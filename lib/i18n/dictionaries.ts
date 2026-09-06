@@ -125,7 +125,7 @@ const dictionaryEn = {
 
 export const dictionaries = {
   en: dictionaryEn,
-  th: dictionaryEn,
+  lo: dictionaryEn,
 } satisfies Record<SupportedLocale, Record<string, string>>;
 
 export function getDictionary(locale: string | undefined) {

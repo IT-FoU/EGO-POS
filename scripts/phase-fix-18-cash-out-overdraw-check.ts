@@ -79,7 +79,6 @@ const repoSrc = readFileSync(join(process.cwd(), "features/cash-sessions/prisma-
 const modalSrc = readFileSync(join(process.cwd(), "features/pos/components/cash-in-out-modal.tsx"), "utf8");
 const cashOutRoute = readFileSync(join(process.cwd(), "app/api/pos/cash-sessions/cash-out/route.ts"), "utf8");
 const en = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/en.json"), "utf8")) as Record<string, string>;
-const th = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/th.json"), "utf8")) as Record<string, string>;
 const lo = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/lo.json"), "utf8")) as Record<string, string>;
 
 check("Server uses canonical calculateExpectedCash + transaction lock", () => {
@@ -120,13 +119,13 @@ check("Invariant helper boundaries", () => {
   );
 });
 
-check("Localization EN + TH + LO", () => {
+check("Localization EN + LO source", () => {
   const key = "ui.cash.out.amount.cannot.exceed.expected.cas";
   assert(en[key] === CASH_OUT_EXCEEDS_EXPECTED_MESSAGE, "en message");
-  assert(Boolean(th[key]), "th missing");
   assert(Boolean(lo[key]) && !lo[key].includes("?"), "lo missing");
   assert(t(key, "en") === en[key], "en t()");
-  assert(t(key, "th") === th[key], "th t()");
+  assert(t(key, "th") === en[key], "legacy th t()");
+  assert(t(key, "lo") === en[key], "lo stays English this phase");
 });
 
 check("POS policy aliases unchanged", () => {

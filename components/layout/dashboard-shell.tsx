@@ -29,7 +29,7 @@ import { LogoContainer } from "@/components/brand/logo-container";
 import { COMPANY_LOGO_CHANGE_EVENT, readCompanyLogoUrl } from "@/features/brand/company-logo";
 import { APP_NAME, DEFAULT_LOCALE, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
-import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
 
@@ -49,7 +49,7 @@ const navigation = [
 
 type NavigationKey = (typeof navigation)[number]["key"];
 
-const shellCopy: Record<"th" | "en", {
+const shellCopy: Record<SupportedLocale, {
   daysLeft: string;
   freePlan: string;
   lockedFeature: string;
@@ -73,20 +73,20 @@ const shellCopy: Record<"th" | "en", {
       suppliers: "Suppliers",
     },
   },
-  th: {
-    daysLeft: "Days left",
-    freePlan: "Free plan",
-    lockedFeature: "Pro plan feature",
+  lo: {
+    daysLeft: "Days Left",
+    freePlan: "Free Plan",
+    lockedFeature: "Paid feature locked",
     nav: {
       customers: "Customers",
-      dashboard: "Dashboard",
+      dashboard: "ໜ້າຫຼັກ",
       inventory: "Inventory",
       membership: "Membership",
       pos: "POS",
       products: "Products",
-      promotions: "Promotion",
+      promotions: "Promotions",
       purchasing: "Purchasing",
-      reports: "Report",
+      reports: "Reports",
       settings: "Settings",
       suppliers: "Suppliers",
     },
@@ -119,7 +119,7 @@ export function DashboardShell({
   useEffect(() => {
     function handleLocaleChange(event: Event) {
       const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (detail?.locale === "en" || detail?.locale === "th") {
+      if (isSupportedLocale(detail?.locale)) {
         setLocale(detail.locale);
       }
     }

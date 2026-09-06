@@ -61,17 +61,19 @@ check(
 );
 check(
   "F. Lao invalid credentials message localized",
-  loDictionary.invalidCredentials.includes("Username") && loDictionary.invalidCredentials.includes("Password"),
+  loDictionary.invalidCredentials.toLowerCase().includes("username") &&
+    loDictionary.invalidCredentials.toLowerCase().includes("password"),
   loDictionary.invalidCredentials,
 );
 
 const loDashboard = getDashboardCopy("lo");
 check(
   "G. Lao dashboard keeps approved English terms",
-  loDashboard.storeDashboard === "Store Dashboard" &&
-    loDashboard.dashboardAlerts.includes("Dashboard") &&
-    getDictionary("lo").reports === "Report" &&
-    getDictionary("lo").promotions === "Promotion",
+  loDashboard.qrTransfer.startsWith("QR") &&
+    loDashboard.taxVat === "Tax/VAT" &&
+    loDashboard.card === "Card" &&
+    getDictionary("lo").reports === "Reports" &&
+    getDictionary("lo").promotions === "Promotions",
 );
 
 const languageToggleSource = readFileSync(resolve(process.cwd(), "components/layout/language-toggle.tsx"), "utf8");
@@ -108,18 +110,16 @@ check(
     localeSource.includes(LOCALE_COOKIE_NAME),
 );
 
-const laoTranslationsSource = readFileSync(resolve(process.cwd(), "lib/i18n/lao-ui-translations.ts"), "utf8");
 check(
-  "M. Approved business terms remain English in Lao runtime map",
-  laoTranslationsSource.includes('"Dashboard"') &&
-    laoTranslationsSource.includes('"POS"') &&
-    laoTranslationsSource.includes('"SKU"') &&
-    laoTranslationsSource.includes('"Cashier"'),
+  "M. Lao locale uses Noto Sans Lao without a global overlay map",
+  rootLayoutSource.includes("Noto_Sans_Lao") &&
+    !localeSource.includes('value === "th" ? "th"') &&
+    languageToggleSource.includes('updateLocale("lo")'),
 );
 
 check(
-  "N. Login/session regression strings remain dictionary-driven",
-  loginPageSource.includes("getDictionary(locale)") &&
+  "N. Login/session regression strings remain English this phase",
+  loginPageSource.includes("LoginLocaleSwitcher") &&
     languageToggleSource.includes("persistClientLocale"),
 );
 

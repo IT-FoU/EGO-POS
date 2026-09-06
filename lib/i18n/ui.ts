@@ -1,18 +1,30 @@
 import en from "@/locales/ui/en.json";
-import th from "@/locales/ui/th.json";
+import lo from "@/locales/ui/lo.json";
+import { normalizeLocale } from "@/lib/i18n/locale";
 
-type Locale = "th" | "en";
+type MiniMartUiLocale = "en" | "lo";
 
-const dictionaries = { en, th } as Record<Locale, Record<string, string>>;
+const dictionaries = { en, lo } as Record<MiniMartUiLocale, Record<string, string>>;
 
-export function t(key: string, locale?: Locale) {
-  const activeLocale =
-    locale ??
-    (typeof document !== "undefined" && document.documentElement.dataset.locale === "en"
-      ? "en"
-      : typeof document !== "undefined" && document.documentElement.dataset.locale === "th"
-        ? "th"
-        : "en");
+function resolveUiLocale(locale?: string): MiniMartUiLocale {
+  if (locale) {
+    return normalizeLocale(locale);
+  }
 
-  return dictionaries[activeLocale]?.[key] ?? dictionaries.en[key] ?? key;
+  if (typeof document !== "undefined") {
+    return normalizeLocale(document.documentElement.dataset.locale);
+  }
+
+  return "en";
+}
+
+export function t(key: string, locale?: string) {
+  const activeLocale = resolveUiLocale(locale);
+  // Phase 01: only Dashboard uses Lao copy. Other Mini Mart modules stay English
+  // so POS / Settings / Reports are not translated accidentally via t().
+  if (activeLocale === "lo") {
+    return dictionaries.en[key] ?? dictionaries.lo[key] ?? key;
+  }
+
+  return dictionaries.en[key] ?? key;
 }

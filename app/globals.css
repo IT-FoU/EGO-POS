@@ -37,12 +37,12 @@
   --danger: #ef4444;
 }
 
-html[data-locale="th"] {
-  --app-font-family: "Phetsarath OT", "Noto Sans Lao", sans-serif;
-}
-
 html[data-locale="en"] {
   --app-font-family: "Noto Sans Lao", "Lao UI", Arial, sans-serif;
+}
+
+html[data-locale="lo"] {
+  --app-font-family: var(--font-noto-sans-lao), "Noto Sans Lao", "Lao UI", Arial, sans-serif;
 }
 
 @theme inline {

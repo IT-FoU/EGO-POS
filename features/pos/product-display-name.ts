@@ -10,7 +10,7 @@ export function localizedProductName(product: NamedProduct, locale?: SupportedLo
   const resolved = locale ?? (typeof window === "undefined" ? "en" : readClientLocale());
   const nameEn = product.nameEn?.trim() ?? "";
   const nameLo = product.nameLo?.trim() ?? "";
-  if (resolved === "th") {
+  if (resolved === "lo") {
     return nameLo || nameEn;
   }
   return nameEn || nameLo;

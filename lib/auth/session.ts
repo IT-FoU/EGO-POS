@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { DEFAULT_LOCALE } from "@/lib/constants";
+import { normalizeLocale } from "@/lib/i18n/locale";
 import { isDemoFallbackEnabled } from "@/lib/demo-mode";
 
 export class ApiUnauthorizedError extends Error {
@@ -56,7 +57,7 @@ async function demoSessionFromDatabase(): Promise<Session | null> {
       activeWarehouseId: "gobox-default-warehouse",
       email: owner.email,
       id: owner.id,
-      locale: owner.preferredLocale,
+      locale: normalizeLocale(owner.preferredLocale),
       name: owner.fullName,
       roles: ["Owner"],
       username: owner.username,

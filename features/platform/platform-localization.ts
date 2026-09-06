@@ -1,4 +1,4 @@
-import type { SupportedLocale } from "@/lib/constants";
+import type { AdminLocale } from "@/lib/i18n/admin-locale";
 import {
   businessTemplates,
   type BusinessTemplate,
@@ -18,12 +18,12 @@ export type LocalizedBusinessTemplate = BusinessTemplate & {
   name: string;
 };
 
-export function getPlatformMessages(locale: SupportedLocale | string | undefined) {
+export function getPlatformMessages(locale: AdminLocale | string | undefined) {
   return locale === "th" ? platformLocales.th : platformLocales.en;
 }
 
 export function getLocalizedBusinessTemplates(
-  locale: SupportedLocale | string | undefined,
+  locale: AdminLocale | string | undefined,
 ): LocalizedBusinessTemplate[] {
   const messages = getPlatformMessages(locale);
 
@@ -40,7 +40,7 @@ export function getLocalizedBusinessTemplates(
 
 export function getLocalizedBusinessTemplate(
   type: BusinessTemplateType | string | undefined,
-  locale: SupportedLocale | string | undefined,
+  locale: AdminLocale | string | undefined,
 ) {
   return (
     getLocalizedBusinessTemplates(locale).find((template) => template.type === type) ??

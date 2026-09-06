@@ -133,7 +133,6 @@ const themeProvider = readFileSync(join(root, "components/theme-provider.tsx"), 
 const prismaSrc = readFileSync(join(root, "lib/db/prisma.ts"), "utf8");
 const prismaSchema = readFileSync(join(root, "prisma/schema.prisma"), "utf8");
 const en = JSON.parse(readFileSync(join(root, "locales/ui/en.json"), "utf8")) as Record<string, string>;
-const th = JSON.parse(readFileSync(join(root, "locales/ui/th.json"), "utf8")) as Record<string, string>;
 const lo = JSON.parse(readFileSync(join(root, "locales/ui/lo.json"), "utf8")) as Record<string, string>;
 const permissionKey = "ui.allow.window.management.to.open.customer.di";
 const localeKeys = [
@@ -204,11 +203,11 @@ await check("source: cart sync architecture unchanged", () => {
   assert(prismaSrc.includes("max: 1") && prismaSrc.includes("maxUses: 1"), "PrismaPg pooling changed");
 });
 
-await check("source: permission message EN + TH + LO", () => {
+await check("source: permission message EN + LO", () => {
   assert(en[permissionKey]?.includes("second screen"), en[permissionKey]);
-  assert(th[permissionKey]?.includes("second screen") || th[permissionKey]?.includes("จอ"), th[permissionKey]);
   assert(Boolean(lo[permissionKey]), "lo locale missing permission copy");
   assert(t(permissionKey, "en") === en[permissionKey], t(permissionKey, "en"));
+  assert(t(permissionKey, "th") === en[permissionKey], "legacy th stays English");
 });
 
 await check("source: no POS/sale mutation from display toggle", () => {
@@ -244,13 +243,13 @@ await check("source: settings expose templates, QR styles, and scoped resets", (
   assert(!settingsForm.includes("updateDisplayTheme"), "old four-theme setter must not remain");
 });
 
-await check("source: localization keys for all supported UI locales", () => {
+await check("source: localization keys for Mini Mart locales", () => {
   for (const key of localeKeys) {
     assert(Boolean(en[key]), `en missing ${key}`);
-    assert(Boolean(th[key]) && th[key] !== en[key], `th must translate ${key}`);
     assert(Boolean(lo[key]), `lo missing ${key}`);
     assert(t(key, "en") === en[key], t(key, "en"));
-    assert(t(key, "th") === th[key], t(key, "th"));
+    assert(t(key, "th") === en[key], `legacy th ${key}`);
+    assert(t(key, "lo") === en[key], `lo stays English this phase ${key}`);
   }
 });
 
@@ -703,8 +702,9 @@ await check("store copy and product names use locale-aware fallbacks", () => {
   assert(resolveCustomerDisplayStoreName("Superwin", ["Welcome"]) === "Superwin", resolveCustomerDisplayStoreName("Superwin", ["Welcome"]));
   assert(resolveCustomerDisplayStoreName("", [LEGACY_EGO_POS_WELCOME]) === NEUTRAL_CUSTOMER_DISPLAY_WELCOME, "legacy welcome must not become the store name");
   assert(localizedProductName({ nameEn: "Water", nameLo: "Nam" }, "en") === "Water", "en prefers nameEn");
-  assert(localizedProductName({ nameEn: "Water", nameLo: "Nam" }, "th") === "Nam", "th prefers nameLo");
-  assert(localizedProductName({ nameEn: "Water", nameLo: "" }, "th") === "Water", "missing local name falls back");
+  assert(localizedProductName({ nameEn: "Water", nameLo: "Nam" }, "lo") === "Nam", "lo prefers nameLo");
+  assert(localizedProductName({ nameEn: "Water", nameLo: "" }, "lo") === "Water", "missing local name falls back");
+  assert(localizedProductName({ nameEn: "Water", nameLo: "Nam" }, "th") === "Water", "legacy th uses English name");
   assert(displayClient.includes("localizedProductName(item, locale)"), "customer display must use localized product names");
 });
 

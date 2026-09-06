@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { translateToThai } from "@/lib/i18n/thai-ui-translations";
 import { DEFAULT_LOCALE } from "@/lib/constants";
+import type { SupportedLocale } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 
 const textOriginals = new WeakMap<Text, string>();
@@ -15,11 +15,11 @@ export function LocalizationRepairRuntime() {
   useEffect(() => {
     let rafId = 0;
 
-    function getLocale() {
+    function getLocale(): SupportedLocale {
       return readClientLocale(document.documentElement.dataset.locale ?? DEFAULT_LOCALE);
     }
 
-    function translateTextNode(node: Text, locale: "th" | "en") {
+    function translateTextNode(node: Text, _locale: SupportedLocale) {
       const current = node.nodeValue ?? "";
       // React reuses text nodes across renders. If the node no longer holds
       // the value this runtime last wrote, the change came from React and the
@@ -29,14 +29,14 @@ export function LocalizationRepairRuntime() {
         textOriginals.set(node, current);
       }
       const original = textOriginals.get(node) ?? current;
-      const next = locale === "th" ? translateToThai(original) : original;
+      const next = original;
       if (next !== current) {
         node.nodeValue = next;
       }
       textAppliedValues.set(node, next);
     }
 
-    function translateElementAttrs(element: Element, locale: "th" | "en") {
+    function translateElementAttrs(element: Element, _locale: SupportedLocale) {
       for (const attr of translatedAttrs) {
         const originalAttr = `${attrOriginalPrefix}${attr}`;
         const appliedAttr = `${attrAppliedPrefix}${attr}`;
@@ -48,7 +48,7 @@ export function LocalizationRepairRuntime() {
           element.setAttribute(originalAttr, current);
         }
         const original = element.getAttribute(originalAttr) ?? current;
-        const next = locale === "th" ? translateToThai(original) : original;
+        const next = original;
         if (next !== current) {
           element.setAttribute(attr, next);
         }

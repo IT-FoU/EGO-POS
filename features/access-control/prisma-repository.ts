@@ -353,7 +353,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           email: `${username}@staff.local`,
           fullName,
           passwordHash: await hash(input.password.trim(), 12),
-          preferredLocale: "th",
+          preferredLocale: "en",
           status: input.status,
           username,
         },

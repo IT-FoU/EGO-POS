@@ -18,6 +18,7 @@ import {
 import { DashboardDateRangeControls } from "@/features/dashboard/components/dashboard-date-range-controls";
 import type { DashboardAlert, DashboardRangeKey, DashboardSnapshot } from "@/features/dashboard/dashboard-service";
 import { formatBusinessDateLabel, formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
+import { localizeDashboardAlerts } from "@/features/dashboard/localize-dashboard-alerts";
 import type { DashboardCopy } from "@/lib/i18n/dashboard-copy";
 
 type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "top_products";
@@ -334,13 +335,14 @@ function BestSellersList({ copy, products }: { copy: DashboardCopy; products: Da
 }
 
 function AlertsList({ alerts, copy }: { alerts: DashboardAlert[]; copy: DashboardCopy }) {
-  if (alerts.length === 0) {
+  const localized = localizeDashboardAlerts(alerts, copy);
+  if (localized.length === 0) {
     return <EmptyState compact icon={AlertTriangle} title={copy.noImportantAlerts} description={copy.emptyAlerts} />;
   }
 
   return (
     <div className="grid gap-3">
-      {alerts.slice(0, 5).map((alert) => (
+      {localized.slice(0, 5).map((alert) => (
         <div className="rounded-md border border-border bg-background p-3" key={`${alert.type}-${alert.title}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{alert.type}</span>
@@ -589,7 +591,7 @@ function buildDetailPanel({
   }
 
   return {
-    table: snapshot.alerts.map((alert) => ({
+    table: localizeDashboardAlerts(snapshot.alerts, copy).map((alert) => ({
       label: alert.title,
       meta: alert.message,
       value: alert.value ?? alert.severity,
@@ -627,9 +629,10 @@ export function DashboardAlertsClient({
   copy: DashboardCopy;
 }) {
   const [open, setOpen] = useState(false);
+  const localized = localizeDashboardAlerts(alerts, copy);
   const content = open
     ? {
-        table: alerts.map((alert) => ({
+        table: localized.map((alert) => ({
           label: alert.title,
           meta: alert.message,
           value: alert.value ?? alert.severity,

@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import type { CSSProperties } from "react";
 import { SuperAdminLoginCard } from "@/components/auth/super-admin-login-card";
 import { getAdminSession } from "@/lib/admin/session";
-import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+import { normalizeAdminLocale } from "@/lib/i18n/admin-locale";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +18,8 @@ export default async function SuperAdminLoginPage({
   }
 
   const params = await Promise.resolve(searchParams);
-  const cookieStore = await cookies();
   const queryLocale = Array.isArray(params?.locale) ? params?.locale[0] : params?.locale;
-  const locale = getServerLocale(queryLocale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  const locale = normalizeAdminLocale(queryLocale);
 
   return (
     <main

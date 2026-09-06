@@ -128,7 +128,6 @@ const mapperSrc = readFileSync(join(process.cwd(), "features/customers/dto-mappe
 const repoSrc = readFileSync(join(process.cwd(), "features/customers/prisma-repository.ts"), "utf8");
 const formSrc = readFileSync(join(process.cwd(), "features/customers/components/customer-form.tsx"), "utf8");
 const en = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/en.json"), "utf8")) as Record<string, string>;
-const th = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/th.json"), "utf8")) as Record<string, string>;
 
 check("Display fallback no longer maps unknown/null to Standard", () => {
   assert(!mapperSrc.includes('? value : "Standard"'), "old Standard fallback still present");
@@ -147,11 +146,11 @@ check("Create form defaults to no membership", () => {
   assert(formSrc.includes('t("ui.no.membership")'), "create form must offer No Membership");
 });
 
-check("Localization EN + TH No Membership", () => {
+check("Localization EN No Membership", () => {
   assert(en["ui.no.membership"] === "No Membership", `en=${en["ui.no.membership"]}`);
-  assert(th["ui.no.membership"] === "ไม่มีสมาชิก", `th=${th["ui.no.membership"]}`);
   assert(t("ui.no.membership", "en") === "No Membership", "en t()");
-  assert(t("ui.no.membership", "th") === "ไม่มีสมาชิก", "th t()");
+  assert(t("ui.no.membership", "th") === "No Membership", "legacy th t()");
+  assert(t("ui.no.membership", "lo") === "No Membership", "lo stays English this phase");
 });
 
 check("DTO: null level is no membership, not Standard", () => {
@@ -166,7 +165,7 @@ check("DTO: null level is no membership, not Standard", () => {
   });
   assert(mapped.membershipLevel === null, `mapped=${mapped.membershipLevel}`);
   assert(membershipDisplayLabel(mapped.membershipLevel, "en") === "No Membership", "EN label");
-  assert(membershipDisplayLabel(mapped.membershipLevel, "th") === "ไม่มีสมาชิก", "TH label");
+  assert(membershipDisplayLabel(mapped.membershipLevel, "th") === "No Membership", "legacy th label");
 });
 
 check("DTO: custom level name is preserved", () => {

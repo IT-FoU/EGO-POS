@@ -10,6 +10,6 @@ export function membershipLevelNameFromRelation(name: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function membershipDisplayLabel(level: string | null | undefined, locale?: "en" | "th"): string {
+export function membershipDisplayLabel(level: string | null | undefined, locale?: string): string {
   return level && level.trim().length > 0 ? level : t(NO_MEMBERSHIP_I18N_KEY, locale);
 }

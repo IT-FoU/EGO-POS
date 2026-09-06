@@ -12,7 +12,6 @@ import {
   STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE,
 } from "../features/inventory/stock-count-errors";
 import { t } from "../lib/i18n/ui";
-import { translateToThai } from "../lib/i18n/thai-ui-translations";
 
 process.env.IGO_DEMO_MODE = "false";
 loadProjectEnvFiles();
@@ -399,8 +398,7 @@ const snap = (await getPrismaInventorySnapshot(tenant)).items.find((item) => ite
 check("Snapshot matches warehouse", Number(snap?.quantity) === (await stockOf(water.id)));
 
 check("EN locale stale", t("ui.stock.count.changed", "en") === STOCK_COUNT_CHANGED_MESSAGE);
-check("TH locale stale", t("ui.stock.count.changed", "th") === "สต็อกมีการเปลี่ยนแปลงระหว่างการนับ กรุณารีเฟรชและตรวจนับใหม่ก่อนบันทึก");
-check("Repair runtime stale", translateToThai(STOCK_COUNT_CHANGED_MESSAGE).includes("สต็อก"));
+check("Legacy th stale stays English", t("ui.stock.count.changed", "th") === STOCK_COUNT_CHANGED_MESSAGE);
 check("EN locale lot", t("ui.stock.count.lot.unsupported", "en") === STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE);
 const lo = JSON.parse(readFileSync(join(process.cwd(), "locales/ui/lo.json"), "utf8")) as Record<string, string>;
 check("Lao source stale present", Boolean(lo["ui.stock.count.changed"]) && !lo["ui.stock.count.changed"].includes("\uFFFD"));

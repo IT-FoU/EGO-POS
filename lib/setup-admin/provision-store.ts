@@ -121,8 +121,8 @@ export function validateProvisionStoreInput(input: ProvisionStoreInput): string 
     return "Selected business template is not available for provisioning yet.";
   }
 
-  if (!["en", "th"].includes(defaultLocale)) {
-    return "Default language must be English or Thai.";
+  if (!["en", "lo", "th"].includes(defaultLocale)) {
+    return "Default language must be English or Lao.";
   }
 
   if (!["LAK", "THB", "USD"].includes(input.defaultCurrency)) {
@@ -165,7 +165,7 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
   const ownerPhone = input.ownerPhone?.trim() ?? null;
   const profileAddress = input.profileAddress?.trim() ?? null;
   const ownerTemporaryPassword = input.ownerTemporaryPassword.trim();
-  const defaultLocale = input.defaultLocale.trim();
+  const defaultLocale = input.defaultLocale.trim() === "lo" ? "lo" : "en";
   const businessTemplateKey = input.businessTemplateKey;
   const defaultCurrency = input.defaultCurrency;
   const receiptPrefix = deriveReceiptPrefix(storeCode, storeName);

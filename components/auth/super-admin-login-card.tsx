@@ -2,28 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { PortalLoginForm } from "@/components/auth/portal-login-form";
-import type { SupportedLocale } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import type { AdminLocale } from "@/lib/i18n/admin-locale";
+import { isAdminLocale, normalizeAdminLocale } from "@/lib/i18n/admin-locale";
 import { getSuperAdminLoginCopy } from "@/lib/i18n/super-admin-login-copy";
-import { readClientLocale } from "@/lib/i18n/locale";
 
-export function SuperAdminLoginCard({ initialLocale }: { initialLocale: SupportedLocale }) {
+export function SuperAdminLoginCard({ initialLocale }: { initialLocale: AdminLocale }) {
   const router = useRouter();
-  const [locale, setLocale] = useState<SupportedLocale>(initialLocale);
+  const [locale, setLocale] = useState<AdminLocale>(normalizeAdminLocale(initialLocale));
   const copy = useMemo(() => getSuperAdminLoginCopy(locale), [locale]);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const queryLocale = searchParams.get("locale");
-    if (queryLocale === "th" || queryLocale === "en") {
+    if (isAdminLocale(queryLocale)) {
       setLocale(queryLocale);
-      return;
     }
-    setLocale(readClientLocale());
   }, []);
 
-  function handleLocaleChange(nextLocale: SupportedLocale) {
+  function handleLocaleChange(nextLocale: AdminLocale) {
     setLocale(nextLocale);
     router.replace(`/super-admin/login?locale=${nextLocale}`);
     router.refresh();
@@ -47,7 +45,23 @@ export function SuperAdminLoginCard({ initialLocale }: { initialLocale: Supporte
 
         <div className="mb-6 flex justify-center">
           <div className="rounded-full border border-[#334155] bg-[#1E293B] p-1 text-[#CBD5E1]">
-            <LanguageToggle locale={locale} onLocaleChange={handleLocaleChange} />
+            <div className="inline-flex h-10 shrink-0 items-center rounded-md border border-border px-2 text-xs font-semibold">
+              <button
+                className={cn("px-1.5 transition", locale === "th" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+                type="button"
+                onClick={() => handleLocaleChange("th")}
+              >
+                TH
+              </button>
+              <span className="text-muted-foreground">|</span>
+              <button
+                className={cn("px-1.5 transition", locale === "en" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+                type="button"
+                onClick={() => handleLocaleChange("en")}
+              >
+                EN
+              </button>
+            </div>
           </div>
         </div>
 

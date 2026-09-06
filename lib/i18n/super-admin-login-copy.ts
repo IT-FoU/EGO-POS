@@ -1,4 +1,4 @@
-import type { SupportedLocale } from "@/lib/constants";
+import type { AdminLocale } from "@/lib/i18n/admin-locale";
 
 export type SuperAdminLoginCopy = {
   authNotReady: string;
@@ -18,7 +18,7 @@ export type SuperAdminLoginCopy = {
   title: string;
 };
 
-const superAdminLoginCopy: Record<SupportedLocale, SuperAdminLoginCopy> = {
+const superAdminLoginCopy: Record<AdminLocale, SuperAdminLoginCopy> = {
   en: {
     authNotReady: "Authentication is not ready. Check the database and environment settings.",
     brandKicker: "Secure platform access",
@@ -55,6 +55,6 @@ const superAdminLoginCopy: Record<SupportedLocale, SuperAdminLoginCopy> = {
   },
 };
 
-export function getSuperAdminLoginCopy(locale: SupportedLocale): SuperAdminLoginCopy {
+export function getSuperAdminLoginCopy(locale: AdminLocale): SuperAdminLoginCopy {
   return superAdminLoginCopy[locale] ?? superAdminLoginCopy.en;
 }

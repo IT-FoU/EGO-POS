@@ -57,7 +57,7 @@ export function LoginForm({
 }: {
   demoMode?: boolean;
   dictionary: LoginDictionary;
-  locale?: "en" | "th";
+  locale?: string;
   registerHref?: string;
   showRegisterLink?: boolean;
   variant?: "default" | "premiumDark";

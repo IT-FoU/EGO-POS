@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo-mode";
 import { readDemoStaffFromCookieHeader, verifyDemoStaffPassword } from "@/lib/auth/demo-staff-access";
 import { authenticateMerchantUser, verifyMerchantSecret } from "@/lib/auth/merchant-login";
+import { normalizeLocale } from "@/lib/i18n/locale";
 
 const demoLoginUsers = [
   {
@@ -103,7 +104,7 @@ async function buildSessionUserFromDatabase(user: {
     activeCompanyId: activeCompany.id,
     activeCompanyName: activeCompany.name,
     businessTemplateKey: activeCompany.businessTemplateKey,
-    locale: user.preferredLocale,
+    locale: normalizeLocale(user.preferredLocale),
     roles: membership.isOwner ? ["Owner"] : companyRoles.map((entry) => entry.role.name),
     allowPOSAccess: membership.allowPosAccess,
     allowBackOfficeAccess: membership.allowBackOfficeAccess,
@@ -138,7 +139,7 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
       activeWarehouseId: "gobox-default-warehouse",
       activeCompanyId: "gobox-company",
       activeCompanyName: "GO BOX",
-      locale: "th",
+      locale: "en",
       roles: [staffUser.role],
       allowPOSAccess: staffUser.allowPosAccess,
       allowBackOfficeAccess: staffUser.allowBackOfficeAccess,
@@ -191,7 +192,7 @@ async function authorizeDemoUser(username: string, password: string, cookieHeade
     activeWarehouseId: demoUser.activeWarehouseId,
     activeCompanyId: demoUser.activeCompanyId,
     activeCompanyName: demoUser.activeCompanyName,
-    locale: "th",
+    locale: "en",
     roles: [...demoUser.roles],
   };
 }

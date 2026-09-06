@@ -33,7 +33,7 @@ export default async function AuthAccessPage({
   const locale = getServerLocale(params?.locale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
   const dictionary = {
     ...getDictionary(locale),
-    registerNewAccount: locale === "th" ? "สร้างธุรกิจ" : "Create Business",
+    registerNewAccount: "Create Business",
   };
   const activeTab = params?.tab === "create" ? "create" : "login";
 
@@ -64,24 +64,22 @@ export default async function AuthAccessPage({
               className={`${tabClass} ${activeTab === "login" ? "bg-[#5EEAD4] text-[#020617]" : "text-[#CBD5E1] hover:text-[#F8FAFC]"}`}
               href={`/auth?tab=login&locale=${locale}`}
             >
-              {locale === "th" ? "เข้าสู่ระบบ" : "Login"}
+              {"Login"}
             </Link>
             <Link
               className={`${tabClass} ${activeTab === "create" ? "bg-[#5EEAD4] text-[#020617]" : "text-[#CBD5E1] hover:text-[#F8FAFC]"}`}
               href={`/auth?tab=create&locale=${locale}`}
             >
-              {locale === "th" ? "สร้างธุรกิจ" : "Create Business"}
+              {"Create Business"}
             </Link>
           </div>
 
           {activeTab === "login" ? (
             <div className="grid gap-5">
               <div>
-                <h2 className="text-2xl font-black text-[#F8FAFC]">{locale === "th" ? "เข้าสู่ระบบร้านค้า" : "Store Login"}</h2>
+                <h2 className="text-2xl font-black text-[#F8FAFC]">{"Store Login"}</h2>
                 <p className="mt-2 text-sm leading-6 text-[#94A3B8]">
-                  {locale === "th"
-                    ? "ใช้บัญชีร้านค้าที่มีอยู่ ระบบจะพา Owner/Manager ไป Back Office และ Cashier ไป POS ตามสิทธิ์ที่มี"
-                    : "Use an existing store account. Owner and manager go to Back Office; cashier goes to POS when the existing auth rules resolve it."}
+                  Use an existing store account. Owner and manager go to Back Office; cashier goes to POS when the existing auth rules resolve it.
                 </p>
               </div>
               <LoginForm demoMode={isDemoMode()} dictionary={dictionary} locale={locale} registerHref={`/auth?tab=create&locale=${locale}`} />
@@ -89,17 +87,15 @@ export default async function AuthAccessPage({
           ) : (
             <div className="grid gap-5">
               <div>
-                <h2 className="text-2xl font-black text-[#F8FAFC]">{locale === "th" ? "สร้างธุรกิจใหม่" : "Create Business"}</h2>
+                <h2 className="text-2xl font-black text-[#F8FAFC]">{"Create Business"}</h2>
                 <p className="mt-2 text-sm leading-6 text-[#94A3B8]">
-                  {locale === "th"
-                    ? "เลือกเทมเพลต กรอกข้อมูลธุรกิจ และเลือกแผนในขั้นตอนถัดไป ระบบสร้างธุรกิจจริงยังไม่ได้เชื่อมต่อ"
-                    : "Choose a template, enter business details, and select a plan in the setup wizard. Real business creation is not connected yet."}
+                  Choose a template, enter business details, and select a plan in the setup wizard. Real business creation is not connected yet.
                 </p>
               </div>
               <div className="rounded-2xl border border-[#334155] bg-[#020617] p-4">
-                <div className="text-sm font-bold text-[#F8FAFC]">{locale === "th" ? "สถานะการเชื่อมต่อ" : "Connection status"}</div>
+                <div className="text-sm font-bold text-[#F8FAFC]">{"Connection status"}</div>
                 <p className="mt-2 text-sm text-[#94A3B8]">
-                  {locale === "th" ? "Business creation backend is not connected yet." : "Business creation backend is not connected yet."}
+                  {"Business creation backend is not connected yet."}
                 </p>
               </div>
               <button
@@ -107,13 +103,13 @@ export default async function AuthAccessPage({
                 disabled
                 type="button"
               >
-                {locale === "th" ? "ยังไม่เชื่อมต่อ" : "Not connected yet"}
+                {"Not connected yet"}
               </button>
               <Link
                 className="flex h-12 items-center justify-center rounded-2xl border border-[#5EEAD4] px-5 text-sm font-black text-[#5EEAD4] transition hover:bg-[#5EEAD4]/10"
                 href={`/onboarding?locale=${locale}`}
               >
-                {locale === "th" ? "ดูขั้นตอนการตั้งค่า" : "Open setup wizard"}
+                {"Open setup wizard"}
               </Link>
             </div>
           )}

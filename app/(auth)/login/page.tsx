@@ -32,31 +32,18 @@ export default async function LoginPage({
 
   const cookieStore = await cookies();
   const locale = getServerLocale(params?.locale, cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  const dictionary = locale === "th"
-    ? {
-        authNotReady: "ระบบยืนยันตัวตนยังไม่พร้อม กรุณาตรวจสอบฐานข้อมูลและการตั้งค่า",
-        databaseUnavailable: "ฐานข้อมูลยังไม่พร้อมใช้งาน",
-        hidePassword: "ซ่อนรหัสผ่าน",
-        invalidCredentials: "อีเมล ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง",
-        password: "รหัสผ่าน",
-        registerNewAccount: "",
-        showPassword: "แสดงรหัสผ่าน",
-        signIn: "เข้าสู่ระบบ",
-        signingIn: "กำลังเข้าสู่ระบบ...",
-        username: "อีเมล / ชื่อผู้ใช้",
-      }
-    : {
-        authNotReady: "Authentication is not ready. Check the database and environment settings.",
-        databaseUnavailable: "Database is not available.",
-        hidePassword: "Hide password",
-        invalidCredentials: "Email, username, or password is incorrect.",
-        password: "Password",
-        registerNewAccount: "",
-        showPassword: "Show password",
-        signIn: "Sign in",
-        signingIn: "Signing in...",
-        username: "Email / Username",
-      };
+  const dictionary = {
+    authNotReady: "Authentication is not ready. Check the database and environment settings.",
+    databaseUnavailable: "Database is not available.",
+    hidePassword: "Hide password",
+    invalidCredentials: "Email, username, or password is incorrect.",
+    password: "Password",
+    registerNewAccount: "",
+    showPassword: "Show password",
+    signIn: "Sign in",
+    signingIn: "Signing in...",
+    username: "Email / Username",
+  };
 
   return (
     <main className="relative flex min-h-screen overflow-hidden bg-[#020617] px-4 py-8 text-[#F8FAFC] sm:px-6">
@@ -70,11 +57,11 @@ export default async function LoginPage({
               </div>
               <div className="text-left">
                 <div className="text-sm font-black tracking-[0.22em] text-[#F8FAFC]">{APP_NAME}</div>
-                <div className="text-xs text-[#94A3B8]">{locale === "th" ? "เข้าสู่ระบบร้าน" : "Store access"}</div>
+                <div className="text-xs text-[#94A3B8]">Store access</div>
               </div>
             </div>
             <h1 className="text-3xl font-black tracking-tight text-[#F8FAFC] sm:text-[2rem]">{APP_NAME}</h1>
-            <p className="mt-2 text-sm text-[#94A3B8]">{locale === "th" ? "เข้าสู่ระบบร้าน" : "Store access"}</p>
+            <p className="mt-2 text-sm text-[#94A3B8]">Store access</p>
           </div>
 
           <div className="mb-6 flex justify-center">

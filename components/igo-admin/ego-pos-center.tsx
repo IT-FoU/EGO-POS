@@ -36,7 +36,6 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { SupportedLocale } from "@/lib/constants";
 import { canViewStoreActivityLogs, getPlatformAuditActionScope } from "@/features/permissions/audit-permission-helpers";
 import {
   PLATFORM_ACTIONS,
@@ -46,7 +45,9 @@ import {
   type PlatformAction,
 } from "@/features/permissions/platform-permissions";
 import { EGO_ADMIN_PROVISIONING_TEMPLATES } from "@/lib/setup-admin/provisioning-templates";
-import { LOCALE_CHANGE_EVENT, persistClientLocale, readClientLocale } from "@/lib/i18n/locale";
+import { readStringFromStorage, writeStringToStorage } from "@/lib/demo/storage";
+import type { AdminLocale } from "@/lib/i18n/admin-locale";
+import { normalizeAdminLocale } from "@/lib/i18n/admin-locale";
 import { cn } from "@/lib/utils";
 
 type CenterBusiness = {
@@ -428,7 +429,7 @@ function canViewNavHref(role: string | null | undefined, href: string) {
   return section === "dashboard" || (section ? canViewSuperAdminSection(role, section) : false);
 }
 
-const copy: Record<SupportedLocale, Record<string, string>> = {
+const copy: Record<AdminLocale, Record<string, string>> = {
   en: {
     active: "Active",
     activeBusinesses: "Active Businesses",
@@ -2148,16 +2149,18 @@ const platformRoles = ["Super Admin", "Support Admin", "Billing Admin", "Templat
 const storeRoles = ["Owner", "Manager", "Cashier"];
 
 function useCenterCopy() {
-  const [locale, setLocale] = useState<SupportedLocale>("en");
+  const [locale, setLocale] = useState<AdminLocale>("en");
 
   useEffect(() => {
-    setLocale(readClientLocale("en"));
-    const handler = () => setLocale(readClientLocale("en"));
-    window.addEventListener(LOCALE_CHANGE_EVENT, handler);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handler);
+    setLocale(normalizeAdminLocale(readStringFromStorage("ego-pos:admin-locale")));
   }, []);
 
-  return { c: copy[locale], locale, setLocale: persistClientLocale };
+  function updateLocale(nextLocale: AdminLocale) {
+    writeStringToStorage("ego-pos:admin-locale", nextLocale);
+    setLocale(nextLocale);
+  }
+
+  return { c: copy[locale], locale, setLocale: updateLocale };
 }
 
 function money(value: unknown) {
@@ -9524,7 +9527,7 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
       branchName: String(data.get("branchName") || "Main Branch"),
       businessTemplateKey: selectedTemplate,
       defaultCurrency: String(data.get("defaultCurrency") || "LAK"),
-      defaultLocale: String(data.get("defaultLocale") || "th"),
+      defaultLocale: String(data.get("defaultLocale") || "en"),
       ownerPhone: String(data.get("ownerPhone") || ""),
       ownerEmail: String(data.get("ownerEmail") || ""),
       ownerFullName: String(data.get("ownerFullName") || ""),
@@ -9609,9 +9612,9 @@ function CreateBusinessWizard({ onClose }: { onClose: () => void }) {
         </label>
         <label className="grid gap-2 text-sm font-medium">
           Language
-          <select className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" name="defaultLocale">
-            <option value="th">Thai</option>
+          <select className="rounded-md border border-[#334155] bg-[#1E293B] px-3 py-2 text-[#F8FAFC]" defaultValue="en" name="defaultLocale">
             <option value="en">English</option>
+            <option value="lo">Lao</option>
           </select>
         </label>
         <label className="grid gap-2 text-sm font-medium">

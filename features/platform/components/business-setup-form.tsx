@@ -103,7 +103,7 @@ export function BusinessSetupForm({
       currency: String(formData.get("currency") ?? "LAK"),
       defaultModules,
       email: String(formData.get("email") ?? ""),
-      language: String(formData.get("language") ?? "th"),
+      language: String(formData.get("language") ?? "en"),
       logoFileName: (formData.get("storeLogo") as File | null)?.name ?? "",
       logoUrl: logoDataUrl ?? undefined,
       ownerName: String(formData.get("ownerName") ?? ""),
@@ -244,9 +244,9 @@ export function BusinessSetupForm({
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-2 text-sm font-medium">
           {dictionary.language}
-          <select className="field-input" name="language" defaultValue="th">
-            <option value="th">Thai</option>
+          <select className="field-input" name="language" defaultValue="en">
             <option value="en">English</option>
+            <option value="lo">Lao</option>
           </select>
         </label>
         <label className="grid gap-2 text-sm font-medium">

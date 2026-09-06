@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DEFAULT_LOCALE } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
-import { LOCALE_CHANGE_EVENT, persistClientLocale, readClientLocale } from "@/lib/i18n/locale";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, persistClientLocale, readClientLocale } from "@/lib/i18n/locale";
 import { runDemoStorageMigrations } from "@/lib/demo/storage";
 
 export function LanguageToggle({
@@ -15,7 +15,7 @@ export function LanguageToggle({
   onLocaleChange?: (locale: SupportedLocale) => void;
 }) {
   const [currentLocale, setCurrentLocale] = useState<SupportedLocale>(
-    locale === "th" ? "th" : DEFAULT_LOCALE,
+    isSupportedLocale(locale) ? locale : DEFAULT_LOCALE,
   );
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function LanguageToggle({
   useEffect(() => {
     function handleLocaleChange(event: Event) {
       const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (detail?.locale === "en" || detail?.locale === "th") {
+      if (isSupportedLocale(detail?.locale)) {
         setCurrentLocale(detail.locale);
       }
     }
@@ -48,11 +48,11 @@ export function LanguageToggle({
   return (
     <div className="inline-flex h-10 shrink-0 items-center rounded-md border border-border px-2 text-xs font-semibold">
       <button
-        className={cn("px-1.5 transition", currentLocale === "th" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
+        className={cn("px-1.5 transition", currentLocale === "lo" ? "text-primary" : "text-muted-foreground hover:text-foreground")}
         type="button"
-        onClick={() => updateLocale("th")}
+        onClick={() => updateLocale("lo")}
       >
-        TH
+        LO
       </button>
       <span className="text-muted-foreground">|</span>
       <button

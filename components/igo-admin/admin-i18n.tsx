@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readStringFromStorage, runDemoStorageMigrations, writeStringToStorage } from "@/lib/demo/storage";
 
-const LANGUAGE_KEY = DemoStorageKeys.locale;
+const LANGUAGE_KEY = "ego-pos:admin-locale";
 
 const adminCopyEn = {
     activeBusinesses: "Active Businesses",
