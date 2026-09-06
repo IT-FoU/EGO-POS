@@ -1,6 +1,6 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
+import { tProducts as t } from "@/lib/i18n/products-copy";
 import { useMemo, useState } from "react";
 import { ImageIcon, Search, UploadCloud } from "lucide-react";
 import type { MockProductImage } from "@/features/products/types";
@@ -28,15 +28,15 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
     }, [images, submittedQuery]);
     if (compact) {
         return (<details className="rounded-lg border border-border bg-card p-4" open>
-        <summary className="cursor-pointer text-sm font-semibold">Product image</summary>
+        <summary className="cursor-pointer text-sm font-semibold">{t("productImage")}</summary>
         <div className="mt-4 grid gap-4">
           <div>
             {selectedImage ? (<MockImageCard image={selectedImage} large/>) : (<div className="grid min-h-28 place-items-center rounded-md border border-dashed border-border bg-background text-sm text-muted-foreground">
-                No image selected
+                {t("noImageSelected")}
               </div>)}
           </div>
           <div className="flex gap-2">
-            <input className="field-input h-10" placeholder="Search image keyword" value={query} onChange={(event) => setQuery(event.target.value)}/>
+            <input className="field-input h-10" placeholder={t("searchImageKeyword")} value={query} onChange={(event) => setQuery(event.target.value)}/>
             <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={() => setSubmittedQuery(query)}>
               <Search aria-hidden="true"/>
             </button>
@@ -52,8 +52,8 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
           </div>
           <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-background p-3 text-center transition hover:border-primary">
             <UploadCloud aria-hidden="true" className="text-muted-foreground"/>
-            <span className="text-xs font-medium">Upload PNG or JPG</span>
-            <input className="sr-only" type="file" accept="image/png,image/jpeg"/>
+            <span className="text-xs font-medium">{t("uploadPngJpg")}</span>
+            <input className="sr-only" type="file" accept={t("acceptImages")}/>
           </label>
         </div>
       </details>);
@@ -62,18 +62,18 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold">Search image</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("ui.mock.image.search.external.image.apis.can.be")}</p>
+            <h2 className="text-lg font-semibold">{t("imageSearchTitle")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("mockImageSearch")}</p>
           </div>
           <div className="grid size-12 place-items-center rounded-md bg-primary/10 text-primary">
             <Search aria-hidden="true"/>
           </div>
         </div>
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <input className="field-input" placeholder="Search product image keyword" value={query} onChange={(event) => setQuery(event.target.value)}/>
+          <input className="field-input" placeholder={t("searchProductImageKeyword")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={() => setSubmittedQuery(query)}>
             <Search aria-hidden="true"/>
-            Search
+            {t("search")}
           </button>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -83,7 +83,7 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
                 <MockImageCard image={image}/>
                 <span className="mt-2 block text-xs font-semibold">{image.title}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                  {isSelected ? "Selected image" : "Select image"}
+                  {isSelected ? t("selectedImage") : t("selectImage")}
                 </span>
               </button>);
         })}
@@ -91,10 +91,10 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
       </div>
 
       <div className="rounded-lg border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold">Selected product image</h2>
+        <h2 className="text-lg font-semibold">{t("selectedProductImage")}</h2>
         <div className="mt-5">
           {selectedImage ? (<MockImageCard image={selectedImage} large/>) : (<div className="grid min-h-44 place-items-center rounded-md border border-dashed border-border bg-background text-sm text-muted-foreground">
-              No image selected
+              {t("noImageSelected")}
             </div>)}
         </div>
       </div>
@@ -102,8 +102,8 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
       <div className="rounded-lg border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Upload image</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{t("ui.keep.normal.upload.option.storage.integratio")}</p>
+          <h2 className="text-lg font-semibold">{t("uploadImage")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("imageUploadHint")}</p>
         </div>
         <div className="grid size-12 place-items-center rounded-md bg-primary/10 text-primary">
           <UploadCloud aria-hidden="true"/>
@@ -111,9 +111,9 @@ export function ProductImageUploadPanel({ compact = false, images, selectedImage
       </div>
       <label className="mt-5 flex min-h-52 cursor-pointer flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-background p-6 text-center transition hover:border-primary">
         <ImageIcon aria-hidden="true" className="text-muted-foreground"/>
-        <span className="text-sm font-medium">Click to choose an image</span>
-        <span className="text-xs text-muted-foreground">{t("ui.png.or.jpg.placeholder.only.no.upload.is.sen")}</span>
-        <input className="sr-only" type="file" accept="image/png,image/jpeg"/>
+        <span className="text-sm font-medium">{t("clickChooseImage")}</span>
+        <span className="text-xs text-muted-foreground">{t("pngJpgPlaceholder")}</span>
+        <input className="sr-only" type="file" accept={t("acceptImages")}/>
       </label>
     </div>
     </div>);

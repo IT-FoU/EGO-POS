@@ -1,6 +1,16 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
+import {
+  fillProductsCopy,
+  localizeProductError,
+  productStatusLabel,
+  tProducts,
+} from "@/lib/i18n/products-copy";
+import { localizedProductName } from "@/features/pos/product-display-name";
+import { readClientLocale } from "@/lib/i18n/locale";
+import type { SupportedLocale } from "@/lib/constants";
+
+const t = tProducts;
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,22 +23,24 @@ import { formatLak } from "@/features/products/format";
 import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
 import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
-const importFields = [
-    "Product Name",
-    "Barcode",
-    "SKU",
-    "Internal Code",
-    "Category",
-    "Supplier",
-    "Cost Price",
-    "Selling Price",
-    "Stock",
-    "Unit",
-    "Expiry Enabled",
-    "Expiry Date",
-    "Status",
-    "Image URL",
-] as const;
+function getImportFields() {
+    return [
+        t("productName"),
+        t("barcode"),
+        t("sku"),
+        t("internalCode"),
+        t("category"),
+        t("supplier"),
+        t("costPrice"),
+        t("sellingPrice"),
+        t("stock"),
+        t("unit"),
+        t("expiryEnabled"),
+        t("expiryDate"),
+        t("status"),
+        t("imageUrl"),
+    ] as const;
+}
 type ProductsModal = "image" | null;
 type ExpiryStatus = "normal" | "near_expiry" | "expired" | "no_expiry";
 type InsightFilter = ProductInsightFilter;
@@ -43,12 +55,15 @@ type ProductShellDrawerContent = {
     title: string;
 };
 const pageSizeOptions = [25, 50, 100, 200] as const;
-export function ProductListClient({ products: initialProducts, categories: initialCategories, listPage: initialListPage, }: {
+export function ProductListClient({ products: initialProducts, categories: initialCategories, listPage: initialListPage, locale: localeProp, }: {
     products: Product[];
     categories: Category[];
     listPage?: ProductListPage;
+    locale?: SupportedLocale;
 }) {
     const router = useRouter();
+    const locale = localeProp ?? readClientLocale();
+    const t = (key: string) => tProducts(key, locale);
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
     const [listPage, setListPage] = useState<ProductListPage | undefined>(initialListPage);
@@ -119,12 +134,12 @@ export function ProductListClient({ products: initialProducts, categories: initi
         };
     }, [categories, listPage, products]);
     const summaryCards = useMemo(() => ([
-        { color: "blue" as const, count: productInsights.total, drawerKey: "total" as ProductShellDrawerKey, emptyText: t("ui.no.products.found"), filter: "all" as SummaryInsight, icon: Boxes, label: "Total Products" },
-        { color: "red" as const, count: productInsights.outOfStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.out.of.stock.products"), filter: "out_of_stock" as SummaryInsight, icon: AlertCircle, label: "Out of Stock" },
-        { color: "orange" as const, count: productInsights.lowStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.low.stock.items"), filter: "low_stock" as SummaryInsight, icon: Package, label: "Low Stock" },
-        { color: "yellow" as const, count: productInsights.nearExpiry, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.products.near.expiry"), filter: "near_expiry" as SummaryInsight, icon: Clock, label: "Near Expiry" },
-        { color: "purple" as const, count: productInsights.deadStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("ui.no.dead.stock.products"), filter: "dead_stock" as SummaryInsight, icon: Archive, label: "Dead Stock" },
-    ]), [productInsights]);
+        { color: "blue" as const, count: productInsights.total, drawerKey: "total" as ProductShellDrawerKey, emptyText: t("noProductsFound"), filter: "all" as SummaryInsight, icon: Boxes, label: t("totalProducts") },
+        { color: "red" as const, count: productInsights.outOfStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("noOutOfStock"), filter: "out_of_stock" as SummaryInsight, icon: AlertCircle, label: t("outOfStock") },
+        { color: "orange" as const, count: productInsights.lowStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("noLowStock"), filter: "low_stock" as SummaryInsight, icon: Package, label: t("lowStock") },
+        { color: "yellow" as const, count: productInsights.nearExpiry, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("noNearExpiry"), filter: "near_expiry" as SummaryInsight, icon: Clock, label: t("nearExpiry") },
+        { color: "purple" as const, count: productInsights.deadStock, drawerKey: "product_health" as ProductShellDrawerKey, emptyText: t("noDeadStock"), filter: "dead_stock" as SummaryInsight, icon: Archive, label: t("deadStock") },
+    ]), [locale, productInsights]);
     const clientFilteredProducts = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
         return products.filter((product) => {
@@ -178,30 +193,30 @@ export function ProductListClient({ products: initialProducts, categories: initi
         startTransition(async () => {
             const result = await deleteProductAction(productId);
             if (!result.ok) {
-                setMessage(result.error ?? "Product delete failed.");
+                setMessage(localizeProductError(result.error ?? "Product delete failed."));
                 return;
             }
             setProducts((current) => current.filter((product) => product.id !== productId));
             setSelectedProductIds((current) => current.filter((id) => id !== productId));
-            setMessage("Product deleted.");
+            setMessage(t("productDeleted"));
             router.refresh();
         });
     }
     function bulkDeleteSelectedProducts() {
         if (selectedProductIds.length === 0) {
-            setMessage("Select products to delete.");
+            setMessage(t("selectProductsToDelete"));
             return;
         }
         startTransition(async () => {
             for (const productId of selectedProductIds) {
                 const result = await deleteProductAction(productId);
                 if (!result.ok) {
-                    setMessage(result.error ?? "Bulk delete failed.");
+                    setMessage(localizeProductError(result.error ?? "Bulk delete failed."));
                     return;
                 }
             }
             setProducts((current) => current.filter((product) => !selectedProductIds.includes(product.id)));
-            setMessage(`${selectedProductIds.length} products deleted.`);
+            setMessage(fillProductsCopy(t("productsDeleted"), { count: selectedProductIds.length }));
             setSelectedProductIds([]);
             router.refresh();
         });
@@ -230,7 +245,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
             }} onViewAll={() => setShellDrawer(card.drawerKey)}/>))}
       </section>
       <ProductsVisualShell stats={productShellStats} onOpenDrawer={setShellDrawer}/>
-      {expandedInsight ? (<InsightPanel emptyText={summaryCards.find((card) => card.filter === expandedInsight)?.emptyText ?? t("ui.no.products.found")} filter={expandedInsight} products={insightProducts[expandedInsight]} onSelectProduct={(product) => {
+      {expandedInsight ? (<InsightPanel emptyText={summaryCards.find((card) => card.filter === expandedInsight)?.emptyText ?? t("noProductsFound")} filter={expandedInsight} products={insightProducts[expandedInsight]} onSelectProduct={(product) => {
                 setQuery(product.nameEn || product.nameLo);
                 applyInsightFilter(expandedInsight);
             }}/>) : null}
@@ -240,56 +255,56 @@ export function ProductListClient({ products: initialProducts, categories: initi
           <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(360px,1fr)_220px_180px]">
             <label className="relative">
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
-              <input className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary" placeholder={t("ui.search.barcode.sku.product.name")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }}/>
+              <input className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary" placeholder={t("searchPlaceholder")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }}/>
             </label>
-            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} aria-label="Filter by category">
-              <option value="all">All categories</option>
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }} aria-label={t("filterByCategory")}>
+              <option value="all">{t("allCategories")}</option>
               {categories.map((category) => (<option value={category.id} key={category.id}>
-                  {category.nameEn}
+                  {locale === "lo" ? (category.nameLo || category.nameEn) : (category.nameEn || category.nameLo)}
                 </option>))}
             </select>
-            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm capitalize outline-none transition focus:border-primary" value={status} onChange={(event) => { setStatus(event.target.value as ProductStatus | "all"); setPage(1); }} aria-label="Filter by status">
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm capitalize outline-none transition focus:border-primary" value={status} onChange={(event) => { setStatus(event.target.value as ProductStatus | "all"); setPage(1); }} aria-label={t("filterByStatus")}>
               {statusOptions.map((option) => (<option value={option} key={option}>
-                  {option === "all" ? "All statuses" : option}
+                  {productStatusLabel(option)}
                 </option>))}
             </select>
           </div>
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={insightFilter} onChange={(event) => applyInsightFilter(event.target.value as InsightFilter)} aria-label="Product insight filter">
-              <option value="all">All product health</option>
-              <option value="out_of_stock">Out of Stock</option>
-              <option value="low_stock">Low Stock</option>
-              <option value="near_expiry">Near Expiry</option>
-              <option value="dead_stock">Dead Stock</option>
-              <option value="missing_barcode">Missing Barcode</option>
-              <option value="no_image">No Image</option>
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={insightFilter} onChange={(event) => applyInsightFilter(event.target.value as InsightFilter)} aria-label={t("insightFilter")}>
+              <option value="all">{t("allProductHealth")}</option>
+              <option value="out_of_stock">{t("outOfStock")}</option>
+              <option value="low_stock">{t("lowStock")}</option>
+              <option value="near_expiry">{t("nearExpiry")}</option>
+              <option value="dead_stock">{t("deadStock")}</option>
+              <option value="missing_barcode">{t("missingBarcode")}</option>
+              <option value="no_image">{t("noImage")}</option>
             </select>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <button className="inline-flex h-11 items-center gap-2 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={selectedProductIds.length === 0 || isPending} onClick={bulkDeleteSelectedProducts}>
               <Trash2 aria-hidden="true" className="size-4"/>
-              Delete Selected
+              {t("deleteSelected")}
             </button>
             <Link className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" href="/products/categories">
               <SlidersHorizontal aria-hidden="true" className="size-4"/>
-              Categories
+              {t("categories")}
             </Link>
             <Link className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href="/products/new">
               <Plus aria-hidden="true" className="size-4"/>
-              Create Product
+              {t("createProduct")}
             </Link>
             <div className="relative">
               <button className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setActionMenuOpen((current) => !current)}>
                 <MoreHorizontal aria-hidden="true" className="size-4"/>
-                More Actions
+                {t("moreActions")}
               </button>
               {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl">
-                  <ActionMenuButton icon={Upload} label="Import Products" onClick={() => openOperationDrawer("tool_import")}/>
-                  <ActionMenuButton icon={Download} label="Export Products" onClick={() => openOperationDrawer("tool_export")}/>
-                  <ActionMenuButton icon={Search} label="Barcode Audit" onClick={() => openOperationDrawer("tool_audit")}/>
-                  <ActionMenuButton icon={Printer} label="Print Barcode" onClick={() => openOperationDrawer("tool_print_barcode")}/>
-                  <ActionMenuButton icon={Tags} label="Print Shelf Label" onClick={() => openOperationDrawer("tool_print_shelf")}/>
-                  <ActionMenuButton icon={FileSpreadsheet} label="Bulk Price Update" onClick={() => openOperationDrawer("tool_bulk_price")}/>
+                  <ActionMenuButton icon={Upload} label={t("importProducts")} onClick={() => openOperationDrawer("tool_import")}/>
+                  <ActionMenuButton icon={Download} label={t("exportProducts")} onClick={() => openOperationDrawer("tool_export")}/>
+                  <ActionMenuButton icon={Search} label={t("barcodeAudit")} onClick={() => openOperationDrawer("tool_audit")}/>
+                  <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/>
+                  <ActionMenuButton icon={Tags} label={t("printShelfLabel")} onClick={() => openOperationDrawer("tool_print_shelf")}/>
+                  <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} onClick={() => openOperationDrawer("tool_bulk_price")}/>
                 </div>) : null}
             </div>
             </div>
@@ -298,7 +313,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            Showing {pageStart}-{pageEnd} of {totalCount}{t("ui.products")}{selectedProductIds.length > 0 ? `${selectedProductIds.length} selected.` : t("ui.operations.use.current.filters.if.nothing.is")}
+            {fillProductsCopy(t("showingRange"), { from: pageStart, to: pageEnd, total: totalCount })} {selectedProductIds.length > 0 ? fillProductsCopy(t("selectedCount"), { count: selectedProductIds.length }) : t("operationsUseFilters")}
           </span>
           {message ? <span className="rounded-full bg-success/10 px-3 py-1 font-semibold text-success">{message}</span> : null}
         </div>
@@ -310,31 +325,33 @@ export function ProductListClient({ products: initialProducts, categories: initi
             <thead className="sticky top-0 z-10 border-b border-border bg-background text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="w-12 px-3 py-3 font-semibold">
-                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllFilteredProducts} aria-label="Select all visible products"/>
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllFilteredProducts} aria-label={t("selectAllVisible")}/>
                 </th>
-                <th className="w-16 px-3 py-3 font-semibold">Image</th>
-                <th className="px-3 py-3 font-semibold">Product Name</th>
-                <th className="px-3 py-3 font-semibold">Barcode</th>
-                <th className="px-3 py-3 font-semibold">SKU</th>
-                <th className="px-3 py-3 font-semibold">Category</th>
-                <th className="px-3 py-3 text-right font-semibold">Stock</th>
-                <th className="px-3 py-3 text-right font-semibold">Cost</th>
-                <th className="px-3 py-3 text-right font-semibold">Price</th>
-                <th className="px-3 py-3 font-semibold">Expiry Status</th>
-                <th className="px-3 py-3 font-semibold">Status</th>
-                <th className="px-3 py-3 text-right font-semibold">Actions</th>
+                <th className="w-16 px-3 py-3 font-semibold">{t("image")}</th>
+                <th className="px-3 py-3 font-semibold">{t("productName")}</th>
+                <th className="px-3 py-3 font-semibold">{t("barcode")}</th>
+                <th className="px-3 py-3 font-semibold">{t("sku")}</th>
+                <th className="px-3 py-3 font-semibold">{t("category")}</th>
+                <th className="px-3 py-3 text-right font-semibold">{t("stock")}</th>
+                <th className="px-3 py-3 text-right font-semibold">{t("cost")}</th>
+                <th className="px-3 py-3 text-right font-semibold">{t("price")}</th>
+                <th className="px-3 py-3 font-semibold">{t("expiryStatus")}</th>
+                <th className="px-3 py-3 font-semibold">{t("status")}</th>
+                <th className="px-3 py-3 text-right font-semibold">{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedProducts.map((product) => {
             const stock = getProductStock(product);
             const expiryStatus = getExpiryStatus(product);
+            const primaryName = localizedProductName(product, locale);
+            const secondaryName = (locale === "lo" ? product.nameEn : product.nameLo)?.trim() || "";
             return (<tr className="border-b border-border last:border-b-0" key={product.id}>
                     <td className="px-3 py-3">
-                      <input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleProductSelection(product.id)} aria-label={`Select ${product.nameEn || product.nameLo}`}/>
+                      <input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleProductSelection(product.id)} aria-label={fillProductsCopy(t("selectProduct"), { name: primaryName })}/>
                     </td>
                     <td className="px-3 py-3">
-                      <button className="group relative size-12 overflow-hidden rounded-md text-left outline-none ring-primary transition focus:ring-2" type="button" onClick={() => openImagePreview(product)} aria-label={`Preview image for ${product.nameEn || product.nameLo}`}>
+                      <button className="group relative size-12 overflow-hidden rounded-md text-left outline-none ring-primary transition focus:ring-2" type="button" onClick={() => openImagePreview(product)} aria-label={fillProductsCopy(t("previewImageFor"), { name: primaryName })}>
                         <ProductThumbnail product={product}/>
                         <span className="absolute inset-0 hidden place-items-center bg-black/40 text-white group-hover:grid">
                           <Eye className="size-4" aria-hidden="true"/>
@@ -342,8 +359,8 @@ export function ProductListClient({ products: initialProducts, categories: initi
                       </button>
                     </td>
                     <td className="max-w-[220px] px-3 py-3">
-                      <div className="truncate font-semibold">{product.nameLo}</div>
-                      <div className="mt-1 truncate text-xs text-muted-foreground">{product.nameEn}</div>
+                      <div className="truncate font-semibold">{primaryName}</div>
+                      {secondaryName && secondaryName !== primaryName ? <div className="mt-1 truncate text-xs text-muted-foreground">{secondaryName}</div> : null}
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">{product.barcode || "-"}</td>
                     <td className="px-3 py-3 font-mono text-xs">{product.sku || "-"}</td>
@@ -357,11 +374,11 @@ export function ProductListClient({ products: initialProducts, categories: initi
                       <div className="flex justify-end gap-2">
                         <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" href={`/products/${product.id}/edit`}>
                           <Edit3 aria-hidden="true" className="size-4"/>
-                          Edit
+                          {t("edit")}
                         </Link>
                         <button className="inline-flex h-9 items-center gap-2 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => deleteProduct(product.id)}>
                           <Trash2 aria-hidden="true" className="size-4"/>
-                          Delete
+                          {t("delete")}
                         </button>
                       </div>
                     </td>
@@ -370,18 +387,18 @@ export function ProductListClient({ products: initialProducts, categories: initi
             </tbody>
           </table>
         </div>
-        {totalCount === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("ui.no.products.match.the.current.search.and.fil")}</div>) : null}
+        {totalCount === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("noProductsMatch")}</div>) : null}
         <div className="flex flex-col gap-3 border-t border-border bg-background px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Rows per page</span>
+            <span className="text-muted-foreground">{t("rowsPerPage")}</span>
             <select className="h-9 rounded-md border border-border bg-card px-2" value={pageSize} onChange={(event) => updatePageSize(Number(event.target.value))}>
               {pageSizeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </div>
           <div className="flex items-center justify-end gap-3">
-            <button className="h-9 rounded-md border border-border px-3 font-semibold disabled:opacity-40" type="button" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
-            <span className="font-semibold">Page {safePage} of {totalPages}</span>
-            <button className="h-9 rounded-md border border-border px-3 font-semibold disabled:opacity-40" type="button" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>Next</button>
+            <button className="h-9 rounded-md border border-border px-3 font-semibold disabled:opacity-40" type="button" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>{t("previous")}</button>
+            <span className="font-semibold">{fillProductsCopy(t("pageOf"), { page: safePage, pages: totalPages })}</span>
+            <button className="h-9 rounded-md border border-border px-3 font-semibold disabled:opacity-40" type="button" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>{t("next")}</button>
           </div>
         </div>
       </section>
@@ -405,35 +422,35 @@ function ProductsVisualShell({ onOpenDrawer, stats }: {
     stats: ProductShellStats;
 }) {
     const topics = [
-        { description: "Review product records, prices, stock signals, and images.", drawerKey: "product_list" as ProductShellDrawerKey, icon: Boxes, label: "Product list" },
-        { description: "Organize products by category before editing category records.", drawerKey: "categories" as ProductShellDrawerKey, icon: Tags, label: "Categories" },
-        { description: "Check barcode and SKU readiness before printing or importing.", drawerKey: "barcode_sku" as ProductShellDrawerKey, icon: Search, label: "Barcode / SKU" },
-        { description: "Review image coverage without changing product images.", drawerKey: "images" as ProductShellDrawerKey, icon: ImageIcon, label: "Product images" },
-        { description: "Review price label and barcode label readiness.", drawerKey: "labels" as ProductShellDrawerKey, icon: Printer, label: "Labels" },
-        { description: "Review product data quality signals without changing records.", drawerKey: "product_health" as ProductShellDrawerKey, icon: AlertCircle, label: "Product Health" },
+        { description: t("productListHint"), drawerKey: "product_list" as ProductShellDrawerKey, icon: Boxes, label: t("productList") },
+        { description: t("categoriesHint"), drawerKey: "categories" as ProductShellDrawerKey, icon: Tags, label: t("categories") },
+        { description: t("barcodeSkuReadyHint"), drawerKey: "barcode_sku" as ProductShellDrawerKey, icon: Search, label: t("barcodeSku") },
+        { description: t("imageCoverageHint"), drawerKey: "images" as ProductShellDrawerKey, icon: ImageIcon, label: t("productImages") },
+        { description: t("labelsHint"), drawerKey: "labels" as ProductShellDrawerKey, icon: Printer, label: t("labels") },
+        { description: t("productHealthHint"), drawerKey: "product_health" as ProductShellDrawerKey, icon: AlertCircle, label: t("productHealth") },
     ];
 
     return (
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Products workspace</p>
-            <h2 className="mt-1 text-xl font-semibold">Product management overview</h2>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">{t("productsWorkspace")}</p>
+            <h2 className="mt-1 text-xl font-semibold">{t("productManagementOverview")}</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              A read-only workspace summary for product records, categories, barcodes, and image readiness.
+              {t("workspaceSummary")}
             </p>
           </div>
           <span className="w-fit rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-muted-foreground">
-            Read-only shell
+            {t("readOnlyShell")}
           </span>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <ProductShellMetric icon={Boxes} label="Total products" value={stats.totalProducts} onClick={() => onOpenDrawer("total")}/>
-          <ProductShellMetric icon={Package} label="Active products" value={stats.activeProducts} onClick={() => onOpenDrawer("active")}/>
-          <ProductShellMetric icon={ImageIcon} label="Missing images" value={stats.missingImages} onClick={() => onOpenDrawer("missing_images")}/>
-          <ProductShellMetric icon={Search} label="Missing barcode" value={stats.missingBarcode} onClick={() => onOpenDrawer("missing_barcode")}/>
-          <ProductShellMetric icon={AlertCircle} label="Product Health" value={stats.healthIssueCount} onClick={() => onOpenDrawer("product_health")}/>
+          <ProductShellMetric icon={Boxes} label={t("totalProducts")} value={stats.totalProducts} onClick={() => onOpenDrawer("total")}/>
+          <ProductShellMetric icon={Package} label={t("activeProducts")} value={stats.activeProducts} onClick={() => onOpenDrawer("active")}/>
+          <ProductShellMetric icon={ImageIcon} label={t("missingImages")} value={stats.missingImages} onClick={() => onOpenDrawer("missing_images")}/>
+          <ProductShellMetric icon={Search} label={t("missingBarcode")} value={stats.missingBarcode} onClick={() => onOpenDrawer("missing_barcode")}/>
+          <ProductShellMetric icon={AlertCircle} label={t("productHealth")} value={stats.healthIssueCount} onClick={() => onOpenDrawer("product_health")}/>
         </div>
 
         <div className="mt-4 grid gap-2">
@@ -444,11 +461,11 @@ function ProductsVisualShell({ onOpenDrawer, stats }: {
 
         {stats.totalProducts === 0 ? (
           <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
-            No products are available yet. Create real products through the existing product workflow when ready.
+            {t("emptyProducts")}
           </div>
         ) : stats.missingImages > 0 ? (
           <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-            {stats.missingImages} product{stats.missingImages === 1 ? "" : "s"} missing image coverage.
+            {fillProductsCopy(t("missingImageCoverage"), { count: stats.missingImages })}
           </div>
         ) : null}
       </section>
@@ -463,7 +480,7 @@ function ProductShellMetric({ icon: Icon, label, onClick, value }: { icon: typeo
           {label}
         </div>
         <div className="mt-2 text-2xl font-semibold">{value.toLocaleString("en-US")}</div>
-        <div className="mt-1 text-xs font-semibold text-primary">View details</div>
+        <div className="mt-1 text-xs font-semibold text-primary">{t("viewDetails")}</div>
       </button>
     );
 }
@@ -481,7 +498,7 @@ function ProductShellTopic({ description, icon: Icon, label, onClick }: { descri
           </div>
         </div>
         <span className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-          Open drawer
+          {t("openDrawer")}
         </span>
       </button>
     );
@@ -511,14 +528,14 @@ function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, 
         return null;
     if (isProductToolDrawer(drawerKey)) {
         return (
-          <ProductDrawerFrame description={getProductToolDescription(drawerKey)} label="Products tool" title={getProductToolTitle(drawerKey)} onClose={onClose}>
+          <ProductDrawerFrame description={getProductToolDescription(drawerKey)} label={t("productsTool")} title={getProductToolTitle(drawerKey)} onClose={onClose}>
             <ProductToolDrawerBody categories={categories} drawerKey={drawerKey} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={stats} onClose={onClose}/>
           </ProductDrawerFrame>
         );
     }
     const content = getProductShellDrawerContent(drawerKey, stats);
     return (
-      <ProductDrawerFrame description={content.description} label="Products detail" title={content.title} onClose={onClose}>
+      <ProductDrawerFrame description={content.description} label={t("productDetail")} title={content.title} onClose={onClose}>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {content.summaries.map((summary) => (
                 <ProductShellDrawerSummary key={summary.label} label={summary.label} value={summary.value}/>
@@ -537,8 +554,8 @@ function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, 
               ))}
             </div>
             <section className="mt-5 rounded-lg border border-border bg-background p-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Disabled Actions</h3>
-              <p className="mt-2 text-sm text-muted-foreground">These controls are read-only until the product workflow connection is approved.</p>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("disabledActions")}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{t("disabledActionsHint")}</p>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {content.actions.map((action) => (
                   <button className="flex cursor-not-allowed items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-left opacity-70" disabled key={action.label} type="button">
@@ -549,11 +566,11 @@ function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, 
               </div>
             </section>
             <details className="mt-5 rounded-lg border border-border bg-background p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Advanced Details</summary>
+              <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">{t("advancedDetails")}</summary>
               <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                <ProductShellStatusRow label="Source" value="Loaded Products page data"/>
-                <ProductShellStatusRow label="Backend writes" value="Not connected from this shell"/>
-                <ProductShellStatusRow label="Raw metadata" value="Hidden"/>
+                <ProductShellStatusRow label={t("source")} value={t("loadedProductsData")}/>
+                <ProductShellStatusRow label={t("backendWrites")} value={t("notConnectedShell")}/>
+                <ProductShellStatusRow label={t("rawMetadata")} value={t("hidden")}/>
               </div>
             </details>
       </ProductDrawerFrame>
@@ -577,7 +594,7 @@ function ProductDrawerFrame({ children, description, label, onClose, title }: {
                 <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
               </div>
-              <button aria-label="Close drawer" className="grid size-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition hover:text-foreground" type="button" onClick={onClose}>
+              <button aria-label={t("closeDrawer")} className="grid size-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition hover:text-foreground" type="button" onClick={onClose}>
                 <X className="size-5" aria-hidden="true"/>
               </button>
             </div>
@@ -635,16 +652,16 @@ function ProductToolDrawerBody({ categories, drawerKey, filteredProducts, onClos
 function ImportProductsDrawer({ onClose }: { onClose: () => void }) {
     return (
       <div className="grid gap-5">
-        <ProductToolNotice text="Import is a read-only setup preview. Product records will not be created or changed from this drawer."/>
+        <ProductToolNotice text={t("importNotice")}/>
         <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Accepted Formats</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("acceptedFormats")}</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {["CSV", "XLSX"].map((format) => <span className="rounded-full border border-border bg-card px-3 py-1 text-sm font-semibold" key={format}>{format}</span>)}
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-4">
-            {["Upload file", "Review preview", "Validate rows", "Import after owner approval"].map((step, index) => (
+            {[t("uploadFile"), t("reviewPreview"), t("validateRows"), t("importAfterApproval")].map((step, index) => (
               <div className="rounded-md border border-border bg-card p-3 text-sm" key={step}>
-                <div className="font-semibold text-primary">Step {index + 1}</div>
+                <div className="font-semibold text-primary">{fillProductsCopy(t("stepN"), { n: index + 1 })}</div>
                 <div className="mt-1 text-muted-foreground">{step}</div>
               </div>
             ))}
@@ -652,16 +669,16 @@ function ImportProductsDrawer({ onClose }: { onClose: () => void }) {
         </section>
         <section className="rounded-lg border border-dashed border-border bg-background p-5 text-center">
           <Upload className="mx-auto size-10 text-muted-foreground" aria-hidden="true"/>
-          <div className="mt-2 font-semibold">Upload area disabled</div>
-          <p className="mt-1 text-sm text-muted-foreground">File parsing and import worker are not connected yet.</p>
+          <div className="mt-2 font-semibold">{t("uploadAreaDisabled")}</div>
+          <p className="mt-1 text-sm text-muted-foreground">{t("importDisabledHint")}</p>
         </section>
         <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Sample Columns</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("sampleColumns")}</h3>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {importFields.slice(0, 8).map((field) => <span className="rounded-md border border-border bg-card px-3 py-2 text-sm" key={field}>{field}</span>)}
+            {getImportFields().slice(0, 8).map((field) => <span className="rounded-md border border-border bg-card px-3 py-2 text-sm" key={field}>{field}</span>)}
           </div>
         </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: "Upload", reason: "Not connected yet" }, { label: "Import", reason: "Disabled" }]}/>
+        <ProductToolFooter onClose={onClose} actions={[{ label: t("upload"), reason: t("notConnectedYet") }, { label: t("import"), reason: t("disabled") }]}/>
       </div>
     );
 }
@@ -674,32 +691,32 @@ function ExportProductsDrawer({ onClose, products, selectedCount, stats }: {
 }) {
     const [selectedIds, setSelectedIds] = useState<string[]>(products.slice(0, 8).map((product) => product.id));
     const previewProducts = products.slice(0, 12);
-    const fields = ["Product name", "Barcode", "SKU", "Category", "Selling price", "Cost price", "Stock", "Status", "Image status"];
+    const fields = [t("productName"), t("barcode"), t("sku"), t("category"), t("sellingPrice"), t("costPrice"), t("stock"), t("status"), t("imageStatus")];
     return (
       <div className="grid gap-5">
-        <ProductToolNotice text="Choose product data and format before export is enabled. This drawer does not download files."/>
+        <ProductToolNotice text={t("exportNotice")}/>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <ProductShellDrawerSummary label="Total products" value={formatShellCount(products.length)}/>
-          <ProductShellDrawerSummary label="Selected rows" value={formatShellCount(selectedIds.length)}/>
-          <ProductShellDrawerSummary label="Missing barcode" value={formatShellCount(stats.missingBarcode)}/>
-          <ProductShellDrawerSummary label="Missing image" value={formatShellCount(stats.missingImages)}/>
+          <ProductShellDrawerSummary label={t("totalProducts")} value={formatShellCount(products.length)}/>
+          <ProductShellDrawerSummary label={t("selectedRows")} value={formatShellCount(selectedIds.length)}/>
+          <ProductShellDrawerSummary label={t("missingBarcode")} value={formatShellCount(stats.missingBarcode)}/>
+          <ProductShellDrawerSummary label={t("missingImage")} value={formatShellCount(stats.missingImages)}/>
         </div>
         <section className="rounded-lg border border-border bg-background p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Product Selection Preview</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("productSelectionPreview")}</h3>
             <div className="flex gap-2">
-              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setSelectedIds(previewProducts.map((product) => product.id))}>Select all preview</button>
-              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setSelectedIds([])}>Clear selection</button>
+              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setSelectedIds(previewProducts.map((product) => product.id))}>{t("selectAllPreview")}</button>
+              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setSelectedIds([])}>{t("clearSelection")}</button>
             </div>
           </div>
           <ProductPreviewTable products={previewProducts} selectedIds={selectedIds} onToggle={(productId) => setSelectedIds((current) => current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId])}/>
-          <p className="mt-3 text-xs text-muted-foreground">{selectedCount > 0 ? "Existing table selection was used as the starting export scope." : "Current filters are used as the export preview scope."}</p>
+          <p className="mt-3 text-xs text-muted-foreground">{selectedCount > 0 ? t("exportScopeSelected") : t("exportScopeFilters")}</p>
         </section>
         <section className="grid gap-4 lg:grid-cols-2">
-          <ProductOptionPanel title="Fields Selection" options={fields}/>
-          <ProductOptionPanel title="Export Format" options={["CSV", "XLSX"]}/>
+          <ProductOptionPanel title={t("fieldsSelection")} options={fields}/>
+          <ProductOptionPanel title={t("exportFormat")} options={["CSV", "XLSX"]}/>
         </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: "Export CSV", reason: "Disabled" }, { label: "Export XLSX", reason: "Disabled" }]}/>
+        <ProductToolFooter onClose={onClose} actions={[{ label: t("exportCsv"), reason: t("disabled") }, { label: t("exportXlsx"), reason: t("disabled") }]}/>
       </div>
     );
 }
@@ -708,28 +725,34 @@ function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void;
     const [filter, setFilter] = useState("all");
     const audit = getBarcodeAudit(products);
     const missingSku = products.filter((product) => !product.sku);
+    const issueLabels: Record<string, string> = {
+        "Missing barcode": t("missingBarcode"),
+        "Duplicate barcode": t("duplicateBarcode"),
+        "Invalid barcode": t("invalidBarcode"),
+        "Missing SKU": t("missingSku"),
+    };
     const rows = [
-        ...audit.missing.map((item) => ({ issue: "Missing barcode", productName: item.productName, unitName: item.unitName ?? "Product", value: "-" })),
-        ...audit.duplicates.map((item) => ({ issue: "Duplicate barcode", productName: item.productName, unitName: item.unitName ?? "Product", value: item.barcode })),
-        ...audit.invalid.map((item) => ({ issue: "Invalid barcode", productName: item.productName, unitName: item.unitName ?? "Product", value: item.barcode ?? "-" })),
-        ...missingSku.map((product) => ({ issue: "Missing SKU", productName: product.nameEn || product.nameLo, unitName: "Product", value: product.barcode || "-" })),
+        ...audit.missing.map((item) => ({ issue: "Missing barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: "-" })),
+        ...audit.duplicates.map((item) => ({ issue: "Duplicate barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: item.barcode })),
+        ...audit.invalid.map((item) => ({ issue: "Invalid barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: item.barcode ?? "-" })),
+        ...missingSku.map((product) => ({ issue: "Missing SKU", productName: localizedProductName(product), unitName: t("product"), value: product.barcode || "-" })),
     ].filter((row) => filter === "all" || row.issue.toLowerCase().replaceAll(" ", "_") === filter);
     return (
       <div className="grid gap-5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <ProductShellDrawerSummary label="Total products" value={formatShellCount(stats.totalProducts)}/>
-          <ProductShellDrawerSummary label="Missing barcode" value={formatShellCount(audit.missing.length)}/>
-          <ProductShellDrawerSummary label="Duplicate barcode" value={formatShellCount(audit.duplicates.length)}/>
-          <ProductShellDrawerSummary label="Invalid barcode" value={formatShellCount(audit.invalid.length)}/>
-          <ProductShellDrawerSummary label="Missing SKU" value={formatShellCount(missingSku.length)}/>
+          <ProductShellDrawerSummary label={t("totalProducts")} value={formatShellCount(stats.totalProducts)}/>
+          <ProductShellDrawerSummary label={t("missingBarcode")} value={formatShellCount(audit.missing.length)}/>
+          <ProductShellDrawerSummary label={t("duplicateBarcode")} value={formatShellCount(audit.duplicates.length)}/>
+          <ProductShellDrawerSummary label={t("invalidBarcode")} value={formatShellCount(audit.invalid.length)}/>
+          <ProductShellDrawerSummary label={t("missingSku")} value={formatShellCount(missingSku.length)}/>
         </div>
         <div className="flex flex-wrap gap-2">
           {[
-            ["all", "All"],
-            ["missing_barcode", "Missing barcode"],
-            ["duplicate_barcode", "Duplicate barcode"],
-            ["invalid_barcode", "Invalid barcode"],
-            ["missing_sku", "Missing SKU"],
+            ["all", t("all")],
+            ["missing_barcode", t("missingBarcode")],
+            ["duplicate_barcode", t("duplicateBarcode")],
+            ["invalid_barcode", t("invalidBarcode")],
+            ["missing_sku", t("missingSku")],
           ].map(([value, label]) => (
             <button className={cn("h-9 rounded-full border px-3 text-xs font-semibold", filter === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")} key={value} type="button" onClick={() => setFilter(value)}>
               {label}
@@ -740,12 +763,12 @@ function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void;
           <div className="max-h-[420px] overflow-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
-                <tr><th className="p-3">Issue</th><th className="p-3">Product</th><th className="p-3">Unit</th><th className="p-3">Barcode / SKU</th></tr>
+                <tr><th className="p-3">{t("issue")}</th><th className="p-3">{t("product")}</th><th className="p-3">{t("unit")}</th><th className="p-3">{t("barcodeSku")}</th></tr>
               </thead>
               <tbody>
                 {rows.map((row, index) => (
                   <tr className="border-t border-border" key={`${row.issue}-${row.productName}-${index}`}>
-                    <td className="p-3 font-semibold">{row.issue}</td>
+                    <td className="p-3 font-semibold">{issueLabels[row.issue] ?? row.issue}</td>
                     <td className="p-3">{row.productName}</td>
                     <td className="p-3">{row.unitName}</td>
                     <td className="p-3 font-mono text-xs">{row.value}</td>
@@ -753,10 +776,10 @@ function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void;
                 ))}
               </tbody>
             </table>
-            {rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">No barcode or SKU issues in the current preview.</div> : null}
+            {rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{t("noBarcodeIssues")}</div> : null}
           </div>
         </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: "Auto fix", reason: "Disabled" }, { label: "Export audit", reason: "Disabled" }]}/>
+        <ProductToolFooter onClose={onClose} actions={[{ label: t("autoFix"), reason: t("disabled") }, { label: t("exportAudit"), reason: t("disabled") }]}/>
       </div>
     );
 }
@@ -768,18 +791,18 @@ function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; produc
     const previewProduct = products[0];
     return (
       <div className="grid gap-5">
-        <ProductToolNotice text="Barcode print is a preview shell only. Real printer integration can be connected later."/>
+        <ProductToolNotice text={t("printBarcodeNotice")}/>
         <PrintLayoutControls labelOptions={["40x30mm", "50x30mm", "60x40mm", "Custom"]} labelValue={labelSize} paperValue={paper} quantity={quantity} onLabelChange={setLabelSize} onPaperChange={setPaper} onQuantityChange={setQuantity}/>
         <ProductSelectionPreview products={products}/>
         <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Barcode Label Preview</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("barcodeLabelPreview")}</h3>
           <div className="mt-4 max-w-sm rounded-md border border-border bg-card p-4 text-center">
-            <div className="truncate text-sm font-semibold">{previewProduct ? previewProduct.nameEn || previewProduct.nameLo : "Product name"}</div>
+            <div className="truncate text-sm font-semibold">{previewProduct ? localizedProductName(previewProduct) : t("productName")}</div>
             <div className="mt-2 rounded bg-background p-3 font-mono text-xs tracking-[0.2em]">{previewProduct?.barcode || previewProduct?.sku || "BARCODE"}</div>
-            <div className="mt-2 text-sm font-semibold">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : "Price"}</div>
+            <div className="mt-2 text-sm font-semibold">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : t("price")}</div>
           </div>
         </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: "Print Preview", reason: "Disabled" }]}/>
+        <ProductToolFooter onClose={onClose} actions={[{ label: t("printPreview"), reason: t("disabled") }]}/>
       </div>
     );
 }
@@ -787,24 +810,24 @@ function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; produc
 function PrintShelfLabelDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
     const [paper, setPaper] = useState("A4");
     const previewProduct = products[0];
-    const toggles = ["Product name", "Price", "Unit", "Barcode optional", "Promo tag optional"];
+    const toggles = [t("productName"), t("price"), t("unit"), t("barcodeOptional"), t("promoTagOptional")];
     return (
       <div className="grid gap-5">
-        <ProductToolNotice text="Shelf label print is a preview shell only. Real printer integration can be connected later."/>
+        <ProductToolNotice text={t("printShelfNotice")}/>
         <section className="grid gap-4 lg:grid-cols-2">
-          <ProductOptionPanel title="Shelf Label Layout" options={["A4", "A5", "80mm roll", "Custom"]} selected={paper} onSelect={setPaper}/>
-          <ProductOptionPanel title="Label Content" options={toggles}/>
+          <ProductOptionPanel title={t("shelfLabelLayout")} options={["A4", "A5", "80mm roll", "Custom"]} selected={paper} onSelect={setPaper}/>
+          <ProductOptionPanel title={t("labelContent")} options={toggles}/>
         </section>
         <ProductSelectionPreview products={products}/>
         <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Shelf Label Preview</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("shelfLabelPreview")}</h3>
           <div className="mt-4 max-w-sm rounded-md border border-border bg-card p-4">
-            <div className="truncate text-lg font-semibold">{previewProduct ? previewProduct.nameEn || previewProduct.nameLo : "Product name"}</div>
-            <div className="mt-2 text-2xl font-black text-primary">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : "Price"}</div>
-            <div className="mt-2 text-xs text-muted-foreground">{previewProduct?.units[0]?.unitName ?? "Unit"} | {previewProduct?.barcode || "Barcode optional"}</div>
+            <div className="truncate text-lg font-semibold">{previewProduct ? localizedProductName(previewProduct) : t("productName")}</div>
+            <div className="mt-2 text-2xl font-black text-primary">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : t("price")}</div>
+            <div className="mt-2 text-xs text-muted-foreground">{previewProduct?.units[0]?.unitName ?? t("unit")} | {previewProduct?.barcode || t("barcodeOptional")}</div>
           </div>
         </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: "Print Preview", reason: "Disabled" }]}/>
+        <ProductToolFooter onClose={onClose} actions={[{ label: t("printPreview"), reason: t("disabled") }]}/>
       </div>
     );
 }
@@ -836,31 +859,31 @@ function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, product
     }).slice(0, 20) : [];
     return (
       <div className="grid gap-5">
-        <ProductToolNotice text="Preview only. No price changes will be applied in this version."/>
+        <ProductToolNotice text={t("bulkPreviewNotice")}/>
         <section className="grid gap-4 rounded-lg border border-border bg-background p-4 lg:grid-cols-3">
-          <label className="grid gap-1 text-sm font-semibold">Apply to<select className="field-input" value={target} onChange={(event) => setTarget(event.target.value as typeof target)}><option value="all">All products</option><option value="selected">Selected products</option><option value="category">Category</option></select></label>
-          <label className="grid gap-1 text-sm font-semibold">Category<select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={target !== "category"}>{categories.map((category) => <option key={category.id} value={category.id}>{category.nameEn || category.nameLo}</option>)}</select></label>
-          <label className="grid gap-1 text-sm font-semibold">Adjustment<select className="field-input" value={adjustmentMode} onChange={(event) => setAdjustmentMode(event.target.value as typeof adjustmentMode)}><option value="increase_percent">Increase by %</option><option value="decrease_percent">Decrease by %</option><option value="increase_amount">Increase by amount</option><option value="decrease_amount">Decrease by amount</option></select></label>
-          <label className="grid gap-1 text-sm font-semibold">Value<input className="field-input" inputMode="decimal" value={formatMoneyInput(adjustmentValue)} onChange={(event) => setAdjustmentValue(event.target.value.replace(/[^\d.]/g, ""))}/></label>
-          <label className="grid gap-1 text-sm font-semibold">Rounding<select className="field-input" value={roundingLak} onChange={(event) => setRoundingLak(Number(event.target.value))}><option value={0}>No rounding</option><option value={500}>Round to nearest 500</option><option value={1000}>Round to nearest 1000</option></select></label>
+          <label className="grid gap-1 text-sm font-semibold">{t("applyTo")}<select className="field-input" value={target} onChange={(event) => setTarget(event.target.value as typeof target)}><option value="all">{t("applyToAll")}</option><option value="selected">{t("applyToSelected")}</option><option value="category">{t("applyToCategory")}</option></select></label>
+          <label className="grid gap-1 text-sm font-semibold">{t("category")}<select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={target !== "category"}>{categories.map((category) => <option key={category.id} value={category.id}>{readClientLocale() === "lo" ? (category.nameLo || category.nameEn) : (category.nameEn || category.nameLo)}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-semibold">{t("adjustment")}<select className="field-input" value={adjustmentMode} onChange={(event) => setAdjustmentMode(event.target.value as typeof adjustmentMode)}><option value="increase_percent">{t("increasePercent")}</option><option value="decrease_percent">{t("decreasePercent")}</option><option value="increase_amount">{t("increaseAmount")}</option><option value="decrease_amount">{t("decreaseAmount")}</option></select></label>
+          <label className="grid gap-1 text-sm font-semibold">{t("value")}<input className="field-input" inputMode="decimal" value={formatMoneyInput(adjustmentValue)} onChange={(event) => setAdjustmentValue(event.target.value.replace(/[^\d.]/g, ""))}/></label>
+          <label className="grid gap-1 text-sm font-semibold">{t("rounding")}<select className="field-input" value={roundingLak} onChange={(event) => setRoundingLak(Number(event.target.value))}><option value={0}>{t("noRounding")}</option><option value={500}>{t("round500")}</option><option value={1000}>{t("round1000")}</option></select></label>
           <div className="grid gap-2 rounded-md border border-border bg-card p-3 text-sm">
-            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.costPrice} onChange={(event) => setFields((current) => ({ ...current, costPrice: event.target.checked }))}/> Cost price</label>
-            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.sellingPrice} onChange={(event) => setFields((current) => ({ ...current, sellingPrice: event.target.checked }))}/> Selling price</label>
-            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.studentPrice} onChange={(event) => setFields((current) => ({ ...current, studentPrice: event.target.checked }))}/> Student price</label>
+            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.costPrice} onChange={(event) => setFields((current) => ({ ...current, costPrice: event.target.checked }))}/> {t("costPrice")}</label>
+            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.sellingPrice} onChange={(event) => setFields((current) => ({ ...current, sellingPrice: event.target.checked }))}/> {t("sellingPrice")}</label>
+            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.studentPrice} onChange={(event) => setFields((current) => ({ ...current, studentPrice: event.target.checked }))}/> {t("studentPrice")}</label>
           </div>
         </section>
         <section className="rounded-lg border border-border bg-background p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Preview Table</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("previewTable")}</h3>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{previewRows.length.toLocaleString("en-US")} preview rows</span>
-              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewEnabled(true)}>Preview changes</button>
+              <span className="text-xs text-muted-foreground">{fillProductsCopy(t("previewRows"), { count: previewRows.length.toLocaleString("en-US") })}</span>
+              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewEnabled(true)}>{t("previewChanges")}</button>
             </div>
           </div>
           <div className="mt-3 max-h-96 overflow-auto">
             <table className="w-full min-w-[820px] text-left text-xs">
               <thead className="sticky top-0 bg-background text-muted-foreground">
-                <tr><th className="p-2">Product</th><th className="p-2 text-right">Old cost</th><th className="p-2 text-right">Preview cost</th><th className="p-2 text-right">Old selling</th><th className="p-2 text-right">Preview selling</th><th className="p-2 text-right">Old student</th><th className="p-2 text-right">Preview student</th></tr>
+                <tr><th className="p-2">{t("product")}</th><th className="p-2 text-right">{t("oldCost")}</th><th className="p-2 text-right">{t("previewCost")}</th><th className="p-2 text-right">{t("oldSelling")}</th><th className="p-2 text-right">{t("previewSelling")}</th><th className="p-2 text-right">{t("oldStudent")}</th><th className="p-2 text-right">{t("previewStudent")}</th></tr>
               </thead>
               <tbody>
                 {previewRows.map((row) => (
@@ -870,10 +893,10 @@ function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, product
                 ))}
               </tbody>
             </table>
-            {previewRows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">No products available for preview.</div> : null}
+            {previewRows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{t("noProductsAvailablePreview")}</div> : null}
           </div>
         </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: "Apply changes", reason: "Disabled" }]}/>
+        <ProductToolFooter onClose={onClose} actions={[{ label: t("applyChanges"), reason: t("disabled") }]}/>
       </div>
     );
 }
@@ -889,7 +912,7 @@ function ProductToolNotice({ text }: { text: string }) {
 function ProductToolFooter({ actions, onClose }: { actions: Array<{ label: string; reason: string }>; onClose: () => void }) {
     return (
       <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-        <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
+        <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
         {actions.map((action) => (
           <button className="h-10 cursor-not-allowed rounded-md border border-border px-4 text-sm font-semibold text-muted-foreground opacity-70" disabled key={action.label} type="button">
             {action.label} - {action.reason}
@@ -908,21 +931,21 @@ function ProductPreviewTable({ onToggle, products, selectedIds }: {
       <div className="mt-3 max-h-80 overflow-auto rounded-md border border-border">
         <table className="w-full min-w-[720px] text-left text-xs">
           <thead className="sticky top-0 bg-background text-muted-foreground">
-            <tr><th className="p-2">Select</th><th className="p-2">Product</th><th className="p-2">Barcode</th><th className="p-2">SKU</th><th className="p-2">Status</th></tr>
+            <tr><th className="p-2">{t("select")}</th><th className="p-2">{t("product")}</th><th className="p-2">{t("barcode")}</th><th className="p-2">{t("sku")}</th><th className="p-2">{t("status")}</th></tr>
           </thead>
           <tbody>
             {products.map((product) => (
               <tr className="border-t border-border" key={product.id}>
-                <td className="p-2"><input type="checkbox" checked={selectedIds.includes(product.id)} onChange={() => onToggle(product.id)} aria-label={`Select ${product.nameEn || product.nameLo} for preview`}/></td>
-                <td className="p-2 font-semibold">{product.nameEn || product.nameLo}</td>
+                <td className="p-2"><input type="checkbox" checked={selectedIds.includes(product.id)} onChange={() => onToggle(product.id)} aria-label={fillProductsCopy(t("selectProductPreview"), { name: localizedProductName(product) })}/></td>
+                <td className="p-2 font-semibold">{localizedProductName(product)}</td>
                 <td className="p-2 font-mono">{product.barcode || "-"}</td>
                 <td className="p-2 font-mono">{product.sku || "-"}</td>
-                <td className="p-2">{product.status}</td>
+                <td className="p-2">{productStatusLabel(product.status)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {products.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">No products available in this preview.</div> : null}
+        {products.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{t("noProductsAvailablePreview")}</div> : null}
       </div>
     );
 }
@@ -939,7 +962,7 @@ function ProductOptionPanel({ onSelect, options, selected, title }: {
         <div className="mt-3 grid gap-2">
           {options.map((option) => (
             <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold" key={option}>
-              <span>{option}</span>
+              <span>{option === "Custom" ? t("custom") : option}</span>
               <input type="checkbox" checked={selected ? selected === option : true} readOnly={!onSelect} onChange={() => onSelect?.(option)}/>
             </label>
           ))}
@@ -959,9 +982,9 @@ function PrintLayoutControls({ labelOptions, labelValue, onLabelChange, onPaperC
 }) {
     return (
       <section className="grid gap-4 rounded-lg border border-border bg-background p-4 lg:grid-cols-3">
-        <label className="grid gap-1 text-sm font-semibold">Quantity per product<input className="field-input" inputMode="numeric" value={quantity} onChange={(event) => onQuantityChange(event.target.value.replace(/[^\d]/g, ""))}/></label>
-        <label className="grid gap-1 text-sm font-semibold">Label size<select className="field-input" value={labelValue} onChange={(event) => onLabelChange(event.target.value)}>{labelOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-        <label className="grid gap-1 text-sm font-semibold">Paper / layout<select className="field-input" value={paperValue} onChange={(event) => onPaperChange(event.target.value)}>{["A4", "A5", "80mm roll", "Custom"].map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+        <label className="grid gap-1 text-sm font-semibold">{t("quantityPerProduct")}<input className="field-input" inputMode="numeric" value={quantity} onChange={(event) => onQuantityChange(event.target.value.replace(/[^\d]/g, ""))}/></label>
+        <label className="grid gap-1 text-sm font-semibold">{t("labelSize")}<select className="field-input" value={labelValue} onChange={(event) => onLabelChange(event.target.value)}>{labelOptions.map((option) => <option key={option} value={option}>{option === "Custom" ? t("custom") : option}</option>)}</select></label>
+        <label className="grid gap-1 text-sm font-semibold">{t("paperLayout")}<select className="field-input" value={paperValue} onChange={(event) => onPaperChange(event.target.value)}>{["A4", "A5", "80mm roll", "Custom"].map((option) => <option key={option} value={option}>{option === "Custom" ? t("custom") : option}</option>)}</select></label>
       </section>
     );
 }
@@ -970,18 +993,18 @@ function ProductSelectionPreview({ products }: { products: Product[] }) {
     return (
       <section className="rounded-lg border border-border bg-background p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Product Selection Preview</h3>
-          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground">{products.length.toLocaleString("en-US")} selected / filtered</span>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("productSelectionPreview")}</h3>
+          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground">{fillProductsCopy(t("selectedFiltered"), { count: products.length.toLocaleString("en-US") })}</span>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {products.slice(0, 6).map((product) => (
             <div className="rounded-md border border-border bg-card p-3 text-sm" key={product.id}>
-              <div className="truncate font-semibold">{product.nameEn || product.nameLo}</div>
-              <div className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || product.sku || "No code"}</div>
+              <div className="truncate font-semibold">{localizedProductName(product)}</div>
+              <div className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || product.sku || t("noCode")}</div>
             </div>
           ))}
         </div>
-        {products.length === 0 ? <div className="mt-3 rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">No products available for preview.</div> : null}
+        {products.length === 0 ? <div className="mt-3 rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{t("noProductsAvailablePreview")}</div> : null}
       </section>
     );
 }
@@ -992,26 +1015,26 @@ function isProductToolDrawer(drawerKey: ProductShellDrawerKey) {
 
 function getProductToolTitle(drawerKey: ProductShellDrawerKey) {
     const titles: Record<string, string> = {
-        tool_audit: "Barcode / SKU Audit",
-        tool_bulk_price: "Bulk Price Update",
-        tool_export: "Export Products",
-        tool_import: "Import Products",
-        tool_print_barcode: "Print Barcode",
-        tool_print_shelf: "Print Shelf Label",
+        tool_audit: t("barcodeSkuAudit"),
+        tool_bulk_price: t("bulkPriceUpdate"),
+        tool_export: t("exportProducts"),
+        tool_import: t("importProducts"),
+        tool_print_barcode: t("printBarcode"),
+        tool_print_shelf: t("printShelfLabel"),
     };
-    return titles[drawerKey] ?? "Products Tool";
+    return titles[drawerKey] ?? t("productsTool");
 }
 
 function getProductToolDescription(drawerKey: ProductShellDrawerKey) {
     const descriptions: Record<string, string> = {
-        tool_audit: "Review barcode and SKU issues without changing product records.",
-        tool_bulk_price: "Preview bulk price changes locally. Applying changes is disabled.",
-        tool_export: "Choose product data and file format before export is enabled.",
-        tool_import: "Review the future import workflow. File parsing and import are disabled.",
-        tool_print_barcode: "Preview barcode label layout without printing or downloading.",
-        tool_print_shelf: "Preview shelf label layout without printing or downloading.",
+        tool_audit: t("barcodeSkuAuditDesc"),
+        tool_bulk_price: t("bulkPriceUpdateDesc"),
+        tool_export: t("exportProductsDesc"),
+        tool_import: t("importProductsDesc"),
+        tool_print_barcode: t("printBarcodeDesc"),
+        tool_print_shelf: t("printShelfLabelDesc"),
     };
-    return descriptions[drawerKey] ?? "Read-only Products tool.";
+    return descriptions[drawerKey] ?? t("productsTool");
 }
 function SummaryCard({ active, color, count, expanded = false, icon: Icon, label, onExpand, onViewAll, }: {
     active: boolean;
@@ -1035,15 +1058,15 @@ function SummaryCard({ active, color, count, expanded = false, icon: Icon, label
         <div>
           <div className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>
           <div className={cn("mt-2 text-3xl font-bold", styles.split(" ")[1])}>{count.toLocaleString("en-US")}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{count === 1 ? "1 Product" : `${count.toLocaleString("en-US")} Products`}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{count === 1 ? t("productCountOne") : fillProductsCopy(t("productCountMany"), { count: count.toLocaleString("en-US") })}</div>
         </div>
         <div className={cn("grid size-10 place-items-center rounded-md border", styles)}>
           <Icon aria-hidden="true" className="size-5"/>
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between gap-2">
-        <button className="text-sm font-semibold text-primary transition hover:underline" type="button" onClick={onViewAll}>{t("ui.view.all")}</button>
-        <button className="grid size-8 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onExpand} aria-label={`Expand ${label}`}>
+        <button className="text-sm font-semibold text-primary transition hover:underline" type="button" onClick={onViewAll}>{t("viewAll")}</button>
+        <button className="grid size-8 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onExpand} aria-label={fillProductsCopy(t("expandCard"), { label })}>
           {expanded ? <ChevronUp aria-hidden="true" className="size-4"/> : <ChevronDown aria-hidden="true" className="size-4"/>}
         </button>
       </div>
@@ -1056,22 +1079,22 @@ function InsightPanel({ emptyText, filter, onSelectProduct, products, }: {
     products: Product[];
 }) {
     const title = filter === "all"
-        ? "All Products"
+        ? t("allProducts")
         : filter === "out_of_stock"
-            ? "Out of Stock Products"
+            ? t("outOfStockProducts")
             : filter === "low_stock"
-                ? "Low Stock Products"
+                ? t("lowStockProducts")
                 : filter === "near_expiry"
-                    ? "Near Expiry Products"
-                    : "Dead Stock Products";
+                    ? t("nearExpiryProducts")
+                    : t("deadStockProducts");
     return (<section className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold">{title}</h2>
-        <span className="text-xs text-muted-foreground">{products.length.toLocaleString("en-US")}{t("ui.item.s")}</span>
+        <span className="text-xs text-muted-foreground">{fillProductsCopy(t("itemCount"), { count: products.length.toLocaleString("en-US") })}</span>
       </div>
       {products.length === 0 ? (<div className="mt-4 rounded-md border border-dashed border-border bg-background p-5 text-center text-sm text-muted-foreground">{emptyText}</div>) : (<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {products.slice(0, 9).map((product) => (<button className="rounded-md border border-border bg-background p-3 text-left transition hover:border-primary" key={product.id} type="button" onClick={() => onSelectProduct(product)}>
-              <div className="truncate font-semibold">{product.nameEn || product.nameLo}</div>
+              <div className="truncate font-semibold">{localizedProductName(product)}</div>
               <div className="mt-2 text-xs text-muted-foreground">{getInsightDetail(product, filter)}</div>
             </button>))}
         </div>)}
@@ -1081,11 +1104,11 @@ function ProductThumbnail({ product }: {
     product: Product;
 }) {
     if (isRenderableImage(product.imageUrl)) {
-        return <img alt={product.nameEn || product.nameLo} className="size-full object-cover" src={product.imageUrl}/>;
+        return <img alt={localizedProductName(product)} className="size-full object-cover" src={product.imageUrl}/>;
     }
     const defaultUnitImage = product.units.find((unit) => unit.isDefaultSaleUnit && isRenderableImage(unit.imageUrl))?.imageUrl;
     if (isRenderableImage(defaultUnitImage)) {
-        return <img alt={product.nameEn || product.nameLo} className="size-full object-cover" src={defaultUnitImage}/>;
+        return <img alt={localizedProductName(product)} className="size-full object-cover" src={defaultUnitImage}/>;
     }
     return <ProductImagePlaceholder />;
 }
@@ -1105,10 +1128,10 @@ function ExpiryBadge({ status }: {
     status: ExpiryStatus;
 }) {
     const labels: Record<ExpiryStatus, string> = {
-        expired: "Expired",
-        near_expiry: "Near Expiry",
-        no_expiry: "No Expiry",
-        normal: "Normal",
+        expired: t("expiredStatus"),
+        near_expiry: t("nearExpiry"),
+        no_expiry: t("noExpiry"),
+        normal: t("normal"),
     };
     const styles: Record<ExpiryStatus, string> = {
         expired: "border-danger/40 bg-danger/10 text-danger",
@@ -1122,17 +1145,17 @@ function ImagePreviewModal({ onClose, product }: {
     onClose: () => void;
     product: Product;
 }) {
-    return (<Modal title="Product Image" onClose={onClose}>
+    return (<Modal title={t("productImage")} onClose={onClose}>
       <div className="grid gap-4">
         <div className="grid min-h-72 place-items-center rounded-lg border border-border bg-background p-4">
-          {isRenderableImage(product.imageUrl) ? (<img alt={product.nameEn || product.nameLo} className="max-h-[420px] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={product.nameEn || product.nameLo} className="max-h-[420px] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
+          {isRenderableImage(product.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[420px] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[420px] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
               <ImageIcon className="mx-auto size-14" aria-hidden="true"/>
-              <div className="text-sm font-semibold">No product image</div>
+              <div className="text-sm font-semibold">{t("noProductImage")}</div>
             </div>)}
         </div>
         <div>
-          <h3 className="text-lg font-semibold">{product.nameEn || product.nameLo}</h3>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || "No barcode"} / {product.sku || "No SKU"}</p>
+          <h3 className="text-lg font-semibold">{localizedProductName(product)}</h3>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || t("noBarcode")} / {product.sku || t("noSku")}</p>
         </div>
       </div>
     </Modal>);
@@ -1146,7 +1169,7 @@ function Modal({ children, onClose, title }: {
       <section className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="text-xl font-semibold">{title}</h2>
-          <button className="grid size-9 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose} aria-label="Close modal">
+          <button className="grid size-9 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose} aria-label={t("closeModal")}>
             <X className="size-4" aria-hidden="true"/>
           </button>
         </div>
@@ -1236,224 +1259,224 @@ function getProductShellStats(products: Product[], categories: Category[]) {
     };
 }
 function getProductShellDrawerContent(drawerKey: ProductShellDrawerKey, stats: ProductShellStats): ProductShellDrawerContent {
-    const readOnlyAction = { label: "Open filtered list", reason: "Read-only" };
+    const readOnlyAction = { label: t("openFilteredList"), reason: t("readOnly") };
     const productWorkflowActions = [
-        { label: "Add product", reason: "Requires product workflow connection" },
-        { label: "Edit product", reason: "Requires product workflow connection" },
-        { label: "Delete product", reason: "Disabled here" },
+        { label: t("addProduct"), reason: t("requiresWorkflow") },
+        { label: t("editProduct"), reason: t("requiresWorkflow") },
+        { label: t("deleteProduct"), reason: t("disabledHere") },
     ];
     const imageActions = [
-        { label: "Upload image", reason: "Not connected yet" },
-        { label: "Bulk image upload", reason: "Coming soon" },
-        { label: "Delete image", reason: "Disabled here" },
+        { label: t("uploadImage"), reason: t("notConnectedYet") },
+        { label: t("bulkImageUpload"), reason: t("comingSoon") },
+        { label: t("deleteImage"), reason: t("disabledHere") },
     ];
     const barcodeActions = [
-        { label: "Generate barcode", reason: "Not connected yet" },
-        { label: "Print labels", reason: "Disabled here" },
-        { label: "Run duplicate scan", reason: "Read-only" },
+        { label: t("generateBarcode"), reason: t("notConnectedYet") },
+        { label: t("printLabels"), reason: t("disabledHere") },
+        { label: t("runDuplicateScan"), reason: t("readOnly") },
     ];
     if (drawerKey === "total") {
         return {
             actions: [readOnlyAction, ...productWorkflowActions],
-            description: "Read-only overview of all loaded product records.",
+            description: t("totalOverview"),
             sections: [
-                { title: "Product Counts", rows: [
-                    { label: "Total products", value: formatShellCount(stats.totalProducts) },
-                    { label: "Active products", value: formatShellCount(stats.activeProducts) },
-                    { label: "Inactive or draft products", value: formatShellCount(stats.inactiveProducts) },
-                    { label: "Categories", value: formatShellCount(stats.categories) },
+                { title: t("productCounts"), rows: [
+                    { label: t("totalProducts"), value: formatShellCount(stats.totalProducts) },
+                    { label: t("activeProducts"), value: formatShellCount(stats.activeProducts) },
+                    { label: t("inactiveOrDraft"), value: formatShellCount(stats.inactiveProducts) },
+                    { label: t("categories"), value: formatShellCount(stats.categories) },
                 ] },
-                { title: "Readiness", rows: [
-                    { label: "Products with barcode", value: formatShellCount(stats.withBarcode) },
-                    { label: "Products with image", value: formatShellCount(stats.withImages) },
-                    { label: "Product Health", value: stats.healthIssueCount > 0 ? `${formatShellCount(stats.healthIssueCount)} signals` : "No signals" },
+                { title: t("readiness"), rows: [
+                    { label: t("productsWithBarcode"), value: formatShellCount(stats.withBarcode) },
+                    { label: t("productsWithImage"), value: formatShellCount(stats.withImages) },
+                    { label: t("productHealth"), value: stats.healthIssueCount > 0 ? fillProductsCopy(t("healthSignalsCount"), { count: formatShellCount(stats.healthIssueCount) }) : t("noSignals") },
                 ] },
             ],
             summaries: [
-                { label: "Total", value: formatShellCount(stats.totalProducts) },
-                { label: "Active", value: formatShellCount(stats.activeProducts) },
-                { label: "Categories", value: formatShellCount(stats.categories) },
-                { label: "Health Signals", value: formatShellCount(stats.healthIssueCount) },
+                { label: t("total"), value: formatShellCount(stats.totalProducts) },
+                { label: t("active"), value: formatShellCount(stats.activeProducts) },
+                { label: t("categories"), value: formatShellCount(stats.categories) },
+                { label: t("healthSignals"), value: formatShellCount(stats.healthIssueCount) },
             ],
-            title: "Total Products",
+            title: t("totalProductsTitle"),
         };
     }
     if (drawerKey === "active") {
         return {
             actions: [readOnlyAction, ...productWorkflowActions],
-            description: "Read-only status for products currently marked active or inactive.",
+            description: t("activeStatusOverview"),
             sections: [
-                { title: "Status Split", rows: [
-                    { label: "Active products", value: formatShellCount(stats.activeProducts) },
-                    { label: "Inactive or draft products", value: formatShellCount(stats.inactiveProducts) },
-                    { label: "Total products", value: formatShellCount(stats.totalProducts) },
+                { title: t("statusSplit"), rows: [
+                    { label: t("activeProducts"), value: formatShellCount(stats.activeProducts) },
+                    { label: t("inactiveOrDraft"), value: formatShellCount(stats.inactiveProducts) },
+                    { label: t("totalProducts"), value: formatShellCount(stats.totalProducts) },
                 ] },
-                { title: "Notes", rows: [
-                    { label: "Filtered list shortcut", value: "Coming soon" },
-                    { label: "Status edits", value: "Disabled here" },
+                { title: t("notes"), rows: [
+                    { label: t("filteredListShortcut"), value: t("comingSoon") },
+                    { label: t("statusEdits"), value: t("disabledHere") },
                 ] },
             ],
             summaries: [
-                { label: "Active", value: formatShellCount(stats.activeProducts) },
-                { label: "Inactive/Draft", value: formatShellCount(stats.inactiveProducts) },
-                { label: "Total", value: formatShellCount(stats.totalProducts) },
+                { label: t("active"), value: formatShellCount(stats.activeProducts) },
+                { label: t("inactiveDraft"), value: formatShellCount(stats.inactiveProducts) },
+                { label: t("total"), value: formatShellCount(stats.totalProducts) },
             ],
-            title: "Active Products",
+            title: t("activeProductsTitle"),
         };
     }
     if (drawerKey === "missing_images" || drawerKey === "images") {
         return {
             actions: imageActions,
-            description: "Read-only image coverage status for loaded product records.",
+            description: t("imageCoverageOverview"),
             sections: [
-                { title: "Image Coverage", rows: [
-                    { label: "Products with image", value: formatShellCount(stats.withImages) },
-                    { label: "Products missing image", value: formatShellCount(stats.missingImages) },
-                    { label: "Bulk image workflow", value: "Not connected yet" },
+                { title: t("imageCoverage"), rows: [
+                    { label: t("productsWithImage"), value: formatShellCount(stats.withImages) },
+                    { label: t("productsMissingImage"), value: formatShellCount(stats.missingImages) },
+                    { label: t("bulkImageWorkflow"), value: t("notConnectedYet") },
                 ] },
-                { title: "Disabled Image Actions", rows: [
-                    { label: "Upload/change image", value: "Disabled" },
-                    { label: "Delete image", value: "Disabled" },
-                    { label: "ZIP image import/export", value: "Not enabled" },
+                { title: t("disabledImageActions"), rows: [
+                    { label: t("uploadChangeImage"), value: t("disabled") },
+                    { label: t("deleteImage"), value: t("disabled") },
+                    { label: t("zipImage"), value: t("notEnabled") },
                 ] },
             ],
             summaries: [
-                { label: "With Image", value: formatShellCount(stats.withImages) },
-                { label: "Missing Image", value: formatShellCount(stats.missingImages) },
-                { label: "Total", value: formatShellCount(stats.totalProducts) },
+                { label: t("withImage"), value: formatShellCount(stats.withImages) },
+                { label: t("missingImage"), value: formatShellCount(stats.missingImages) },
+                { label: t("total"), value: formatShellCount(stats.totalProducts) },
             ],
-            title: drawerKey === "images" ? "Product Images" : "Missing Images",
+            title: drawerKey === "images" ? t("productImages") : t("missingImagesTitle"),
         };
     }
     if (drawerKey === "missing_barcode" || drawerKey === "barcode_sku") {
         return {
             actions: barcodeActions,
-            description: "Read-only barcode and SKU readiness for loaded products and units.",
+            description: t("barcodeSkuOverview"),
             sections: [
-                { title: "Barcode Readiness", rows: [
-                    { label: "Products with barcode", value: formatShellCount(stats.withBarcode) },
-                    { label: "Products missing barcode", value: formatShellCount(stats.missingBarcode) },
-                    { label: "Duplicate barcode entries", value: formatShellCount(stats.duplicateBarcode) },
-                    { label: "Invalid barcode entries", value: formatShellCount(stats.invalidBarcode) },
+                { title: t("barcodeReadiness"), rows: [
+                    { label: t("productsWithBarcode"), value: formatShellCount(stats.withBarcode) },
+                    { label: t("productsMissingBarcode"), value: formatShellCount(stats.missingBarcode) },
+                    { label: t("duplicateBarcodeEntries"), value: formatShellCount(stats.duplicateBarcode) },
+                    { label: t("invalidBarcodeEntries"), value: formatShellCount(stats.invalidBarcode) },
                 ] },
-                { title: "Scanner / Label Notes", rows: [
-                    { label: "Scanner support", value: "Uses existing product workflow" },
-                    { label: "Barcode generation", value: "Not connected yet" },
-                    { label: "Label print", value: "Disabled from this shell" },
+                { title: t("scannerLabelNotes"), rows: [
+                    { label: t("scannerSupport"), value: t("usesExistingWorkflow") },
+                    { label: t("barcodeGeneration"), value: t("notConnectedYet") },
+                    { label: t("labelPrint"), value: t("disabledFromShell") },
                 ] },
             ],
             summaries: [
-                { label: "With Barcode", value: formatShellCount(stats.withBarcode) },
-                { label: "Missing Barcode", value: formatShellCount(stats.missingBarcode) },
-                { label: "Duplicate Entries", value: formatShellCount(stats.duplicateBarcode) },
-                { label: "Invalid Entries", value: formatShellCount(stats.invalidBarcode) },
+                { label: t("withBarcode"), value: formatShellCount(stats.withBarcode) },
+                { label: t("missingBarcode"), value: formatShellCount(stats.missingBarcode) },
+                { label: t("duplicateEntries"), value: formatShellCount(stats.duplicateBarcode) },
+                { label: t("invalidEntries"), value: formatShellCount(stats.invalidBarcode) },
             ],
-            title: drawerKey === "barcode_sku" ? "Barcode / SKU" : "Missing Barcode",
+            title: drawerKey === "barcode_sku" ? t("barcodeSku") : t("missingBarcode"),
         };
     }
     if (drawerKey === "categories") {
         return {
             actions: [
-                { label: "Add category", reason: "Requires category workflow connection" },
-                { label: "Edit category", reason: "Coming soon" },
-                { label: "Delete category", reason: "Disabled here" },
+                { label: t("addCategoryAction"), reason: t("requiresCategoryWorkflow") },
+                { label: t("editCategoryAction"), reason: t("comingSoon") },
+                { label: t("deleteCategoryAction"), reason: t("disabledHere") },
             ],
-            description: "Read-only category management status for the loaded product workspace.",
+            description: t("categoryOverview"),
             sections: [
-                { title: "Category Status", rows: [
-                    { label: "Categories", value: formatShellCount(stats.categories) },
-                    { label: "Category assignment check", value: "Uses loaded product data" },
-                    { label: "Category management", value: "Existing workflow unchanged" },
+                { title: t("categoryStatus"), rows: [
+                    { label: t("categories"), value: formatShellCount(stats.categories) },
+                    { label: t("categoryAssignmentCheck"), value: t("usesLoadedProductData") },
+                    { label: t("categoryManagement"), value: t("existingWorkflowUnchanged") },
                 ] },
             ],
             summaries: [
-                { label: "Categories", value: formatShellCount(stats.categories) },
-                { label: "Products", value: formatShellCount(stats.totalProducts) },
+                { label: t("categories"), value: formatShellCount(stats.categories) },
+                { label: t("products"), value: formatShellCount(stats.totalProducts) },
             ],
-            title: "Categories",
+            title: t("categories"),
         };
     }
     if (drawerKey === "labels") {
         return {
             actions: [
-                { label: "Print barcode label", reason: "Disabled here" },
-                { label: "Print price label", reason: "Disabled here" },
-                { label: "Save print history", reason: "Not connected yet" },
+                { label: t("printBarcodeLabel"), reason: t("disabledHere") },
+                { label: t("printPriceLabel"), reason: t("disabledHere") },
+                { label: t("savePrintHistory"), reason: t("notConnectedYet") },
             ],
-            description: "Read-only label readiness for price labels and barcode labels.",
+            description: t("labelsOverview"),
             sections: [
-                { title: "Label Readiness", rows: [
-                    { label: "Products with barcode", value: formatShellCount(stats.withBarcode) },
-                    { label: "Products missing barcode", value: formatShellCount(stats.missingBarcode) },
-                    { label: "Print backend", value: "Not connected from this shell" },
+                { title: t("labelReadiness"), rows: [
+                    { label: t("productsWithBarcode"), value: formatShellCount(stats.withBarcode) },
+                    { label: t("productsMissingBarcode"), value: formatShellCount(stats.missingBarcode) },
+                    { label: t("printBackend"), value: t("notConnectedShell") },
                 ] },
-                { title: "Safe Status", rows: [
-                    { label: "Browser print call", value: "Not enabled here" },
-                    { label: "Print history", value: "Not connected" },
+                { title: t("safeStatus"), rows: [
+                    { label: t("browserPrintCall"), value: t("notEnabledHere") },
+                    { label: t("printHistory"), value: t("notConnected") },
                 ] },
             ],
             summaries: [
-                { label: "Ready for Labels", value: formatShellCount(stats.withBarcode) },
-                { label: "Needs Barcode", value: formatShellCount(stats.missingBarcode) },
+                { label: t("readyForLabels"), value: formatShellCount(stats.withBarcode) },
+                { label: t("needsBarcode"), value: formatShellCount(stats.missingBarcode) },
             ],
-            title: "Labels",
+            title: t("labels"),
         };
     }
     if (drawerKey === "product_list") {
         return {
             actions: [readOnlyAction, ...productWorkflowActions],
-            description: "Read-only status for the product list, search, filters, and table shell.",
+            description: t("listOverview"),
             sections: [
-                { title: "List Readiness", rows: [
-                    { label: "Loaded products", value: formatShellCount(stats.totalProducts) },
-                    { label: "Search and filters", value: "Available" },
-                    { label: "Table shell", value: "Available" },
-                    { label: "Pagination", value: "Available" },
+                { title: t("listReadiness"), rows: [
+                    { label: t("loadedProducts"), value: formatShellCount(stats.totalProducts) },
+                    { label: t("searchAndFilters"), value: t("available") },
+                    { label: t("tableShell"), value: t("available") },
+                    { label: t("pagination"), value: t("available") },
                 ] },
-                { title: "Write Actions", rows: [
-                    { label: "Add product", value: "Disabled from this shell" },
-                    { label: "Edit product", value: "Disabled from this shell" },
-                    { label: "Delete product", value: "Disabled from this shell" },
+                { title: t("writeActions"), rows: [
+                    { label: t("addProduct"), value: t("disabledFromShell") },
+                    { label: t("editProduct"), value: t("disabledFromShell") },
+                    { label: t("deleteProduct"), value: t("disabledFromShell") },
                 ] },
             ],
             summaries: [
-                { label: "Products", value: formatShellCount(stats.totalProducts) },
-                { label: "Active", value: formatShellCount(stats.activeProducts) },
-                { label: "Health Signals", value: formatShellCount(stats.healthIssueCount) },
+                { label: t("products"), value: formatShellCount(stats.totalProducts) },
+                { label: t("active"), value: formatShellCount(stats.activeProducts) },
+                { label: t("healthSignals"), value: formatShellCount(stats.healthIssueCount) },
             ],
-            title: "Products List",
+            title: t("productsListTitle"),
         };
     }
     return {
         actions: [
-            { label: "Resolve product issues", reason: "Coming soon" },
-            { label: "Run full product audit", reason: "Not connected yet" },
-            { label: "Export health report", reason: "Disabled here" },
+            { label: t("resolveIssues"), reason: t("comingSoon") },
+            { label: t("runFullAudit"), reason: t("notConnectedYet") },
+            { label: t("exportHealthReport"), reason: t("disabledHere") },
         ],
-        description: "Read-only product health status using only the currently loaded Products page data.",
+        description: t("healthOverview"),
         sections: [
-            { title: "Health Checks", rows: [
-                { label: "Missing image", value: formatShellCount(stats.missingImages) },
-                { label: "Missing barcode", value: formatShellCount(stats.missingBarcode) },
-                { label: "Missing cost", value: formatShellCount(stats.missingCost) },
-                { label: "Low margin", value: formatShellCount(stats.lowMargin) },
-                { label: "Inactive products", value: formatShellCount(stats.inactiveProducts) },
-                { label: "Duplicate SKU/barcode", value: stats.duplicateBarcode > 0 ? formatShellCount(stats.duplicateBarcode) : "Not connected for SKU / 0 barcode duplicates" },
+            { title: t("healthChecks"), rows: [
+                { label: t("missingImage"), value: formatShellCount(stats.missingImages) },
+                { label: t("missingBarcode"), value: formatShellCount(stats.missingBarcode) },
+                { label: t("missingCost"), value: formatShellCount(stats.missingCost) },
+                { label: t("lowMargin"), value: formatShellCount(stats.lowMargin) },
+                { label: t("inactiveProducts"), value: formatShellCount(stats.inactiveProducts) },
+                { label: t("duplicateSkuBarcode"), value: stats.duplicateBarcode > 0 ? formatShellCount(stats.duplicateBarcode) : t("notConnectedSku") },
             ] },
-            { title: "Stock / Expiry Signals", rows: [
-                { label: "Out of stock", value: formatShellCount(stats.outOfStock) },
-                { label: "Low stock", value: formatShellCount(stats.lowStock) },
-                { label: "Near expiry", value: formatShellCount(stats.nearExpiry) },
-                { label: "Dead stock", value: formatShellCount(stats.deadStock) },
+            { title: t("stockExpirySignals"), rows: [
+                { label: t("outOfStockLower"), value: formatShellCount(stats.outOfStock) },
+                { label: t("lowStockLower"), value: formatShellCount(stats.lowStock) },
+                { label: t("nearExpiryLower"), value: formatShellCount(stats.nearExpiry) },
+                { label: t("deadStockLower"), value: formatShellCount(stats.deadStock) },
             ] },
         ],
         summaries: [
-            { label: "Health Signals", value: formatShellCount(stats.healthIssueCount) },
-            { label: "Missing Image", value: formatShellCount(stats.missingImages) },
-            { label: "Missing Barcode", value: formatShellCount(stats.missingBarcode) },
-            { label: "Inactive", value: formatShellCount(stats.inactiveProducts) },
+            { label: t("healthSignals"), value: formatShellCount(stats.healthIssueCount) },
+            { label: t("missingImage"), value: formatShellCount(stats.missingImages) },
+            { label: t("missingBarcode"), value: formatShellCount(stats.missingBarcode) },
+            { label: t("inactive"), value: formatShellCount(stats.inactiveProducts) },
         ],
-        title: "Product Health",
+        title: t("productHealth"),
     };
 }
 function formatShellCount(value: number) {
@@ -1473,10 +1496,10 @@ function getInsightProducts(products: Product[]): Record<SummaryInsight, Product
 }
 function getInsightDetail(product: Product, filter: SummaryInsight) {
     if (filter === "near_expiry")
-        return `Expiry Status: ${getExpiryStatus(product) === "near_expiry" ? "Near Expiry" : "Normal"}`;
+        return getExpiryStatus(product) === "near_expiry" ? t("expiryStatusNear") : t("expiryStatusNormal");
     if (filter === "dead_stock")
-        return t("ui.no.sales.activity.for.90.days");
-    return `Current Stock: ${formatStockDisplay(product)}`;
+        return t("noSales90Days");
+    return fillProductsCopy(t("currentStock"), { stock: formatStockDisplay(product) });
 }
 function matchesInsightFilter(product: Product, filter: InsightFilter) {
     const stock = getProductStock(product);
@@ -1552,7 +1575,7 @@ function buildBulkPricePreview(products: Product[], config: {
                 oldSelling,
                 oldStudent,
                 productId: product.id,
-                productName: product.nameEn || product.nameLo,
+                productName: localizedProductName(product),
                 unitId: unit.id,
                 unitName: unit.unitName,
             };
@@ -1578,7 +1601,7 @@ function getBarcodeAudit(products: Product[]) {
         barcode?: string;
     }> = [];
     for (const product of products) {
-        const productName = product.nameEn || product.nameLo;
+        const productName = localizedProductName(product);
         const entries = [
             { barcode: product.barcode, productName },
             ...product.units.map((unit) => ({ barcode: unit.barcode, productName, unitName: unit.unitName })),

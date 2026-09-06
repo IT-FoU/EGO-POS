@@ -1,4 +1,5 @@
 import type { ProductStatus } from "@/features/products/types";
+import { productStatusLabel } from "@/lib/i18n/products-copy";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<ProductStatus | "active" | "inactive", string> = {
@@ -20,7 +21,7 @@ export function StatusBadge({
         statusStyles[status],
       )}
     >
-      {status}
+      {productStatusLabel(status)}
     </span>
   );
 }
