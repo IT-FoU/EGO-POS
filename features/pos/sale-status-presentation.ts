@@ -1,4 +1,4 @@
-import { t } from "@/lib/i18n/ui";
+import { tPos as t } from "@/lib/i18n/pos-copy";
 
 export type SaleStatusTone =
   | "completed"

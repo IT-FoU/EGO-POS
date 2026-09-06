@@ -1,16 +1,21 @@
+import { cookies } from "next/headers";
 import { PosPageClient } from "@/features/pos/components/pos-page-client";
 import { getPosSnapshot } from "@/features/pos/pos-service";
 import { createPosPermissionPolicyFromDatabase } from "@/features/access-control/pos-policy-loader";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { isDemoMode } from "@/lib/demo-mode";
+import { getPosCopy } from "@/lib/i18n/pos-copy";
+import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 export default async function PosPage() {
   const session = await requireSession();
   if (session.user.allowPOSAccess === false) {
+    const cookieStore = await cookies();
+    const copy = getPosCopy(getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value));
     return (
       <div className="rounded-lg border border-danger/30 bg-danger/10 p-6 text-danger">
-        You do not have permission to perform this action.
+        {copy["ui.permission.denied"]}
       </div>
     );
   }

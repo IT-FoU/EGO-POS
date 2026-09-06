@@ -11,7 +11,7 @@ import {
 } from "@/features/pos/cash-movement";
 import { formatLak } from "@/features/pos/format";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
-import { t } from "@/lib/i18n/ui";
+import { tPos as t } from "@/lib/i18n/pos-copy";
 import { cn } from "@/lib/utils";
 
 type CashInOutModalProps = {

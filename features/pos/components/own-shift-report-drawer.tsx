@@ -6,85 +6,56 @@ import { RefreshCw } from "lucide-react";
 import { formatLak } from "@/features/pos/format";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import type { OwnShiftReport } from "@/features/reports/own-shift-report-service";
+import { tPos } from "@/lib/i18n/pos-copy";
 import { cn } from "@/lib/utils";
 
 type OwnShiftReportDrawerProps = {
-  locale?: "en" | "th";
+  locale?: string;
   onClose: () => void;
 };
 
 type Copy = ReturnType<typeof copy>;
 
-function copy(locale: "en" | "th") {
-  if (locale === "th") {
-    return {
-      accessDenied: "คุณไม่มีสิทธิ์ดูส่วนนี้",
-      back: "กลับไปหน้า POS",
-      card: "บัตร",
-      cashDrawerSummary: "สรุปลิ้นชักเงินสด",
-      cashIn: "เงินเข้า",
-      cashOut: "เงินออก",
-      cashReceived: "เงินสดรับ",
-      cashier: "แคชเชียร์",
-      closedAt: "ปิดกะเมื่อ",
-      closedShift: "ปิดกะแล้ว",
-      closingCash: "เงินสดปิดกะ",
-      discounts: "ส่วนลด",
-      expectedCash: "เงินสดที่ควรมี",
-      noReport: "ไม่พบรายงานกะ",
-      openedAt: "เปิดกะเมื่อ",
-      openingCash: "เงินสดเปิดกะ",
-      openShift: "กำลังเปิดกะ",
-      ownShiftReport: "รายงานกะของฉัน",
-      paymentBreakdown: "สรุปการชำระเงิน",
-      promotionUsage: "การใช้โปรโมชัน",
-      qrPayment: "QR Payment",
-      recentBills: "บิลล่าสุดในกะของฉัน",
-      refresh: "รีเฟรช",
-      refundTotal: "ยอดคืนเงิน",
-      refundVoidSummary: "สรุปคืนเงิน / ยกเลิกบิล",
-      shiftSummary: "สรุปกะ",
-      status: "สถานะ",
-      totalBills: "จำนวนบิล",
-      totalSales: "ยอดขายรวม",
-      transfer: "โอนเงิน",
-      variance: "ส่วนต่าง",
-      voidTotal: "ยอดยกเลิกบิล",
-    };
-  }
+function copy(locale?: string) {
+  const t = (key: string) => tPos(key, locale);
   return {
-    accessDenied: "You do not have permission to view this section.",
-    back: "Back to POS",
-    card: "Card",
-    cashDrawerSummary: "Cash Drawer Summary",
-    cashIn: "Cash In",
-    cashOut: "Cash Out",
-    cashReceived: "Cash Received",
-    cashier: "Cashier",
-    closedAt: "Closed At",
-    closedShift: "Closed Shift",
-    closingCash: "Closing Cash",
-    discounts: "Discounts",
-    expectedCash: "Expected Cash",
-    noReport: "No shift report found.",
-    openedAt: "Opened At",
-    openingCash: "Opening Cash",
-    openShift: "Open Shift",
-    ownShiftReport: "Own Shift Report",
-    paymentBreakdown: "Payment Breakdown",
-    promotionUsage: "Promotion Usage",
-    qrPayment: "QR Payment",
-    recentBills: "Recent Bills in My Shift",
-    refresh: "Refresh",
-    refundTotal: "Refund Total",
-    refundVoidSummary: "Refund / Void Summary",
-    shiftSummary: "Shift Summary",
-    status: "Status",
-    totalBills: "Total Bills",
-    totalSales: "Total Sales",
-    transfer: "Transfer",
-    variance: "Variance",
-    voidTotal: "Void Total",
+    accessDenied: t("ui.shift.access.denied"),
+    amount: t("ui.amount"),
+    back: t("ui.back.to.pos"),
+    card: t("ui.card"),
+    cashDrawerSummary: t("ui.cash.drawer.summary"),
+    cashIn: t("ui.cash.in"),
+    cashOut: t("ui.cash.out"),
+    cashReceived: t("ui.cash.received"),
+    cashier: t("ui.cashier"),
+    closedAt: t("ui.closed.at"),
+    closedShift: tPos("ui.staff.closed", locale),
+    closingCash: t("ui.closing.cash"),
+    discounts: t("ui.discount"),
+    expectedCash: t("ui.expected.cash"),
+    loading: t("ui.loading"),
+    noReport: t("ui.no.shift.report"),
+    openedAt: t("ui.opened.at"),
+    openingCash: t("ui.opening.cash.total"),
+    openShift: t("ui.cash.session.opened").replace(/\.$/, ""),
+    ownShiftReport: t("ui.own.shift.report"),
+    payment: t("ui.payment"),
+    paymentBreakdown: t("ui.payment.breakdown"),
+    promotionUsage: t("ui.promotion.usage"),
+    qrPayment: t("ui.qr.payment"),
+    receipt: t("ui.receipt"),
+    recentBills: t("ui.recent.bills.shift"),
+    refresh: t("ui.refresh"),
+    refundTotal: t("ui.refund.total"),
+    refundVoidSummary: t("ui.refund.void.summary"),
+    shiftSummary: t("ui.shift.summary"),
+    status: t("ui.status"),
+    time: t("ui.time"),
+    totalBills: t("ui.total.bills"),
+    totalSales: t("ui.total.sales"),
+    transfer: t("ui.bank.transfer"),
+    variance: t("ui.variance"),
+    voidTotal: t("ui.void.total"),
   };
 }
 
@@ -177,11 +148,11 @@ function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">Receipt</th>
-                <th className="px-3 py-2">Time</th>
-                <th className="px-3 py-2">Amount</th>
-                <th className="px-3 py-2">Payment</th>
-                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">{c.receipt}</th>
+                <th className="px-3 py-2">{c.time}</th>
+                <th className="px-3 py-2">{c.amount}</th>
+                <th className="px-3 py-2">{c.payment}</th>
+                <th className="px-3 py-2">{c.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -204,8 +175,8 @@ function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
   );
 }
 
-export function OwnShiftReportModal({ locale = "en", onClose }: OwnShiftReportDrawerProps) {
-  const [detectedLocale, setDetectedLocale] = useState<"en" | "th">(locale);
+export function OwnShiftReportModal({ locale, onClose }: OwnShiftReportDrawerProps) {
+  const [detectedLocale, setDetectedLocale] = useState(locale);
   const c = copy(detectedLocale);
   const [report, setReport] = useState<OwnShiftReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -232,7 +203,7 @@ export function OwnShiftReportModal({ locale = "en", onClose }: OwnShiftReportDr
   }
 
   useEffect(() => {
-    setDetectedLocale(document.documentElement.dataset.locale === "th" ? "th" : locale);
+    setDetectedLocale(document.documentElement.dataset.locale || locale);
     void loadReport();
   }, []);
 

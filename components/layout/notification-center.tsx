@@ -1,5 +1,6 @@
 "use client";
 
+import { tPos } from "@/lib/i18n/pos-copy";
 import { t } from "@/lib/i18n/ui";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -18,9 +19,9 @@ const labels = {
         empty: "No urgent alerts",
         title: "Notifications",
     },
-    th: {
-        empty: "No urgent alerts",
-        title: "Notifications",
+    lo: {
+        empty: tPos("ui.no.urgent.alerts", "lo"),
+        title: tPos("ui.notifications", "lo"),
     },
 };
 const severityClass: Record<NotificationSeverity, string> = {
@@ -45,7 +46,7 @@ export function NotificationCenter({ locale }: {
     locale?: string;
 }) {
     const [isOpen, setIsOpen] = useState(false);
-    const copy = locale === "en" ? labels.en : labels.th;
+    const copy = locale === "lo" ? labels.lo : labels.en;
     const notifications = useMemo<NotificationItem[]>(() => [
         {
             href: "/inventory",

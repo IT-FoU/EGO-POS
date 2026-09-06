@@ -47,7 +47,8 @@
     "test:stock-count-guard": "tsx scripts/phase-fix-20-stock-count-guard-check.ts",
     "test:customer-display": "tsx scripts/phase-fix-customer-display-check.ts",
     "test:customer-display-settings": "tsx scripts/phase-fix-customer-display-settings-check.ts",
-    "test:lao-01": "tsx scripts/phase-lao-01-language-check.ts"
+    "test:lao-01": "tsx scripts/phase-lao-01-language-check.ts",
+    "test:lao-02": "tsx scripts/phase-lao-02-pos-language-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

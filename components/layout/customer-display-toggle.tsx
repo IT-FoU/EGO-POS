@@ -1,5 +1,6 @@
 "use client";
 
+import { tPos } from "@/lib/i18n/pos-copy";
 import { t } from "@/lib/i18n/ui";
 import { useRef, useState } from "react";
 import { Maximize2, Monitor } from "lucide-react";
@@ -56,7 +57,7 @@ export function CustomerDisplayToggle() {
   return (
     <div className="relative flex items-center gap-1">
       <button
-        aria-label="Open Customer Display"
+        aria-label={tPos("ui.open.customer.display")}
         className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-foreground"
         onClick={openCustomerDisplay}
         type="button"
@@ -64,7 +65,7 @@ export function CustomerDisplayToggle() {
         <Monitor className="size-4" aria-hidden="true" />
       </button>
       <button
-        aria-label="Fullscreen Customer Display"
+        aria-label={tPos("ui.fullscreen.customer.display")}
         className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-foreground"
         onClick={() => void openCustomerDisplayFullscreen()}
         type="button"

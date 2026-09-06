@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
+import { tPos } from "@/lib/i18n/pos-copy";
 
 export function FullScreenToggle({ locale: _locale }: { locale?: string }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -30,7 +31,7 @@ export function FullScreenToggle({ locale: _locale }: { locale?: string }) {
 
   return (
     <button
-      aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+      aria-label={isFullscreen ? tPos("ui.exit.full.screen") : tPos("ui.full.screen")}
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-foreground"
       type="button"
       onClick={toggleFullscreen}

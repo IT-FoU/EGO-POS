@@ -3,6 +3,7 @@
 import { useEffect, useId } from "react";
 import { X } from "lucide-react";
 
+import { tPos } from "@/lib/i18n/pos-copy";
 import { cn } from "@/lib/utils";
 
 type PosWorkspaceModalProps = {
@@ -40,7 +41,7 @@ export function PosWorkspaceModal({ children, headerActions, headerClassName, on
           <h2 className="min-w-0 truncate text-xl font-semibold" id={titleId}>{title}</h2>
           <div className="flex shrink-0 items-center gap-2">
             {headerActions}
-            <button className="grid size-10 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" type="button" onClick={onClose} aria-label="Close">
+            <button className="grid size-10 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" type="button" onClick={onClose} aria-label={tPos("ui.close")}>
               <X className="size-4" aria-hidden="true" />
             </button>
           </div>

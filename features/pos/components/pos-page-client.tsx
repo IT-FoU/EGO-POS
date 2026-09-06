@@ -1,6 +1,7 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
+import { localizedProductName } from "@/features/pos/product-display-name";
+import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
@@ -251,15 +252,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [visibleProducts, setVisibleProducts] = useState<PosProduct[]>(products);
     const [currentTime, setCurrentTime] = useState(HYDRATION_SAFE_TIME);
     const [businessDate, setBusinessDate] = useState(HYDRATION_SAFE_BUSINESS_DATE);
-    const [uiLocale, setUiLocale] = useState<"en" | "th">("en");
     const [stockReferenceDate, setStockReferenceDate] = useState(HYDRATION_SAFE_REFERENCE_DATE);
     const [billNo, setBillNo] = useState(nextSaleNo);
     useEffect(() => {
         setBillNo(nextSaleNo);
     }, [nextSaleNo]);
-    useEffect(() => {
-        setUiLocale(document.documentElement.dataset.locale === "th" ? "th" : "en");
-    }, []);
     useEffect(() => {
         setActiveCashSession(cashSession);
         if (cashSession.status === "open") {
@@ -532,12 +529,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return false;
         }
         recordPosAudit(action, "blocked", "rejected", decision.reason ?? POS_PERMISSION_DENIED_MESSAGE);
-        setMessage(POS_PERMISSION_DENIED_MESSAGE);
+        setMessage(t("ui.permission.denied"));
         return false;
     }
     function resolvePendingApproval(requestId: string, status: "approved" | "rejected") {
         if (posPermissionPolicy.role !== "Owner") {
-            setMessage(POS_PERMISSION_DENIED_MESSAGE);
+            setMessage(t("ui.permission.denied"));
             recordPosAudit("manual_price_override", "blocked", "rejected", "Only Owner can approve or reject POS approval requests.");
             return;
         }
@@ -569,7 +566,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             membershipPoints: selectedCustomer?.pointsBalance ?? 0,
             membershipStatus: selectedCustomer
                 ? `${selectedCustomer.membershipType} ${isMembershipActive(selectedCustomer) ? "Active" : "Expired"}`
-                : "Guest",
+                : t("ui.guest"),
             pointsEarned,
             promotionDiscountLak: promotionDiscountTotal,
             selectedQrBank: customerQrVisible ? selectedQrBank : null,
@@ -591,7 +588,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             stockWarning,
         });
         if (!planned.result.added) {
-            setMessage(`Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested ${planned.requestedBaseQty}.`);
+            setMessage(fillPosCopy(t("ui.stock.insufficient"), { name: localizedProductName(product), available: product.stockQty, requested: planned.requestedBaseQty }));
             setUnitSelectionProduct(null);
             return;
         }
@@ -600,7 +597,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setThankYouSnapshot(null);
         setCustomerDisplayMode("checkout");
         setUnitSelectionProduct(null);
-        setMessage(stockWarning ? `${stockWarning.label}: ${product.nameEn}` : `${product.nameEn} ${saleUnit?.unitName ?? ""} added to cart.`);
+        setMessage(stockWarning ? `${stockWarningLabel(stockWarning.tone)}: ${localizedProductName(product)}` : fillPosCopy(t("ui.added.to.cart"), { name: `${localizedProductName(product)} ${saleUnit?.unitName ?? ""}`.trim() }));
     }
     function selectProductForSale(product: PosProduct, matchedUnit?: PosProductUnit) {
         if (matchedUnit) {
@@ -613,7 +610,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         if (maxSellQty(product.stockQty, 1) < 1) {
-            setMessage(`Insufficient stock for ${product.nameEn}. Available ${product.stockQty}, requested 1.`);
+            setMessage(fillPosCopy(t("ui.stock.insufficient"), { name: localizedProductName(product), available: product.stockQty, requested: 1 }));
             return;
         }
         setUnitSelectionProduct(product);
@@ -710,7 +707,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setHeldBillsLoaded(true);
         }
         catch (error) {
-            setMessage(error instanceof Error ? error.message : "Unable to load held bills.");
+            setMessage(error instanceof Error ? error.message : t("ui.unable.load.held"));
         }
     }
     function buildHeldBillSnapshot(): HeldBillCartSnapshot {
@@ -773,7 +770,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setHeldSales((current) => [heldSale, ...current]);
             clearSale();
             setSelectedCustomer(null);
-            setMessage(`Bill ${heldSale.saleNo} held.`);
+            setMessage(fillPosCopy(t("ui.bill.held"), { saleNo: heldSale.saleNo }));
             return true;
         }
         setHeldBillsBusy(true);
@@ -782,11 +779,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setHeldSales((current) => [heldSale, ...current]);
             clearSale();
             setSelectedCustomer(null);
-            setMessage(`Bill ${heldSale.saleNo} held.`);
+            setMessage(fillPosCopy(t("ui.bill.held"), { saleNo: heldSale.saleNo }));
             return true;
         }
         catch (error) {
-            setMessage(error instanceof Error ? error.message : "Unable to hold this bill.");
+            setMessage(error instanceof Error ? error.message : t("ui.unable.hold.bill"));
             return false;
         }
         finally {
@@ -813,7 +810,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             restoreHeldBill(heldSale);
             setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
             setSelectedHeldSaleId("");
-            setMessage(`Bill ${heldSale.saleNo} resumed.`);
+            setMessage(fillPosCopy(t("ui.bill.resumed"), { saleNo: heldSale.saleNo }));
             return true;
         }
         setHeldBillsBusy(true);
@@ -821,7 +818,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             const result = await resumeHeldBill(heldSale.id);
             const restorable = pickRestorableHeldSale(result.sale, heldSale);
             if (!hasRestorableHeldCart(restorable)) {
-                setMessage("Unable to restore this held bill cart.");
+                setMessage(t("ui.unable.restore.held"));
                 return false;
             }
             restoreHeldBill(restorable);
@@ -829,11 +826,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setSelectedHeldSaleId("");
             setMessage(result.availabilityWarnings.length > 0
                 ? `${heldSale.saleNo} resumed with stock warnings: ${result.availabilityWarnings.join(" ")}`
-                : `Bill ${heldSale.saleNo} resumed.`);
+                : fillPosCopy(t("ui.bill.resumed"), { saleNo: heldSale.saleNo }));
             return true;
         }
         catch (error) {
-            setMessage(error instanceof Error ? error.message : "Unable to resume this held bill.");
+            setMessage(error instanceof Error ? error.message : t("ui.unable.resume.bill"));
             return false;
         }
         finally {
@@ -864,7 +861,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         if (demoMode) {
             setHeldSales((current) => current.filter((item) => item.id !== selectedHeldSaleId));
             setSelectedHeldSaleId("");
-            setMessage(`Bill ${sale.saleNo} cancelled.`);
+            setMessage(fillPosCopy(t("ui.bill.cancelled"), { saleNo: sale.saleNo }));
             return true;
         }
         setHeldBillsBusy(true);
@@ -872,11 +869,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             await cancelHeldBill(sale.id);
             setHeldSales((current) => current.filter((item) => item.id !== sale.id));
             setSelectedHeldSaleId("");
-            setMessage(`Bill ${sale.saleNo} cancelled.`);
+            setMessage(fillPosCopy(t("ui.bill.cancelled"), { saleNo: sale.saleNo }));
             return true;
         }
         catch (error) {
-            setMessage(error instanceof Error ? error.message : "Unable to cancel this held bill.");
+            setMessage(error instanceof Error ? error.message : t("ui.unable.cancel.held"));
             return false;
         }
         finally {
@@ -925,7 +922,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             cartItems,
             changeAmount: payment.changeAmount,
             createdAt,
-            customerName: selectedCustomer?.name ?? "Guest",
+            customerName: selectedCustomer?.name ?? t("ui.guest"),
             discountTotal,
             paidAmount: payment.paidAmount,
             paymentMode,
@@ -1009,12 +1006,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 ? receiptSnapshotFromPersistedSale(result.data, {
                     branchName,
                     cashierName,
-                    customerName: selectedCustomer?.name ?? "Guest",
+                    customerName: selectedCustomer?.name ?? t("ui.guest"),
                 })
                 : buildReceiptSnapshot(payment, assignedSaleNo);
             setLastReceipt(receipt);
             setSaleCompletedReceipt(receipt);
-            setMessage(`${assignedSaleNo} completed and saved.`);
+            setMessage(fillPosCopy(t("ui.sale.completed"), { saleNo: assignedSaleNo }));
             beginThankYouDisplay();
             clearSale({ keepThankYou: true });
             setBillNo(getFollowingPosSaleNo(assignedSaleNo, receiptSettings.receiptPrefix));
@@ -1045,7 +1042,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             changeAmount: payment.changeAmount,
             createdAt,
             customerId: selectedCustomer?.id,
-            customerName: selectedCustomer?.name ?? "Guest",
+            customerName: selectedCustomer?.name ?? t("ui.guest"),
             customerPhone: selectedCustomer?.phone,
             discountAmount,
             discountPercent,
@@ -1077,7 +1074,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setLastReceipt(receipt);
             setSaleCompletedReceipt(receipt);
             recordPosAudit("create_sale", "allowed", "not_required", `${saleNo} completed. Stock, receipt, sales, and audit updated.`);
-            setMessage(`${saleNo} completed and saved.`);
+            setMessage(fillPosCopy(t("ui.sale.completed"), { saleNo }));
             beginThankYouDisplay();
             clearSale({ keepThankYou: true });
             setBillNo(getFollowingPosSaleNo(saleNo, receiptSettings.receiptPrefix));
@@ -1089,7 +1086,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }, displaySettings.autoReturnSeconds * 1000);
         }
         catch {
-            setMessage("Storage save failed. Sale was not completed.");
+            setMessage(t("ui.storage.save.failed"));
         }
     }
     function handleReceiptPrintModeAfterSale(receipt: ReceiptSnapshot) {
@@ -1137,7 +1134,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                         cartItems: loaded.cartItems as PosCartItem[],
                     };
                 } catch (error) {
-                    setMessage(error instanceof Error ? error.message : "Receipt load failed.");
+                    setMessage(error instanceof Error ? error.message : t("ui.receipt.load.failed"));
                     return;
                 }
             } else {
@@ -1208,9 +1205,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     }
                     await refreshRecentSalesFromServer();
                     recordPosAudit("void_bill", "allowed", "not_required", `${sale.saleNo} voided.`);
-                    setMessage(`${sale.saleNo} voided. Stock restored.`);
+                    setMessage(fillPosCopy(t("ui.sale.voided.stock"), { saleNo: sale.saleNo }));
                 } catch (error) {
-                    setMessage(error instanceof Error ? error.message : "Void failed.");
+                    setMessage(error instanceof Error ? error.message : t("ui.void.failed"));
                 } finally {
                     postSaleInFlightRef.current = false;
                 }
@@ -1225,7 +1222,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setVisibleProducts(nextProducts.map(mapStoredProductToPosProduct).filter((product) => product.stockQty >= 0));
         updateRecentSaleStatus(sale, "voided", "Voided");
         recordPosAudit("void_bill", "allowed", "not_required", `${sale.saleNo} voided and stock restored.`);
-        setMessage(`${sale.saleNo} voided. Stock restored.`);
+        setMessage(fillPosCopy(t("ui.sale.voided.stock"), { saleNo: sale.saleNo }));
     }
     function openManagerApprovalRequest(action: ManagerApprovalRequest["action"], sale: DemoSaleRecord) {
         setRecentSalesOpen(false);
@@ -1245,7 +1242,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         const reason = managerApprovalReason.trim();
         if (!managerApprovalPin.trim() || !reason) {
-            setMessage("Manager PIN and reason are required.");
+            setMessage(t("ui.manager.pin.reason.required"));
             return;
         }
         const approval: PostSaleManagerApprovalPayload = {
@@ -1272,7 +1269,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             closeManagerApprovalRequest();
         } catch (error) {
             setManagerApprovalPin("");
-            setMessage(error instanceof Error ? error.message : "Manager approval failed.");
+            setMessage(error instanceof Error ? error.message : t("ui.manager.approval.failed"));
         }
     }
     function editSaleField(sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") {
@@ -1350,7 +1347,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             membershipPoints: selectedCustomer?.pointsBalance ?? 0,
             membershipStatus: selectedCustomer
                 ? `${selectedCustomer.membershipType} ${isMembershipActive(selectedCustomer) ? "Active" : "Expired"}`
-                : "Guest",
+                : t("ui.guest"),
             pointsEarned,
             promotionDiscountLak: promotionDiscountTotal,
             selectedQrBank: null,
@@ -1400,10 +1397,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 setWorkEndedAt(null);
                 setStaffStatus("Working");
                 setClosingSummaryVisible(false);
-                setMessage("Cash session opened.");
+                setMessage(t("ui.cash.session.opened"));
                 router.refresh();
             } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Failed to open cash session.");
+                setMessage(error instanceof Error ? error.message : t("ui.cash.session.open.failed"));
             }
         });
     }
@@ -1428,10 +1425,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 setWorkEndedAt(new Date());
                 setStaffStatus("Closed");
                 setClosingSummaryVisible(true);
-                setMessage(`Shift closed. Variance ${formatLak(session.expectedCashLak - actualClosingCash)} LAK.`);
+                setMessage(fillPosCopy(t("ui.shift.closed"), { amount: formatLak(session.expectedCashLak - actualClosingCash) }));
                 router.refresh();
             } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Failed to close cash session.");
+                setMessage(error instanceof Error ? error.message : t("ui.cash.session.close.failed"));
             }
         });
     }
@@ -1633,7 +1630,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               {categories.map((category) => (<button className={cn("h-10 shrink-0 rounded-md border px-4 text-sm font-semibold transition", selectedCategory === category
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-background text-muted-foreground hover:border-primary hover:text-foreground")} key={category} type="button" onClick={() => setSelectedCategory(category)}>
-                  <span className="block max-w-36 truncate">{category}</span>
+                  <span className="block max-w-36 truncate">{category === "All" ? t("ui.all") : category}</span>
                 </button>))}
             </div>
             <div className="mt-2 flex gap-2 overflow-x-auto [scrollbar-width:thin]">
@@ -1645,7 +1642,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           </Panel>
 
           {productGridVisible ? (<section className={cn("grid min-w-0 gap-3 overflow-x-hidden overflow-y-auto pr-1 [scrollbar-width:thin]", cartCollapsed ? "max-h-[812px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))] xl:col-span-2 xl:row-start-2" : "max-h-[610px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))]")}>
-            {filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)}/>))}
+            {filteredProducts.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-dashed border-border p-6 text-center text-sm font-semibold text-muted-foreground">
+                {productQuery ? t("ui.no.search.results") : t("ui.no.products")}
+              </div>
+            ) : filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)}/>))}
           </section>) : null}
         </main>
 
@@ -1686,17 +1687,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                   {cartItems.map((item, index) => (<div className="rounded-xl border border-border bg-background p-3 shadow-sm" key={cartLineKey(item, index)}>
                       <div className="flex min-w-0 items-start justify-between gap-3">
                         <div className="size-14 shrink-0 overflow-hidden rounded-xl border border-border bg-background/70">
-                          <PosProductImage className="size-full rounded-none border-0" imageClassName="object-cover" imageKey={item.imageKey} imageUrl={item.unitImageUrl} label={item.nameEn}/>
+                          <PosProductImage className="size-full rounded-none border-0" imageClassName="object-cover" imageKey={item.imageKey} imageUrl={item.unitImageUrl} label={localizedProductName(item)}/>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="line-clamp-1 text-base font-bold" title={item.nameEn}>{item.nameEn}</div>
+                          <div className="line-clamp-1 text-base font-bold" title={localizedProductName(item)}>{localizedProductName(item)}</div>
                           <div className="truncate font-mono text-[11px] text-muted-foreground" title={`${item.sku} / ${item.unitName}`}>{item.sku} / {item.unitName}</div>
-                          {item.stockWarning ? (<div className={cn("mt-1 truncate text-xs font-semibold", warningTextClass(item.stockWarning.tone))} title={item.stockWarning.label}>
-                              {item.stockWarning.label}
+                          {item.stockWarning ? (<div className={cn("mt-1 truncate text-xs font-semibold", warningTextClass(item.stockWarning.tone))} title={stockWarningLabel(item.stockWarning.tone)}>
+                              {stockWarningLabel(item.stockWarning.tone)}
                             </div>) : null}
                           {item.pricingNote ? (<div className="mt-1 truncate text-xs font-semibold text-primary" title={item.pricingNote}>{item.pricingNote}</div>) : null}
                         </div>
-                        <button className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-danger transition hover:border-danger/50 hover:bg-danger/10" type="button" onClick={() => removeItem(item.id, item.unitId)} aria-label="Remove item">
+                        <button className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-danger transition hover:border-danger/50 hover:bg-danger/10" type="button" onClick={() => removeItem(item.id, item.unitId)} aria-label={t("ui.remove.item")}>
                           <Trash2 className="size-4" aria-hidden="true"/>
                         </button>
                       </div>
@@ -1775,7 +1776,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setCashShiftCountOpen(true);
             setMoreMenuOpen(false);
         }}/>
-          <MoreMenuButton label={uiLocale === "th" ? "รายงานกะของฉัน" : "Own Shift Report"} onClick={() => {
+          <MoreMenuButton label={t("ui.own.shift.report")} onClick={() => {
             setOwnShiftReportOpen(true);
             setMoreMenuOpen(false);
         }}/>
@@ -1819,12 +1820,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       {heldBillsOpen ? (<PosModal title={t("ui.hold.bills.resume.bills")} onClose={() => setHeldBillsOpen(false)}>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-2">
-            <ActionButton icon={RotateCcw} label={heldBillsBusy ? "Loading..." : t("ui.resume.bills")} onClick={() => {
+            <ActionButton icon={RotateCcw} label={heldBillsBusy ? t("ui.loading") : t("ui.resume.bills")} onClick={() => {
             void resumeSale().then((resumed) => {
                 if (resumed) setHeldBillsOpen(false);
             });
         }}/>
-            <ActionButton icon={ReceiptText} label={heldBillsBusy ? "Saving..." : t("ui.hold.bills")} onClick={() => {
+            <ActionButton icon={ReceiptText} label={heldBillsBusy ? t("ui.saving") : t("ui.hold.bills")} onClick={() => {
             void holdSale().then((held) => {
                 if (held) setHeldBillsOpen(false);
             });
@@ -1842,17 +1843,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         </div>
       </PosModal>) : null}
 
-      {heldBillConflict ? (<PosModal title="Current cart has items" onClose={() => setHeldBillConflict(null)}>
+      {heldBillConflict ? (<PosModal title={t("ui.current.cart.has.items")} onClose={() => setHeldBillConflict(null)}>
         <div className="grid gap-3 text-sm">
-          <p className="text-muted-foreground">Hold the current cart before restoring {heldBillConflict.saleNo}, or keep working on the current bill.</p>
+          <p className="text-muted-foreground">{t("ui.hold.current.before.resume")} {heldBillConflict.saleNo}</p>
           <button className="h-11 rounded-md bg-primary px-3 font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={heldBillsBusy} onClick={() => void holdCurrentAndResume()}>
-            {heldBillsBusy ? "Saving current bill..." : "Hold Current Bill & Resume"}
+            {heldBillsBusy ? t("ui.saving.current.bill") : t("ui.hold.current.resume")}
           </button>
           <button className="h-11 rounded-md border border-border px-3 font-semibold" type="button" onClick={() => setHeldBillConflict(null)}>
-            Continue Current Bill
+            {t("ui.continue.current.bill")}
           </button>
           <button className="h-11 rounded-md border border-danger/40 px-3 font-semibold text-danger" type="button" onClick={() => setHeldBillConflict(null)}>
-            Cancel
+            {t("ui.cancel")}
           </button>
         </div>
       </PosModal>) : null}
@@ -1915,7 +1916,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           onSubmit={(input) => submitCashMovement(input)}
         />
       ) : null}
-      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} locale={uiLocale} onClose={() => setOwnShiftReportOpen(false)} /> : null}
+      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} onClose={() => setOwnShiftReportOpen(false)} /> : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
             setReceiptOpen(false);
@@ -1968,15 +1969,15 @@ function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, m
         </span>
       </div>
       <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-        <InfoLine label="Type" value={customer.membershipType}/>
+        <InfoLine label={t("ui.type")} value={customer.membershipType}/>
         <InfoLine label={t("ui.member.no")} value={customer.membershipNumber}/>
-        <InfoLine label="Expiry" value={customer.membershipExpiry}/>
-        <InfoLine label="Points" value={String(customer.pointsBalance)}/>
+        <InfoLine label={t("ui.expiry")} value={customer.membershipExpiry}/>
+        <InfoLine label={t("ui.points")} value={String(customer.pointsBalance)}/>
       </div>
       {loyaltyEnabled && active && customer.pointsBalance >= minRedeemPoints ? (
         <div className="mt-2 space-y-1 rounded-md border border-border p-2">
           <label className="block text-[11px] font-semibold" htmlFor="redeem-points">
-            Redeem points ({minRedeemPoints} min, max {maxRedeemPoints})
+            {fillPosCopy(t("ui.redeem.points"), { min: minRedeemPoints, max: maxRedeemPoints })}
           </label>
           <input
             className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
@@ -1988,14 +1989,14 @@ function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, m
             value={redeemPoints}
           />
           {redeemDiscountLak > 0 ? (
-            <div className="text-[11px] text-primary">Redeem discount: {formatLak(redeemDiscountLak)} LAK</div>
+            <div className="text-[11px] text-primary">{fillPosCopy(t("ui.redeem.discount"), { amount: formatLak(redeemDiscountLak) })}</div>
           ) : null}
         </div>
       ) : null}
       {customer.membershipType === "Student" ? (<div className="mt-1.5 rounded-md bg-primary/10 p-1.5 text-[11px] text-primary">
-          <div className="flex items-center gap-1 font-semibold"><GraduationCap className="size-4" aria-hidden="true"/> Student verified</div>
+          <div className="flex items-center gap-1 font-semibold"><GraduationCap className="size-4" aria-hidden="true"/> {t("ui.student.verified")}</div>
           <div className="line-clamp-1">{customer.schoolName} - {customer.studentIdNumber}</div>
-          <div>Card upload: {customer.studentCardUrl ? "Stored" : "Missing"}</div>
+          <div>{customer.studentCardUrl ? t("ui.card.upload.stored") : t("ui.card.upload.missing")}</div>
         </div>) : null}
     </div>);
 }
@@ -2016,10 +2017,10 @@ function ProductGridItem({ onClick, product, stockReferenceDate, }: {
     stockReferenceDate: Date;
 }) {
     return (<>
-      <button className="group relative min-h-[190px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${product.nameEn} / ${product.sku}`}>
-        <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={product.nameEn}/>
+      <button className="group relative min-h-[190px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} / ${product.sku}`}>
+        <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
         <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/90 via-black/75 to-black/10 p-3 pt-8 text-white backdrop-blur-[2px]">
-          <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={product.nameEn}>{product.nameEn}</div>
+          <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={localizedProductName(product)}>{localizedProductName(product)}</div>
           <div className="mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/70" title={product.sku}>{product.sku}</div>
           <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
             <div className="min-w-0 overflow-hidden">
@@ -2046,8 +2047,9 @@ function StockBadge({ product, stockReferenceDate }: {
     stockReferenceDate: Date;
 }) {
     const warning = getStockWarning(product, stockReferenceDate);
-    return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warning ? warningBadgeClass(warning.tone) : "bg-primary/20 text-primary")} title={warning ? warning.label : `${product.stockQty} left`}>
-      {warning ? warning.label : `${product.stockQty} left`}
+    const label = warning ? stockWarningLabel(warning.tone) : fillPosCopy(t("ui.stock.left"), { qty: product.stockQty });
+    return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warning ? warningBadgeClass(warning.tone) : "bg-primary/20 text-primary")} title={label}>
+      {label}
     </span>);
 }
 function QuantityStepper({ item, onChange }: {
@@ -2056,11 +2058,11 @@ function QuantityStepper({ item, onChange }: {
 }) {
     const maxSaleQty = Math.max(1, maxSellQty(item.stockQty, item.conversionQty ?? 1));
     return (<div className="inline-flex h-11 items-center rounded-xl border border-border bg-card">
-      <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity - 1, item.unitId)} aria-label="Decrease quantity">
+      <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity - 1, item.unitId)} aria-label={t("ui.decrease.qty")}>
         <Minus aria-hidden="true"/>
       </button>
       <PosNumberInput className="h-11 w-16 border-x border-border bg-transparent text-center text-base font-bold outline-none" max={maxSaleQty} min={1} value={item.quantity} onValueChange={(value) => onChange(item.id, value, item.unitId)}/>
-      <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity + 1, item.unitId)} aria-label="Increase quantity">
+      <button className="grid size-11 place-items-center" type="button" onClick={() => onChange(item.id, item.quantity + 1, item.unitId)} aria-label={t("ui.increase.qty")}>
         <Plus aria-hidden="true"/>
       </button>
     </div>);
@@ -2095,31 +2097,31 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount
 }) {
     return (<div className="mt-3 grid gap-2 sm:grid-cols-2">
       {(mode === "cash" || mode === "mixed") ? (<div className="grid gap-1 text-xs font-semibold sm:col-span-2">
-          <span>Cash Amount</span>
+          <span>{t("ui.cash.amount")}</span>
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
             <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>
-              Hold Bill
+              {t("ui.hold.bill")}
             </button>
             <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={heldBillsLoaded && heldBillCount === 0}>
-              Resume Bills{heldBillCount > 0 ? ` (${heldBillCount})` : ""}
+              {heldBillCount > 0 ? fillPosCopy(t("ui.resume.bills.count"), { count: heldBillCount }) : t("ui.resume.bills")}
             </button>
           </div>
         </div>) : null}
       {(mode === "qr" || mode === "mixed") ? (<>
-          <Field label="QR Bank">
+          <Field label={t("ui.qr.bank")}>
             <select className="field-input" value={selectedQrBankId} onChange={(event) => setSelectedQrBankId(event.target.value)}>
-              {availableQrBanks.map((bank) => (<option key={bank.id} value={bank.id}>{bank.bankName}</option>))}
+              {availableQrBanks.length === 0 ? <option value="">{t("ui.no.qr.accounts")}</option> : availableQrBanks.map((bank) => (<option key={bank.id} value={bank.id}>{bank.bankName}</option>))}
             </select>
           </Field>
-          <Field label="QR Amount">
+          <Field label={t("ui.qr.amount")}>
             <PosNumberInput className="field-input" value={qrAmount} onValueChange={setQrAmount}/>
           </Field>
         </>) : null}
-      {(mode === "transfer" || mode === "mixed") ? (<Field label="Bank Transfer">
+      {(mode === "transfer" || mode === "mixed") ? (<Field label={t("ui.bank.transfer")}>
           <PosNumberInput className="field-input" value={transferAmount} onValueChange={setTransferAmount}/>
         </Field>) : null}
-      {(mode === "card" || mode === "mixed") ? (<Field label="Card Amount">
+      {(mode === "card" || mode === "mixed") ? (<Field label={t("ui.card.amount")}>
           <PosNumberInput className="field-input" value={cardAmount} onValueChange={setCardAmount}/>
         </Field>) : null}
     </div>);
@@ -2174,10 +2176,10 @@ function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSal
               <h3 className="text-sm font-semibold">{t("ui.cash.shift.count")}</h3>
               <span className="text-muted-foreground">|</span>
               <span className="text-muted-foreground">{businessDate}</span>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", staffStatusClassName(staffStatus))}>{staffStatus}</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", staffStatusClassName(staffStatus))}>{staffStatusLabel(staffStatus)}</span>
             </div>
             <div className="mt-1 text-[11px] font-semibold text-muted-foreground">
-              Work {workHours.toFixed(2)}h | OT {otHours.toFixed(2)}h
+              {fillPosCopy(t("ui.work.ot"), { work: workHours.toFixed(2), ot: otHours.toFixed(2) })}
             </div>
           </div>
         </div>
@@ -2191,7 +2193,7 @@ function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSal
           </div>
 
           <label className="mt-3 grid gap-1 text-xs font-semibold">
-            Staff
+            {t("ui.staff")}
             <select className="field-input h-9 text-xs" value={selectedStaffName} onChange={(event) => onSelectStaff(event.target.value)}>
               {staffOptions.map((staffName) => (<option key={staffName} value={staffName}>
                   {staffName}
@@ -2200,24 +2202,24 @@ function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSal
           </label>
 
           <div className="mt-2 grid grid-cols-2 gap-1">
-            <StaffButton active={isWorking} tone="success" label="Start Work" onClick={onStartWork}/>
-            <StaffButton label="End Work" onClick={onEndWork}/>
-            <StaffButton active={isOt} tone="warning" label="Start OT" onClick={onStartOt}/>
-            <StaffButton label="End OT" onClick={onEndOt}/>
+            <StaffButton active={isWorking} tone="success" label={t("ui.start.work")} onClick={onStartWork}/>
+            <StaffButton label={t("ui.end.work")} onClick={onEndWork}/>
+            <StaffButton active={isOt} tone="warning" label={t("ui.start.ot")} onClick={onStartOt}/>
+            <StaffButton label={t("ui.end.ot")} onClick={onEndOt}/>
           </div>
 
           <div className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-2 text-[11px]">
-            <StaffTime label="Start Work" value={formatStaffTime(workStartedAt)}/>
-            <StaffTime label="End Work" value={formatStaffTime(workEndedAt)}/>
-            <StaffTime label="Start OT" value={formatStaffTime(otStartedAt)}/>
-            <StaffTime label="End OT" value={formatStaffTime(otEndedAt)}/>
-            <StaffTime label="Work Hours" value={workHours.toFixed(2)} strong/>
-            <StaffTime label="OT Hours" value={otHours.toFixed(2)} strong/>
+            <StaffTime label={t("ui.start.work")} value={formatStaffTime(workStartedAt)}/>
+            <StaffTime label={t("ui.end.work")} value={formatStaffTime(workEndedAt)}/>
+            <StaffTime label={t("ui.start.ot")} value={formatStaffTime(otStartedAt)}/>
+            <StaffTime label={t("ui.end.ot")} value={formatStaffTime(otEndedAt)}/>
+            <StaffTime label={t("ui.work.hours")} value={workHours.toFixed(2)} strong/>
+            <StaffTime label={t("ui.ot.hours")} value={otHours.toFixed(2)} strong/>
           </div>
 
           <div className="mt-2 rounded-md border border-border bg-background p-2">
             <div className="mb-2 text-xs font-semibold">
-              <span>Opening Cash Count</span>
+              <span>{t("ui.opening.cash.count")}</span>
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1">
               {OPENING_CASH_DENOMINATIONS.map((denomination) => (<label className="grid grid-cols-[58px_minmax(0,1fr)] items-center gap-2 text-[11px]" key={denomination}>
@@ -2229,25 +2231,25 @@ function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSal
 
           <div className="mt-2 rounded-md border border-border bg-background p-2">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="text-xs font-semibold">Closing Summary</div>
-              {closingSummaryVisible ? (<span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">Confirm required</span>) : null}
+              <div className="text-xs font-semibold">{t("ui.closing.summary")}</div>
+              {closingSummaryVisible ? (<span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">{t("ui.confirm.required")}</span>) : null}
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <SettlementValue label="Cash Sales" value={`${formatLak(cashSales)} LAK`}/>
-              <SettlementValue label="QR / Transfer" value={`${formatLak(qrTransferSales)} LAK`}/>
-              <SettlementValue label="Expected Cash" value={`${formatLak(expectedCash)} LAK`} strong/>
+              <SettlementValue label={t("ui.cash.sales")} value={`${formatLak(cashSales)} LAK`}/>
+              <SettlementValue label={t("ui.qr.transfer")} value={`${formatLak(qrTransferSales)} LAK`}/>
+              <SettlementValue label={t("ui.expected.cash")} value={`${formatLak(expectedCash)} LAK`} strong/>
               <label className="grid gap-1">
-                <span className="text-muted-foreground">Actual Cash</span>
+                <span className="text-muted-foreground">{t("ui.actual.cash")}</span>
                 <PosNumberInput className="h-9 rounded-md border border-border bg-card px-2 text-xs font-semibold outline-none transition focus:border-primary" value={actualClosingCash} onValueChange={onSetActualClosingCash}/>
               </label>
             </div>
             <div className={cn("mt-2 rounded-md border px-2 py-2 text-xs font-semibold", cashDifference === 0
                 ? "border-success/30 bg-success/10 text-success"
                 : "border-danger/40 bg-danger/10 text-danger")}>
-              Cash Difference: {formatLak(cashDifference)} LAK
+              {fillPosCopy(t("ui.cash.difference.amount"), { amount: formatLak(cashDifference) })}
             </div>
             {closingSummaryVisible ? (<button className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground" type="button">
-                Confirm Closing Summary
+                {t("ui.confirm.closing.summary")}
               </button>) : null}
           </div>
         </>)}
@@ -2457,10 +2459,10 @@ function UnitSelectorModal({ onClose, onSelect, product, }: {
       <section className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">Select sale unit</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{product.nameEn || product.nameLo}</p>
+            <h2 className="text-xl font-semibold">{t("ui.select.sale.unit")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{localizedProductName(product)}</p>
           </div>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close unit selector">
+          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("ui.close.unit.selector")}>
             <X className="size-4" aria-hidden="true"/>
           </button>
         </div>
@@ -2469,7 +2471,7 @@ function UnitSelectorModal({ onClose, onSelect, product, }: {
               <span>
                 <span className="block font-semibold">{unit.unitName}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                  {unit.conversionQty} base units {unit.barcode ? `| ${unit.barcode}` : t("ui.manual.select")}
+                  {fillPosCopy(t("ui.base.units"), { qty: unit.conversionQty })} {unit.barcode ? `| ${unit.barcode}` : t("ui.manual.select")}
                 </span>
               </span>
               <span className="text-right font-semibold text-primary">{formatLak(unit.sellingPriceLak)} LAK</span>
@@ -2506,30 +2508,30 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardA
     return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Mixed Payment</h2>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close mixed payment">
+          <h2 className="text-lg font-semibold">{t("ui.mixed.payment")}</h2>
+          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("ui.close")}>
             <X aria-hidden="true"/>
           </button>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Field label="Cash Amount">
+          <Field label={t("ui.cash.amount")}>
             <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
           </Field>
-          <Field label="QR Amount">
+          <Field label={t("ui.qr.amount")}>
             <PosNumberInput className="field-input" value={qrAmount} onValueChange={setQrAmount}/>
           </Field>
-          <Field label="Card Amount">
+          <Field label={t("ui.card.amount")}>
             <PosNumberInput className="field-input" value={cardAmount} onValueChange={setCardAmount}/>
           </Field>
-          <Field label="Transfer Amount">
+          <Field label={t("ui.transfer.amount")}>
             <PosNumberInput className="field-input" value={transferAmount} onValueChange={setTransferAmount}/>
           </Field>
         </div>
         <div className={cn("mt-4 rounded-md border p-3 text-sm font-semibold", valid ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning")}>
-          Paid {formatLak(paid)} LAK / Total {formatLak(totalAmount)} LAK
+          {fillPosCopy(t("ui.paid.total"), { paid: formatLak(paid), total: formatLak(totalAmount) })}
         </div>
         <button className="mt-4 h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
-          Apply Mixed Payment
+          {t("ui.apply.mixed.payment")}
         </button>
       </div>
     </div>);
@@ -2554,11 +2556,11 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
           </button>
         </div>
         <dl className="mt-4 grid gap-2 rounded-md border border-border bg-background p-3 text-sm">
-          <InfoLine label="Bill number" value={receipt.saleNo}/>
-          <InfoLine label="Total" value={`${formatLak(receipt.totalAmount)} LAK`}/>
-          <InfoLine label="Payment method" value={receipt.paymentMode.toUpperCase()}/>
-          <InfoLine label="Cashier" value={receipt.cashierName}/>
-          <InfoLine label="Date/time" value={formatReceiptDateTime(receipt.createdAt)}/>
+          <InfoLine label={t("ui.bill.number")} value={receipt.saleNo}/>
+          <InfoLine label={t("ui.total")} value={`${formatLak(receipt.totalAmount)} LAK`}/>
+          <InfoLine label={t("ui.payment.method")} value={receipt.paymentMode.toUpperCase()}/>
+          <InfoLine label={t("ui.cashier")} value={receipt.cashierName}/>
+          <InfoLine label={t("ui.date.time")} value={formatReceiptDateTime(receipt.createdAt)}/>
         </dl>
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
           <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={onPrint}>
@@ -2584,35 +2586,35 @@ function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, on
     reason: string;
     sale: DemoSaleRecord;
 }) {
-    const label = action === "refund" ? "Refund" : "Void";
-    return (<PosModal title={`Manager approval: ${label}`} onClose={onClose}>
+    const title = action === "refund" ? t("ui.manager.approval.refund") : t("ui.manager.approval.void");
+    return (<PosModal title={title} onClose={onClose}>
       <div className="grid gap-4">
         <div className="rounded-lg border border-border bg-background p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-mono text-sm font-semibold">{sale.saleNo}</p>
-              <p className="text-xs text-muted-foreground">{sale.customerName || "Guest"} · {formatReceiptDateTime(sale.createdAt)}</p>
+              <p className="text-xs text-muted-foreground">{sale.customerName || t("ui.guest")} · {formatReceiptDateTime(sale.createdAt)}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-xs text-muted-foreground">{t("ui.total")}</p>
               <p className="font-semibold">{formatLak(sale.totalAmount)} LAK</p>
             </div>
           </div>
         </div>
         <label className="grid gap-2 text-sm font-semibold">
-          Reason
-          <textarea className="field-input min-h-24 resize-y" value={reason} onChange={(event) => onReasonChange(event.target.value)} placeholder={`${label} reason`}/>
+          {t("ui.reason")}
+          <textarea className="field-input min-h-24 resize-y" value={reason} onChange={(event) => onReasonChange(event.target.value)} placeholder={action === "refund" ? t("ui.refund.reason") : t("ui.void.reason")}/>
         </label>
         <label className="grid gap-2 text-sm font-semibold">
-          Manager / Owner PIN
-          <input className="field-input" type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={(event) => onPinChange(event.target.value)} placeholder="Enter manager PIN"/>
+          {t("ui.manager.owner.pin")}
+          <input className="field-input" type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={(event) => onPinChange(event.target.value)} placeholder={t("ui.enter.manager.pin")}/>
         </label>
         <div className="flex flex-wrap justify-end gap-2">
           <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>
-            Cancel
+            {t("ui.cancel")}
           </button>
           <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onSubmit}>
-            Approve {label}
+            {action === "refund" ? t("ui.approve.refund") : t("ui.approve.void")}
           </button>
         </div>
       </div>
@@ -2647,18 +2649,18 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
     const canRequestManagerApproval = resolveStoreUiRole(currentRole) === STORE_ROLES.CASHIER;
     const canDeleteSale = canVoidSale;
     const filterOptions: Array<{ label: string; value: "today" | "yesterday" | "week" | "month" | "custom" }> = [
-        { label: "Today", value: "today" },
-        { label: "Yesterday", value: "yesterday" },
-        { label: "This Week", value: "week" },
-        { label: "This Month", value: "month" },
-        { label: "Custom", value: "custom" },
+        { label: t("ui.today"), value: "today" },
+        { label: t("ui.yesterday"), value: "yesterday" },
+        { label: t("ui.this.week"), value: "week" },
+        { label: t("ui.this.month"), value: "month" },
+        { label: t("ui.custom"), value: "custom" },
     ];
-    return (<PosWorkspaceModal onClose={onClose} title="Recent Sales">
-        <p className="text-sm text-muted-foreground">Search, view receipts, reprint, return, exchange, or void bills.</p>
+    return (<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>
+        <p className="text-sm text-muted-foreground">{t("ui.search.or.select.sale")}</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
-            <input className="field-input pl-10" placeholder="Search bill, customer, cashier, phone, product..." value={search} onChange={(event) => onSearch(event.target.value)}/>
+            <input className="field-input pl-10" placeholder={t("ui.search.recent.sales")} value={search} onChange={(event) => onSearch(event.target.value)}/>
           </label>
           <div className="flex flex-wrap gap-2">
             {filterOptions.map((option) => (<button className={cn("h-10 rounded-md border px-3 text-xs font-semibold", filter === option.value ? "border-primary bg-primary/10 text-primary" : "border-border")} key={option.value} type="button" onClick={() => onFilter(option.value)}>
@@ -2672,10 +2674,10 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
           </div>) : null}
         {currentRole === "Owner" ? (<label className="mt-3 flex items-center gap-2 text-sm">
             <input type="checkbox" checked={showDeleted} onChange={(event) => onShowDeleted(event.target.checked)}/>
-            Show deleted bills
+            {t("ui.show.deleted.bills")}
           </label>) : null}
         <div className="mt-4 grid gap-3">
-          {sales.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No recent sales found.</div>) : sales.map((sale) => {
+          {sales.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t("ui.no.recent.sales")}</div>) : sales.map((sale) => {
             const statusVisual = resolveSaleStatusVisual(sale.status);
             return (
             <div className="overflow-hidden rounded-lg border border-border bg-background" key={sale.saleNo}>
@@ -2689,14 +2691,14 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                     <span className="text-xs text-muted-foreground">{formatReceiptDateTime(sale.createdAt)}</span>
                   </div>
                   <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
-                    <InfoLine label={t("ui.customer")} value={sale.customerName || "Guest"}/>
+                    <InfoLine label={t("ui.customer")} value={sale.customerName || t("ui.guest")}/>
                     <InfoLine label={t("ui.cashier")} value={sale.cashierName}/>
                     <InfoLine label={t("ui.sale.items")} value={String((sale.items ?? []).length)}/>
                     <InfoLine label={t("ui.total")} value={`${formatLak(sale.totalAmount)} LAK`} muted={statusVisual.isVoided} strike={statusVisual.isVoided}/>
                     <InfoLine label={t("ui.payment")} value={sale.paymentMode.toUpperCase()} muted={statusVisual.isVoided}/>
                   </div>
                   <details className="mt-2 text-xs text-muted-foreground">
-                    <summary className="cursor-pointer font-semibold text-foreground">Sale Timeline</summary>
+                    <summary className="cursor-pointer font-semibold text-foreground">{t("ui.sale.timeline")}</summary>
                     <div className="mt-2 grid gap-1">
                       {(sale.timeline ?? []).map((event, index) => (<div className="flex justify-between gap-3" key={`${sale.saleNo}-timeline-${index}`}>
                           <span>{event.label} by {event.user}</span>
@@ -2706,23 +2708,23 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
                   </details>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:max-w-[360px]">
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onViewReceipt(sale)}>View Receipt</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>Reprint Receipt</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onViewReceipt(sale)}>{t("ui.view.receipt")}</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>{t("ui.reprint.receipt")}</button>
                   {canRefundSale || canRequestManagerApproval ? (
-                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>Return / Refund</button>
+                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>{t("ui.return.refund")}</button>
                   ) : null}
                   {canRefundSale || canRequestManagerApproval ? (
-                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onExchange(sale)}>Exchange</button>
+                    <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onExchange(sale)}>{t("ui.exchange")}</button>
                   ) : null}
                   {canVoidSale || canRequestManagerApproval ? (
-                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>Void Sale</button>
+                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>{t("ui.void.sale")}</button>
                   ) : null}
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onDuplicate(sale)}>Duplicate</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>Edit Note</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>Edit Customer</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>Edit Payment</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onDuplicate(sale)}>{t("ui.duplicate")}</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>{t("ui.edit.note")}</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>{t("ui.edit.customer")}</button>
+                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>{t("ui.edit.payment")}</button>
                   {canDeleteSale ? (
-                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>Delete</button>
+                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>{t("ui.delete")}</button>
                   ) : null}
                 </div>
                 </div>
@@ -2767,27 +2769,27 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
         return () => window.clearTimeout(timeout);
     }, [autoPrint, autoPrintStarted, onReprint]);
     const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
-    const receiptFooter = receiptSettings.receiptFooter || "Thank you";
-    return (<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title="Receipt preview">
+    const receiptFooter = receiptSettings.receiptFooter || t("ui.thank.you");
+    return (<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title={t("ui.receipt.preview")}>
         <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
           <div className="text-center">
             <div className="text-lg font-bold">{receiptTitle}</div>
             {receiptSettings.profileAddress ? <div>{receiptSettings.profileAddress}</div> : null}
             {receiptSettings.profilePhone ? <div>{receiptSettings.profilePhone}</div> : null}
             {receiptSettings.profileEmail ? <div>{receiptSettings.profileEmail}</div> : null}
-            {receiptSettings.taxNumber ? <div>Tax: {receiptSettings.taxNumber}</div> : null}
+            {receiptSettings.taxNumber ? <div>{t("ui.tax.label")} {receiptSettings.taxNumber}</div> : null}
             <div>{branchName}</div>
-            <div>Bill: {saleNo}</div>
-            <div>Receipt: {receiptNo}</div>
-            <div>Customer: {customerName}</div>
+            <div>{t("ui.bill.label")} {saleNo}</div>
+            <div>{t("ui.receipt.label")} {receiptNo}</div>
+            <div>{t("ui.customer.label")} {customerName}</div>
             <div>{t("ui.cashier")}{cashierName}</div>
             <div>{formatReceiptDateTime(createdAt)}</div>
           </div>
           <div className="my-4 border-t border-dashed border-border"/>
           <div className="flex flex-col gap-3">
-            {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">No receipt items.</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
+            {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{t("ui.no.receipt.items")}</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
                 <div className="flex justify-between gap-3">
-                  <span>{item.nameEn}</span>
+                  <span>{localizedProductName(item)}</span>
                   <span>{formatLak(item.priceLak * item.quantity)}</span>
                 </div>
                 <div className="text-muted-foreground">{item.quantity} x {formatLak(item.priceLak)} LAK</div>
@@ -2809,7 +2811,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
             }
         }}>
           <Printer aria-hidden="true"/>
-          Print receipt
+          {t("ui.print.receipt")}
         </button>
     </PosWorkspaceModal>);
 }
@@ -2935,7 +2937,7 @@ function applyCustomerPricing(product: PosProduct, customer: PosCustomer | null)
             priceLak: product.specialStudentPriceLak,
             quantity: 1,
             retailPriceLak,
-            pricingNote: "Student special price",
+            pricingNote: t("ui.student.price"),
         };
     }
     if (customer.discountPercent && customer.discountPercent > 0) {
@@ -2944,7 +2946,7 @@ function applyCustomerPricing(product: PosProduct, customer: PosCustomer | null)
             priceLak: Math.round(retailPriceLak * (1 - customer.discountPercent / 100)),
             quantity: 1,
             retailPriceLak,
-            pricingNote: `${customer.discountPercent}% member discount`,
+            pricingNote: fillPosCopy(t("ui.member.discount.pct"), { pct: customer.discountPercent }),
         };
     }
     return { ...product, priceLak: retailPriceLak, quantity: 1, retailPriceLak };
@@ -2962,6 +2964,18 @@ function getStockWarning(product: PosProduct, referenceDate: Date): PosCartItem[
         return { label: "Low Stock", tone: "orange" };
     }
     return undefined;
+}
+function staffStatusLabel(status: string) {
+    if (status === "Working") return t("ui.staff.working");
+    if (status === "OT") return t("ui.staff.ot");
+    if (status === "Closed") return t("ui.staff.closed");
+    if (status === "Not Started") return t("ui.staff.not.started");
+    return status;
+}
+function stockWarningLabel(tone: "orange" | "yellow" | "red") {
+    if (tone === "red") return t("ui.expired");
+    if (tone === "yellow") return t("ui.near.expiry");
+    return t("ui.low.stock");
 }
 function warningBadgeClass(tone: "orange" | "yellow" | "red") {
     if (tone === "red")

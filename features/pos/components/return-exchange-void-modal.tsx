@@ -13,6 +13,8 @@ import {
   type PostSaleManagerApprovalPayload,
 } from "@/features/pos/post-sale-client";
 import type { ReturnItemCondition, ReturnReceiptSnapshot, ReturnableSaleItem, ReturnableSaleSnapshot } from "@/features/pos/return-types";
+import { localizedProductName } from "@/features/pos/product-display-name";
+import { fillPosCopy, tPos } from "@/lib/i18n/pos-copy";
 import { cn } from "@/lib/utils";
 
 export type ReturnExchangeTab = "return" | "exchange" | "void";
@@ -24,19 +26,21 @@ type ReturnExchangeVoidModalProps = {
   onCompleted: (message: string) => void;
 };
 
-const CONDITIONS: Array<{ label: string; value: ReturnItemCondition }> = [
-  { label: "Sellable", value: "sellable" },
-  { label: "Damaged", value: "damaged" },
-  { label: "Expired", value: "expired" },
-  { label: "Opened / Used", value: "opened_used" },
-];
+const CONDITIONS: ReturnItemCondition[] = ["sellable", "damaged", "expired", "opened_used"];
 
 const METHODS = [
-  { label: "Cash", value: "cash" },
-  { label: "Transfer", value: "transfer" },
-  { label: "QR", value: "qr" },
-  { label: "Card", value: "visa" },
+  { key: "ui.cash", value: "cash" },
+  { key: "ui.bank.transfer", value: "transfer" },
+  { key: "ui.qr.payment", value: "qr" },
+  { key: "ui.card", value: "visa" },
 ] as const;
+
+function conditionLabel(value: ReturnItemCondition) {
+  if (value === "sellable") return tPos("ui.sellable");
+  if (value === "damaged") return tPos("ui.damaged");
+  if (value === "expired") return tPos("ui.expired");
+  return tPos("ui.opened.used");
+}
 
 type DraftLine = {
   condition: ReturnItemCondition;
@@ -92,7 +96,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
         selectSale(selected);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Sale lookup failed.");
+      setError(loadError instanceof Error ? loadError.message : tPos("ui.sale.lookup.failed"));
     }
   }
 
@@ -125,14 +129,14 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
     try {
       setProductResults((await lookupExchangeProducts(productQuery)).map((product) => ({ ...product, quantity: 1 })));
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : "Product search failed.");
+      setError(searchError instanceof Error ? searchError.message : tPos("ui.product.search.failed"));
     }
   }
 
   async function submitReturn() {
     if (!sale || busy) return;
     if (selectedReturns.length === 0) {
-      setError("Select at least one returned item.");
+      setError(tPos("ui.select.returned.item"));
       return;
     }
     setBusy(true);
@@ -149,13 +153,13 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
         refundMethod: method,
       });
       if (result.status === "pending_approval") {
-        onCompleted(`Return pending approval for ${sale.saleNo}.`);
+        onCompleted(fillPosCopy(tPos("ui.pending.for"), { action: tPos("ui.return.and.refund"), saleNo: sale.saleNo }));
         return;
       }
       setReceipt(result.receipt ?? null);
-      onCompleted(`${sale.saleNo} returned ${formatLak(returnValueLak)} LAK.`);
+      onCompleted(fillPosCopy(tPos("ui.sale.returned"), { saleNo: sale.saleNo, amount: formatLak(returnValueLak) }));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Return failed.");
+      setError(submitError instanceof Error ? submitError.message : tPos("ui.return.failed"));
     } finally {
       setBusy(false);
     }
@@ -164,7 +168,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
   async function submitExchange() {
     if (!sale || busy) return;
     if (selectedReturns.length === 0 || replacements.length === 0) {
-      setError("Select returned items and at least one replacement product.");
+      setError(tPos("ui.select.returned.and.replacement"));
       return;
     }
     setBusy(true);
@@ -187,13 +191,13 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
         })),
       });
       if (result.status === "pending_approval") {
-        onCompleted(`Exchange pending approval for ${sale.saleNo}.`);
+        onCompleted(fillPosCopy(tPos("ui.pending.for"), { action: tPos("ui.exchange"), saleNo: sale.saleNo }));
         return;
       }
       setReceipt(result.receipt ?? null);
-      onCompleted(`${sale.saleNo} exchanged. Difference ${formatLak(result.differenceLak ?? differenceLak)} LAK.`);
+      onCompleted(fillPosCopy(tPos("ui.sale.exchanged"), { saleNo: sale.saleNo, amount: formatLak(result.differenceLak ?? differenceLak) }));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Exchange failed.");
+      setError(submitError instanceof Error ? submitError.message : tPos("ui.exchange.failed"));
     } finally {
       setBusy(false);
     }
@@ -202,7 +206,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
   async function submitVoid(approval?: PostSaleManagerApprovalPayload) {
     if (!sale || busy) return;
     if (!reason.trim()) {
-      setError("A void reason is required.");
+      setError(tPos("ui.void.reason.required"));
       return;
     }
     setBusy(true);
@@ -210,29 +214,29 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
     try {
       const result = await voidSaleRequest(sale.id, reason, approval);
       if (result.status === "pending_approval") {
-        onCompleted(`Void pending approval for ${sale.saleNo}.`);
+        onCompleted(fillPosCopy(tPos("ui.pending.for"), { action: tPos("ui.void.sale"), saleNo: sale.saleNo }));
         return;
       }
-      onCompleted(`${sale.saleNo} voided. Stock restored.`);
+      onCompleted(fillPosCopy(tPos("ui.sale.voided.stock"), { saleNo: sale.saleNo }));
       onClose();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Void failed.");
+      setError(submitError instanceof Error ? submitError.message : tPos("ui.void.failed"));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <PosWorkspaceModal onClose={onClose} title="Return / Exchange / Void">
+    <PosWorkspaceModal onClose={onClose} title={tPos("ui.return.exchange.void")}>
       {receipt ? (
         <ReturnReceiptView receipt={receipt} onClose={onClose} />
       ) : (
         <div className="grid gap-4">
           <div className="grid gap-2 sm:grid-cols-3">
             {([
-              ["return", "Return & Refund"],
-              ["exchange", "Exchange"],
-              ["void", "Void Sale"],
+              ["return", tPos("ui.return.and.refund")],
+              ["exchange", tPos("ui.exchange")],
+              ["void", tPos("ui.void.sale")],
             ] as const).map(([value, label]) => (
               <button
                 className={cn("h-11 rounded-md border px-3 text-sm font-semibold", tab === value ? "border-primary bg-primary/10 text-primary" : "border-border")}
@@ -248,10 +252,10 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
             <div className="grid gap-2">
               <label className="grid gap-1 text-sm font-semibold">
-                Receipt / sale search
+                {tPos("ui.receipt.sale.search")}
                 <input
                   className="field-input h-11"
-                  placeholder="Receipt no, sale no, customer, barcode"
+                  placeholder={tPos("ui.search.sales.placeholder")}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={(event) => {
@@ -263,11 +267,11 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                 />
               </label>
               <button className="h-10 rounded-md border border-border text-sm font-semibold" type="button" onClick={() => void loadSales(search)}>
-                Search sales
+                {tPos("ui.search.sales")}
               </button>
               <div className="max-h-64 overflow-y-auto rounded-md border border-border">
                 {sales.length === 0 ? (
-                  <p className="p-3 text-sm text-muted-foreground">Search or select a completed sale.</p>
+                  <p className="p-3 text-sm text-muted-foreground">{tPos("ui.search.or.select.sale")}</p>
                 ) : sales.map((row) => (
                   <button
                     className={cn("block w-full border-b border-border px-3 py-2 text-left text-sm last:border-b-0", sale?.id === row.id ? "bg-primary/10" : "bg-background")}
@@ -285,7 +289,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
 
             <div className="grid min-w-0 gap-3">
               {!sale ? (
-                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">Select an original completed sale. The original bill is never edited or deleted.</div>
+                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">{tPos("ui.select.original.sale")}</div>
               ) : (
                 <>
                   <div className="rounded-lg border border-border bg-background p-3">
@@ -295,7 +299,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                         <p className="text-xs text-muted-foreground">{sale.receiptNo} · {sale.customerName} · {sale.status}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Remaining refundable</p>
+                        <p className="text-xs text-muted-foreground">{tPos("ui.remaining.refundable")}</p>
                         <p className="font-semibold">{formatLak(sale.remainingRefundableLak)} LAK</p>
                       </div>
                     </div>
@@ -316,9 +320,9 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                                 onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, selected: event.target.checked } }))}
                               />
                               <span className="min-w-0 flex-1">
-                                <span className="font-semibold">{item.nameEn}</span>
+                                <span className="font-semibold">{localizedProductName(item)}</span>
                                 <span className="block text-xs text-muted-foreground">
-                                  Remaining {item.remainingQuantity}/{item.originalQuantity} · {formatLak(item.remainingPaidLak)} LAK original paid
+                                  {fillPosCopy(tPos("ui.remaining.line"), { remain: item.remainingQuantity, total: item.originalQuantity, amount: formatLak(item.remainingPaidLak) })}
                                 </span>
                               </span>
                             </label>
@@ -338,11 +342,11 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                                 value={draft.condition}
                                 onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, condition: event.target.value as ReturnItemCondition } }))}
                               >
-                                {CONDITIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                {CONDITIONS.map((value) => <option key={value} value={value}>{conditionLabel(value)}</option>)}
                               </select>
                               <input
                                 className="field-input h-10"
-                                placeholder="Item reason"
+                                placeholder={tPos("ui.item.reason")}
                                 value={draft.reason}
                                 onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, reason: event.target.value } }))}
                               />
@@ -355,11 +359,11 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
 
                   {tab === "exchange" ? (
                     <div className="grid gap-2 rounded-md border border-border p-3">
-                      <p className="text-sm font-semibold">Replacement products</p>
+                      <p className="text-sm font-semibold">{tPos("ui.replacement.products")}</p>
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <input
                           className="field-input h-11"
-                          placeholder="Search or scan replacement SKU/barcode"
+                          placeholder={tPos("ui.search.replacement")}
                           value={productQuery}
                           onChange={(event) => setProductQuery(event.target.value)}
                           onKeyDown={(event) => {
@@ -370,7 +374,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                           }}
                         />
                         <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => void searchProducts()}>
-                          Search
+                          {tPos("ui.search")}
                         </button>
                       </div>
                       {productResults.map((product) => (
@@ -386,12 +390,12 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                             return [...current, { ...product, quantity: 1 }];
                           })}
                         >
-                          {product.nameEn} · {formatLak(product.sellingPriceLak)} LAK
+                          {localizedProductName(product)} · {formatLak(product.sellingPriceLak)} LAK
                         </button>
                       ))}
                       {replacements.map((item, index) => (
                         <div className="flex items-center justify-between gap-2 text-sm" key={`${item.id}-${index}`}>
-                          <span>{item.nameEn}</span>
+                          <span>{localizedProductName(item)}</span>
                           <input
                             className="field-input h-9 w-20"
                             min={1}
@@ -402,24 +406,24 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                         </div>
                       ))}
                       <div className="rounded-md bg-muted/40 p-3 text-sm">
-                        <p>Original return value: {formatLak(returnValueLak)} LAK</p>
-                        <p>New item total: {formatLak(replacementTotalLak)} LAK</p>
+                        <p>{tPos("ui.original.return.value")}: {formatLak(returnValueLak)} LAK</p>
+                        <p>{tPos("ui.new.item.total")}: {formatLak(replacementTotalLak)} LAK</p>
                         <p className="font-semibold">
-                          {differenceLak > 0 ? `Customer pays ${formatLak(differenceLak)} LAK` : differenceLak < 0 ? `Store refunds ${formatLak(Math.abs(differenceLak))} LAK` : "Equal exchange: 0 LAK"}
+                          {differenceLak > 0 ? fillPosCopy(tPos("ui.customer.pays"), { amount: formatLak(differenceLak) }) : differenceLak < 0 ? fillPosCopy(tPos("ui.store.refunds"), { amount: formatLak(Math.abs(differenceLak)) }) : tPos("ui.equal.exchange")}
                         </p>
                       </div>
                     </div>
                   ) : null}
 
                   <label className="grid gap-1 text-sm font-semibold">
-                    Reason
+                    {tPos("ui.reason")}
                     <textarea className="field-input min-h-20" value={reason} onChange={(event) => setReason(event.target.value)} />
                   </label>
                   {tab !== "void" ? (
                     <label className="grid gap-1 text-sm font-semibold">
-                      {tab === "exchange" ? "Difference method" : "Refund method"}
+                      {tab === "exchange" ? tPos("ui.difference.method") : tPos("ui.refund.method")}
                       <select className="field-input h-11" value={method} onChange={(event) => setMethod(event.target.value as typeof method)}>
-                        {METHODS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {METHODS.map((option) => <option key={option.value} value={option.value}>{option.value === "qr" ? "QR" : tPos(option.key)}</option>)}
                       </select>
                     </label>
                   ) : null}
@@ -427,20 +431,20 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                   {error ? <p className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p> : null}
 
                   <div className="flex flex-wrap justify-end gap-2">
-                    <button className="h-11 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>Cancel</button>
+                    <button className="h-11 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{tPos("ui.cancel")}</button>
                     {tab === "return" ? (
                       <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" disabled={busy} type="button" onClick={() => void submitReturn()}>
-                        Confirm return
+                        {tPos("ui.confirm.return")}
                       </button>
                     ) : null}
                     {tab === "exchange" ? (
                       <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" disabled={busy} type="button" onClick={() => void submitExchange()}>
-                        Confirm exchange
+                        {tPos("ui.confirm.exchange")}
                       </button>
                     ) : null}
                     {tab === "void" ? (
                       <button className="h-11 rounded-md bg-danger px-4 text-sm font-semibold text-primary-foreground" disabled={busy} type="button" onClick={() => void submitVoid()}>
-                        Confirm void
+                        {tPos("ui.confirm.void")}
                       </button>
                     ) : null}
                   </div>
@@ -455,23 +459,23 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
 }
 
 function ReturnReceiptView({ onClose, receipt }: { onClose: () => void; receipt: ReturnReceiptSnapshot }) {
-  const title = receipt.kind === "exchange" ? "Exchange Receipt" : "Return / Refund Receipt";
+  const title = receipt.kind === "exchange" ? tPos("ui.exchange.receipt") : tPos("ui.return.receipt");
   return (
     <div className="grid gap-4">
       <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
         <div className="text-center text-lg font-bold">{title}</div>
         <div className="mt-2 text-center">
-          <div>Original: {receipt.originalSaleNo} / {receipt.originalReceiptNo}</div>
-          <div>Document: {receipt.receiptNo}</div>
+          <div>{tPos("ui.original")}: {receipt.originalSaleNo} / {receipt.originalReceiptNo}</div>
+          <div>{tPos("ui.document")}: {receipt.receiptNo}</div>
           <div>{new Date(receipt.createdAt).toLocaleString()}</div>
-          <div>User: {receipt.createdBy}{receipt.approvedBy ? ` · Approver: ${receipt.approvedBy}` : ""}</div>
-          <div>Method: {receipt.method.toUpperCase()}</div>
-          {receipt.reason ? <div>Reason: {receipt.reason}</div> : null}
+          <div>{tPos("ui.user")}: {receipt.createdBy}{receipt.approvedBy ? ` · ${tPos("ui.approver")}: ${receipt.approvedBy}` : ""}</div>
+          <div>{tPos("ui.method")}: {receipt.method.toUpperCase()}</div>
+          {receipt.reason ? <div>{tPos("ui.reason")}: {receipt.reason}</div> : null}
         </div>
         <div className="my-4 border-t border-dashed border-border" />
         {receipt.returnedItems.map((item, index) => (
           <div className="flex justify-between gap-3" key={`ret-${index}`}>
-            <span>{item.nameEn} x{item.quantity} ({item.condition})</span>
+            <span>{localizedProductName(item)} x{item.quantity} ({conditionLabel(item.condition)})</span>
             <span>{formatLak(item.amountLak)}</span>
           </div>
         ))}
@@ -480,19 +484,19 @@ function ReturnReceiptView({ onClose, receipt }: { onClose: () => void; receipt:
             <div className="my-4 border-t border-dashed border-border" />
             {receipt.replacementItems.map((item, index) => (
               <div className="flex justify-between gap-3" key={`ex-${index}`}>
-                <span>{item.nameEn} x{item.quantity}</span>
+                <span>{localizedProductName(item)} x{item.quantity}</span>
                 <span>{formatLak(item.totalAmountLak)}</span>
               </div>
             ))}
           </>
         ) : null}
         <div className="my-4 border-t border-dashed border-border" />
-        <div className="flex justify-between"><span>Refunded</span><span>{formatLak(receipt.refundAmountLak)} LAK</span></div>
-        <div className="flex justify-between"><span>Additional paid</span><span>{formatLak(receipt.paymentAmountLak)} LAK</span></div>
-        <div className="flex justify-between font-bold"><span>Difference</span><span>{formatLak(receipt.differenceLak)} LAK</span></div>
+        <div className="flex justify-between"><span>{tPos("ui.refunded")}</span><span>{formatLak(receipt.refundAmountLak)} LAK</span></div>
+        <div className="flex justify-between"><span>{tPos("ui.additional.paid")}</span><span>{formatLak(receipt.paymentAmountLak)} LAK</span></div>
+        <div className="flex justify-between font-bold"><span>{tPos("ui.difference")}</span><span>{formatLak(receipt.differenceLak)} LAK</span></div>
       </div>
-      <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={() => window.print()}>Print</button>
-      <button className="h-11 rounded-md border border-border px-4 text-sm font-semibold print:hidden" type="button" onClick={onClose}>Close</button>
+      <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={() => window.print()}>{tPos("ui.print.receipt")}</button>
+      <button className="h-11 rounded-md border border-border px-4 text-sm font-semibold print:hidden" type="button" onClick={onClose}>{tPos("ui.close")}</button>
     </div>
   );
 }
