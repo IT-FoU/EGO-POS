@@ -3,6 +3,12 @@ import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-map
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
+import {
+  emitCategoryTombstone,
+  emitCategoryUpsert,
+  emitProductTombstone,
+  emitProductUpsert,
+} from "@/features/offline/server/reference-emit";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 
 export { productListInclude };
@@ -464,6 +470,7 @@ export async function createPrismaProduct(input: ProductWriteInput, tenant: Tena
     newData: input,
     tenant,
     write: (tx) => writePrismaProductCreate(tx, input, tenant),
+    afterWrite: (result, tx) => emitProductUpsert(tx, tenant, (result as { id: string }).id),
   });
 }
 
@@ -624,6 +631,7 @@ export async function updatePrismaProduct(productId: string, input: Partial<Prod
     newData: { productId, ...input },
     tenant,
     write: (tx) => writePrismaProductUpdate(tx, productId, input, tenant),
+    afterWrite: (_result, tx) => emitProductUpsert(tx, tenant, productId),
   });
 }
 
@@ -687,6 +695,7 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
 
       return mapPrismaProduct(duplicatedProduct);
     },
+    afterWrite: (result, tx) => emitProductUpsert(tx, tenant, (result as { id: string }).id),
   });
 }
 
@@ -802,7 +811,15 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
         }
       }
 
-      return { updatedProducts: products.length };
+      return {
+        updatedProducts: products.length,
+        productIds: products.map((product: { id: string }) => product.id),
+      };
+    },
+    afterWrite: async (result, tx) => {
+      for (const id of (result as { productIds: string[] }).productIds) {
+        await emitProductUpsert(tx, tenant, id);
+      }
     },
   });
 }
@@ -827,6 +844,7 @@ export async function archivePrismaProduct(productId: string, tenant: TenantCont
     newData: { productId, isActive: false, status: "deleted" },
     tenant,
     write: (tx) => writePrismaProductArchive(tx, productId, tenant),
+    afterWrite: (_result, tx) => emitProductTombstone(tx, tenant, productId),
   });
 }
 
@@ -872,6 +890,7 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
 
       return mapPrismaProduct(deletedProduct);
     },
+    afterWrite: (_result, tx) => emitProductTombstone(tx, tenant, productId),
   });
 }
 
@@ -920,6 +939,7 @@ export async function upsertPrismaCategory(input: {
           },
         });
     },
+    afterWrite: (result, tx) => emitCategoryUpsert(tx, tenant, (result as { id: string }).id),
   });
 }
 
@@ -948,5 +968,6 @@ export async function deletePrismaCategory(categoryId: string, tenant: TenantCon
 
       return tx.category.delete({ where: { id: existing.id } });
     },
+    afterWrite: (_result, tx) => emitCategoryTombstone(tx, tenant, categoryId),
   });
 }

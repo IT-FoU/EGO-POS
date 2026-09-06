@@ -32,6 +32,8 @@ import type { SupportedLocale } from "@/lib/constants";
 import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
+import { OfflineStatusIndicator } from "@/components/offline/offline-status-indicator";
+import { ServiceWorkerManager } from "@/components/offline/service-worker-manager";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -177,6 +179,13 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+      <ServiceWorkerManager
+        namespace={{
+          branchId: session.user.activeBranchId ?? undefined,
+          companyId: session.user.activeCompanyId ?? undefined,
+          terminalId: session.user.assignedTerminal ?? undefined,
+        }}
+      />
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-border bg-card lg:flex lg:flex-col">
         <div className="border-b border-border p-6">
           <div className="flex items-center gap-3">
@@ -233,6 +242,12 @@ export function DashboardShell({
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <OfflineStatusIndicator
+                branchId={session.user.activeBranchId ?? null}
+                companyId={session.user.activeCompanyId ?? null}
+                roles={session.user.roles ?? null}
+                terminalId={session.user.assignedTerminal ?? null}
+              />
               <NotificationCenter locale={locale} />
               <CustomerDisplayQrToggle />
               <CustomerDisplayToggle />

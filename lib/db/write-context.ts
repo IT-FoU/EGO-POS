@@ -51,6 +51,7 @@ export async function withTenantTransaction<T>({
   oldData,
   tenant,
   write,
+  afterWrite,
 }: {
   action: string;
   module: string;
@@ -58,6 +59,12 @@ export async function withTenantTransaction<T>({
   oldData?: unknown;
   tenant: TenantContext;
   write: (tx: any) => Promise<T>;
+  /**
+   * Optional hook run inside the SAME transaction, after the business write and
+   * audit row. Used to emit offline reference changes (OfflineServerChange)
+   * atomically with the write. Must not perform unrelated side effects.
+   */
+  afterWrite?: (result: T, tx: any) => Promise<void> | void;
 }) {
   assertProductionWritesEnabled();
 
@@ -75,6 +82,10 @@ export async function withTenantTransaction<T>({
           userId: tenant.userId,
         },
       });
+
+      if (afterWrite) {
+        await afterWrite(result, tx);
+      }
 
       return result;
     },

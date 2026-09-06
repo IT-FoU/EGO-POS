@@ -147,7 +147,25 @@ type ResolvedPayment = {
 };
 const POS_PRODUCT_GRID_VISIBILITY_KEY = "ego.pos.productGridVisible";
 
-export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, offlineCheckout, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, readOnly = false, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+    readOnly?: boolean;
+    /**
+     * Phase 6C offline CASH checkout. When `enabled`, the Pay button is active in
+     * an otherwise read-only offline session and clicking it routes to a LOCAL
+     * cash commit (never the online action). Absent/disabled → online behavior.
+     */
+    offlineCheckout?: {
+        enabled: boolean;
+        onCheckout: (args: {
+            items: Array<{ productId: string; unitId?: string; quantity: number; conversionQty: number; unitPriceLak: number; name: string; unitName: string }>;
+            subtotalLak: number;
+            discountTotalLak: number;
+            taxRatePercent: number;
+            taxInclusive: boolean;
+            totalLak: number;
+            paidCashLak: number;
+        }) => Promise<{ ok: true; receiptReference: string; saleNo: string } | { ok: false; error: string }>;
+    };
     branchId: string;
     branchName: string;
     cashierName: string;
@@ -300,6 +318,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }, []);
     useEffect(() => {
         function refreshOnFocus() {
+            if (readOnly) {
+                return;
+            }
             if (recentSalesLoaded) {
                 void refreshRecentSalesFromServer();
             }
@@ -967,6 +988,44 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         applyResolvedPayment(payment);
         const saleNo = billNo;
+        if (offlineCheckout?.enabled) {
+            // Phase 6C: local CASH checkout only. Never calls the online action.
+            checkoutInFlightRef.current = true;
+            startTransition(async () => {
+                try {
+                    const result = await offlineCheckout.onCheckout({
+                        items: cartItems.map((item) => ({
+                            productId: item.id,
+                            unitId: item.unitId,
+                            quantity: item.quantity,
+                            conversionQty: item.conversionQty ?? 1,
+                            unitPriceLak: item.priceLak,
+                            name: item.nameEn || item.nameLo || "Item",
+                            unitName: item.unitName,
+                        })),
+                        subtotalLak: subtotal,
+                        discountTotalLak: discountTotal,
+                        taxRatePercent: taxEnabled ? taxRatePercent : 0,
+                        taxInclusive,
+                        totalLak: totalAmount,
+                        paidCashLak: payment.cashAmount || payment.paidAmount,
+                    });
+                    if (!result.ok) {
+                        // Local validation failed: keep the cart unchanged, show the safe error.
+                        setMessage(result.error);
+                        return;
+                    }
+                    const receipt = { ...buildReceiptSnapshot(payment, result.saleNo), receiptNo: result.receiptReference };
+                    setLastReceipt(receipt);
+                    setSaleCompletedReceipt(receipt);
+                    setMessage(`Receipt ${result.receiptReference} — Pending sync.`);
+                    clearSale();
+                } finally {
+                    checkoutInFlightRef.current = false;
+                }
+            });
+            return;
+        }
         if (demoMode) {
             completeDemoSale(saleNo, payment);
             return;
@@ -1733,7 +1792,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
             {paymentMode === "mixed" ? (<div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3 text-sm font-semibold text-success">
               {t("ui.mixed.payment.configured")} - {formatLak(paidAmount)} LAK
-            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} heldBillsLoaded={heldBillsLoaded} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => {
+            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} heldBillsLoaded={heldBillsLoaded} holdDisabled={cartItems.length === 0 || readOnly} readOnly={readOnly} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => {
                 void refreshHeldBillsFromServer();
                 setHeldBillsOpen(true);
             }} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>) }
@@ -1743,7 +1802,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               <Metric label={t("ui.due")} value={`${formatLak(dueAmount)} LAK`}/>
               <Metric label={t("ui.change")} value={`${formatLak(changeAmount)} LAK`}/>
             </dl>
-            <button className="mt-4 h-16 w-full rounded-xl bg-primary text-[40px] font-black leading-none text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-105 disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending}>
+            <button className="mt-4 h-16 w-full rounded-xl bg-primary text-[40px] font-black leading-none text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-105 disabled:opacity-60" type="button" onClick={completeSale} disabled={isPending || (readOnly && !offlineCheckout?.enabled)}>
               {isPending ? t("ui.completing") : t("ui.pay")}
             </button>
             </div>
@@ -2074,13 +2133,14 @@ function Field({ children, label }: {
       {children}
     </label>);
 }
-function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount, heldBillsLoaded, holdDisabled, mode, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
+function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount, heldBillsLoaded, holdDisabled, readOnly = false, mode, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
     availableQrBanks: QrBank[];
     cardAmount: number;
     cashAmount: number;
     heldBillCount: number;
     heldBillsLoaded: boolean;
     holdDisabled: boolean;
+    readOnly?: boolean;
     mode: PaymentMode;
     onHoldBill: () => void;
     onResumeBills: () => void;
@@ -2101,7 +2161,7 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount
             <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>
               Hold Bill
             </button>
-            <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={heldBillsLoaded && heldBillCount === 0}>
+            <button className={cn("h-11 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground", heldBillCount > 0 ? "border-[#F59E0B]/60 bg-[#F59E0B] text-white hover:bg-[#D97706]" : "")} type="button" onClick={onResumeBills} disabled={readOnly || (heldBillsLoaded && heldBillCount === 0)}>
               Resume Bills{heldBillCount > 0 ? ` (${heldBillCount})` : ""}
             </button>
           </div>

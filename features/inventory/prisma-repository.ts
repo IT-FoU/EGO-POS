@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, withTenantTransaction } from "@/lib/db/write-context";
 import { assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
+import { emitStockLevelChange } from "@/features/offline/server/reference-emit";
 import {
   applyAtomicStockDelta,
   lockInventoryMutationKey,
@@ -321,6 +322,7 @@ export async function createStockIn(input: StockInInput, tenant: TenantContext) 
     newData: parseStockInInput(input),
     tenant,
     write: (tx) => writeStockIn(tx, input, tenant),
+    afterWrite: (_result, tx) => emitStockLevelChange(tx, tenant, input.productId, input.warehouseId),
   });
 }
 
@@ -384,6 +386,7 @@ export async function createStockAdjustment(input: StockAdjustmentInput, tenant:
 
       return balance;
     },
+    afterWrite: (_result, tx) => emitStockLevelChange(tx, tenant, data.productId, data.warehouseId),
   });
 }
 
@@ -424,5 +427,6 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
       });
       return balance;
     },
+    afterWrite: (_result, tx) => emitStockLevelChange(tx, tenant, data.productId, data.warehouseId),
   });
 }

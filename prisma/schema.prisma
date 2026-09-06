@@ -1776,3 +1776,177 @@ model Backup {
   @@index([companyId, backupDate])
   @@map("backups")
 }
+
+// ---------------------------------------------------------------------------
+// Offline-first (Mini Mart) — Phase 3: device/terminal & authorization records.
+// Scalar foreign keys (no Prisma relations) keep these decoupled from existing
+// models. Status fields are strings validated in the application layer. All
+// records are tenant-scoped by company_id (+ branch/warehouse/terminal where
+// relevant) and reuse the existing authorization/audit rules on write.
+// ---------------------------------------------------------------------------
+
+model TerminalDevice {
+  id                 String    @id @default(cuid())
+  companyId          String    @map("company_id")
+  branchId           String    @map("branch_id")
+  warehouseId        String?   @map("warehouse_id")
+  deviceId           String    @map("device_id")
+  terminalId         String    @map("terminal_id")
+  deviceName         String    @map("device_name")
+  status             String    @default("pending")
+  policyVersion      Int       @default(0) @map("policy_version")
+  offlineGraceDays   Int       @default(7) @map("offline_grace_days")
+  lockCredentialHash String?   @map("lock_credential_hash")
+  lockCredentialSalt String?   @map("lock_credential_salt")
+  activatedByUserId  String?   @map("activated_by_user_id")
+  activatedAt        DateTime? @map("activated_at")
+  revokedAt          DateTime? @map("revoked_at")
+  lastPolicySyncAt   DateTime? @map("last_policy_sync_at")
+  lastSeenAt         DateTime? @map("last_seen_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@unique([companyId, deviceId])
+  @@index([companyId, branchId])
+  @@index([companyId, status])
+  @@map("terminal_devices")
+}
+
+model OfflineSyncCursor {
+  id               String    @id @default(cuid())
+  companyId        String    @map("company_id")
+  deviceId         String    @map("device_id")
+  terminalDeviceId String    @map("terminal_device_id")
+  bootstrapCursor  String?   @map("bootstrap_cursor")
+  syncCursor       String?   @map("sync_cursor")
+  lastPushAt       DateTime? @map("last_push_at")
+  lastPullAt       DateTime? @map("last_pull_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([companyId, deviceId])
+  @@index([companyId, terminalDeviceId])
+  @@map("offline_sync_cursors")
+}
+
+model TerminalReceiptRange {
+  id               String   @id @default(cuid())
+  companyId        String   @map("company_id")
+  branchId         String   @map("branch_id")
+  terminalDeviceId String   @map("terminal_device_id")
+  prefix           String
+  rangeStart       Int      @map("range_start")
+  rangeEnd         Int      @map("range_end")
+  nextValue        Int      @map("next_value")
+  status           String   @default("active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, terminalDeviceId, prefix, rangeStart])
+  @@index([companyId, branchId])
+  @@map("terminal_receipt_ranges")
+}
+
+model TerminalStockAllocation {
+  id               String    @id @default(cuid())
+  companyId        String    @map("company_id")
+  branchId         String    @map("branch_id")
+  warehouseId      String    @map("warehouse_id")
+  terminalDeviceId String    @map("terminal_device_id")
+  productId        String    @map("product_id")
+  unitId           String?   @map("unit_id")
+  lotId            String?   @map("lot_id")
+  allocatedQty     Decimal   @default(0) @map("allocated_qty") @db.Decimal(18, 3)
+  consumedQty      Decimal   @default(0) @map("consumed_qty") @db.Decimal(18, 3)
+  baseVersion      Int       @default(0) @map("base_version")
+  status           String    @default("active")
+  expiresAt        DateTime? @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([companyId, terminalDeviceId, productId])
+  @@index([companyId, warehouseId, productId])
+  @@map("terminal_stock_allocations")
+}
+
+model OfflineLoyaltyAllowance {
+  id               String    @id @default(cuid())
+  companyId        String    @map("company_id")
+  terminalDeviceId String    @map("terminal_device_id")
+  customerId       String    @map("customer_id")
+  maxPoints        Int       @default(0) @map("max_points")
+  usedPoints       Int       @default(0) @map("used_points")
+  maxAmountLak     Decimal   @default(0) @map("max_amount_lak") @db.Decimal(18, 2)
+  usedAmountLak    Decimal   @default(0) @map("used_amount_lak") @db.Decimal(18, 2)
+  status           String    @default("active")
+  expiresAt        DateTime? @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([companyId, terminalDeviceId, customerId])
+  @@index([companyId, terminalDeviceId])
+  @@map("offline_loyalty_allowances")
+}
+
+// ---------------------------------------------------------------------------
+// Offline-first (Mini Mart) — Phase 4: cloud sync protocol persistence.
+// ---------------------------------------------------------------------------
+
+model OfflineOperation {
+  id               String    @id @default(cuid())
+  companyId        String    @map("company_id")
+  operationId      String    @map("operation_id")
+  deviceId         String    @map("device_id")
+  terminalDeviceId String?   @map("terminal_device_id")
+  actorUserId      String    @map("actor_user_id")
+  operationType    String    @map("operation_type")
+  sequence         Int       @default(0)
+  payloadHash      String?   @map("payload_hash")
+  status           String
+  resultCode       String    @map("result_code")
+  resultDetail     String?   @map("result_detail")
+  result           Json?
+  auditLogId       String?   @map("audit_log_id")
+  receivedAt       DateTime  @default(now()) @map("received_at")
+  processedAt      DateTime? @map("processed_at")
+
+  @@unique([companyId, operationId])
+  @@index([companyId, deviceId])
+  @@index([companyId, status])
+  @@map("offline_operations")
+}
+
+model OfflineServerChange {
+  seq         Int      @id @default(autoincrement())
+  companyId   String   @map("company_id")
+  branchId    String?  @map("branch_id")
+  warehouseId String?  @map("warehouse_id")
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  version     Int      @default(0)
+  deleted     Boolean  @default(false)
+  payload     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, seq])
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, warehouseId])
+  @@map("offline_server_changes")
+}
+
+/**
+ * Atomic per-scope reference revision counter (Phase 5.2). A single upsert-
+ * increment statement guarantees two concurrent writes to the same scoped
+ * entity never receive the same version. `scopeKey` = company + branch +
+ * warehouse + entity kind + entity id (never null), unique-constrained.
+ */
+model OfflineReferenceRevision {
+  id        String   @id @default(cuid())
+  companyId String   @map("company_id")
+  scopeKey  String   @unique @map("scope_key")
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@map("offline_reference_revisions")
+}

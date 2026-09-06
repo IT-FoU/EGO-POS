@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
+import { emitSettingsChange } from "@/features/offline/server/reference-emit";
 import type { SettingsFormData } from "@/features/settings/types";
 
 const db = prisma as any;
@@ -238,6 +239,7 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
 
       return mapSettings(updatedCompany);
     },
+    afterWrite: (_result, tx) => emitSettingsChange(tx, tenant),
   });
 }
 
