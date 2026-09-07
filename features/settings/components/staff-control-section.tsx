@@ -20,7 +20,7 @@ import {
 } from "@/features/access-control/permission-catalog";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import type { SupportedLocale } from "@/lib/constants";
-import { fillSettingsCopy, localizeSettingsError, tSettings } from "@/lib/i18n/settings-copy";
+import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, localizeTerminalOption, tSettings } from "@/lib/i18n/settings-copy";
 
 const TERMINAL_OPTIONS = ["POS-01", "POS-02", "POS-03", "Back Office"];
 
@@ -90,13 +90,27 @@ export function StaffControlSection({
   }, [initialSnapshot]);
 
   const selectedRole = initialSnapshot.roles.find((entry) => entry.templateKey === role);
-  const filteredModules = PERMISSION_MODULE_LABELS.filter((module) => module.toLowerCase().includes(query.toLowerCase()));
-  const filteredStaff = staff.filter((member) =>
-    [member.fullName, member.username, member.roleName, member.branchName, member.assignedTerminal]
+  const filteredModules = PERMISSION_MODULE_LABELS.filter((module) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return module.toLowerCase().includes(needle) || localizePermissionModule(module, locale).toLowerCase().includes(needle);
+  });
+  const filteredStaff = staff.filter((member) => {
+    const needle = staffQuery.trim().toLowerCase();
+    if (!needle) return true;
+    return [
+      member.fullName,
+      member.username,
+      member.roleName,
+      localizeRoleTemplate(member.roleName, locale),
+      member.branchName,
+      member.assignedTerminal,
+      localizeTerminalOption(member.assignedTerminal, locale),
+    ]
       .join(" ")
       .toLowerCase()
-      .includes(staffQuery.toLowerCase()),
-  );
+      .includes(needle);
+  });
 
   function runMutation(action: () => Promise<{ error?: string; ok: boolean }>, successMessage: string) {
     onNotify(null);
@@ -138,7 +152,7 @@ export function StaffControlSection({
           permissions: matrixToPermissionKeys(matrix, role),
           roleId: selectedRole.id,
         }),
-      `${role} permissions saved.`,
+      `${fillSettingsCopy(tSettings("permissionsSaved", locale), { role: localizeRoleTemplate(role, locale) })}`,
     );
   }
 
@@ -154,7 +168,7 @@ export function StaffControlSection({
           thresholdLak: existing.thresholdLak,
           thresholdPercent: existing.thresholdPercent,
         }),
-      `${APPROVAL_RULE_LABELS[ruleKey]} rule saved.`,
+      fillSettingsCopy(tSettings("approvalRuleSaved", locale), { rule: localizeApprovalRule(ruleKey, locale) }),
     );
   }
 
@@ -223,7 +237,7 @@ export function StaffControlSection({
   }
 
   function decideApproval(approvalId: string, status: "approved" | "rejected") {
-    runMutation(() => decideApprovalAction({ approvalId, status }), `Approval ${status}.`);
+    runMutation(() => decideApprovalAction({ approvalId, status }), status === "approved" ? tSettings("approvalApproved", locale) : tSettings("approvalRejected", locale));
   }
 
   return (
@@ -240,19 +254,19 @@ export function StaffControlSection({
                 type="button"
                 onClick={() => setRole(template)}
               >
-                {template}
+                {localizeRoleTemplate(template, locale)}
               </button>
             ))}
           </div>
           <button className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending || role === "Owner"} type="button" onClick={saveMatrix}>
-            {fillSettingsCopy(tSettings("savePermissions", locale), { role })}
+            {fillSettingsCopy(tSettings("savePermissions", locale), { role: localizeRoleTemplate(role, locale) })}
           </button>
           <div className="mt-4 grid gap-3">
             {(Object.keys(APPROVAL_RULE_LABELS) as Array<keyof typeof APPROVAL_RULE_LABELS>).map((ruleKey) => {
               const rule = approvalRules.find((entry) => entry.ruleKey === ruleKey);
               return (
                 <div className="rounded-md border border-border bg-card p-3" key={ruleKey}>
-                  <div className="text-xs font-semibold">{APPROVAL_RULE_LABELS[ruleKey]}</div>
+                  <div className="text-xs font-semibold">{localizeApprovalRule(ruleKey, locale)}</div>
                   <label className="mt-2 flex items-center gap-2 text-xs">
                     <input checked={rule?.isEnabled ?? true} className="size-4 accent-primary" type="checkbox" onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, isEnabled: event.target.checked } : entry))} />
                     {tSettings("enabled", locale)}
@@ -284,7 +298,7 @@ export function StaffControlSection({
                 <h3 className="font-semibold">{tSettings("login", locale)}</h3>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input className="field-input h-10 sm:w-64" placeholder={tSettings("staff", locale)} value={staffQuery} onChange={(event) => setStaffQuery(event.target.value)} />
+                <input className="field-input h-10 sm:w-64" placeholder={tSettings("searchStaff", locale)} value={staffQuery} onChange={(event) => setStaffQuery(event.target.value)} />
                 <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={openAddStaff}>
                   <Plus className="size-4" aria-hidden="true" />
                   {tSettings("addStaff", locale)}
@@ -310,15 +324,15 @@ export function StaffControlSection({
                     <tr className="border-b border-border last:border-b-0" key={member.id}>
                       <td className="px-3 py-3 font-semibold">{member.fullName}</td>
                       <td className="px-3 py-3 font-mono text-xs">{member.username}</td>
-                      <td className="px-3 py-3">{member.roleName}</td>
+                      <td className="px-3 py-3">{localizeRoleTemplate(member.roleName, locale)}</td>
                       <td className="px-3 py-3">{member.branchName}</td>
-                      <td className="px-3 py-3">{member.assignedTerminal}</td>
+                      <td className="px-3 py-3">{localizeTerminalOption(member.assignedTerminal, locale)}</td>
                       <td className="px-3 py-3 text-xs">
                         <span className={member.allowPosAccess ? "mr-1 rounded-full bg-success/10 px-2 py-1 text-success" : "mr-1 rounded-full bg-muted px-2 py-1 text-muted-foreground"}>{tSettings("pos", locale)}</span>
                         <span className={member.allowBackOfficeAccess ? "rounded-full bg-primary/10 px-2 py-1 text-primary" : "rounded-full bg-muted px-2 py-1 text-muted-foreground"}>{tSettings("backOffice", locale)}</span>
                       </td>
                       <td className="px-3 py-3">
-                        <span className={member.status === "active" ? "rounded-full bg-success/10 px-2 py-1 text-xs font-semibold text-success" : "rounded-full bg-danger/10 px-2 py-1 text-xs font-semibold text-danger"}>{member.status}</span>
+                        <span className={member.status === "active" ? "rounded-full bg-success/10 px-2 py-1 text-xs font-semibold text-success" : "rounded-full bg-danger/10 px-2 py-1 text-xs font-semibold text-danger"}>{localizeStaffStatus(member.status, locale)}</span>
                       </td>
                       <td className="px-3 py-3">
                         {!member.isOwner ? (
@@ -343,20 +357,20 @@ export function StaffControlSection({
                 <h3 className="font-semibold">{tSettings("permissionMatrix", locale)}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">{tSettings("auditPermissionHelp", locale)}</p>
               </div>
-              <input className="field-input md:w-72" placeholder={tSettings("settings", locale)} value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input className="field-input md:w-72" placeholder={tSettings("searchModules", locale)} value={query} onChange={(event) => setQuery(event.target.value)} />
             </div>
             <div className="mt-4 max-w-full overflow-x-auto">
               <table className="w-full min-w-[820px] text-left text-sm">
                 <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-3">{tSettings("module", locale)}</th>
-                    {PERMISSION_ACTION_LABELS.map((action) => <th className="px-3 py-3 text-center" key={action}>{action}</th>)}
+                    {PERMISSION_ACTION_LABELS.map((action) => <th className="px-3 py-3 text-center" key={action}>{localizePermissionAction(action, locale)}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredModules.map((module) => (
                     <tr className="border-b border-border last:border-b-0" key={module}>
-                      <td className="px-3 py-3 font-semibold">{module}</td>
+                      <td className="px-3 py-3 font-semibold">{localizePermissionModule(module, locale)}</td>
                       {PERMISSION_ACTION_LABELS.map((action) => (
                         <td className="px-3 py-3 text-center" key={action}>
                           <input checked={matrix[role][module][action]} className="size-4 accent-primary disabled:opacity-50" disabled={role === "Owner" || isPending} type="checkbox" onChange={() => togglePermission(module, action)} />
@@ -391,7 +405,7 @@ export function StaffControlSection({
                   <tbody>
                     {pendingApprovals.map((row) => (
                       <tr className="border-b border-border last:border-b-0" key={row.id}>
-                        <td className="px-3 py-3">{row.module}</td>
+                        <td className="px-3 py-3">{localizePermissionModule(row.module, locale)}</td>
                         <td className="px-3 py-3">{row.action ?? "-"}</td>
                         <td className="px-3 py-3">{row.requestBy}</td>
                         <td className="px-3 py-3">{row.reason ?? "-"}</td>
@@ -410,13 +424,13 @@ export function StaffControlSection({
       </div>
 
       {staffModalOpen ? (
-        <SettingsDialog title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)} onClose={() => setStaffModalOpen(false)}>
+        <SettingsDialog locale={locale} title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)} onClose={() => setStaffModalOpen(false)}>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={tSettings("fullName", locale)}><input className="field-input" value={staffDraft.fullName} onChange={(event) => setStaffDraft((current) => ({ ...current, fullName: event.target.value }))} /></Field>
             <Field label={tSettings("username", locale)}><input className="field-input" value={staffDraft.username} onChange={(event) => setStaffDraft((current) => ({ ...current, username: event.target.value }))} /></Field>
             <Field label={tSettings("role", locale)}>
               <select className="field-input" value={staffDraft.roleId} onChange={(event) => setStaffDraft((current) => ({ ...current, roleId: event.target.value }))}>
-                {initialSnapshot.roles.filter((entry) => entry.templateKey !== "Owner").map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                {initialSnapshot.roles.filter((entry) => entry.templateKey !== "Owner").map((entry) => <option key={entry.id} value={entry.id}>{localizeRoleTemplate(entry.name, locale)}</option>)}
               </select>
             </Field>
             <Field label={tSettings("branch", locale)}>
@@ -426,7 +440,7 @@ export function StaffControlSection({
             </Field>
             <Field label={tSettings("terminal", locale)}>
               <select className="field-input" value={staffDraft.assignedTerminal} onChange={(event) => setStaffDraft((current) => ({ ...current, assignedTerminal: event.target.value }))}>
-                {TERMINAL_OPTIONS.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}
+                {TERMINAL_OPTIONS.map((terminal) => <option key={terminal} value={terminal}>{localizeTerminalOption(terminal, locale)}</option>)}
               </select>
             </Field>
             <Field label={tSettings("status", locale)}>
@@ -461,13 +475,13 @@ function Field({ children, label }: { children: React.ReactNode; label: string }
   return <label className="grid gap-2 text-sm"><span className="font-medium">{label}</span>{children}</label>;
 }
 
-function SettingsDialog({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+function SettingsDialog({ children, locale, onClose, title }: { children: React.ReactNode; locale?: SupportedLocale; onClose: () => void; title: string }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={onClose} aria-label="Close modal"><X className="size-4" aria-hidden="true" /></button>
+          <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={onClose} aria-label={tSettings("closeModal", locale)}><X className="size-4" aria-hidden="true" /></button>
         </div>
         <div className="mt-4">{children}</div>
       </div>

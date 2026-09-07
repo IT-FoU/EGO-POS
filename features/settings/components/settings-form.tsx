@@ -1,7 +1,6 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { fillSettingsCopy, localizeSettingsError, receiptPrintModeLabel, roundingMethodLabel, tSettings } from "@/lib/i18n/settings-copy";
+import { fillSettingsCopy, localizeCustomerDisplayTemplateDescription, localizeSettingsError, receiptPrintModeLabel, roundingMethodLabel, tSettings } from "@/lib/i18n/settings-copy";
 import type { SupportedLocale } from "@/lib/constants";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -98,7 +97,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         setLogoStage((current) => cancelStagedImage(current));
     }
     function removeLogo() {
-        if (!window.confirm(tSettings("remove", locale) + "?")) {
+        if (!window.confirm(tSettings("removeLogoConfirm", locale))) {
             return;
         }
         clearCompanyLogoUrl();
@@ -334,7 +333,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm shadow-sm"
                 : "rounded-md border border-border bg-background p-3 text-left text-sm transition hover:border-primary"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
                   <div className="font-semibold">{template.name}</div>
-                  <div className="mt-2 text-xs leading-5 text-muted-foreground">{template.description}</div>
+                  <div className="mt-2 text-xs leading-5 text-muted-foreground">{localizeCustomerDisplayTemplateDescription(template.id, template.description, locale)}</div>
                   <div className="mt-3 text-xs font-semibold text-primary">
                     {displaySettings.template === template.id ? tSettings("selected", locale) : tSettings("select", locale)}
                   </div>
@@ -370,7 +369,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             <img className="aspect-video w-full object-cover" src={media.url} alt={media.name}/>)}
                       <div className="flex items-center justify-between gap-2 p-2">
                         <span className="truncate text-xs font-semibold">{media.name}</span>
-                        <button className="grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deleteDisplayMedia(media.id)} aria-label={`Delete ${media.name}`}>
+                        <button className="grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deleteDisplayMedia(media.id)} aria-label={tSettings("delete", locale)}>
                           <Trash2 className="size-4" aria-hidden="true"/>
                         </button>
                       </div>
@@ -393,7 +392,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
               <div className="grid gap-2">
                 {displaySettings.promotionMessages.map((promotion, index) => (<div className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm" key={`${promotion}-${index}`}>
                     <span className="min-w-0 truncate">{promotion}</span>
-                    <button className="grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deletePromotionMessage(index)} aria-label={`Delete promotion message ${promotion}`}>
+                    <button className="grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deletePromotionMessage(index)} aria-label={tSettings("delete", locale)}>
                       <Trash2 className="size-4" aria-hidden="true"/>
                     </button>
                   </div>))}
@@ -615,7 +614,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             logoUrl: bankDraft.logoUrl,
             shortCode: bankDraft.shortCode.trim() || bankNameValue.slice(0, 6).toUpperCase(),
             sortOrder: bankDraft.sortOrder,
-        }), editingBankId ? `Bank ${bankNameValue} updated.` : `Bank ${bankNameValue} added.`, (saved) => {
+        }), editingBankId ? tSettings("bankUpdated", locale) : tSettings("bankAdded", locale), (saved) => {
             const nextBanks = editingBankId
                 ? banks.map((bank) => bank.id === saved.id ? saved : bank)
                 : [...banks, saved];
@@ -627,13 +626,13 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         if (!bankToDelete) {
             return;
         }
-        runMutation(() => deleteQrPaymentBankAction(bankToDelete.id), `Bank ${bankToDelete.bankName} deleted.`, () => {
+        runMutation(() => deleteQrPaymentBankAction(bankToDelete.id), tSettings("bankDeleted", locale), () => {
             applyQrLists(qrAccounts.filter((account) => account.bankId !== bankToDelete.id), banks.filter((bank) => bank.id !== bankToDelete.id));
             setBankToDelete(null);
         });
     }
     function disableBank(bank: QrPaymentBankRecord) {
-        runMutation(() => archiveQrPaymentBankAction(bank.id), `Bank ${bank.bankName} archived.`, (saved) => {
+        runMutation(() => archiveQrPaymentBankAction(bank.id), tSettings("bankArchived", locale), (saved) => {
             const nextAccounts = qrAccounts.map((account) => account.bankId === bank.id ? { ...account, isActive: false } : account);
             applyQrLists(nextAccounts, banks.map((item) => item.id === saved.id ? saved : item));
             setBankToDelete(null);
@@ -647,7 +646,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             logoUrl: bank.logoUrl,
             shortCode: bank.shortCode,
             sortOrder: bank.sortOrder,
-        }), `Bank ${bank.bankName} enabled.`, (saved) => {
+        }), tSettings("bankEnabled", locale), (saved) => {
             applyQrLists(qrAccounts, banks.map((item) => item.id === saved.id ? saved : item));
         });
     }
@@ -696,7 +695,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         }
         const confirmedQr = previewStagedImage(confirmStagedImage(qrImageStage)) ?? accountDraft.qrImageUrl;
         if (isStagedImageDirty(qrImageStage)) {
-            onNotify({ text: t("ui.confirm.qr.before.save"), tone: "error" });
+            onNotify({ text: tSettings("confirmQrBeforeSave", locale), tone: "error" });
             return;
         }
         if (accountDraft.isActive && !confirmedQr) {
@@ -715,7 +714,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             printOnReceipt: accountDraft.printOnReceipt,
             qrImageUrl: confirmedQr || undefined,
             showOnCustomerDisplay: accountDraft.showOnCustomerDisplay,
-        }), editingAccountId ? `QR account ${accountDraft.displayLabel || accountName} updated.` : `QR account ${accountDraft.displayLabel || accountName} added.`, (saved) => {
+        }), editingAccountId ? tSettings("qrAccountUpdated", locale) : tSettings("qrAccountAdded", locale), (saved) => {
             const nextAccounts = editingAccountId
                 ? qrAccounts.map((account) => account.id === saved.id ? saved : account)
                 : [...qrAccounts, saved];
@@ -728,18 +727,18 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         if (!accountToDelete) {
             return;
         }
-        runMutation(() => deleteQrPaymentAccountAction(accountToDelete.id), `QR account ${accountToDelete.displayLabel} deleted.`, () => {
+        runMutation(() => deleteQrPaymentAccountAction(accountToDelete.id), tSettings("qrAccountDeleted", locale), () => {
             applyQrLists(qrAccounts.filter((account) => account.id !== accountToDelete.id), banks);
             setAccountToDelete(null);
         });
     }
     function setDefaultQrAccount(account: QrPaymentAccountRecord) {
-        runMutation(() => setDefaultQrPaymentAccountAction(account.id), `Default QR account set for ${branchName(account.branchId)}.`, (saved) => {
+        runMutation(() => setDefaultQrPaymentAccountAction(account.id), tSettings("defaultQrAccountSet", locale), (saved) => {
             applyQrLists(qrAccounts.map((item) => item.branchId === saved.branchId ? { ...item, isDefault: item.id === saved.id } : item), banks);
         });
     }
     function bankName(bankId: string) {
-        return banks.find((bank) => bank.id === bankId)?.bankName ?? "Unknown bank";
+        return banks.find((bank) => bank.id === bankId)?.bankName ?? tSettings("unknownBank", locale);
     }
     return (<div>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -764,7 +763,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
               <h3 className="font-semibold">{tSettings("bankManagement", locale)}</h3>
               <p className="mt-1 text-xs text-muted-foreground">{tSettings("banksHelp", locale)}</p>
             </div>
-            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{banks.length} banks</span>
+            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{fillSettingsCopy(tSettings("banksCount", locale), { count: banks.length })}</span>
           </div>
 
           {banks.length === 0 ? (<div className="mt-4 grid min-h-32 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{tSettings("noBanks", locale)}</div>) : (<div className="mt-4 grid gap-3">
@@ -772,7 +771,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                   <div className="grid size-12 place-items-center overflow-hidden rounded-md border border-border bg-background text-xs font-bold text-primary">
                     {bank.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="size-full object-contain" src={bank.logoUrl} alt={`${bank.bankName} logo`}/>) : (bank.shortCode || "BANK")}
+                <img className="size-full object-contain" src={bank.logoUrl} alt={tSettings("bankLogo", locale)}/>) : (bank.shortCode || "BANK")}
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -781,17 +780,17 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                         {bank.isActive ? tSettings("active", locale) : tSettings("inactive", locale)}
                       </span>
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{tSettings("shortCode", locale)}: {bank.shortCode || "-"} · Sort: {bank.sortOrder}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{tSettings("shortCode", locale)}: {bank.shortCode || "-"} · {tSettings("sortOrder", locale)}: {bank.sortOrder}</div>
                     <div className="mt-1 text-xs text-muted-foreground">{fillSettingsCopy(tSettings("qrAccountsCount", locale), { count: qrAccounts.filter((account) => account.bankId === bank.id).length })}</div>
                   </div>
                   <div className="flex items-center gap-2 sm:justify-end">
-                    <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditBank(bank)} aria-label={`Edit ${bank.bankName}`}>
+                    <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditBank(bank)} aria-label={tSettings("edit", locale)}>
                       <Edit3 className="size-4" aria-hidden="true"/>
                     </button>
                     {bank.isActive ? null : (
                       <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" type="button" onClick={() => enableBank(bank)}>{tSettings("enable", locale)}</button>
                     )}
-                    <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setBankToDelete(bank)} aria-label={`Delete ${bank.bankName}`}>
+                    <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setBankToDelete(bank)} aria-label={tSettings("delete", locale)}>
                       <Trash2 className="size-4" aria-hidden="true"/>
                     </button>
                   </div>
@@ -805,7 +804,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
               <h3 className="font-semibold">{tSettings("qrAccountManagement", locale)}</h3>
               <p className="mt-1 text-xs text-muted-foreground">{tSettings("oneDefaultQrHelp", locale)}</p>
             </div>
-            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{qrAccounts.length} accounts</span>
+            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{fillSettingsCopy(tSettings("accountsCount", locale), { count: qrAccounts.length })}</span>
           </div>
 
           {qrAccounts.length === 0 ? (<div className="mt-4 grid min-h-32 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{tSettings("noQrAccounts", locale)}</div>) : (<div className="mt-4 grid gap-3">
@@ -831,10 +830,10 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                     <div className="flex flex-wrap gap-2 lg:justify-end">
                       <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewAccount(account)}>{tSettings("qrPreview", locale)}</button>
                       <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setDefaultQrAccount(account)}>{tSettings("setDefault", locale)}</button>
-                      <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditAccount(account)} aria-label={`Edit ${account.displayLabel}`}>
+                      <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditAccount(account)} aria-label={tSettings("edit", locale)}>
                         <Edit3 className="size-4" aria-hidden="true"/>
                       </button>
-                      <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setAccountToDelete(account)} aria-label={`Delete ${account.displayLabel}`}>
+                      <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setAccountToDelete(account)} aria-label={tSettings("delete", locale)}>
                         <Trash2 className="size-4" aria-hidden="true"/>
                       </button>
                     </div>
@@ -855,7 +854,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           </div>))}
       </div>
 
-      {bankModalOpen ? (<SettingsDialog title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)}>
+      {bankModalOpen ? (<SettingsDialog locale={locale} title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)}>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={tSettings("bankName", locale)}>
               <input className="field-input" value={bankDraft.bankName} onChange={(event) => setBankDraft((current) => ({ ...current, bankName: event.target.value }))}/>
@@ -881,11 +880,11 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           <DialogActions locale={locale} onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel={tSettings("saveBank", locale)}/>
         </SettingsDialog>) : null}
 
-      {accountModalOpen ? (<SettingsDialog title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)}>
+      {accountModalOpen ? (<SettingsDialog locale={locale} title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)}>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={tSettings("bank", locale)}>
               <select className="field-input" value={accountDraft.bankId} onChange={(event) => setAccountDraft((current) => ({ ...current, bankId: event.target.value }))}>
-                <option value="">{tSettings("select", locale)} {tSettings("bank", locale).toLowerCase()}</option>
+                <option value="">{tSettings("selectBank", locale)}</option>
                 {activeBanks.map((bank) => <option key={bank.id} value={bank.id}>{bank.bankName}</option>)}
               </select>
             </Field>
@@ -900,7 +899,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             </Field>
             <Field label={tSettings("branch", locale)}>
               <select className="field-input" value={accountDraft.branchId} onChange={(event) => setAccountDraft((current) => ({ ...current, branchId: event.target.value }))}>
-                <option value="">{tSettings("select", locale)} {tSettings("branch", locale).toLowerCase()}</option>
+                <option value="">{tSettings("selectBranch", locale)}</option>
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
             </Field>
@@ -914,19 +913,19 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                   <div className="grid size-28 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background" data-cd-qr-preview="bounded">
                     {previewStagedImage(qrImageStage) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img alt="QR preview" className="h-full w-full object-contain" src={previewStagedImage(qrImageStage) ?? ""}/>
+                      <img alt={tSettings("qrPreview", locale)} className="h-full w-full object-contain" src={previewStagedImage(qrImageStage) ?? ""}/>
                     ) : <QrCode className="size-10 text-muted-foreground" aria-hidden="true"/>}
                   </div>
                   <div className="grid gap-2">
                     <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={qrImageInputRef} type="file" onChange={(event) => void chooseQrImage(event)}/>
                     <div className="flex flex-wrap gap-2">
-                      {/* Source markers: ui.replace.qr ui.remove.qr */}
+                      {/* Source markers: ui.confirm.qr ui.replace.qr ui.remove.qr */}
                       {isStagedImageDirty(qrImageStage) ? (<>
-                        <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setQrImageStage((current) => confirmStagedImage(current))}>{t("ui.confirm.qr")}</button>
+                        <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setQrImageStage((current) => confirmStagedImage(current))}>{tSettings("confirmQr", locale)}</button>
                         <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{tSettings("change", locale)}</button>
                         <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setQrImageStage((current) => cancelStagedImage(current))}>{tSettings("cancel", locale)}</button>
                       </>) : (<>
-                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{qrImageStage.saved ? tSettings("change", locale) : tSettings("chooseLogo", locale)}</button>
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{qrImageStage.saved ? tSettings("change", locale) : tSettings("chooseQrImage", locale)}</button>
                         {qrImageStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={() => { setQrImageStage(removeStagedImage()); setAccountDraft((current) => ({ ...current, qrImageUrl: undefined })); }}>{tSettings("remove", locale)}</button> : null}
                       </>)}
                     </div>
@@ -938,7 +937,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           <DialogActions locale={locale} onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel={tSettings("saveQrAccount", locale)}/>
         </SettingsDialog>) : null}
 
-      {bankToDelete ? (<SettingsDialog title={tSettings("delete", locale) + " " + tSettings("bank", locale)} onClose={() => setBankToDelete(null)}>
+      {bankToDelete ? (<SettingsDialog locale={locale} title={tSettings("deleteBankTitle", locale)} onClose={() => setBankToDelete(null)}>
           <p className="text-sm text-muted-foreground">{tSettings("deleteBankConfirm", locale)}</p>
           {qrAccounts.some((account) => account.bankId === bankToDelete.id) ? (<div className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">{tSettings("bankHasAccountsWarning", locale)}</div>) : null}
           <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -948,7 +947,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           </div>
         </SettingsDialog>) : null}
 
-      {accountToDelete ? (<SettingsDialog title={tSettings("delete", locale) + " " + tSettings("qr", locale) + " " + tSettings("accountName", locale)} onClose={() => setAccountToDelete(null)}>
+      {accountToDelete ? (<SettingsDialog locale={locale} title={tSettings("deleteQrAccountTitle", locale)} onClose={() => setAccountToDelete(null)}>
           <p className="text-sm text-muted-foreground">{tSettings("deleteQrAccountConfirm", locale)}</p>
           <div className="mt-5 flex justify-end gap-2">
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setAccountToDelete(null)}>{tSettings("cancel", locale)}</button>
@@ -956,12 +955,12 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           </div>
         </SettingsDialog>) : null}
 
-      {previewAccount ? (<SettingsDialog title={tSettings("qrPreview", locale)} onClose={() => setPreviewAccount(null)}>
+      {previewAccount ? (<SettingsDialog locale={locale} title={tSettings("qrPreview", locale)} onClose={() => setPreviewAccount(null)}>
           <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
             <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
               {previewAccount.qrImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img className="size-full object-contain" src={previewAccount.qrImageUrl} alt={`${previewAccount.displayLabel} QR`}/>) : (<QrCode className="size-16 text-muted-foreground" aria-hidden="true"/>)}
+            <img className="size-full object-contain" src={previewAccount.qrImageUrl} alt={tSettings("qrPreview", locale)}/>) : (<QrCode className="size-16 text-muted-foreground" aria-hidden="true"/>)}
             </div>
             <div className="text-sm leading-7">
               <div className="font-semibold">{previewAccount.displayLabel}</div>
@@ -978,8 +977,9 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         </SettingsDialog>) : null}
     </div>);
 }
-function SettingsDialog({ children, onClose, title }: {
+function SettingsDialog({ children, locale, onClose, title }: {
     children: React.ReactNode;
+    locale?: SupportedLocale;
     onClose: () => void;
     title: string;
 }) {
@@ -987,7 +987,7 @@ function SettingsDialog({ children, onClose, title }: {
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={onClose} aria-label="Close modal">
+          <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={onClose} aria-label={tSettings("closeModal", locale)}>
             <X className="size-4" aria-hidden="true"/>
           </button>
         </div>

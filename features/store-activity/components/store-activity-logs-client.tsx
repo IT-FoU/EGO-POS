@@ -5,7 +5,7 @@ import { ChevronRight, Filter, RefreshCw, X } from "lucide-react";
 
 import type { StoreActivityLogOptions, StoreActivityLogRecord } from "@/features/store-activity/store-activity-log-service";
 import type { SupportedLocale } from "@/lib/constants";
-import { getSettingsCopy, tSettings } from "@/lib/i18n/settings-copy";
+import { fillSettingsCopy, getSettingsCopy, localizeActivityStatus, localizeRoleTemplate, localizeTerminalOption, tSettings } from "@/lib/i18n/settings-copy";
 import { cn } from "@/lib/utils";
 
 type StoreActivityResponse = {
@@ -64,8 +64,8 @@ function activityCopy(locale?: SupportedLocale) {
     approvedBy: tSettings("approvedBy", locale),
     approvalMethod: tSettings("approvalMethod", locale),
     approvalReason: tSettings("approvalReason", locale),
-    back: `Back to ${settingsCopy.storeActivityLogs}`,
-    before: "Before",
+    back: fillSettingsCopy(tSettings("backToSection", locale), { section: settingsCopy.storeActivityLogs }),
+    before: tSettings("before", locale),
     branch: tSettings("branch", locale),
     createdAt: tSettings("occurredAt", locale),
     currency: tSettings("currency", locale),
@@ -199,7 +199,7 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
   if (error === c.accessDenied) {
     return (
       <div className="rounded-lg border border-danger/30 bg-danger/10 p-5 text-danger">
-        <h3 className="font-semibold">Access denied</h3>
+        <h3 className="font-semibold">{tSettings("accessDeniedTitle", locale)}</h3>
         <p className="mt-2 text-sm">{c.accessDenied}</p>
       </div>
     );
@@ -210,7 +210,7 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-lg font-semibold">{c.storeActivityLogs}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{total} records</p>
+          <p className="mt-1 text-sm text-muted-foreground">{fillSettingsCopy(tSettings("recordsCount", locale), { count: total })}</p>
         </div>
         <button className="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary hover:text-primary" type="button" onClick={loadLogs}>
           <RefreshCw className={cn("size-4", isLoading && "animate-spin")} aria-hidden="true" />
@@ -226,10 +226,10 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <FilterField label={c.dateFrom}><input className="field-input" type="date" value={filters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></FilterField>
           <FilterField label={c.dateTo}><input className="field-input" type="date" value={filters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></FilterField>
-          <FilterField label={c.action}><select className="field-input" value={filters.action} onChange={(event) => updateFilter("action", event.target.value)}><option value="">All</option>{options.actions.map((action) => <option key={action} value={action}>{action}</option>)}</select></FilterField>
-          <FilterField label={c.status}><select className="field-input" value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}><option value="">All</option>{options.statuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></FilterField>
-          <FilterField label={c.actor}><select className="field-input" value={filters.actorId} onChange={(event) => updateFilter("actorId", event.target.value)}><option value="">All</option>{options.actors.map((actor) => <option key={actor.id} value={actor.id}>{actor.name}</option>)}</select></FilterField>
-          <FilterField label={c.branch}><select className="field-input" value={filters.branchId} onChange={(event) => updateFilter("branchId", event.target.value)}><option value="">All</option>{options.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></FilterField>
+          <FilterField label={c.action}><select className="field-input" value={filters.action} onChange={(event) => updateFilter("action", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.actions.map((action) => <option key={action} value={action}>{action}</option>)}</select></FilterField>
+          <FilterField label={c.status}><select className="field-input" value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.statuses.map((status) => <option key={status} value={status}>{localizeActivityStatus(status, locale)}</option>)}</select></FilterField>
+          <FilterField label={c.actor}><select className="field-input" value={filters.actorId} onChange={(event) => updateFilter("actorId", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.actors.map((actor) => <option key={actor.id} value={actor.id}>{actor.name}</option>)}</select></FilterField>
+          <FilterField label={c.branch}><select className="field-input" value={filters.branchId} onChange={(event) => updateFilter("branchId", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></FilterField>
         </div>
       </section>
 
@@ -252,13 +252,13 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
                 <tr className="border-t border-border transition hover:bg-primary/5" key={log.id}>
                   <td className="whitespace-nowrap px-4 py-3">{formatDate(log.createdAt)}</td>
                   <td className="px-4 py-3">{log.actorName}</td>
-                  <td className="px-4 py-3">{titleize(log.actorRole)}</td>
+                  <td className="px-4 py-3">{localizeRoleTemplate(titleize(log.actorRole), locale)}</td>
                   <td className="px-4 py-3"><Badge value={log.action} tone="info" /></td>
                   <td className="px-4 py-3">{log.targetName ?? log.targetType}</td>
                   <td className="px-4 py-3">{log.amount ?? "-"}</td>
                   <td className="px-4 py-3">{log.currency}</td>
-                  <td className="px-4 py-3"><Badge value={log.status} tone={log.status === "denied" || log.status === "failed" ? "danger" : "success"} /></td>
-                  <td className="px-4 py-3">{log.terminalName ?? log.deviceName ?? "-"}</td>
+                  <td className="px-4 py-3"><Badge value={localizeActivityStatus(log.status, locale)} tone={log.status === "denied" || log.status === "failed" ? "danger" : "success"} /></td>
+                  <td className="px-4 py-3">{localizeTerminalOption(log.terminalName ?? log.deviceName ?? "-", locale)}</td>
                   <td className="px-4 py-3">
                     <button className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline" type="button" onClick={() => setSelected(log)}>
                       {c.details}
@@ -273,12 +273,12 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
       </section>
 
       <div className="flex items-center justify-between gap-3 text-sm">
-        <button className="h-10 rounded-md border border-border px-3 font-semibold disabled:opacity-50" disabled={page <= 1 || isLoading} type="button" onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
-        <span className="text-muted-foreground">Page {page}</span>
-        <button className="h-10 rounded-md border border-border px-3 font-semibold disabled:opacity-50" disabled={!hasNextPage || isLoading} type="button" onClick={() => setPage((current) => current + 1)}>Next</button>
+        <button className="h-10 rounded-md border border-border px-3 font-semibold disabled:opacity-50" disabled={page <= 1 || isLoading} type="button" onClick={() => setPage((current) => Math.max(1, current - 1))}>{tSettings("previous", locale)}</button>
+        <span className="text-muted-foreground">{fillSettingsCopy(tSettings("pageLabel", locale), { page })}</span>
+        <button className="h-10 rounded-md border border-border px-3 font-semibold disabled:opacity-50" disabled={!hasNextPage || isLoading} type="button" onClick={() => setPage((current) => current + 1)}>{tSettings("next", locale)}</button>
       </div>
 
-      {selected ? <ActivityDetailDrawer c={c} log={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? <ActivityDetailDrawer c={c} locale={locale} log={selected} onClose={() => setSelected(null)} /> : null}
     </div>
   );
 }
@@ -303,7 +303,7 @@ function Badge({ tone, value }: { tone: "danger" | "info" | "success"; value: st
   );
 }
 
-function ActivityDetailDrawer({ c, log, onClose }: { c: ReturnType<typeof activityCopy>; log: StoreActivityLogRecord; onClose: () => void }) {
+function ActivityDetailDrawer({ c, locale, log, onClose }: { c: ReturnType<typeof activityCopy>; locale: SupportedLocale; log: StoreActivityLogRecord; onClose: () => void }) {
   return (
     <div className="pointer-events-none fixed inset-y-0 right-0 z-[60] flex w-full justify-end">
       <aside className="pointer-events-auto flex h-full w-full max-w-[calc(100vw-4rem)] flex-col border-l border-border bg-background shadow-2xl xl:max-w-[calc(100vw-17rem)]">
@@ -312,7 +312,7 @@ function ActivityDetailDrawer({ c, log, onClose }: { c: ReturnType<typeof activi
             <button className="mb-2 text-sm font-semibold text-primary" type="button" onClick={onClose}>{c.back}</button>
             <h2 className="truncate text-xl font-semibold">{c.activityDetail}</h2>
           </div>
-          <button className="grid size-10 shrink-0 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label="Close">
+          <button className="grid size-10 shrink-0 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={tSettings("closeModal", locale)}>
             <X className="size-4" aria-hidden="true" />
           </button>
         </header>
@@ -323,12 +323,12 @@ function ActivityDetailDrawer({ c, log, onClose }: { c: ReturnType<typeof activi
               [c.occurredAt, formatDate(log.occurredAt)],
               [c.syncedAt, formatDate(log.syncedAt)],
               [c.actor, log.actorName],
-              [c.role, titleize(log.actorRole)],
+              [c.role, localizeRoleTemplate(titleize(log.actorRole), locale)],
               [c.action, log.action],
-              [c.status, log.status],
+              [c.status, localizeActivityStatus(log.status, locale)],
               [c.target, `${log.targetType}${log.targetName ? `: ${log.targetName}` : ""}`],
               [c.branch, log.branch?.name ?? log.branchId ?? "-"],
-              [c.terminal, log.terminalName ?? "-"],
+              [c.terminal, localizeTerminalOption(log.terminalName ?? "-", locale)],
               [c.device, log.deviceName ?? "-"],
               [c.amount, log.amount ?? "-"],
               [c.currency, log.currency],
@@ -341,7 +341,7 @@ function ActivityDetailDrawer({ c, log, onClose }: { c: ReturnType<typeof activi
               [c.originalAction, detailValue(metadataValue(log, "attempted_action") ?? metadataValue(log, "attempted_actions") ?? log.action)],
             ]} />
             <DetailPanel title={c.before}>{detailValue(log.beforeValue)}</DetailPanel>
-            <DetailPanel title="After">{detailValue(log.afterValue)}</DetailPanel>
+            <DetailPanel title={tSettings("after", locale)}>{detailValue(log.afterValue)}</DetailPanel>
             <DetailPanel title={c.metadata}>{detailValue(log.metadata)}</DetailPanel>
           </div>
         </div>
