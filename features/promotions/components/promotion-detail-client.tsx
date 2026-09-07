@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, Gift, Package, Percent, ShieldAlert, SlidersHorizontal, Tags, } from "lucide-react";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import {
   localizePromotionError,
   promotionStatusLabel,
   tPromotions,
 } from "@/lib/i18n/promotions-copy";
+import { usePromotionsLocale } from "@/features/promotions/use-promotions-locale";
 import type { Category, Product } from "@/features/products/types";
 import { PromotionStatusBadge } from "@/features/promotions/components/promotion-status-badge";
 import { formatLak, formatPromotionType } from "@/features/promotions/format";
@@ -37,23 +37,9 @@ export function PromotionDetailClient({
   simulation: PromotionSimulation;
 }) {
   const router = useRouter();
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = usePromotionsLocale(localeProp);
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
-
   activeLocale = locale;
 
   const includedProducts = products.filter((product) => promotion.applicableProductIds.includes(product.id));

@@ -56,7 +56,8 @@
     "test:lao-05": "tsx scripts/phase-lao-05-purchasing-language-check.ts",
     "test:lao-06": "tsx scripts/phase-lao-06-customers-language-check.ts",
     "test:lao-07": "tsx scripts/phase-lao-07-memberships-suppliers-language-check.ts",
-    "test:lao-08": "tsx scripts/phase-lao-08-promotions-reports-settings-language-check.ts"
+    "test:lao-08": "tsx scripts/phase-lao-08-promotions-reports-settings-language-check.ts",
+    "test:lao-08-promotions-repair": "tsx scripts/phase-lao-08-promotions-repair-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

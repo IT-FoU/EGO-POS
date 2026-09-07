@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import {
   fillPromotionsCopy,
   localizePromotionError,
+  promotionRiskLabel,
   promotionStatusLabel,
   tPromotions,
 } from "@/lib/i18n/promotions-copy";
+import { usePromotionsLocale } from "@/features/promotions/use-promotions-locale";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Archive, BarChart3, CalendarDays, CheckCircle2, Copy, Download, Edit3, Eye, Gift, Import, Search, ShieldAlert, SlidersHorizontal, Trash2, XCircle, type LucideIcon, } from "lucide-react";
@@ -38,21 +39,7 @@ export function PromotionsListClient({
   promotions: Promotion[];
 }) {
     const router = useRouter();
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
-
-    useEffect(() => {
-      if (localeProp) setLocale(localeProp);
-    }, [localeProp]);
-
-    useEffect(() => {
-      function handleLocaleChange(event: Event) {
-        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-      }
-      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
-
+    const locale = usePromotionsLocale(localeProp);
     activeLocale = locale;
     const [isPending, startTransition] = useTransition();
     const [query, setQuery] = useState("");
@@ -207,7 +194,7 @@ export function PromotionsListClient({
           <table className="w-full min-w-[1360px] border-collapse text-left text-sm">
             <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-3"><input type="checkbox" checked={filteredPromotions.length > 0 && filteredPromotions.every((promotion) => selectedIds.includes(promotion.id))} onChange={toggleAllVisible} aria-label="Select visible promotions"/></th>
+                <th className="px-3 py-3"><input type="checkbox" checked={filteredPromotions.length > 0 && filteredPromotions.every((promotion) => selectedIds.includes(promotion.id))} onChange={toggleAllVisible} aria-label={t("selectVisiblePromotions")}/></th>
                 <th className="px-3 py-3 font-semibold">{t("promotionCode")}</th>
                 <th className="px-3 py-3 font-semibold">{t("promotionName")}</th>
                 <th className="px-3 py-3 font-semibold">{t("type")}</th>
@@ -370,8 +357,8 @@ function SlowMovingPanel() {
     return (<DataTable headers={[t("selectedProducts"), t("scope"), t("scope"), t("usage"), t("discountPercent"), t("action")]}>
       {["Dishwashing Liquid", "Imported Cookies", "Canned Coffee"].map((product, index) => (<tr className="border-b border-border last:border-b-0" key={product}>
           <td className="px-3 py-3 font-semibold">{product}</td>
-          <td className="px-3 py-3">{90 + index * 20} days</td>
-          <td className="px-3 py-3">{24 + index * 8} units</td>
+          <td className="px-3 py-3">{fillPromotionsCopy(t("daysCount"), { count: 90 + index * 20 })}</td>
+          <td className="px-3 py-3">{fillPromotionsCopy(t("unitsCount"), { count: 24 + index * 8 })}</td>
           <td className="px-3 py-3">{t("slowMoving")}</td>
           <td className="px-3 py-3">{10 + index * 5}%</td>
           <td className="px-3 py-3"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{t("createPromotion")}</button></td>
@@ -382,7 +369,7 @@ function PromotionDetailModal({ onClose, promotion }: {
     onClose: () => void;
     promotion: Promotion;
 }) {
-    const auditEvents = ["Created", "Edited", "Duplicated", "Activated", "Used in sale", "Profit protection warning triggered"];
+    const auditEvents = [t("auditCreated"), t("auditEdited"), t("auditDuplicated"), t("auditActivated"), t("auditUsedInSale"), t("auditProfitWarning")];
     const forecast = buildPromotionForecast(promotion);
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="max-h-[88vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
@@ -399,7 +386,7 @@ function PromotionDetailModal({ onClose, promotion }: {
               {[
             [t("type"), formatPromotionType(promotion.type, activeLocale)],
             [t("target"), promotionTarget(promotion)],
-            [t("dateRange"), `${promotion.startDate} to ${promotion.endDate}`],
+            [t("dateRange"), `${promotion.startDate} ${t("dateTo")} ${promotion.endDate}`],
             [t("status"), promotionStatusLabel(promotion.status, activeLocale)],
             [t("usage"), formatLak(promotion.usageCount)],
             [t("discountGiven"), `${formatLak(promotion.totalDiscountLak)} LAK`],
@@ -421,7 +408,7 @@ function PromotionDetailModal({ onClose, promotion }: {
             <div className="mt-5 rounded-md border border-border bg-card p-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold">{t("promotionImpactForecast")}</h3>
-                <span className={forecast.risk === "High" ? "rounded-full border border-danger/40 bg-danger/10 px-2 py-1 text-xs font-semibold text-danger" : forecast.risk === "Medium" ? "rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-semibold text-warning" : "rounded-full border border-success/40 bg-success/10 px-2 py-1 text-xs font-semibold text-success"}>{forecast.risk}</span>
+                <span className={forecast.risk === "High" ? "rounded-full border border-danger/40 bg-danger/10 px-2 py-1 text-xs font-semibold text-danger" : forecast.risk === "Medium" ? "rounded-full border border-warning/40 bg-warning/10 px-2 py-1 text-xs font-semibold text-warning" : "rounded-full border border-success/40 bg-success/10 px-2 py-1 text-xs font-semibold text-success"}>{promotionRiskLabel(forecast.risk, activeLocale)}</span>
               </div>
               <dl className="mt-3 grid gap-2 text-sm">
                 <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t("members")}</dt><dd className="font-semibold">{formatLak(forecast.customers)}</dd></div>
@@ -429,7 +416,7 @@ function PromotionDetailModal({ onClose, promotion }: {
                 <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t("revenueGenerated")}</dt><dd className="font-semibold">{formatLak(forecast.revenue)} LAK</dd></div>
                 <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t("discountGiven")}</dt><dd className="font-semibold text-danger">-{formatLak(forecast.discount)} LAK</dd></div>
                 <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t("estimatedProfit")}</dt><dd className="font-semibold">{formatLak(forecast.profit)} LAK</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t("scope")}</dt><dd className="font-semibold">{formatLak(forecast.stock)} units</dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t("scope")}</dt><dd className="font-semibold">{fillPromotionsCopy(t("unitsCount"), { count: formatLak(forecast.stock) })}</dd></div>
               </dl>
             </div>
           </aside>
@@ -619,10 +606,10 @@ function HealthScore({ index, promotion }: {
 }
 function promotionTarget(promotion: Promotion) {
     if (promotion.applicableProductIds.length > 0)
-        return `${promotion.applicableProductIds.length} products`;
+        return fillPromotionsCopy(t("productCount"), { count: promotion.applicableProductIds.length });
     if (promotion.applicableCategoryIds.length > 0)
-        return `${promotion.applicableCategoryIds.length} categories`;
-    return "Whole bill";
+        return fillPromotionsCopy(t("categoryCount"), { count: promotion.applicableCategoryIds.length });
+    return t("wholeBill");
 }
 function daysUntil(dateValue: string) {
     const date = new Date(`${dateValue}T00:00:00`);

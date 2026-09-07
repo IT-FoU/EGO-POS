@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
 import {
+  fillPromotionsCopy,
   localizePromotionError,
+  promotionRiskLabel,
   tPromotions,
 } from "@/lib/i18n/promotions-copy";
+import { usePromotionsLocale } from "@/features/promotions/use-promotions-locale";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, CheckCircle2, Gift, QrCode, Save, Search, ShieldAlert, SlidersHorizontal, Sparkles, XCircle, type LucideIcon, } from "lucide-react";
@@ -42,6 +44,20 @@ function stackOptionLabel(option: string) {
   if (option === "Buy X Get Y") return t("buyXGetY");
   if (option === "Free gift") return t("freeGift");
   return option;
+}
+
+function previewPromotionLabel(item: string) {
+  if (item === "Current promotion being created") return t("currentPromotionPreview");
+  if (item === "Existing stackable mock promotion") return t("existingStackablePreview");
+  if (item === "Coupon / QR coupon") return t("couponQrPreview");
+  if (item === "Point redemption") return t("pointRedemption");
+  if (item === "Free gift") return t("freeGift");
+  if (item === "Minimum margin review") return t("minimumMarginReview");
+  if (item.endsWith(" member discount")) {
+    const target = item.slice(0, -" member discount".length);
+    return `${memberTargetLabel(target)} ${t("memberDiscount")}`;
+  }
+  return item;
 }
 
 const stackOptions = [
@@ -86,21 +102,7 @@ export function PromotionForm({
     products: Product[];
 }) {
     const router = useRouter();
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
-
-    useEffect(() => {
-      if (localeProp) setLocale(localeProp);
-    }, [localeProp]);
-
-    useEffect(() => {
-      function handleLocaleChange(event: Event) {
-        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-      }
-      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
-
+    const locale = usePromotionsLocale(localeProp);
     activeLocale = locale;
 
     const wizardSteps = useMemo(() => [
@@ -215,7 +217,7 @@ export function PromotionForm({
         if (approvalRequired || hasProfitRisk)
             issues.push({ level: "yellow", text: t("approvalRequiredBeforeActivation") });
         return issues;
-    }, [approvalRequired, buyQty, couponCode, discount, endDate, getQty, hasProfitRisk, name, selectedCategoryIds.length, selectedProductIds.length, startDate, template, type]);
+    }, [approvalRequired, buyQty, couponCode, discount, endDate, getQty, hasProfitRisk, locale, name, selectedCategoryIds.length, selectedProductIds.length, startDate, template, type]);
     const blockingIssues = validationIssues.filter((issue) => issue.level === "red");
     function calculateDiscount() {
         if (type === "percentage" || type === "member_discount")
@@ -245,7 +247,7 @@ export function PromotionForm({
         if (selectedTemplate.key === "coupon") {
             setCouponCode("SAVE10");
         }
-        setMessage(`${selectedTemplate.label} template applied.`);
+        setMessage(fillPromotionsCopy(t("templateApplied"), { name: selectedTemplate.label }));
     }
     function toggleStack(option: string) {
         setStacking((current) => current.includes(option) ? current.filter((item) => item !== option) : [...current, option]);
@@ -617,7 +619,7 @@ function LivePosPreviewPanel({ belowMinimumMargin = false, compact = false, prev
           <div className="rounded-md border border-border bg-background p-3">
             <div className="text-sm font-semibold">{t("promotions")}</div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {preview.appliedPromotions.map((promotion) => (<span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" key={promotion}>{promotion}</span>))}
+              {preview.appliedPromotions.map((promotion) => (<span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" key={promotion}>{previewPromotionLabel(promotion)}</span>))}
             </div>
           </div>
 
@@ -642,7 +644,7 @@ function ForecastPanel({ forecast }: {
           <p className="mt-1 text-xs text-muted-foreground">{t("subtitle")}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${riskClass}`}>
-          {forecast.riskLevel} {t("riskWarnings")}
+          {promotionRiskLabel(forecast.riskLevel, activeLocale)} {t("riskWarnings")}
         </span>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -652,7 +654,7 @@ function ForecastPanel({ forecast }: {
         <Metric label={t("discountGiven")} value={`${formatLak(forecast.discountGiven)} LAK`}/>
         <Metric label={t("estimatedProfit")} value={`${formatLak(forecast.grossProfit)} LAK`} danger={forecast.grossProfit < 0}/>
         <Metric label={t("marginImpact")} value={`${forecast.marginImpact.toFixed(1)}%`} danger={forecast.marginImpact < -8}/>
-        <Metric label={t("scope")} value={`${formatLak(forecast.stockMovement)} units`}/>
+        <Metric label={t("scope")} value={fillPromotionsCopy(t("unitsCount"), { count: formatLak(forecast.stockMovement) })}/>
       </div>
     </section>);
 }
