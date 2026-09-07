@@ -4,7 +4,7 @@ import { DataTable, MetricCard, ReportHeader } from "@/features/reports/componen
 import { formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
-import { tReports } from "@/lib/i18n/reports-copy";
+import { localizeReportLabel, tReports } from "@/lib/i18n/reports-copy";
 
 export default async function InventoryReportPage() {
   const cookieStore = await cookies();
@@ -44,7 +44,7 @@ export default async function InventoryReportPage() {
         rows={inventoryItems.map((item) => [
           item.productNameEn,
           item.sku,
-          item.category,
+          localizeReportLabel(item.category, locale),
           `${formatNumber(item.quantity)} ${item.baseUnit}`,
           formatNumber(item.minStock),
           item.expiryDate ?? tReports("noExpiry", locale),

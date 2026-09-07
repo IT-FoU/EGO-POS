@@ -4,7 +4,7 @@ import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/report
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
-import { tReports } from "@/lib/i18n/reports-copy";
+import { localizeReportLabel, tReports } from "@/lib/i18n/reports-copy";
 
 export default async function SalesReportPage() {
   const cookieStore = await cookies();
@@ -27,12 +27,12 @@ export default async function SalesReportPage() {
       </section>
       <section className="grid gap-6 xl:grid-cols-2">
         <BarChart
-          rows={revenueTrend.map((point) => ({ label: point.label, revenue: point.revenueLak }))}
+          rows={revenueTrend.map((point) => ({ label: localizeReportLabel(point.label, locale), revenue: point.revenueLak }))}
           title={tReports("revenueTrend", locale)}
           valueKey="revenue"
         />
         <BarChart
-          rows={revenueTrend.map((point) => ({ label: point.label, sales: point.salesCount }))}
+          rows={revenueTrend.map((point) => ({ label: localizeReportLabel(point.label, locale), sales: point.salesCount }))}
           title={tReports("salesTrend", locale)}
           valueKey="sales"
           valueType="number"
@@ -47,7 +47,7 @@ export default async function SalesReportPage() {
           tReports("transactions", locale),
         ]}
         rows={salesMetrics.map((metric) => [
-          metric.label,
+          localizeReportLabel(metric.label, locale),
           `${formatLak(metric.revenueLak)} LAK`,
           `${formatLak(metric.profitLak)} LAK`,
           `${formatLak(metric.taxLak)} LAK`,

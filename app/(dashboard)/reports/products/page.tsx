@@ -4,7 +4,7 @@ import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/report
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
-import { tReports } from "@/lib/i18n/reports-copy";
+import { localizeReportLabel, tReports } from "@/lib/i18n/reports-copy";
 
 export default async function ProductReportPage() {
   const cookieStore = await cookies();
@@ -52,7 +52,7 @@ export default async function ProductReportPage() {
         ]}
         rows={productRows.map((row) => [
           row.productName,
-          row.categoryName,
+          localizeReportLabel(row.categoryName, locale),
           formatNumber(row.quantitySold),
           `${formatLak(row.revenueLak)} LAK`,
           `${formatLak(row.profitLak)} LAK`,

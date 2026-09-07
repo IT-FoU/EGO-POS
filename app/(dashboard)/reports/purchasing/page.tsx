@@ -4,7 +4,7 @@ import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/report
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
-import { tReports } from "@/lib/i18n/reports-copy";
+import { localizeReportLabel, tReports } from "@/lib/i18n/reports-copy";
 
 export default async function PurchasingReportPage() {
   const cookieStore = await cookies();
@@ -45,7 +45,7 @@ export default async function PurchasingReportPage() {
           valueKey="value"
         />
         <BarChart
-          rows={purchaseTrend.map((point) => ({ label: point.label, value: point.purchaseValueLak }))}
+          rows={purchaseTrend.map((point) => ({ label: localizeReportLabel(point.label, locale), value: point.purchaseValueLak }))}
           title={tReports("purchaseTrends", locale)}
           valueKey="value"
         />

@@ -114,6 +114,7 @@ export function ReportsAnalyticsClient({
     const [modalTitle, setModalTitle] = useState("");
     const [activeKpi, setActiveKpi] = useState<ReportKpiKey>("revenue");
     const [activeReport, setActiveReport] = useState("Sales Summary");
+    const [activePointLabel, setActivePointLabel] = useState("");
     const [activeSource, setActiveSource] = useState("Sales");
     const [favorites, setFavorites] = useState<string[]>(["Sales Summary", "Profit & Loss", "Inventory Valuation"]);
     const dataSourceStatuses = useMemo(() => buildDataSourceStatuses(hub), [hub]);
@@ -165,8 +166,8 @@ export function ReportsAnalyticsClient({
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
       {modal === "kpi" ? <KpiDetailModal activeKpi={activeKpi} currency={currency} hub={hub} onClose={() => setModal(null)} title={modalTitle}/> : null}
       {modal === "health" ? <HealthModal inventoryAlerts={hub.inventoryAlerts} onClose={() => setModal(null)}/> : null}
-      {modal === "daily" ? <DayDetailModal hub={hub} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle} topSellers={hub.topSellers}/> : null}
-      {modal === "hour" ? <HourDetailModal hub={hub} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle} topSellers={hub.topSellers}/> : null}
+      {modal === "daily" ? <DayDetailModal hub={hub} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} pointLabel={activePointLabel} title={modalTitle} topSellers={hub.topSellers}/> : null}
+      {modal === "hour" ? <HourDetailModal hub={hub} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} pointLabel={activePointLabel} title={modalTitle} topSellers={hub.topSellers}/> : null}
       {modal === "category" ? <CategoryModal currency={currency} onClose={() => setModal(null)} title={modalTitle} topSellers={hub.topSellers}/> : null}
       {modal === "inventory" ? <InventoryAlertModal onClose={() => setModal(null)} productRows={productRows} title={modalTitle}/> : null}
       {modal === "product" ? <ProductAnalyticsModal currency={currency} onClose={() => setModal(null)} revenueProfitTrend={hub.revenueProfitTrend} title={modalTitle}/> : null}
@@ -180,7 +181,7 @@ export function ReportsAnalyticsClient({
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-primary">EGO POS Analytics</p>
+            <p className="text-sm font-medium text-primary">{t("egoPosAnalytics")}</p>
             <h1 className="mt-2 text-3xl font-semibold">{t("reportsAnalytics")}</h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">{t("subtitle")}</p>
           </div>
@@ -238,17 +239,17 @@ export function ReportsAnalyticsClient({
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <RevenueProfitTrend currency={currency} data={hub.revenueProfitTrend} onOpen={(label) => { setModalTitle(`${label} Day Detail`); setModal("daily"); }}/>
-            <HourlySalesTrend data={hub.hourlySales} onOpen={(hour) => { setModalTitle(`${hour} Hour Detail`); setModal("hour"); }}/>
+            <RevenueProfitTrend currency={currency} data={hub.revenueProfitTrend} onOpen={(label) => { setActivePointLabel(label); setModalTitle(fillReportsCopy(t("dayDetailTitle"), { label: localizeLabel(label) })); setModal("daily"); }}/>
+            <HourlySalesTrend data={hub.hourlySales} onOpen={(hour) => { setActivePointLabel(hour); setModalTitle(fillReportsCopy(t("hourDetailTitle"), { hour })); setModal("hour"); }}/>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <CategoryBreakdown currency={currency} data={hub.categoryBreakdown} onOpen={(name) => { setModalTitle(`${name} Analytics`); setModal("category"); }}/>
+            <CategoryBreakdown currency={currency} data={hub.categoryBreakdown} onOpen={(name) => { setModalTitle(fillReportsCopy(t("analyticsTitle"), { name })); setModal("category"); }}/>
             <OperationalAlerts data={hub.inventoryAlerts} onOpen={(title) => { setModalTitle(localizeLabel(title)); setModal("inventory"); }}/>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <TopSellers currency={currency} data={hub.topSellers} onOpen={(name) => { setModalTitle(`${name} Product Sales Analytics`); setModal("product"); }}/>
+            <TopSellers currency={currency} data={hub.topSellers} onOpen={(name) => { setModalTitle(fillReportsCopy(t("productSalesAnalytics"), { name })); setModal("product"); }}/>
             <DeadStockWidget data={hub.deadStockProducts} onOpen={() => setModal("deadstock")}/>
           </section>
         </>) : (<ReportCenter favorites={favorites} onFavorite={(title) => setFavorites((current) => current.includes(title) ? current.filter((item) => item !== title) : [...current, title])} onOpen={openReport} onSchedule={(title) => { setActiveReport(title); setModal("schedule"); }} query={reportQuery}/>)}
@@ -285,7 +286,7 @@ function FilterBar(props: {
         <Select label={t("category")} value={props.categoryId} onChange={props.setCategoryId} options={props.categoryOptions}/>
         <Select label={t("supplier")} value={props.supplierId} onChange={props.setSupplierId} options={props.supplierOptions}/>
         <Select label={t("cashier")} value={props.cashierId} onChange={props.setCashierId} options={props.cashierOptions}/>
-        <Select label="Currency" value={props.currency} onChange={(value) => props.setCurrency(value as ReportCurrency)} options={[{ label: "LAK", value: "LAK" }, { label: "THB", value: "THB" }, { label: "USD", value: "USD" }]}/>
+        <Select label={t("currency")} value={props.currency} onChange={(value) => props.setCurrency(value as ReportCurrency)} options={[{ label: "LAK", value: "LAK" }, { label: "THB", value: "THB" }, { label: "USD", value: "USD" }]}/>
         <div className="flex items-end gap-2">
           <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={props.onApply}>{t("apply")}</button>
           <button className="grid h-10 w-10 place-items-center rounded-md border border-border" type="button" onClick={props.onReset} aria-label={t("resetFilters")}><RefreshCcw className="size-4"/></button>
@@ -410,7 +411,7 @@ function DataSourceStatusPanel({ dataSourceStatuses, generatedAt, onOpen }: {
       <p className="mt-1 text-sm text-muted-foreground">{t("lastUpdated")}: {lastUpdated}</p>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {dataSourceStatuses.map((source) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary" key={source.name} type="button" onClick={() => onOpen(source.name)}>
-            <span className="font-semibold">{source.name}</span>
+            <span className="font-semibold">{localizeLabel(source.name)}</span>
             <StatusBadge status={source.status}/>
           </button>))}
       </div>
@@ -435,7 +436,7 @@ function RevenueProfitTrend({ currency, data, onOpen }: {
       <div className="mt-5 grid gap-4">
         {data.map((point) => (<button className="grid gap-2 rounded-md p-2 text-left hover:bg-background" key={point.label} type="button" onClick={() => onOpen(point.label)} title={performanceTooltip(point.revenue, max, "revenue")}>
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span>{point.label}</span>
+              <span>{localizeLabel(point.label)}</span>
               <span>{formatCurrency(point.revenue, currency)} / {formatCurrency(point.profit, currency)} {currency}</span>
             </div>
             <div className="text-xs text-muted-foreground">{t("margin")} {point.revenue > 0 ? Math.round(point.profit / point.revenue * 100) : 0}% | {t("transactions")} {point.transactions ?? 0} | {performanceStatus(point.revenue, max, "revenue")}</div>
@@ -475,8 +476,8 @@ function CategoryBreakdown({ currency, data, onOpen }: {
       <div className="mt-5 grid gap-4">
         {data.map((row) => (<button className="rounded-md border border-border bg-background p-4 text-left transition hover:border-primary" key={row.category} type="button" onClick={() => onOpen(row.category)}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="font-semibold">{row.category}</div>
-              <div className="text-sm text-muted-foreground">{formatCurrency(row.revenue, currency)} {currency} / {row.margin}{t("margin")}</div>
+              <div className="font-semibold">{localizeLabel(row.category)}</div>
+              <div className="text-sm text-muted-foreground">{formatCurrency(row.revenue, currency)} {currency} / {t("margin")} {row.margin}%</div>
             </div>
             <div className="mt-2 text-xs text-muted-foreground">{t("profit")} {formatCurrency(row.profit, currency)} {currency} | {t("qty")} {formatNumber(row.unitsSold)}</div>
             <div className="mt-3 h-3 rounded-full bg-card"><div className="h-3 rounded-full bg-primary" style={{ width: `${row.revenue / max * 100}%` }}/></div>
@@ -539,16 +540,20 @@ function ReportCenter({ favorites, onFavorite, onOpen, onSchedule, query }: {
     query: string;
 }) {
     const normalized = query.trim().toLowerCase();
-    const filterItems = (items: string[]) => normalized ? items.filter((item) => item.toLowerCase().includes(normalized)) : items;
+    const filterItems = (items: string[]) => normalized
+        ? items.filter((item) => `${item} ${localizeLabel(item)}`.toLowerCase().includes(normalized))
+        : items;
     const filteredFavorites = filterItems(favorites);
     const recent = filterItems(["Sales by Product", "Low Stock", "Promotion Performance"]);
     const executive = filterItems(executiveReports);
     const categories = reportCategories
         .map((category) => ({
         ...category,
-        reports: normalized ? category.reports.filter((report) => `${category.title} ${category.description} ${report}`.toLowerCase().includes(normalized)) : category.reports,
+        reports: normalized
+            ? category.reports.filter((report) => `${category.title} ${category.description} ${report} ${localizeLabel(category.title)} ${localizeLabel(category.description)} ${localizeLabel(report)}`.toLowerCase().includes(normalized))
+            : category.reports,
     }))
-        .filter((category) => category.reports.length > 0 || `${category.title} ${category.description}`.toLowerCase().includes(normalized));
+        .filter((category) => category.reports.length > 0 || `${category.title} ${category.description} ${localizeLabel(category.title)} ${localizeLabel(category.description)}`.toLowerCase().includes(normalized));
     const hasResults = filteredFavorites.length > 0 || recent.length > 0 || executive.length > 0 || categories.length > 0;
     return (<div className="flex flex-col gap-6">
       <section className="grid gap-4 xl:grid-cols-3">
@@ -573,19 +578,19 @@ function ReportCategoryCard({ category, favorites, onFavorite, onOpen, onSchedul
     return (<article className="min-w-0 rounded-lg border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="grid size-11 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Icon aria-hidden="true"/></div>
-        <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={() => onFavorite(category.title)} title="Favorite category">
+        <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={() => onFavorite(category.title)} title={t("favoriteCategory")}>
           <Star className={favorites.includes(category.title) ? "size-4 fill-primary text-primary" : "size-4"}/>
         </button>
       </div>
       <h2 className="mt-4 text-lg font-semibold">{localizeLabel(category.title)}</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{category.description}</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{localizeLabel(category.description)}</p>
       <div className="mt-4 flex max-h-44 flex-col gap-2 overflow-y-auto">
         {category.reports.map((report) => (<div className="flex items-center justify-between gap-2 rounded-md border border-border bg-background p-2" key={report}>
             <button className="min-w-0 truncate text-left text-sm font-medium hover:text-primary" type="button" onClick={() => onOpen(report)}>{localizeLabel(report)}</button>
             <div className="flex shrink-0 gap-1">
-              <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onOpen(report)} title="Open"><Eye className="size-4"/></button>
-              <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onSchedule(report)} title="Schedule"><CalendarClock className="size-4"/></button>
-              <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onFavorite(report)} title="Favorite"><Star className={favorites.includes(report) ? "size-4 fill-primary text-primary" : "size-4"}/></button>
+              <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onOpen(report)} title={t("open")}><Eye className="size-4"/></button>
+              <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onSchedule(report)} title={t("schedule")}><CalendarClock className="size-4"/></button>
+              <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onFavorite(report)} title={t("favorite")}><Star className={favorites.includes(report) ? "size-4 fill-primary text-primary" : "size-4"}/></button>
             </div>
           </div>))}
       </div>
@@ -633,43 +638,43 @@ function kpiSummaryLines(hub: ReportsAnalyticsHub, currency: ReportCurrency, key
     switch (key) {
         case "revenue":
             return [
-                ...hub.paymentBreakdown.map((row) => `${row.label}: ${money(row.value)}`),
-                ...hub.categoryBreakdown.slice(0, 3).map((row) => `${row.category}: ${money(row.revenue)}`),
+                ...hub.paymentBreakdown.map((row) => `${paymentMethodLabel(row.label, activeLocale)}: ${money(row.value)}`),
+                ...hub.categoryBreakdown.slice(0, 3).map((row) => `${localizeLabel(row.category)}: ${money(row.revenue)}`),
             ];
         case "profit":
             return [
-                `Gross profit: ${money(kpiValue("profit"))}`,
-                `Profit margin: ${hub.profitMarginPercent}%`,
-                ...(hub.topSellers[0] ? [`Top seller: ${hub.topSellers[0].name}`] : []),
+                fillReportsCopy(t("kpiGrossProfit"), { value: money(kpiValue("profit")) }),
+                fillReportsCopy(t("kpiProfitMargin"), { value: `${hub.profitMarginPercent}%` }),
+                ...(hub.topSellers[0] ? [fillReportsCopy(t("kpiTopSeller"), { name: hub.topSellers[0].name })] : []),
             ];
         case "transactions":
             return [
-                `Transactions: ${formatNumber(kpiValue("transactions"))}`,
-                `Items sold: ${formatNumber(hub.itemsSold)}`,
-                `Average bill: ${money(hub.averageBillLak)}`,
+                fillReportsCopy(t("kpiTransactions"), { value: formatNumber(kpiValue("transactions")) }),
+                fillReportsCopy(t("kpiItemsSold"), { value: formatNumber(hub.itemsSold) }),
+                fillReportsCopy(t("kpiAverageBill"), { value: money(hub.averageBillLak) }),
             ];
         case "customers":
-            return [`Customers: ${formatNumber(kpiValue("customers"))}`];
+            return [fillReportsCopy(t("kpiCustomers"), { value: formatNumber(kpiValue("customers")) })];
         case "averageBill":
             return [
-                `Average bill: ${money(hub.averageBillLak)}`,
-                `Transactions: ${formatNumber(kpiValue("transactions"))}`,
+                fillReportsCopy(t("kpiAverageBill"), { value: money(hub.averageBillLak) }),
+                fillReportsCopy(t("kpiTransactions"), { value: formatNumber(kpiValue("transactions")) }),
             ];
         case "itemsSold":
             return [
-                `Items sold: ${formatNumber(hub.itemsSold)}`,
-                ...(hub.topSellers[0] ? [`Top item: ${hub.topSellers[0].name} (${formatNumber(hub.topSellers[0].qty)})`] : []),
+                fillReportsCopy(t("kpiItemsSold"), { value: formatNumber(hub.itemsSold) }),
+                ...(hub.topSellers[0] ? [fillReportsCopy(t("kpiTopItem"), { name: hub.topSellers[0].name, qty: formatNumber(hub.topSellers[0].qty) })] : []),
             ];
         case "inventoryValue":
             return [
-                `Inventory value: ${money(hub.inventoryValueLak)}`,
-                `Dead stock items: ${formatNumber(hub.deadStockProducts.length)}`,
-                ...hub.inventoryAlerts.filter((alert) => alert.count > 0).map((alert) => `${alert.label}: ${formatNumber(alert.count)}`),
+                fillReportsCopy(t("kpiInventoryValue"), { value: money(hub.inventoryValueLak) }),
+                fillReportsCopy(t("kpiDeadStockItems"), { value: formatNumber(hub.deadStockProducts.length) }),
+                ...hub.inventoryAlerts.filter((alert) => alert.count > 0).map((alert) => `${localizeLabel(alert.label)}: ${formatNumber(alert.count)}`),
             ];
         case "profitMargin":
             return [
-                `Profit margin: ${hub.profitMarginPercent}%`,
-                ...(hub.categoryBreakdown[0] ? [`Top category: ${hub.categoryBreakdown[0].category}`] : []),
+                fillReportsCopy(t("kpiProfitMargin"), { value: `${hub.profitMarginPercent}%` }),
+                ...(hub.categoryBreakdown[0] ? [fillReportsCopy(t("kpiTopCategory"), { name: hub.categoryBreakdown[0].category })] : []),
             ];
         default:
             return [];
@@ -699,7 +704,7 @@ function KpiDetailModal({ activeKpi, currency, hub, onClose, title }: {
     const details = kpiSummaryLines(hub, currency, activeKpi);
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-4 lg:grid-cols-2">
-        <SimpleBars title={`${title} Detail`} rows={hub.paymentBreakdown.map((row) => ({ label: paymentMethodLabel(row.label, activeLocale), value: row.value }))} currency={currency}/>
+        <SimpleBars title={fillReportsCopy(t("detailTitle"), { title })} rows={hub.paymentBreakdown.map((row) => ({ label: paymentMethodLabel(row.label, activeLocale), value: row.value }))} currency={currency}/>
         <div className="rounded-lg border border-border bg-background p-4">
           <h3 className="font-semibold">{t("salesSummary")}</h3>
           <div className="mt-4 flex flex-col gap-3">
@@ -757,7 +762,7 @@ function ReportDetailModal({ categoryBreakdown, currency, onClose, productRows, 
           <KpiMini label={t("profit")} value={`${formatCurrency(totalProfit, currency)} ${currency}`}/>
           <KpiMini label={t("margin")} value={margin}/>
         </div>
-        <SimpleBars title={t("revenueTrend")} rows={categoryBreakdown.map((row) => ({ label: row.category, value: row.revenue }))} currency={currency}/>
+        <SimpleBars title={t("revenueTrend")} rows={categoryBreakdown.map((row) => ({ label: localizeLabel(row.category), value: row.revenue }))} currency={currency}/>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
@@ -775,7 +780,7 @@ function ReportDetailModal({ categoryBreakdown, currency, onClose, productRows, 
             <tbody>
               {pagedRows.map((row) => <tr className="border-b border-border last:border-b-0" key={row.name}>
                   <td className="px-3 py-3">{row.name}</td>
-                  <td className="px-3 py-3">{row.category}</td>
+                  <td className="px-3 py-3">{localizeLabel(row.category)}</td>
                   <td className="px-3 py-3">{row.qty}</td>
                   <td className="px-3 py-3">{row.revenue}</td>
                   {showProfit ? <td className="px-3 py-3">{row.profit}</td> : null}
@@ -815,16 +820,17 @@ function GenericDetailModal({ onClose, productRows, title }: {
 }) {
     return <ModalFrame onClose={onClose} title={title}><ReportRowsTable productRows={productRows}/></ModalFrame>;
 }
-function DayDetailModal({ hub, onClose, paymentBreakdown, title, topSellers }: {
+function DayDetailModal({ hub, onClose, paymentBreakdown, pointLabel, title, topSellers }: {
     hub: ReportsAnalyticsHub;
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
+    pointLabel: string;
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
     const labels = [t("revenue"), t("profit"), t("margin"), t("transactions"), t("customers"), t("refunds"), t("discounts")];
     const buttons = [t("viewSalesReport"), t("viewReport"), t("export")];
-    const dayKey = title.replace(/\s+Day Detail$/i, "").trim();
+    const dayKey = pointLabel || title.replace(/\s+Day Detail$/i, "").trim();
     const dayPoint = hub.revenueProfitTrend.find((point) => point.label === dayKey);
     const revenue = dayPoint?.revenue ?? 0;
     const profit = dayPoint?.profit ?? 0;
@@ -844,21 +850,22 @@ function DayDetailModal({ hub, onClose, paymentBreakdown, title, topSellers }: {
         {labels.map((label, index) => <KpiMini key={label} label={label} value={values[index] ?? "0"}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MiniList title={t("salesByCategory")} items={categoryNames} onOpen={() => undefined}/>
+        <MiniList title={t("salesByCategory")} items={categoryNames.map((name) => localizeLabel(name))} onOpen={() => undefined}/>
         <MiniList title={t("topSellingProducts")} items={topSellers.slice(0, 4).map((item) => item.name)} onOpen={() => undefined}/>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{buttons.map((button) => <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" key={button}>{button}</button>)}</div>
     </ModalFrame>);
 }
-function HourDetailModal({ hub, onClose, paymentBreakdown, title, topSellers }: {
+function HourDetailModal({ hub, onClose, paymentBreakdown, pointLabel, title, topSellers }: {
     hub: ReportsAnalyticsHub;
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
+    pointLabel: string;
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
     const labels = [t("revenue"), t("profit"), t("transactions"), t("itemsSold")];
-    const hourKey = title.replace(/\s+Hour Detail$/i, "").trim();
+    const hourKey = pointLabel || title.replace(/\s+Hour Detail$/i, "").trim();
     const hourPoint = hub.hourlySales.find((row) => row.hour === hourKey);
     const values = [
         `${formatLak(hourPoint?.revenueLak ?? 0)} LAK`,
@@ -883,10 +890,10 @@ function DataSourceModal({ dataSourceStatuses, onClose, source }: {
     source: string;
 }) {
     const item = dataSourceStatuses.find((entry) => entry.name === source) ?? dataSourceStatuses[0];
-    return (<ModalFrame onClose={onClose} title={source}>
+    return (<ModalFrame onClose={onClose} title={localizeLabel(source)}>
       <div className="grid gap-3 md:grid-cols-2">
-        <KpiMini label={t("dataSourceStatus")} value={item.name}/>
-        <KpiMini label={t("synced")} value="Live"/>
+        <KpiMini label={t("dataSourceStatus")} value={localizeLabel(item.name)}/>
+        <KpiMini label={t("synced")} value={t("live")}/>
         <KpiMini label={t("rows")} value={formatNumber(item.count)}/>
         <div className="rounded-md border border-border bg-background p-3"><div className="text-xs text-muted-foreground">{t("synced")}</div><div className="mt-2"><StatusBadge status={item.status}/></div></div>
       </div>
@@ -906,8 +913,8 @@ function InventoryAlertModal({ onClose, productRows, title }: {
     productRows: ProductReportRow[];
     title: string;
 }) {
-    const action = title.includes("Expiring") ? t("createPromotion") : title.includes("Dead") ? t("createPromotion") : t("createPo");
-    return <ModalFrame onClose={onClose} title={`${title} ${t("reports")}`}><ReportRowsTable productRows={productRows}/><div className="mt-4"><button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{action}</button></div></ModalFrame>;
+    const action = title === t("expiringSoon") || title === t("deadStock") || /Expiring|Dead/i.test(title) ? t("createPromotion") : t("createPo");
+    return <ModalFrame onClose={onClose} title={fillReportsCopy(t("detailTitle"), { title })}><ReportRowsTable productRows={productRows}/><div className="mt-4"><button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{action}</button></div></ModalFrame>;
 }
 function ProductAnalyticsModal({ currency, onClose, revenueProfitTrend, title }: {
     currency: ReportCurrency;
@@ -915,7 +922,7 @@ function ProductAnalyticsModal({ currency, onClose, revenueProfitTrend, title }:
     revenueProfitTrend: ReportsAnalyticsHub["revenueProfitTrend"];
     title: string;
 }) {
-    return <ModalFrame onClose={onClose} title={title}><SimpleBars title={t("salesByProduct")} rows={revenueProfitTrend.map((row) => ({ label: row.label, value: row.revenue }))} currency={currency}/></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={title}><SimpleBars title={t("salesByProduct")} rows={revenueProfitTrend.map((row) => ({ label: localizeLabel(row.label), value: row.revenue }))} currency={currency}/></ModalFrame>;
 }
 function DeadStockModal({ deadStockProducts, onClose }: {
     deadStockProducts: ReportsAnalyticsHub["deadStockProducts"];
@@ -941,12 +948,12 @@ function ScheduleModal({ onClose, reportName }: {
 }) {
     return (<ModalFrame onClose={onClose} title={t("schedule")}>
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium">{t("reports")}<input className="field-input mt-2" defaultValue={reportName}/></label>
-        <Select label={t("schedule")} value="Daily" onChange={() => undefined} options={[{ label: t("today"), value: "Daily" }, { label: t("thisWeek"), value: "Weekly" }, { label: t("thisMonth"), value: "Monthly" }]}/>
+        <label className="text-sm font-medium">{t("reports")}<input className="field-input mt-2" defaultValue={localizeLabel(reportName)}/></label>
+        <Select label={t("schedule")} value="Daily" onChange={() => undefined} options={[{ label: t("scheduleDaily"), value: "Daily" }, { label: t("scheduleWeekly"), value: "Weekly" }, { label: t("scheduleMonthly"), value: "Monthly" }]}/>
         <label className="text-sm font-medium">{t("period")}<input className="field-input mt-2" type="time" defaultValue="08:00"/></label>
-        <Select label={t("export")} value="Email" onChange={() => undefined} options={[{ label: "Email", value: "Email" }, { label: "Telegram", value: "Telegram" }, { label: "WhatsApp", value: "WhatsApp" }, { label: "EGO POS App notification", value: "EGO POS App notification" }]}/>
+        <Select label={t("deliveryChannel")} value="Email" onChange={() => undefined} options={[{ label: t("email"), value: "Email" }, { label: t("telegram"), value: "Telegram" }, { label: t("whatsapp"), value: "WhatsApp" }, { label: t("appNotification"), value: "EGO POS App notification" }]}/>
         <Select label={t("export")} value="PDF" onChange={() => undefined} options={[{ label: t("pdf"), value: "PDF" }, { label: t("excel"), value: "Excel" }]}/>
-        <label className="flex items-end gap-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" defaultChecked/> Active</label>
+        <label className="flex items-end gap-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" defaultChecked/> {t("active")}</label>
       </div>
       <button className="mt-5 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{t("apply")}</button>
     </ModalFrame>);
@@ -981,7 +988,7 @@ function ReportRowsTable({ productRows }: { productRows: ProductReportRow[] }) {
             const margin = row.revenueLak > 0 ? `${((row.profitLak / row.revenueLak) * 100).toFixed(1)}%` : "0%";
             return (<tr className="border-b border-border last:border-b-0" key={row.productName}>
                 <td className="px-3 py-3">{row.productName}</td>
-                <td className="px-3 py-3">{row.categoryName}</td>
+                <td className="px-3 py-3">{localizeLabel(row.categoryName)}</td>
                 <td className="px-3 py-3">{formatNumber(row.quantitySold)}</td>
                 <td className="px-3 py-3">{formatLak(row.revenueLak)} LAK</td>
                 <td className="px-3 py-3">{formatLak(row.profitLak)} LAK</td>
@@ -1018,28 +1025,28 @@ function performanceColor(value: number, max: number) {
 }
 function performanceLegend(type: "hour" | "revenue") {
     return type === "hour"
-        ? ["High sales", "Normal sales", "Low sales"]
-        : ["High revenue", "Normal revenue", "Low revenue"];
+        ? [t("highSales"), t("normalSales"), t("lowSales")]
+        : [t("highRevenue"), t("normalRevenue"), t("lowRevenue")];
 }
 function performanceStatus(value: number, max: number, type: "hour" | "revenue") {
     const ratio = max > 0 ? value / max : 0;
     if (type === "hour") {
         if (ratio >= 0.75)
-            return "High sales";
+            return t("highSales");
         if (ratio >= 0.35)
-            return "Normal sales";
-        return "Low sales";
+            return t("normalSales");
+        return t("lowSales");
     }
     if (ratio >= 0.75)
-        return "High revenue";
+        return t("highRevenue");
     if (ratio >= 0.35)
-        return "Normal revenue";
-    return "Low revenue";
+        return t("normalRevenue");
+    return t("lowRevenue");
 }
 function performanceTooltip(value: number, max: number, type: "hour" | "revenue") {
     const percent = Math.round((max > 0 ? value / max : 0) * 100);
     const status = performanceStatus(value, max, type);
-    return `${status}. ${value} (${percent}% of max).`;
+    return fillReportsCopy(t("performanceTooltip"), { status, value, percent });
 }
 function formatCurrency(value: number, currency: ReportCurrency) {
     const converted = Math.round(value * currencyRates[currency]);
