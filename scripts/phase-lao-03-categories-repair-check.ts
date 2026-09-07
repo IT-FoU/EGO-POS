@@ -58,8 +58,9 @@ check(
     (shell.includes('customers: "Customers"') || shell.includes('tCustomers("customers"')) &&
     (shell.includes('membership: "Membership"') || shell.includes('tMemberships("membership"')) &&
     (shell.includes('suppliers: "Suppliers"') || shell.includes('tSuppliers("suppliers"')) &&
-    shell.includes('settings: "Settings"') &&
-    shell.includes('promotions: "Promotions"') &&
+    (shell.includes('settings: "Settings"') || shell.includes('tSettings("settings"')) &&
+    (shell.includes('promotions: "Promotions"') || shell.includes('tPromotions("promotions"')) &&
+    (shell.includes('reports: "Reports"') || shell.includes('tReports("reports"')) &&
     !toggle.includes('updateLocale("th")') &&
     !toggle.includes("TH") &&
     tProducts("products", "th") === en.products,

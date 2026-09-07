@@ -141,8 +141,9 @@ check(
     shell.includes('tSuppliers("suppliers", "lo")') &&
     sen.suppliers === "Suppliers" &&
     slo.suppliers === laoSuppliers &&
-    shell.includes('promotions: "Promotions"') &&
-    shell.includes('settings: "Settings"'),
+    (shell.includes('promotions: "Promotions"') || shell.includes('tPromotions("promotions"')) &&
+    (shell.includes('reports: "Reports"') || shell.includes('tReports("reports"')) &&
+    (shell.includes('settings: "Settings"') || shell.includes('tSettings("settings"')),
 );
 
 check(

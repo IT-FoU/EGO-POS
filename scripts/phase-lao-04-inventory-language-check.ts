@@ -203,7 +203,7 @@ check(
     !quickStockIn.includes("useState(generateClientStockInNo)") &&
     inventoryPage.includes("getInventoryListPage") &&
     inventoryLoading.includes("loadingInventory") &&
-    reportsInventory.includes('from "@/lib/i18n/ui"') &&
+    (reportsInventory.includes('from "@/lib/i18n/ui"') || reportsInventory.includes("tReports")) &&
     !reportsInventory.includes("inventory-copy") &&
     !customersPage.includes("inventory-copy") &&
     !settingsForm.includes("inventory-copy") &&

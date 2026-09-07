@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Filter, RefreshCw, X } from "lucide-react";
 
 import type { StoreActivityLogOptions, StoreActivityLogRecord } from "@/features/store-activity/store-activity-log-service";
+import type { SupportedLocale } from "@/lib/constants";
+import { getSettingsCopy, tSettings } from "@/lib/i18n/settings-copy";
 import { cn } from "@/lib/utils";
 
 type StoreActivityResponse = {
@@ -51,72 +53,40 @@ function defaultDateFrom() {
   return date.toISOString().slice(0, 10);
 }
 
-function copy(locale: "en" | "th") {
-  return locale === "th"
-    ? {
-        accessDenied: "คุณไม่มีสิทธิ์ดูส่วนนี้",
-        action: "การทำงาน",
-        activityDetail: "รายละเอียดกิจกรรม",
-        actor: "ผู้ใช้งาน",
-        amount: "จำนวนเงิน",
-        approvedBy: "อนุมัติโดย",
-        approvalMethod: "วิธีอนุมัติ",
-        approvalReason: "เหตุผลอนุมัติ",
-        back: "กลับไป Store Activity Logs",
-        before: "ก่อน",
-        branch: "สาขา",
-        createdAt: "วันที่ / เวลา",
-        currency: "สกุลเงิน",
-        dateFrom: "จากวันที่",
-        dateTo: "ถึงวันที่",
-        details: "รายละเอียด",
-        device: "อุปกรณ์",
-        empty: "ไม่พบประวัติการทำงานของร้าน",
-        filters: "ตัวกรอง",
-        metadata: "Metadata",
-        occurredAt: "เวลาที่เกิดรายการ",
-        originalAction: "รายการต้นทาง",
-        refresh: "โหลดใหม่",
-        requestedBy: "ร้องขอโดย",
-        role: "บทบาท",
-        status: "สถานะ",
-        storeActivityLogs: "Store Activity Logs",
-        syncedAt: "เวลาซิงก์",
-        target: "เป้าหมาย",
-        terminal: "เครื่อง POS",
-      }
-    : {
-        accessDenied: "You do not have permission to view this section.",
-        action: "Action",
-        activityDetail: "Activity Detail",
-        actor: "Actor",
-        amount: "Amount",
-        approvedBy: "Approved by",
-        approvalMethod: "Approval method",
-        approvalReason: "Approval reason",
-        back: "Back to Store Activity Logs",
-        before: "Before",
-        branch: "Branch",
-        createdAt: "Date / Time",
-        currency: "Currency",
-        dateFrom: "Date from",
-        dateTo: "Date to",
-        details: "Details",
-        device: "Device",
-        empty: "No store activity logs found.",
-        filters: "Filters",
-        metadata: "Metadata",
-        occurredAt: "Occurred at",
-        originalAction: "Original action",
-        refresh: "Refresh",
-        requestedBy: "Requested by",
-        role: "Role",
-        status: "Status",
-        storeActivityLogs: "Store Activity Logs",
-        syncedAt: "Synced at",
-        target: "Target",
-        terminal: "Terminal",
-      };
+function activityCopy(locale?: SupportedLocale) {
+  const settingsCopy = getSettingsCopy(locale);
+  return {
+    accessDenied: tSettings("permissionDenied", locale),
+    action: tSettings("activityAction", locale),
+    activityDetail: tSettings("activityDetail", locale),
+    actor: tSettings("actor", locale),
+    amount: tSettings("amount", locale),
+    approvedBy: tSettings("approvedBy", locale),
+    approvalMethod: tSettings("approvalMethod", locale),
+    approvalReason: tSettings("approvalReason", locale),
+    back: `Back to ${settingsCopy.storeActivityLogs}`,
+    before: "Before",
+    branch: tSettings("branch", locale),
+    createdAt: tSettings("occurredAt", locale),
+    currency: tSettings("currency", locale),
+    dateFrom: tSettings("dateFrom", locale),
+    dateTo: tSettings("dateTo", locale),
+    details: tSettings("details", locale),
+    device: tSettings("device", locale),
+    empty: tSettings("emptyActivity", locale),
+    filters: tSettings("filters", locale),
+    metadata: tSettings("details", locale),
+    occurredAt: tSettings("occurredAt", locale),
+    originalAction: tSettings("originalAction", locale),
+    refresh: tSettings("refresh", locale),
+    requestedBy: tSettings("requestedBy", locale),
+    role: tSettings("role", locale),
+    status: tSettings("status", locale),
+    storeActivityLogs: settingsCopy.storeActivityLogs,
+    syncedAt: tSettings("syncedAt", locale),
+    target: tSettings("target", locale),
+    terminal: tSettings("terminal", locale),
+  };
 }
 
 function formatDate(value: string | null | undefined) {
@@ -179,8 +149,8 @@ function buildQuery(filters: StoreActivityFilters, page: number) {
   return params.toString();
 }
 
-export function StoreActivityLogsClient({ locale = "en" }: { locale?: "en" | "th" }) {
-  const c = copy(locale);
+export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedLocale }) {
+  const c = activityCopy(locale);
   const [filters, setFilters] = useState<StoreActivityFilters>(initialFilters);
   const [logs, setLogs] = useState<StoreActivityLogRecord[]>([]);
   const [options, setOptions] = useState<StoreActivityLogOptions>(emptyOptions);
@@ -201,7 +171,7 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: "en" | "th
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.ok === false) {
         setLogs([]);
-        setError(response.status === 403 ? c.accessDenied : payload.message ?? payload.error?.message ?? "Store activity logs could not be loaded.");
+        setError(response.status === 403 ? c.accessDenied : payload.message ?? payload.error?.message ?? tSettings("loadActivityFailed", locale));
         return;
       }
       const data = payload.data as StoreActivityResponse;
@@ -211,7 +181,7 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: "en" | "th
       setTotal(data.pagination?.total ?? 0);
     } catch (loadError) {
       setLogs([]);
-      setError(loadError instanceof Error ? loadError.message : "Store activity logs could not be loaded.");
+      setError(loadError instanceof Error ? loadError.message : tSettings("loadActivityFailed", locale));
     } finally {
       setIsLoading(false);
     }
@@ -277,7 +247,7 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: "en" | "th
             </thead>
             <tbody>
               {logs.length === 0 ? (
-                <tr><td className="px-4 py-8 text-center text-muted-foreground" colSpan={10}>{isLoading ? "Loading..." : c.empty}</td></tr>
+                <tr><td className="px-4 py-8 text-center text-muted-foreground" colSpan={10}>{isLoading ? tSettings("loadingSettings", locale) : c.empty}</td></tr>
               ) : logs.map((log) => (
                 <tr className="border-t border-border transition hover:bg-primary/5" key={log.id}>
                   <td className="whitespace-nowrap px-4 py-3">{formatDate(log.createdAt)}</td>
@@ -333,7 +303,7 @@ function Badge({ tone, value }: { tone: "danger" | "info" | "success"; value: st
   );
 }
 
-function ActivityDetailDrawer({ c, log, onClose }: { c: ReturnType<typeof copy>; log: StoreActivityLogRecord; onClose: () => void }) {
+function ActivityDetailDrawer({ c, log, onClose }: { c: ReturnType<typeof activityCopy>; log: StoreActivityLogRecord; onClose: () => void }) {
   return (
     <div className="pointer-events-none fixed inset-y-0 right-0 z-[60] flex w-full justify-end">
       <aside className="pointer-events-auto flex h-full w-full max-w-[calc(100vw-4rem)] flex-col border-l border-border bg-background shadow-2xl xl:max-w-[calc(100vw-17rem)]">

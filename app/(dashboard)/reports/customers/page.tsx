@@ -1,31 +1,60 @@
-import { t } from "@/lib/i18n/ui";
+import { cookies } from "next/headers";
 import { Gift, TrendingUp, Users, WalletCards } from "lucide-react";
-import { BarChart, DataTable, MetricCard, ReportHeader, } from "@/features/reports/components/report-primitives";
+import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/reports/components/report-primitives";
 import { calculateAvailablePoints } from "@/features/customers/format";
 import { membershipDisplayLabel } from "@/features/customers/membership-display";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
+import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+import { tReports } from "@/lib/i18n/reports-copy";
+
 export default async function CustomerReportPage() {
-    const { customers } = await getReportsSnapshot();
-    const topCustomers = [...customers].sort((a, b) => b.totalPurchasesLak - a.totalPurchasesLak);
-    const totalSpending = customers.reduce((total, customer) => total + customer.totalPurchasesLak, 0);
-    const totalPoints = customers.reduce((total, customer) => total + calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints), 0);
-    return (<div className="flex flex-col gap-6">
-      <ReportHeader title="Customer Report" description={t("ui.top.customers.loyalty.points.and.customer.sp")}/>
+  const cookieStore = await cookies();
+  const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  const { customers } = await getReportsSnapshot();
+  const topCustomers = [...customers].sort((a, b) => b.totalPurchasesLak - a.totalPurchasesLak);
+  const totalSpending = customers.reduce((total, customer) => total + customer.totalPurchasesLak, 0);
+  const totalPoints = customers.reduce(
+    (total, customer) => total + calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints),
+    0,
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ReportHeader
+        description={tReports("customerReports", locale)}
+        locale={locale}
+        title={tReports("customerReport", locale)}
+      />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Users} label="Total Customers" value={formatNumber(customers.length)}/>
-        <MetricCard icon={TrendingUp} label="Top Customer" value={topCustomers[0]?.fullName ?? "N/A"}/>
-        <MetricCard icon={Gift} label="Loyalty Points" value={formatNumber(totalPoints)}/>
-        <MetricCard icon={WalletCards} label="Customer Spending" value={`${formatLak(totalSpending)} LAK`}/>
+        <MetricCard icon={Users} label={tReports("totalCustomers", locale)} value={formatNumber(customers.length)} />
+        <MetricCard icon={TrendingUp} label={tReports("topCustomer", locale)} value={topCustomers[0]?.fullName ?? tReports("na", locale)} />
+        <MetricCard icon={Gift} label={tReports("loyaltyPoints", locale)} value={formatNumber(totalPoints)} />
+        <MetricCard icon={WalletCards} label={tReports("customerSpending", locale)} value={`${formatLak(totalSpending)} LAK`} />
       </section>
-      <BarChart rows={topCustomers.map((customer) => ({ label: customer.fullName, spending: customer.totalPurchasesLak }))} title="Customer Spending" valueKey="spending"/>
-      <DataTable columns={["Customer", "Membership", "Total Purchases", "Earned Points", "Redeemed Points", "Available Points"]} rows={topCustomers.map((customer) => [
-            customer.fullName,
-            membershipDisplayLabel(customer.membershipLevel),
-            `${formatLak(customer.totalPurchasesLak)} LAK`,
-            formatNumber(customer.earnedPoints),
-            formatNumber(customer.redeemedPoints),
-            formatNumber(calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints)),
-        ])}/>
-    </div>);
+      <BarChart
+        rows={topCustomers.map((customer) => ({ label: customer.fullName, spending: customer.totalPurchasesLak }))}
+        title={tReports("customerSpending", locale)}
+        valueKey="spending"
+      />
+      <DataTable
+        columns={[
+          tReports("customers", locale),
+          tReports("membership", locale),
+          tReports("customerSpending", locale),
+          tReports("earnedPoints", locale),
+          tReports("redeemedPoints", locale),
+          tReports("availablePoints", locale),
+        ]}
+        rows={topCustomers.map((customer) => [
+          customer.fullName,
+          membershipDisplayLabel(customer.membershipLevel),
+          `${formatLak(customer.totalPurchasesLak)} LAK`,
+          formatNumber(customer.earnedPoints),
+          formatNumber(customer.redeemedPoints),
+          formatNumber(calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints)),
+        ])}
+      />
+    </div>
+  );
 }

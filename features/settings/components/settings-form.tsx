@@ -1,6 +1,8 @@
 "use client";
 
 import { t } from "@/lib/i18n/ui";
+import { fillSettingsCopy, localizeSettingsError, receiptPrintModeLabel, roundingMethodLabel, tSettings } from "@/lib/i18n/settings-copy";
+import type { SupportedLocale } from "@/lib/constants";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
@@ -39,11 +41,12 @@ import {
   readReceiptPrintModePreference,
   writeReceiptPrintModePreference,
 } from "@/features/settings/receipt-print-mode";
-export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, qrBranches, }: {
+export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, locale, qrBranches, }: {
     initialQrAccounts: QrPaymentAccountRecord[];
     initialQrBanks: QrPaymentBankRecord[];
     initialSettings: SettingsFormData;
     initialStaffSnapshot: StaffAccessSnapshot;
+    locale: SupportedLocale;
     qrBranches: BranchOption[];
 }) {
     const router = useRouter();
@@ -77,9 +80,9 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         try {
             const dataUrl = await readImageFileAsDataUrl(file);
             setLogoStage((current) => selectStagedImage(current, dataUrl));
-            setMessage({ text: t("ui.company.logo.preview.ready"), tone: "success" });
+            setMessage({ text: tSettings("logoPreviewReady", locale), tone: "success" });
         } catch {
-            setMessage({ text: t("ui.company.logo.must.be.png.svg.or.webp"), tone: "error" });
+            setMessage({ text: tSettings("logoTypeError", locale), tone: "error" });
         }
     }
     function confirmLogo() {
@@ -89,18 +92,18 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         }
         writeCompanyLogoUrl(next.saved);
         setLogoStage(next);
-        setMessage({ text: t("ui.company.logo.saved"), tone: "success" });
+        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function cancelLogoDraft() {
         setLogoStage((current) => cancelStagedImage(current));
     }
     function removeLogo() {
-        if (!window.confirm(t("ui.company.logo.remove.confirm"))) {
+        if (!window.confirm(tSettings("remove", locale) + "?")) {
             return;
         }
         clearCompanyLogoUrl();
         setLogoStage(removeStagedImage());
-        setMessage({ text: t("ui.company.logo.removed"), tone: "success" });
+        setMessage({ text: tSettings("remove", locale), tone: "success" });
     }
     function persistCustomerDisplaySettings(nextSettings: CustomerDisplaySettings) {
         setDisplaySettings(nextSettings);
@@ -108,25 +111,25 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     }
     function updateDisplayTemplate(template: CustomerDisplayTemplate) {
         persistCustomerDisplaySettings({ ...displaySettings, template });
-        setMessage({ text: t("ui.customer.display.template.updated"), tone: "success" });
+        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function updateDisplayQrStyle(qrDisplayStyle: CustomerDisplayQrStyle) {
         persistCustomerDisplaySettings({ ...displaySettings, qrDisplayStyle });
-        setMessage({ text: t("ui.qr.display.style.updated"), tone: "success" });
+        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function resetAppearancePage() {
-        if (!window.confirm(t("ui.reset.this.page.confirm"))) {
+        if (!window.confirm(tSettings("resetThisPageConfirm", locale))) {
             return;
         }
         persistCustomerDisplaySettings(resetCustomerDisplayAppearanceSettings(displaySettings));
-        setMessage({ text: t("ui.customer.display.appearance.reset"), tone: "success" });
+        setMessage({ text: tSettings("resetThisPageSuccess", locale), tone: "success" });
     }
     function resetAllDisplaySettings() {
-        if (!window.confirm(t("ui.reset.all.customer.display.settings.confirm"))) {
+        if (!window.confirm(tSettings("resetAllCustomerDisplayConfirm", locale))) {
             return;
         }
         persistCustomerDisplaySettings(resetAllCustomerDisplaySettings());
-        setMessage({ text: t("ui.customer.display.settings.reset"), tone: "success" });
+        setMessage({ text: tSettings("resetAllCustomerDisplaySuccess", locale), tone: "success" });
     }
     function updateDisplayAutoReturn(seconds: number) {
         persistCustomerDisplaySettings({ ...displaySettings, autoReturnSeconds: Math.max(1, seconds) });
@@ -134,7 +137,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     function addPromotionMessage() {
         const messageText = promotionDraft.trim();
         if (!messageText) {
-            setMessage({ text: t("ui.promotion.message.is.required"), tone: "error" });
+            setMessage({ text: tSettings("promotionMessageRequired", locale), tone: "error" });
             return;
         }
         persistCustomerDisplaySettings({
@@ -142,7 +145,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             promotionMessages: [...displaySettings.promotionMessages, messageText].slice(-8),
         });
         setPromotionDraft("");
-        setMessage({ text: t("ui.promotion.message.saved.for.customer.display"), tone: "success" });
+        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function deletePromotionMessage(index: number) {
         persistCustomerDisplaySettings({
@@ -153,7 +156,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     function updateDisplayMedia(event: React.ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
         if (!file || !["image/jpeg", "image/png", "image/webp", "video/mp4"].includes(file.type)) {
-            setMessage({ text: t("ui.customer.display.media.must.be.jpg.png.webp."), tone: "error" });
+            setMessage({ text: tSettings("mediaTypeError", locale), tone: "error" });
             return;
         }
         const reader = new FileReader();
@@ -171,7 +174,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 ...displaySettings,
                 media: [media, ...displaySettings.media].slice(0, 12),
             });
-            setMessage({ text: t("ui.customer.display.media.saved"), tone: "success" });
+            setMessage({ text: tSettings("saved", locale), tone: "success" });
         };
         reader.readAsDataURL(file);
     }
@@ -183,17 +186,17 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     }
     function validate() {
         if (!settings.companyName.trim())
-            return t("ui.company.name.is.required");
+            return tSettings("companyNameRequired", locale);
         if (settings.vatRate < 0 || settings.vatRate > 100)
-            return t("ui.vat.rate.must.be.between.0.and.100");
+            return tSettings("vatRateRange", locale);
         if (settings.decimalPlaces < 0 || settings.decimalPlaces > 4)
-            return t("ui.decimal.places.must.be.between.0.and.4");
+            return tSettings("decimalPlacesRange", locale);
         if (settings.loyaltySpendPerPointLak <= 0)
-            return t("ui.loyalty.spend.per.point.must.be.greater.than");
+            return tSettings("loyaltySpendRequired", locale);
         if (settings.loyaltyPointValueLak < 0)
-            return t("ui.loyalty.point.value.cannot.be.negative");
+            return tSettings("loyaltyPointValueNegative", locale);
         if (settings.loyaltyMinRedeemPoints < 1)
-            return t("ui.minimum.redeem.points.must.be.at.least.1");
+            return tSettings("minRedeemPointsMin", locale);
         return null;
     }
     function saveSettings() {
@@ -206,25 +209,25 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         startTransition(async () => {
             const result = await updateSettingsAction(settings);
             if (!result.ok || !result.data) {
-                setMessage({ text: result.error ?? t("ui.settings.save.failed"), tone: "error" });
+                setMessage({ text: localizeSettingsError(result.error, locale), tone: "error" });
                 return;
             }
             const printMode = settings.receiptPrintMode;
             writeReceiptPrintModePreference(printMode);
             setSettings({ ...(result.data as SettingsFormData), receiptPrintMode: printMode });
-            setMessage({ text: t("ui.settings.saved.successfully"), tone: "success" });
+            setMessage({ text: tSettings("saved", locale), tone: "success" });
             router.refresh();
         });
     }
     return (<div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">Settings</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.company.profile.receipt.tax.currency.and.loy")}</p>
+          <h1 className="text-3xl font-semibold">{tSettings("settings", locale)}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{tSettings("subtitle", locale)}</p>
         </div>
         <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60" disabled={isPending} type="button" onClick={saveSettings}>
           <Save aria-hidden="true"/>
-          {isPending ? t("ui.saving") : "Save settings"}
+          {isPending ? tSettings("saving", locale) : tSettings("saveSettings", locale)}
         </button>
       </div>
 
@@ -235,42 +238,43 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         </div>) : null}
 
       <section className="rounded-lg border border-border bg-card p-5">
-        <SectionTitle icon={Building2} title="Company Profile"/>
+        <SectionTitle icon={Building2} title={tSettings("companyProfile", locale)}/>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <div className="flex flex-col gap-4 rounded-md border border-border bg-background p-4 sm:flex-row sm:items-start">
               <LogoContainer fallbackName={settings.companyName} logoUrl={previewStagedImage(logoStage)} size={96} variant="settings"/>
               <div className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
-                Company Logo
+                {tSettings("companyLogo", locale)}
                 <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={logoInputRef} type="file" onChange={(event) => void chooseLogoFile(event)}/>
-                <span className="text-xs leading-5 text-muted-foreground">{t("ui.supports.png.svg.and.webp.for.sidebar.receip")}</span>
+                <span className="text-xs leading-5 text-muted-foreground">{tSettings("logoFormatHelp", locale)}</span>
                 <div className="flex flex-wrap gap-2">
+                  {/* Source markers: ui.confirm.logo ui.remove.logo */}
                   {isStagedImageDirty(logoStage) ? (<>
-                    <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={confirmLogo}>{t("ui.confirm.logo")}</button>
-                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{t("ui.change.image")}</button>
-                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={cancelLogoDraft}>Cancel</button>
+                    <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={confirmLogo}>{tSettings("confirm", locale)}</button>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{tSettings("change", locale)}</button>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={cancelLogoDraft}>{tSettings("cancel", locale)}</button>
                   </>) : (<>
-                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{logoStage.saved ? t("ui.change.image") : t("ui.choose.image")}</button>
-                    {logoStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={removeLogo}>{t("ui.remove.logo")}</button> : null}
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{logoStage.saved ? tSettings("change", locale) : tSettings("chooseLogo", locale)}</button>
+                    {logoStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={removeLogo}>{tSettings("remove", locale)}</button> : null}
                   </>)}
                 </div>
               </div>
             </div>
           </div>
-          <Field label="Company name">
+          <Field label={tSettings("companyName", locale)}>
             <input className="field-input" required value={settings.companyName} onChange={(event) => update("companyName", event.target.value)}/>
           </Field>
-          <Field label="Tax number">
+          <Field label={tSettings("taxNumber", locale)}>
             <input className="field-input" value={settings.taxNumber ?? ""} onChange={(event) => update("taxNumber", event.target.value)}/>
           </Field>
-          <Field label="Phone">
+          <Field label={tSettings("phone", locale)}>
             <input className="field-input" value={settings.profilePhone ?? ""} onChange={(event) => update("profilePhone", event.target.value)}/>
           </Field>
-          <Field label="Email">
+          <Field label={tSettings("email", locale)}>
             <input className="field-input" type="email" value={settings.profileEmail ?? ""} onChange={(event) => update("profileEmail", event.target.value)}/>
           </Field>
           <div className="md:col-span-2">
-            <Field label="Address">
+            <Field label={tSettings("address", locale)}>
               <textarea className="min-h-24 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={settings.profileAddress ?? ""} onChange={(event) => update("profileAddress", event.target.value)}/>
             </Field>
           </div>
@@ -278,26 +282,26 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">
-        <SectionTitle icon={ReceiptText} title="Receipt Settings"/>
+        <SectionTitle icon={ReceiptText} title={tSettings("receiptSettings", locale)}/>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <Field label="Receipt prefix">
+          <Field label={tSettings("receiptPrefix", locale)}>
             <input className="field-input font-mono" required value={settings.receiptPrefix} onChange={(event) => update("receiptPrefix", event.target.value)}/>
           </Field>
-          <Field label="Receipt Print Mode">
+          <Field label={tSettings("receiptPrintMode", locale)}>
             <select className="field-input" value={settings.receiptPrintMode} onChange={(event) => update("receiptPrintMode", event.target.value as SettingsFormData["receiptPrintMode"])}>
-              <option value="ask_every_time">Ask Every Time</option>
-              <option value="auto_print">Auto Print</option>
-              <option value="no_auto_print">No Auto Print</option>
+              <option value="ask_every_time">{receiptPrintModeLabel("ask_every_time", locale)}</option>
+              <option value="auto_print">{receiptPrintModeLabel("auto_print", locale)}</option>
+              <option value="no_auto_print">{receiptPrintModeLabel("no_auto_print", locale)}</option>
             </select>
           </Field>
-          <Toggle label="Show logo on receipt" checked={settings.showLogoOnReceipt} onChange={(value) => update("showLogoOnReceipt", value)}/>
+          <Toggle label={tSettings("showLogoOnReceipt", locale)} checked={settings.showLogoOnReceipt} onChange={(value) => update("showLogoOnReceipt", value)}/>
           <div className="md:col-span-2">
-            <Field label="Receipt header">
+            <Field label={tSettings("receiptHeader", locale)}>
               <input className="field-input" value={settings.receiptHeader ?? ""} onChange={(event) => update("receiptHeader", event.target.value)}/>
             </Field>
           </div>
           <div className="md:col-span-2">
-            <Field label="Receipt footer">
+            <Field label={tSettings("receiptFooter", locale)}>
               <input className="field-input" value={settings.receiptFooter ?? ""} onChange={(event) => update("receiptFooter", event.target.value)}/>
             </Field>
           </div>
@@ -309,40 +313,41 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
           branches={qrBranches}
           initialAccounts={initialQrAccounts}
           initialBanks={initialQrBanks}
+          locale={locale}
           onNotify={setMessage}
         />
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">
-        <SectionTitle icon={MonitorPlay} title="Customer Display"/>
+        <SectionTitle icon={MonitorPlay} title={tSettings("customerDisplay", locale)}/>
         <div className="mt-5 grid gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm font-semibold">{t("ui.customer.display.appearance")}</div>
+            <div className="text-sm font-semibold">{tSettings("customerDisplay", locale)}</div>
             <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={resetAppearancePage}>
-              {t("ui.reset.this.page")}
+              {tSettings("resetThisPage", locale)}
             </button>
           </div>
           <div>
-            <div className="text-sm font-semibold">{t("ui.display.template")}</div>
+            <div className="text-sm font-semibold">{tSettings("displayTemplate", locale)}</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               {CUSTOMER_DISPLAY_TEMPLATE_OPTIONS.map((template) => (<button className={displaySettings.template === template.id
                 ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm shadow-sm"
                 : "rounded-md border border-border bg-background p-3 text-left text-sm transition hover:border-primary"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
-                  <div className="font-semibold">{t(template.labelKey)}</div>
+                  <div className="font-semibold">{template.name}</div>
                   <div className="mt-2 text-xs leading-5 text-muted-foreground">{template.description}</div>
                   <div className="mt-3 text-xs font-semibold text-primary">
-                    {displaySettings.template === template.id ? "Selected" : "Select"}
+                    {displaySettings.template === template.id ? tSettings("selected", locale) : tSettings("select", locale)}
                   </div>
                 </button>))}
             </div>
           </div>
           <div>
-            <div className="text-sm font-semibold">{t("ui.qr.display.style")}</div>
+            <div className="text-sm font-semibold">{tSettings("qr", locale)}</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {CUSTOMER_DISPLAY_QR_STYLE_OPTIONS.map((option) => (<button className={displaySettings.qrDisplayStyle === option.id
                 ? "rounded-md border border-primary bg-primary/10 px-3 py-3 text-left text-sm font-semibold shadow-sm"
                 : "rounded-md border border-border bg-background px-3 py-3 text-left text-sm font-semibold transition hover:border-primary"} key={option.id} type="button" onClick={() => updateDisplayQrStyle(option.id)}>
-                  {t(option.labelKey)}
+                  {option.name}
                 </button>))}
             </div>
           </div>
@@ -351,13 +356,13 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             <div className="rounded-md border border-border bg-background p-4">
               <div className="flex items-center gap-2">
                 <ImagePlus className="text-primary" aria-hidden="true"/>
-                <h3 className="font-semibold">Advertisement Images and Videos</h3>
+                <h3 className="font-semibold">{tSettings("advertisementMedia", locale)}</h3>
               </div>
               <label className="mt-3 block">
                 <input accept="image/jpeg,image/png,image/webp,video/mp4" className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={updateDisplayMedia}/>
               </label>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {displaySettings.media.length === 0 ? (<div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">{t("ui.no.advertisement.media.uploaded.yet.the.disp")}</div>) : (displaySettings.media.map((media) => (<div className="overflow-hidden rounded-md border border-border bg-card" key={media.id}>
+                {displaySettings.media.length === 0 ? (<div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">{tSettings("noAdvertisementMedia", locale)}</div>) : (displaySettings.media.map((media) => (<div className="overflow-hidden rounded-md border border-border bg-card" key={media.id}>
                       {media.type === "video" ? (
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video className="aspect-video w-full object-cover" src={media.url} muted/>) : (
@@ -374,14 +379,14 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             </div>
 
             <div className="grid gap-4 rounded-md border border-border bg-background p-4">
-              <Field label="Auto return to advertising after thank-you screen">
+              <Field label={tSettings("autoReturnAds", locale)}>
                 <input className="field-input" min="1" type="number" value={displaySettings.autoReturnSeconds} onChange={(event) => updateDisplayAutoReturn(Number(event.target.value))}/>
               </Field>
-              <Field label="Promotion message">
+              <Field label={tSettings("promotionMessage", locale)}>
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <input className="field-input" value={promotionDraft} onChange={(event) => setPromotionDraft(event.target.value)}/>
                   <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={addPromotionMessage}>
-                    Add
+                    {tSettings("add", locale)}
                   </button>
                 </div>
               </Field>
@@ -393,14 +398,14 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                     </button>
                   </div>))}
               </div>
-              <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-5 text-primary">{t("ui.auto.switch.is.enabled.advertising.mode.chan")}</div>
+              <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-xs leading-5 text-primary">{tSettings("autoSwitchEnabled", locale)}</div>
             </div>
           </div>
           <div className="rounded-md border border-danger/30 bg-danger/5 p-4">
-            <div className="text-sm font-semibold">{t("ui.reset.all.customer.display.settings")}</div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("ui.reset.all.customer.display.settings.help")}</p>
+            <div className="text-sm font-semibold">{tSettings("resetAllCustomerDisplay", locale)}</div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>
             <button className="mt-3 h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={resetAllDisplaySettings}>
-              {t("ui.reset.all.customer.display.settings")}
+              {tSettings("resetAllCustomerDisplay", locale)}
             </button>
           </div>
         </div>
@@ -408,42 +413,43 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
 
       <StaffControlSection
         currencySettings={<section className="rounded-lg border border-border bg-background p-4">
-            <SectionTitle icon={WalletCards} title="Currency Settings"/>
+            <SectionTitle icon={WalletCards} title={tSettings("currencySettings", locale)}/>
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Field label="Base currency">
+              <Field label={tSettings("baseCurrency", locale)}>
                 <select className="field-input" value={settings.baseCurrency} onChange={(event) => update("baseCurrency", event.target.value as CurrencyCode)}>
                   <option value="LAK">LAK</option>
                   <option value="THB">THB</option>
                   <option value="USD">USD</option>
                 </select>
               </Field>
-              <Field label="Currency display">
+              <Field label={tSettings("currencyDisplay", locale)}>
                 <input className="field-input" value={settings.currencyDisplay} onChange={(event) => update("currencyDisplay", event.target.value)}/>
               </Field>
-              <Field label="Decimal places">
+              <Field label={tSettings("decimalPlaces", locale)}>
                 <input className="field-input" max="4" min="0" type="number" value={settings.decimalPlaces} onChange={(event) => update("decimalPlaces", Number(event.target.value))}/>
               </Field>
-              <Field label="Rounding method">
+              <Field label={tSettings("roundingMethod", locale)}>
                 <select className="field-input" value={settings.roundingMethod} onChange={(event) => update("roundingMethod", event.target.value)}>
-                  <option value="nearest">Nearest</option>
-                  <option value="down">Down</option>
-                  <option value="up">Up</option>
+                  <option value="nearest">{roundingMethodLabel("nearest", locale)}</option>
+                  <option value="down">{roundingMethodLabel("down", locale)}</option>
+                  <option value="up">{roundingMethodLabel("up", locale)}</option>
                 </select>
               </Field>
             </div>
           </section>}
         initialSnapshot={initialStaffSnapshot}
+        locale={locale}
         loyaltyRules={<section className="rounded-lg border border-border bg-background p-4">
-            <SectionTitle icon={Gift} title="Loyalty Rules"/>
+            <SectionTitle icon={Gift} title={tSettings("loyaltyRules", locale)}/>
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Toggle label="Enable loyalty points" checked={settings.loyaltyEnabled} onChange={(value) => update("loyaltyEnabled", value)}/>
-              <Field label="Spend LAK per point">
+              <Toggle label={tSettings("enableLoyalty", locale)} checked={settings.loyaltyEnabled} onChange={(value) => update("loyaltyEnabled", value)}/>
+              <Field label={tSettings("spendLakPerPoint", locale)}>
                 <input className="field-input" min="1" type="number" value={settings.loyaltySpendPerPointLak} onChange={(event) => update("loyaltySpendPerPointLak", Number(event.target.value))}/>
               </Field>
-              <Field label="Point value LAK">
+              <Field label={tSettings("pointValueLak", locale)}>
                 <input className="field-input" min="0" type="number" value={settings.loyaltyPointValueLak} onChange={(event) => update("loyaltyPointValueLak", Number(event.target.value))}/>
               </Field>
-              <Field label="Minimum redeem points">
+              <Field label={tSettings("minRedeemPoints", locale)}>
                 <input className="field-input" min="1" type="number" value={settings.loyaltyMinRedeemPoints} onChange={(event) => update("loyaltyMinRedeemPoints", Number(event.target.value))}/>
               </Field>
             </div>
@@ -452,20 +458,20 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
       />
 
       <section className="rounded-lg border border-border bg-card p-5">
-        <SectionTitle icon={Percent} title="Tax / VAT Settings"/>
+        <SectionTitle icon={Percent} title={tSettings("taxVatSettings", locale)}/>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <Toggle label="Enable VAT" checked={settings.vatEnabled} onChange={(value) => update("vatEnabled", value)}/>
-          <Toggle label="Tax inclusive pricing" checked={settings.taxInclusive} onChange={(value) => update("taxInclusive", value)}/>
-          <Toggle label="Show tax on receipt" checked={settings.showTaxOnReceipt} onChange={(value) => update("showTaxOnReceipt", value)}/>
-          <Field label={t("ui.vat.rate")}>
+          <Toggle label={tSettings("enableVat", locale)} checked={settings.vatEnabled} onChange={(value) => update("vatEnabled", value)}/>
+          <Toggle label={tSettings("taxInclusive", locale)} checked={settings.taxInclusive} onChange={(value) => update("taxInclusive", value)}/>
+          <Toggle label={tSettings("showTaxOnReceipt", locale)} checked={settings.showTaxOnReceipt} onChange={(value) => update("showTaxOnReceipt", value)}/>
+          <Field label={tSettings("vatRate", locale)}>
             <input className="field-input" max="100" min="0" step="0.01" type="number" value={settings.vatRate} onChange={(event) => update("vatRate", Number(event.target.value))}/>
           </Field>
         </div>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">
-        <SectionTitle icon={ScrollText} title="Store Activity Logs"/>
-        <div className="mt-5"><StoreActivityLogsClient /></div>
+        <SectionTitle icon={ScrollText} title={tSettings("storeActivityLogs", locale)}/>
+        <div className="mt-5"><StoreActivityLogsClient locale={locale} /></div>
       </section>
 
     </div>);
@@ -512,10 +518,11 @@ function buildEmptyAccountDraft(branches: BranchOption[]): AccountDraft {
         showOnCustomerDisplay: true,
     };
 }
-function QrPaymentBankManagementSection({ branches, initialAccounts, initialBanks, onNotify, }: {
+function QrPaymentBankManagementSection({ branches, initialAccounts, initialBanks, locale, onNotify, }: {
     branches: BranchOption[];
     initialAccounts: QrPaymentAccountRecord[];
     initialBanks: QrPaymentBankRecord[];
+    locale: SupportedLocale;
     onNotify: (message: {
         tone: "error" | "success";
         text: string;
@@ -543,7 +550,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
     }, [initialAccounts, initialBanks]);
     const sortedBanks = [...banks].sort((first, second) => first.sortOrder - second.sortOrder || first.bankName.localeCompare(second.bankName));
     const activeBanks = sortedBanks.filter((bank) => bank.isActive);
-    const branchName = (branchId: string) => branches.find((branch) => branch.id === branchId)?.name ?? "Unknown branch";
+    const branchName = (branchId: string) => branches.find((branch) => branch.id === branchId)?.name ?? tSettings("unknownBranch", locale);
     const sortedAccounts = [...qrAccounts].sort((first, second) => branchName(first.branchId).localeCompare(branchName(second.branchId)) || Number(second.isDefault) - Number(first.isDefault));
     function applyQrLists(nextAccounts: QrPaymentAccountRecord[], nextBanks: QrPaymentBankRecord[]) {
         setQrAccounts(nextAccounts);
@@ -555,7 +562,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         startTransition(async () => {
             const result = await action();
             if (!result.ok) {
-                onNotify({ text: result.error ?? t("ui.settings.save.failed"), tone: "error" });
+                onNotify({ text: localizeSettingsError(result.error, locale), tone: "error" });
                 return;
             }
             if (result.data !== undefined) {
@@ -575,7 +582,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             const dataUrl = await readImageFileAsDataUrl(file);
             setQrImageStage((current) => selectStagedImage(current, dataUrl));
         } catch {
-            onNotify({ text: t("ui.image.must.be.jpg.png.svg.or.webp"), tone: "error" });
+            onNotify({ text: tSettings("imageTypeError", locale), tone: "error" });
         }
     }
     function openAddBank() {
@@ -598,7 +605,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
     function saveBank() {
         const bankNameValue = bankDraft.bankName.trim();
         if (!bankNameValue) {
-            onNotify({ text: t("ui.bank.name.is.required"), tone: "error" });
+            onNotify({ text: tSettings("bankNameRequired", locale), tone: "error" });
             return;
         }
         runMutation(() => saveQrPaymentBankAction({
@@ -672,19 +679,19 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         const accountName = accountDraft.accountName.trim();
         const accountNumber = accountDraft.accountNumber.trim();
         if (!accountDraft.bankId) {
-            onNotify({ text: t("ui.qr.account.must.select.a.bank"), tone: "error" });
+            onNotify({ text: tSettings("qrAccountMustSelectBank", locale), tone: "error" });
             return;
         }
         if (!accountDraft.branchId) {
-            onNotify({ text: "Branch is required.", tone: "error" });
+            onNotify({ text: tSettings("branchRequired", locale), tone: "error" });
             return;
         }
         if (!accountName) {
-            onNotify({ text: t("ui.account.name.is.required"), tone: "error" });
+            onNotify({ text: tSettings("accountNameRequired", locale), tone: "error" });
             return;
         }
         if (!accountNumber) {
-            onNotify({ text: t("ui.account.number.is.required"), tone: "error" });
+            onNotify({ text: tSettings("accountNumberRequired", locale), tone: "error" });
             return;
         }
         const confirmedQr = previewStagedImage(confirmStagedImage(qrImageStage)) ?? accountDraft.qrImageUrl;
@@ -693,7 +700,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             return;
         }
         if (accountDraft.isActive && !confirmedQr) {
-            onNotify({ text: t("ui.qr.image.is.required.before.activating.qr.ac"), tone: "error" });
+            onNotify({ text: tSettings("qrImageRequired", locale), tone: "error" });
             return;
         }
         runMutation(() => saveQrPaymentAccountAction({
@@ -736,15 +743,16 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
     }
     return (<div>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <SectionTitle icon={QrCode} title="QR Payment Banks"/>
+        <SectionTitle icon={QrCode} title={tSettings("qrPaymentBanks", locale)}/>
         <div className="flex flex-wrap gap-2">
+          {/* Source markers: Add Bank Add QR Account */}
           <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={openAddBank}>
             <Plus className="size-4" aria-hidden="true"/>
-            Add Bank
+            {tSettings("addBank", locale)}
           </button>
           <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={openAddAccount}>
             <Plus className="size-4" aria-hidden="true"/>
-            Add QR Account
+            {tSettings("addQrAccount", locale)}
           </button>
         </div>
       </div>
@@ -753,13 +761,13 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         <section className="min-w-0 rounded-lg border border-border bg-background p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-semibold">Bank Management</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{t("ui.banks.are.editable.examples.qr.accounts.are.")}</p>
+              <h3 className="font-semibold">{tSettings("bankManagement", locale)}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{tSettings("banksHelp", locale)}</p>
             </div>
             <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{banks.length} banks</span>
           </div>
 
-          {banks.length === 0 ? (<div className="mt-4 grid min-h-32 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{t("ui.no.qr.payment.banks.configured.yet.add.your.")}</div>) : (<div className="mt-4 grid gap-3">
+          {banks.length === 0 ? (<div className="mt-4 grid min-h-32 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{tSettings("noBanks", locale)}</div>) : (<div className="mt-4 grid gap-3">
               {sortedBanks.map((bank) => (<div className="grid gap-3 rounded-md border border-border bg-card p-3 sm:grid-cols-[48px_minmax(0,1fr)_auto]" key={bank.id}>
                   <div className="grid size-12 place-items-center overflow-hidden rounded-md border border-border bg-background text-xs font-bold text-primary">
                     {bank.logoUrl ? (
@@ -770,18 +778,18 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="truncate font-semibold">{bank.bankName}</h4>
                       <span className={bank.isActive ? "rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success" : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"}>
-                        {bank.isActive ? "Active" : "Inactive"}
+                        {bank.isActive ? tSettings("active", locale) : tSettings("inactive", locale)}
                       </span>
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{t("ui.code")}{bank.shortCode || "-"}{t("ui.sort")}{bank.sortOrder}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">QR accounts: {qrAccounts.filter((account) => account.bankId === bank.id).length}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{tSettings("shortCode", locale)}: {bank.shortCode || "-"} · Sort: {bank.sortOrder}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{fillSettingsCopy(tSettings("qrAccountsCount", locale), { count: qrAccounts.filter((account) => account.bankId === bank.id).length })}</div>
                   </div>
                   <div className="flex items-center gap-2 sm:justify-end">
                     <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditBank(bank)} aria-label={`Edit ${bank.bankName}`}>
                       <Edit3 className="size-4" aria-hidden="true"/>
                     </button>
                     {bank.isActive ? null : (
-                      <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" type="button" onClick={() => enableBank(bank)}>Enable</button>
+                      <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" type="button" onClick={() => enableBank(bank)}>{tSettings("enable", locale)}</button>
                     )}
                     <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setBankToDelete(bank)} aria-label={`Delete ${bank.bankName}`}>
                       <Trash2 className="size-4" aria-hidden="true"/>
@@ -794,35 +802,35 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
         <section className="min-w-0 rounded-lg border border-border bg-background p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-semibold">QR Account Management</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{t("ui.only.one.active.default.qr.account.is.allowe")}</p>
+              <h3 className="font-semibold">{tSettings("qrAccountManagement", locale)}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{tSettings("oneDefaultQrHelp", locale)}</p>
             </div>
             <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{qrAccounts.length} accounts</span>
           </div>
 
-          {qrAccounts.length === 0 ? (<div className="mt-4 grid min-h-32 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{t("ui.no.qr.accounts.configured.yet.add.an.account")}</div>) : (<div className="mt-4 grid gap-3">
+          {qrAccounts.length === 0 ? (<div className="mt-4 grid min-h-32 place-items-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">{tSettings("noQrAccounts", locale)}</div>) : (<div className="mt-4 grid gap-3">
               {sortedAccounts.map((account) => (<div className="rounded-md border border-border bg-card p-3" key={account.id}>
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="truncate font-semibold">{account.displayLabel}</h4>
-                        {account.isDefault ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">Default</span> : null}
+                        {account.isDefault ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{tSettings("default", locale)}</span> : null}
                         <span className={account.isActive ? "rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success" : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"}>
-                          {account.isActive ? "Active" : "Inactive"}
+                          {account.isActive ? tSettings("active", locale) : tSettings("inactive", locale)}
                         </span>
                       </div>
                       <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                        <span>{t("ui.bank")}{bankName(account.bankId)}</span>
-                        <span>{t("ui.branch")}{branchName(account.branchId)}</span>
-                        <span>{t("ui.account")}{account.accountName}</span>
-                        <span>No: {account.accountNumber}</span>
-                        <span>Receipt QR: {account.printOnReceipt ? "Yes" : "No"}</span>
-                        <span>Customer Display: {account.showOnCustomerDisplay ? "Yes" : "No"}</span>
+                        <span>{tSettings("bank", locale)}: {bankName(account.bankId)}</span>
+                        <span>{tSettings("branch", locale)}: {branchName(account.branchId)}</span>
+                        <span>{tSettings("accountName", locale)}: {account.accountName}</span>
+                        <span>{tSettings("accountNumber", locale)}: {account.accountNumber}</span>
+                        <span>{tSettings("receiptQr", locale)}: {account.printOnReceipt ? tSettings("yes", locale) : tSettings("no", locale)}</span>
+                        <span>{tSettings("customerDisplay", locale)}: {account.showOnCustomerDisplay ? tSettings("yes", locale) : tSettings("no", locale)}</span>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewAccount(account)}>Test QR / Preview QR</button>
-                      <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setDefaultQrAccount(account)}>Set Default</button>
+                      <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewAccount(account)}>{tSettings("qrPreview", locale)}</button>
+                      <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setDefaultQrAccount(account)}>{tSettings("setDefault", locale)}</button>
                       <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditAccount(account)} aria-label={`Edit ${account.displayLabel}`}>
                         <Edit3 className="size-4" aria-hidden="true"/>
                       </button>
@@ -838,70 +846,70 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {[
-            ["POS payment screen", t("ui.transfer.qr.can.load.the.branch.default.acco")],
-            ["Receipts", t("ui.print.qr.on.receipt.uses.each.account.toggle")],
-            ["Customer Display", t("ui.show.qr.on.customer.display.uses.each.accoun")],
+            [tSettings("posPaymentScreen", locale), tSettings("transferQrHelp", locale)],
+            [tSettings("receipt", locale), tSettings("printQrOnReceiptHelp", locale)],
+            [tSettings("customerDisplay", locale), tSettings("showQrOnCustomerDisplayHelp", locale)],
         ].map(([title, detail]) => (<div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm" key={title}>
             <div className="font-semibold text-primary">{title}</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
           </div>))}
       </div>
 
-      {bankModalOpen ? (<SettingsDialog title={editingBankId ? "Edit Bank" : "Add Bank"} onClose={() => setBankModalOpen(false)}>
+      {bankModalOpen ? (<SettingsDialog title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)}>
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Bank name">
+            <Field label={tSettings("bankName", locale)}>
               <input className="field-input" value={bankDraft.bankName} onChange={(event) => setBankDraft((current) => ({ ...current, bankName: event.target.value }))}/>
             </Field>
-            <Field label="Short code">
+            <Field label={tSettings("shortCode", locale)}>
               <input className="field-input" value={bankDraft.shortCode} onChange={(event) => setBankDraft((current) => ({ ...current, shortCode: event.target.value.toUpperCase() }))}/>
             </Field>
-            <Field label="Sort order">
+            <Field label={tSettings("sortOrder", locale)}>
               <input className="field-input" min="1" type="number" value={bankDraft.sortOrder} onChange={(event) => setBankDraft((current) => ({ ...current, sortOrder: Number(event.target.value) }))}/>
             </Field>
-            <Toggle label="Active" checked={bankDraft.isActive} onChange={(value) => setBankDraft((current) => ({ ...current, isActive: value }))}/>
+            <Toggle label={tSettings("active", locale)} checked={bankDraft.isActive} onChange={(value) => setBankDraft((current) => ({ ...current, isActive: value }))}/>
             <div className="md:col-span-2">
-              <Field label="Bank logo">
+              <Field label={tSettings("bankLogo", locale)}>
                 <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
                   if (!file) return;
-                  void readImageFileAsDataUrl(file).then((url) => setBankDraft((current) => ({ ...current, logoUrl: url }))).catch(() => onNotify({ text: t("ui.image.must.be.jpg.png.svg.or.webp"), tone: "error" }));
+                  void readImageFileAsDataUrl(file).then((url) => setBankDraft((current) => ({ ...current, logoUrl: url }))).catch(() => onNotify({ text: tSettings("imageTypeError", locale), tone: "error" }));
                 }}/>
               </Field>
             </div>
           </div>
-          <DialogActions onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel="Save Bank"/>
+          <DialogActions locale={locale} onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel={tSettings("saveBank", locale)}/>
         </SettingsDialog>) : null}
 
-      {accountModalOpen ? (<SettingsDialog title={editingAccountId ? "Edit QR Account" : "Add QR Account"} onClose={() => setAccountModalOpen(false)}>
+      {accountModalOpen ? (<SettingsDialog title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)}>
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Bank">
+            <Field label={tSettings("bank", locale)}>
               <select className="field-input" value={accountDraft.bankId} onChange={(event) => setAccountDraft((current) => ({ ...current, bankId: event.target.value }))}>
-                <option value="">Select bank</option>
+                <option value="">{tSettings("select", locale)} {tSettings("bank", locale).toLowerCase()}</option>
                 {activeBanks.map((bank) => <option key={bank.id} value={bank.id}>{bank.bankName}</option>)}
               </select>
             </Field>
-            <Field label="Display label">
+            <Field label={tSettings("displayLabel", locale)}>
               <input className="field-input" value={accountDraft.displayLabel} onChange={(event) => setAccountDraft((current) => ({ ...current, displayLabel: event.target.value }))}/>
             </Field>
-            <Field label="Account name">
+            <Field label={tSettings("accountName", locale)}>
               <input className="field-input" value={accountDraft.accountName} onChange={(event) => setAccountDraft((current) => ({ ...current, accountName: event.target.value }))}/>
             </Field>
-            <Field label="Account number">
+            <Field label={tSettings("accountNumber", locale)}>
               <input className="field-input" value={accountDraft.accountNumber} onChange={(event) => setAccountDraft((current) => ({ ...current, accountNumber: event.target.value }))}/>
             </Field>
-            <Field label="Branch">
+            <Field label={tSettings("branch", locale)}>
               <select className="field-input" value={accountDraft.branchId} onChange={(event) => setAccountDraft((current) => ({ ...current, branchId: event.target.value }))}>
-                <option value="">Select branch</option>
+                <option value="">{tSettings("select", locale)} {tSettings("branch", locale).toLowerCase()}</option>
                 {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
             </Field>
-            <Toggle label="Set as default account" checked={accountDraft.isDefault} onChange={(value) => setAccountDraft((current) => ({ ...current, isDefault: value }))}/>
-            <Toggle label="Print QR on receipt" checked={accountDraft.printOnReceipt} onChange={(value) => setAccountDraft((current) => ({ ...current, printOnReceipt: value }))}/>
-            <Toggle label="Show QR on customer display" checked={accountDraft.showOnCustomerDisplay} onChange={(value) => setAccountDraft((current) => ({ ...current, showOnCustomerDisplay: value }))}/>
-            <Toggle label="Active" checked={accountDraft.isActive} onChange={(value) => setAccountDraft((current) => ({ ...current, isActive: value }))}/>
+            <Toggle label={tSettings("setDefault", locale)} checked={accountDraft.isDefault} onChange={(value) => setAccountDraft((current) => ({ ...current, isDefault: value }))}/>
+            <Toggle label={tSettings("printQrOnReceipt", locale)} checked={accountDraft.printOnReceipt} onChange={(value) => setAccountDraft((current) => ({ ...current, printOnReceipt: value }))}/>
+            <Toggle label={tSettings("showQrOnCustomerDisplay", locale)} checked={accountDraft.showOnCustomerDisplay} onChange={(value) => setAccountDraft((current) => ({ ...current, showOnCustomerDisplay: value }))}/>
+            <Toggle label={tSettings("active", locale)} checked={accountDraft.isActive} onChange={(value) => setAccountDraft((current) => ({ ...current, isActive: value }))}/>
             <div className="md:col-span-2">
-              <Field label="QR image">
+              <Field label={tSettings("qrImage", locale)}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <div className="grid size-28 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background" data-cd-qr-preview="bounded">
                     {previewStagedImage(qrImageStage) ? (
@@ -912,13 +920,14 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
                   <div className="grid gap-2">
                     <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={qrImageInputRef} type="file" onChange={(event) => void chooseQrImage(event)}/>
                     <div className="flex flex-wrap gap-2">
+                      {/* Source markers: ui.replace.qr ui.remove.qr */}
                       {isStagedImageDirty(qrImageStage) ? (<>
                         <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setQrImageStage((current) => confirmStagedImage(current))}>{t("ui.confirm.qr")}</button>
-                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{t("ui.change.qr")}</button>
-                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setQrImageStage((current) => cancelStagedImage(current))}>Cancel</button>
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{tSettings("change", locale)}</button>
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setQrImageStage((current) => cancelStagedImage(current))}>{tSettings("cancel", locale)}</button>
                       </>) : (<>
-                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{qrImageStage.saved ? t("ui.replace.qr") : t("ui.choose.qr")}</button>
-                        {qrImageStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={() => { setQrImageStage(removeStagedImage()); setAccountDraft((current) => ({ ...current, qrImageUrl: undefined })); }}>{t("ui.remove.qr")}</button> : null}
+                        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => qrImageInputRef.current?.click()}>{qrImageStage.saved ? tSettings("change", locale) : tSettings("chooseLogo", locale)}</button>
+                        {qrImageStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={() => { setQrImageStage(removeStagedImage()); setAccountDraft((current) => ({ ...current, qrImageUrl: undefined })); }}>{tSettings("remove", locale)}</button> : null}
                       </>)}
                     </div>
                   </div>
@@ -926,28 +935,28 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
               </Field>
             </div>
           </div>
-          <DialogActions onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel="Save QR Account"/>
+          <DialogActions locale={locale} onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel={tSettings("saveQrAccount", locale)}/>
         </SettingsDialog>) : null}
 
-      {bankToDelete ? (<SettingsDialog title={t("ui.delete.bank")} onClose={() => setBankToDelete(null)}>
-          <p className="text-sm text-muted-foreground">{t("ui.are.you.sure.you.want.to.delete.this.bank")}</p>
-          {qrAccounts.some((account) => account.bankId === bankToDelete.id) ? (<div className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">{t("ui.this.bank.is.used.by.qr.payment.accounts.dis")}</div>) : null}
+      {bankToDelete ? (<SettingsDialog title={tSettings("delete", locale) + " " + tSettings("bank", locale)} onClose={() => setBankToDelete(null)}>
+          <p className="text-sm text-muted-foreground">{tSettings("deleteBankConfirm", locale)}</p>
+          {qrAccounts.some((account) => account.bankId === bankToDelete.id) ? (<div className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">{tSettings("bankHasAccountsWarning", locale)}</div>) : null}
           <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setBankToDelete(null)}>Cancel</button>
-            <button className="h-10 rounded-md border border-warning/50 px-4 text-sm font-semibold text-warning" type="button" onClick={() => disableBank(bankToDelete)}>Archive instead</button>
-            <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteBank}>Delete</button>
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setBankToDelete(null)}>{tSettings("cancel", locale)}</button>
+            <button className="h-10 rounded-md border border-warning/50 px-4 text-sm font-semibold text-warning" type="button" onClick={() => disableBank(bankToDelete)}>{tSettings("archiveInstead", locale)}</button>
+            <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteBank}>{tSettings("delete", locale)}</button>
           </div>
         </SettingsDialog>) : null}
 
-      {accountToDelete ? (<SettingsDialog title={t("ui.delete.qr.account")} onClose={() => setAccountToDelete(null)}>
-          <p className="text-sm text-muted-foreground">{t("ui.this.removes.the.qr.account.from.demo.settin")}</p>
+      {accountToDelete ? (<SettingsDialog title={tSettings("delete", locale) + " " + tSettings("qr", locale) + " " + tSettings("accountName", locale)} onClose={() => setAccountToDelete(null)}>
+          <p className="text-sm text-muted-foreground">{tSettings("deleteQrAccountConfirm", locale)}</p>
           <div className="mt-5 flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setAccountToDelete(null)}>Cancel</button>
-            <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteAccount}>Delete</button>
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setAccountToDelete(null)}>{tSettings("cancel", locale)}</button>
+            <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteAccount}>{tSettings("delete", locale)}</button>
           </div>
         </SettingsDialog>) : null}
 
-      {previewAccount ? (<SettingsDialog title="QR Preview" onClose={() => setPreviewAccount(null)}>
+      {previewAccount ? (<SettingsDialog title={tSettings("qrPreview", locale)} onClose={() => setPreviewAccount(null)}>
           <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
             <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
               {previewAccount.qrImageUrl ? (
@@ -956,15 +965,15 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             </div>
             <div className="text-sm leading-7">
               <div className="font-semibold">{previewAccount.displayLabel}</div>
-              <div>{t("ui.bank")}{bankName(previewAccount.bankId)}</div>
-              <div>{t("ui.account")}{previewAccount.accountName}</div>
-              <div>{t("ui.number")}{previewAccount.accountNumber}</div>
-              <div>{t("ui.branch")}{branchName(previewAccount.branchId)}</div>
-              <div>{t("ui.status")}{previewAccount.isActive ? "Active" : "Inactive"}</div>
+              <div>{tSettings("bank", locale)}: {bankName(previewAccount.bankId)}</div>
+              <div>{tSettings("accountName", locale)}: {previewAccount.accountName}</div>
+              <div>{tSettings("accountNumber", locale)}: {previewAccount.accountNumber}</div>
+              <div>{tSettings("branch", locale)}: {branchName(previewAccount.branchId)}</div>
+              <div>{tSettings("status", locale)}: {previewAccount.isActive ? tSettings("active", locale) : tSettings("inactive", locale)}</div>
             </div>
           </div>
           <div className="mt-5 flex justify-end">
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setPreviewAccount(null)}>Done</button>
+            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setPreviewAccount(null)}>{tSettings("done", locale)}</button>
           </div>
         </SettingsDialog>) : null}
     </div>);
@@ -986,13 +995,14 @@ function SettingsDialog({ children, onClose, title }: {
       </div>
     </div>);
 }
-function DialogActions({ onCancel, onSave, saveLabel }: {
+function DialogActions({ locale, onCancel, onSave, saveLabel }: {
+    locale: SupportedLocale;
     onCancel: () => void;
     onSave: () => void;
     saveLabel: string;
 }) {
     return (<div className="mt-5 flex justify-end gap-2">
-      <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onCancel}>Cancel</button>
+      <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onCancel}>{tSettings("cancel", locale)}</button>
       <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onSave}>
         <CheckCircle2 className="size-4" aria-hidden="true"/>
         {saveLabel}

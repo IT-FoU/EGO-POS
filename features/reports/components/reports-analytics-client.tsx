@@ -1,6 +1,5 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,15 +11,26 @@ import type { ReportFilterOptions, ReportFilters } from "@/features/reports/repo
 import { reportFiltersToSearchParams } from "@/features/reports/report-filters";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import type { ProductReportRow, ReportKpiKey } from "@/features/reports/types";
+import type { SupportedLocale } from "@/lib/constants";
 import { formatBusinessMediumDateTime } from "@/lib/datetime/business-timezone";
-const datePresetLabels = {
-    all: "All Time",
-    custom: "Custom",
-    this_month: "This Month",
-    this_week: "This Week",
-    today: "Today",
-    yesterday: "Yesterday",
-} as const;
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import {
+  datePresetLabel,
+  fillReportsCopy,
+  localizeReportLabel,
+  paymentMethodLabel,
+  tReports,
+} from "@/lib/i18n/reports-copy";
+
+let activeLocale: SupportedLocale = "en";
+
+function t(key: string) {
+  return tReports(key, activeLocale);
+}
+
+function localizeLabel(label: string) {
+  return localizeReportLabel(label, activeLocale);
+}
 
 type TabKey = "dashboard" | "center";
 
@@ -57,89 +67,38 @@ function buildDataSourceStatuses(hub: ReportsAnalyticsHub): DataSourceStatus[] {
 }
 function peakHourLabel(hourlySales: ReportsAnalyticsHub["hourlySales"]) {
     if (hourlySales.length === 0)
-        return "No sales yet";
+        return t("noSalesYet");
     const peak = [...hourlySales].sort((left, right) => right.transactions - left.transactions)[0];
-    return `Peak hour: ${peak.hour}`;
+    return fillReportsCopy(t("peakHour"), { hour: peak.hour });
 }
-const reportCopy = {
-    en: {
-        aiInsights: "AI Insights",
-        apply: "Apply",
-        businessHealth: "Business Health Score",
-        createPo: "Create Purchase Order",
-        createPromotion: "Create Promotion",
-        dashboard: "Dashboard",
-        dataSourceStatus: "Data Source Status",
-        dayDetail: "Day Detail",
-        excellent: "Excellent",
-        good: "Good",
-        healthSubtitle: t("ui.ai.insight.sales.growth.is.healthy.margin.is"),
-        highHour: "Green: High sales",
-        highRevenue: "Green: High revenue",
-        hourDetail: "Hour Detail",
-        lastUpdated: "Last updated",
-        lowHour: "Red: Low or no sales",
-        lowRevenue: "Red: Low revenue",
-        noReports: "No reports found",
-        normalHour: "Orange: Normal sales",
-        normalRevenue: "Orange: Normal revenue",
-        pageTitle: t("ui.reports.analytics"),
-        reportCenter: "Report Center",
-        searchReports: t("ui.search.reports"),
-        statusCritical: "Critical",
-        statusWarning: "Warning",
-        viewInsights: "View Insights",
-        viewInventory: "View Inventory Report",
-        viewProduct: "View Product Report",
-        viewSales: "View Sales Report",
-    },
-    th: {
-        aiInsights: "AI Insights",
-        apply: "Apply filters",
-        businessHealth: "Business Health Score",
-        createPo: "Create purchase order",
-        createPromotion: "Create promotion",
-        dashboard: "Dashboard",
-        dataSourceStatus: "Data Source Status",
-        dayDetail: "Daily Detail",
-        excellent: "Excellent",
-        good: "Good",
-        healthSubtitle: "AI insights: Sales are growing, profit is stable, but dead stock and low-stock items need attention this week.",
-        highHour: "Green: high sales",
-        highRevenue: "Green: high revenue",
-        hourDetail: "Hourly Detail",
-        lastUpdated: "Last updated",
-        lowHour: "Yellow: low or no sales",
-        lowRevenue: "Yellow: low revenue",
-        noReports: "No reports found",
-        normalHour: "Purple: normal sales",
-        normalRevenue: "Purple: normal revenue",
-        pageTitle: "Reports and Analytics",
-        reportCenter: "Report Center",
-        searchReports: "Search reports...",
-        statusCritical: "Critical",
-        statusWarning: "Warning",
-        viewInsights: "View insights",
-        viewInventory: "View inventory report",
-        viewProduct: "View product report",
-        viewSales: "View sales report",
-    },
-};
+
 export function ReportsAnalyticsClient({
     filterOptions,
     filters,
     generatedAt,
     hub,
+    locale: localeProp,
     productRows,
 }: {
     filterOptions: ReportFilterOptions;
     filters: ReportFilters;
     generatedAt: string;
     hub: ReportsAnalyticsHub;
+    locale?: SupportedLocale;
     productRows: ProductReportRow[];
 }) {
     const router = useRouter();
-    const [locale, setLocale] = useState<"en" | "th">("en");
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    useEffect(() => { if (localeProp) setLocale(localeProp); }, [localeProp]);
+    useEffect(() => {
+        function handleLocaleChange(event: Event) {
+            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+            if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
+        }
+        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+    activeLocale = locale;
     const [tab, setTab] = useState<TabKey>("dashboard");
     const [reportQuery, setReportQuery] = useState("");
     const [datePreset, setDatePreset] = useState(filters.datePreset);
@@ -156,13 +115,8 @@ export function ReportsAnalyticsClient({
     const [activeKpi, setActiveKpi] = useState<ReportKpiKey>("revenue");
     const [activeReport, setActiveReport] = useState("Sales Summary");
     const [activeSource, setActiveSource] = useState("Sales");
-    const [favorites, setFavorites] = useState<string[]>(["Sales Summary", t("ui.profit.loss"), "Inventory Valuation"]);
-    const copy = reportCopy[locale];
+    const [favorites, setFavorites] = useState<string[]>(["Sales Summary", "Profit & Loss", "Inventory Valuation"]);
     const dataSourceStatuses = useMemo(() => buildDataSourceStatuses(hub), [hub]);
-    useEffect(() => {
-        const datasetLocale = document.documentElement.dataset.locale;
-        setLocale(datasetLocale === "th" ? "th" : "en");
-    }, []);
     const kpis = hub.kpis;
     const healthScore = hub.healthScore;
     const healthStatusKey = hub.healthStatus;
@@ -211,8 +165,8 @@ export function ReportsAnalyticsClient({
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
       {modal === "kpi" ? <KpiDetailModal activeKpi={activeKpi} currency={currency} hub={hub} onClose={() => setModal(null)} title={modalTitle}/> : null}
       {modal === "health" ? <HealthModal inventoryAlerts={hub.inventoryAlerts} onClose={() => setModal(null)}/> : null}
-      {modal === "daily" ? <DayDetailModal hub={hub} locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.dayDetail} topSellers={hub.topSellers}/> : null}
-      {modal === "hour" ? <HourDetailModal hub={hub} locale={locale} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle || copy.hourDetail} topSellers={hub.topSellers}/> : null}
+      {modal === "daily" ? <DayDetailModal hub={hub} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle} topSellers={hub.topSellers}/> : null}
+      {modal === "hour" ? <HourDetailModal hub={hub} onClose={() => setModal(null)} paymentBreakdown={hub.paymentBreakdown} title={modalTitle} topSellers={hub.topSellers}/> : null}
       {modal === "category" ? <CategoryModal currency={currency} onClose={() => setModal(null)} title={modalTitle} topSellers={hub.topSellers}/> : null}
       {modal === "inventory" ? <InventoryAlertModal onClose={() => setModal(null)} productRows={productRows} title={modalTitle}/> : null}
       {modal === "product" ? <ProductAnalyticsModal currency={currency} onClose={() => setModal(null)} revenueProfitTrend={hub.revenueProfitTrend} title={modalTitle}/> : null}
@@ -221,31 +175,31 @@ export function ReportsAnalyticsClient({
       {modal === "export" ? <ExportModal onClose={() => setModal(null)}/> : null}
       {modal === "schedule" ? <ScheduleModal onClose={() => setModal(null)} reportName={activeReport}/> : null}
       {modal === "favorites" ? <FavoritesModal favorites={favorites} onClose={() => setModal(null)} onOpen={openReport}/> : null}
-      {modal === "dataSource" ? <DataSourceModal dataSourceStatuses={dataSourceStatuses} locale={locale} onClose={() => setModal(null)} source={activeSource}/> : null}
+      {modal === "dataSource" ? <DataSourceModal dataSourceStatuses={dataSourceStatuses} onClose={() => setModal(null)} source={activeSource}/> : null}
 
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium text-primary">EGO POS Analytics</p>
-            <h1 className="mt-2 text-3xl font-semibold">{copy.pageTitle}</h1>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">{t("ui.commercial.reporting.center.for.sales.invent")}</p>
+            <h1 className="mt-2 text-3xl font-semibold">{t("reportsAnalytics")}</h1>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">{t("subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <ExportMenu onExport={() => setModal("export")}/>
-            <HeaderAction icon={Printer} label="Print" onClick={() => setModal("export")}/>
-            <HeaderAction icon={CalendarClock} label="Schedule" onClick={() => setModal("schedule")}/>
-            <HeaderAction icon={Star} label="Favorites" onClick={() => setModal("favorites")}/>
+            <HeaderAction icon={Printer} label={t("print")} onClick={() => setModal("export")}/>
+            <HeaderAction icon={CalendarClock} label={t("schedule")} onClick={() => setModal("schedule")}/>
+            <HeaderAction icon={Star} label={t("favorites")} onClick={() => setModal("favorites")}/>
           </div>
         </div>
       </section>
 
       <FilterBar
         branchId={branchId}
-        branchOptions={buildSelectOptions("All Branches", filterOptions.branches)}
+        branchOptions={buildSelectOptions(t("allBranches"), filterOptions.branches)}
         cashierId={cashierId}
-        cashierOptions={buildSelectOptions("All Cashiers", filterOptions.cashiers)}
+        cashierOptions={buildSelectOptions(t("allCashiers"), filterOptions.cashiers)}
         categoryId={categoryId}
-        categoryOptions={buildSelectOptions("All Categories", filterOptions.categories)}
+        categoryOptions={buildSelectOptions(t("allCategories"), filterOptions.categories)}
         currency={currency}
         datePreset={datePreset}
         onApply={applyFilters}
@@ -258,46 +212,46 @@ export function ReportsAnalyticsClient({
         setSupplierId={setSupplierId}
         setWarehouseId={setWarehouseId}
         supplierId={supplierId}
-        supplierOptions={buildSelectOptions("All Suppliers", filterOptions.suppliers)}
+        supplierOptions={buildSelectOptions(t("allSuppliers"), filterOptions.suppliers)}
         warehouseId={warehouseId}
-        warehouseOptions={buildSelectOptions("All Warehouses", filterOptions.warehouses)}
+        warehouseOptions={buildSelectOptions(t("allWarehouses"), filterOptions.warehouses)}
       />
 
       <section className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-2">
-        <button className={tab === "dashboard" ? "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" : "h-10 rounded-md px-4 text-sm font-semibold hover:bg-background"} type="button" onClick={() => setTab("dashboard")}>{copy.dashboard}</button>
-        <button className={tab === "center" ? "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" : "h-10 rounded-md px-4 text-sm font-semibold hover:bg-background"} type="button" onClick={() => setTab("center")}>{copy.reportCenter}</button>
+        <button className={tab === "dashboard" ? "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" : "h-10 rounded-md px-4 text-sm font-semibold hover:bg-background"} type="button" onClick={() => setTab("dashboard")}>{t("dashboard")}</button>
+        <button className={tab === "center" ? "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" : "h-10 rounded-md px-4 text-sm font-semibold hover:bg-background"} type="button" onClick={() => setTab("center")}>{t("reportCenter")}</button>
         <label className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
-          <input className="field-input h-10 pl-10" placeholder={copy.searchReports} value={reportQuery} onChange={(event) => setReportQuery(event.target.value)}/>
+          <input className="field-input h-10 pl-10" placeholder={t("searchReports")} value={reportQuery} onChange={(event) => setReportQuery(event.target.value)}/>
         </label>
       </section>
 
       {tab === "dashboard" ? (<>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {kpis.map((kpi) => (<KpiCard key={kpi.key} label={kpi.label} value={valueText(kpi.value, kpi.valueType)} onClick={() => openKpi(kpi.key, kpi.label)}/>))}
+            {kpis.map((kpi) => (<KpiCard key={kpi.key} label={localizeLabel(kpi.label)} value={valueText(kpi.value, kpi.valueType)} onClick={() => openKpi(kpi.key, localizeLabel(kpi.label))}/>))}
           </section>
 
-          <BusinessHealthScore hub={hub} locale={locale} score={healthScore} statusKey={healthStatusKey} onOpen={() => setModal("health")}/>
+          <BusinessHealthScore hub={hub} score={healthScore} statusKey={healthStatusKey} onOpen={() => setModal("health")}/>
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <AIInsightsPanel hub={hub} locale={locale} onOpenReport={openReport}/>
-            <DataSourceStatusPanel dataSourceStatuses={dataSourceStatuses} generatedAt={generatedAt} locale={locale} onOpen={(source) => { setActiveSource(source); setModal("dataSource"); }}/>
+            <AIInsightsPanel hub={hub} onOpenReport={openReport}/>
+            <DataSourceStatusPanel dataSourceStatuses={dataSourceStatuses} generatedAt={generatedAt} onOpen={(source) => { setActiveSource(source); setModal("dataSource"); }}/>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <RevenueProfitTrend currency={currency} data={hub.revenueProfitTrend} locale={locale} onOpen={(label) => { setModalTitle(`${label} ${copy.dayDetail}`); setModal("daily"); }}/>
-            <HourlySalesTrend data={hub.hourlySales} locale={locale} onOpen={(hour) => { setModalTitle(`${hour} ${copy.hourDetail}`); setModal("hour"); }}/>
+            <RevenueProfitTrend currency={currency} data={hub.revenueProfitTrend} onOpen={(label) => { setModalTitle(`${label} Day Detail`); setModal("daily"); }}/>
+            <HourlySalesTrend data={hub.hourlySales} onOpen={(hour) => { setModalTitle(`${hour} Hour Detail`); setModal("hour"); }}/>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
             <CategoryBreakdown currency={currency} data={hub.categoryBreakdown} onOpen={(name) => { setModalTitle(`${name} Analytics`); setModal("category"); }}/>
-            <OperationalAlerts data={hub.inventoryAlerts} onOpen={(title) => { setModalTitle(title); setModal("inventory"); }}/>
+            <OperationalAlerts data={hub.inventoryAlerts} onOpen={(title) => { setModalTitle(localizeLabel(title)); setModal("inventory"); }}/>
           </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
             <TopSellers currency={currency} data={hub.topSellers} onOpen={(name) => { setModalTitle(`${name} Product Sales Analytics`); setModal("product"); }}/>
             <DeadStockWidget data={hub.deadStockProducts} onOpen={() => setModal("deadstock")}/>
           </section>
-        </>) : (<ReportCenter favorites={favorites} locale={locale} onFavorite={(title) => setFavorites((current) => current.includes(title) ? current.filter((item) => item !== title) : [...current, title])} onOpen={openReport} onSchedule={(title) => { setActiveReport(title); setModal("schedule"); }} query={reportQuery}/>)}
+        </>) : (<ReportCenter favorites={favorites} onFavorite={(title) => setFavorites((current) => current.includes(title) ? current.filter((item) => item !== title) : [...current, title])} onOpen={openReport} onSchedule={(title) => { setActiveReport(title); setModal("schedule"); }} query={reportQuery}/>)}
     </div>);
 }
 function FilterBar(props: {
@@ -325,16 +279,16 @@ function FilterBar(props: {
 }) {
     return (<section className="sticky top-20 z-10 rounded-lg border border-border bg-card/95 p-4 backdrop-blur">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-        <Select label="Date Range" value={props.datePreset} onChange={(value) => props.setDatePreset(value as ReportFilters["datePreset"])} options={Object.entries(datePresetLabels).map(([value, label]) => ({ label, value }))}/>
-        <Select label="Branch" value={props.branchId} onChange={props.setBranchId} options={props.branchOptions}/>
-        <Select label="Warehouse" value={props.warehouseId} onChange={props.setWarehouseId} options={props.warehouseOptions}/>
-        <Select label="Category" value={props.categoryId} onChange={props.setCategoryId} options={props.categoryOptions}/>
-        <Select label="Supplier" value={props.supplierId} onChange={props.setSupplierId} options={props.supplierOptions}/>
-        <Select label="Cashier" value={props.cashierId} onChange={props.setCashierId} options={props.cashierOptions}/>
+        <Select label={t("dateRange")} value={props.datePreset} onChange={(value) => props.setDatePreset(value as ReportFilters["datePreset"])} options={(["all", "custom", "this_month", "this_week", "today", "yesterday"] as const).map((value) => ({ label: datePresetLabel(value, activeLocale), value }))}/>
+        <Select label={t("branch")} value={props.branchId} onChange={props.setBranchId} options={props.branchOptions}/>
+        <Select label={t("warehouse")} value={props.warehouseId} onChange={props.setWarehouseId} options={props.warehouseOptions}/>
+        <Select label={t("category")} value={props.categoryId} onChange={props.setCategoryId} options={props.categoryOptions}/>
+        <Select label={t("supplier")} value={props.supplierId} onChange={props.setSupplierId} options={props.supplierOptions}/>
+        <Select label={t("cashier")} value={props.cashierId} onChange={props.setCashierId} options={props.cashierOptions}/>
         <Select label="Currency" value={props.currency} onChange={(value) => props.setCurrency(value as ReportCurrency)} options={[{ label: "LAK", value: "LAK" }, { label: "THB", value: "THB" }, { label: "USD", value: "USD" }]}/>
         <div className="flex items-end gap-2">
-          <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={props.onApply}>Apply</button>
-          <button className="grid h-10 w-10 place-items-center rounded-md border border-border" type="button" onClick={props.onReset} aria-label="Reset filters"><RefreshCcw className="size-4"/></button>
+          <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={props.onApply}>{t("apply")}</button>
+          <button className="grid h-10 w-10 place-items-center rounded-md border border-border" type="button" onClick={props.onReset} aria-label={t("resetFilters")}><RefreshCcw className="size-4"/></button>
         </div>
       </div>
     </section>);
@@ -369,15 +323,13 @@ function KpiCard({ label, onClick, value }: {
       </div>
     </button>);
 }
-function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
+function BusinessHealthScore({ hub, onOpen, score, statusKey }: {
     hub: ReportsAnalyticsHub;
-    locale: "en" | "th";
     onOpen: () => void;
     score: number;
     statusKey: "excellent" | "good" | "warning" | "critical";
 }) {
-    const copy = reportCopy[locale];
-    const status = statusKey === "excellent" ? copy.excellent : statusKey === "good" ? copy.good : statusKey === "warning" ? copy.statusWarning : copy.statusCritical;
+    const status = statusKey === "excellent" ? t("excellent") : statusKey === "good" ? t("good") : statusKey === "warning" ? t("warning") : t("critical");
     const tone = statusKey === "excellent" ? "text-success" : statusKey === "good" ? "text-primary" : statusKey === "warning" ? "text-warning" : "text-danger";
     const transactions = hub.kpis.find((entry) => entry.key === "transactions")?.value ?? 0;
     const lowStock = hub.inventoryAlerts.find((entry) => entry.key === "low_stock")?.count ?? 0;
@@ -386,20 +338,24 @@ function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
     const stockHealth = Math.max(0, Math.min(100, Math.round(100 - (lowStock * 2 + outOfStock * 4 + deadStock * 3))));
     const customerHealth = Math.max(0, Math.min(100, Math.round(transactions > 0 ? Math.min(100, (hub.itemsSold / transactions) * 10) : 0)));
     const promotionHealth = Math.max(0, Math.min(100, Math.round(100 - Math.min(deadStock * 4, 60))));
-    const breakdown = locale === "th"
-        ? [["Sales growth", score], ["Profit margin", Math.round(hub.profitMarginPercent)], ["Stock health", stockHealth], ["Customer activity", customerHealth], ["Promotion impact", promotionHealth]]
-        : [["Sales Score", score], ["Profit Margin", Math.round(hub.profitMarginPercent)], ["Stock Health", stockHealth], ["Customer Activity", customerHealth], ["Promotion Impact", promotionHealth]];
+    const breakdown = [
+        [t("salesTrend"), score],
+        [t("profitMargin"), Math.round(hub.profitMarginPercent)],
+        [t("inventoryValue"), stockHealth],
+        [t("totalCustomers"), customerHealth],
+        [t("promotionReports"), promotionHealth],
+    ] as const;
     return (<section className="rounded-lg border border-border bg-card p-6">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold">{copy.businessHealth}</h2>
+          <h2 className="text-xl font-semibold">{t("businessHealth")}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {copy.healthSubtitle}
+            {t("aiInsights")}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onOpen}>{copy.viewInsights}</button>
-            <Link className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-semibold" href="/promotions/new">{copy.createPromotion}</Link>
-            <Link className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" href="/purchasing/new">{copy.createPo}</Link>
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onOpen}>{t("viewReport")}</button>
+            <Link className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-semibold" href="/promotions/new">{t("createPromotion")}</Link>
+            <Link className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" href="/purchasing/new">{t("createPo")}</Link>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {breakdown.map(([label, value]) => (<div key={label}>
@@ -416,33 +372,23 @@ function BusinessHealthScore({ hub, locale, onOpen, score, statusKey }: {
       </div>
     </section>);
 }
-function AIInsightsPanel({ hub, locale, onOpenReport }: {
+function AIInsightsPanel({ hub, onOpenReport }: {
     hub: ReportsAnalyticsHub;
-    locale: "en" | "th";
     onOpenReport: (title: string) => void;
 }) {
-    const copy = reportCopy[locale];
-    const topCategory = hub.categoryBreakdown[0]?.category ?? "N/A";
+    const topCategory = hub.categoryBreakdown[0]?.category ?? t("na");
     const deadStockCount = hub.deadStockProducts.length;
     const lowStockCount = hub.inventoryAlerts.find((entry) => entry.key === "low_stock")?.count ?? 0;
     const peakHour = peakHourLabel(hub.hourlySales);
-    const insights = locale === "th"
-        ? [
-            [`Profit`, copy.viewProduct, "Sales by Category"],
-            [`Bills`, copy.createPromotion, "Dead Stock"],
-            [`Items sold`, copy.createPo, "Low Stock"],
-            [`${peakHour}`, copy.viewSales, "Sales by Hour"],
-            [`Top products sold in this hour`, copy.viewInventory, t("ui.profit.loss")],
-        ]
-        : [
-            [`Top revenue category: ${topCategory}`, "View Product Report", "Sales by Category"],
-            [`Dead stock detected: ${deadStockCount} items`, "Create Promotion", "Dead Stock"],
-            [`Low stock risk: ${lowStockCount} items`, "Create Purchase Order", "Low Stock"],
-            [peakHour, "View Sales Report", "Sales by Hour"],
-            [`Current profit margin: ${hub.profitMarginPercent.toFixed(1)}%`, "View Inventory Report", t("ui.profit.loss")],
-        ];
+    const insights = [
+        [`${t("salesByCategory")}: ${topCategory}`, t("viewProductReport"), "Sales by Category"],
+        [`${t("deadStock")}: ${deadStockCount}`, t("createPromotion"), "Dead Stock"],
+        [`${t("lowStock")}: ${lowStockCount}`, t("createPo"), "Low Stock"],
+        [peakHour, t("viewSalesReport"), "Sales by Hour"],
+        [`${t("profitMargin")}: ${hub.profitMarginPercent.toFixed(1)}%`, t("viewInventoryReport"), "Profit & Loss"],
+    ] as const;
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">{copy.aiInsights}</h2>
+      <h2 className="text-lg font-semibold">{t("aiInsights")}</h2>
       <div className="mt-4 grid gap-3">
         {insights.map(([text, action, report]) => (<div className="rounded-md border border-border bg-background p-3" key={text}>
             <p className="text-sm leading-6">{text}</p>
@@ -453,76 +399,67 @@ function AIInsightsPanel({ hub, locale, onOpenReport }: {
       </div>
     </section>);
 }
-function DataSourceStatusPanel({ dataSourceStatuses, generatedAt, locale, onOpen }: {
+function DataSourceStatusPanel({ dataSourceStatuses, generatedAt, onOpen }: {
     dataSourceStatuses: DataSourceStatus[];
     generatedAt: string;
-    locale: "en" | "th";
     onOpen: (source: string) => void;
 }) {
-    const copy = reportCopy[locale];
-    const lastUpdated = formatBusinessMediumDateTime(generatedAt, locale);
+    const lastUpdated = formatBusinessMediumDateTime(generatedAt, "en");
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">{copy.dataSourceStatus}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{copy.lastUpdated}: {lastUpdated}</p>
+      <h2 className="text-lg font-semibold">{t("dataSourceStatus")}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{t("lastUpdated")}: {lastUpdated}</p>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {dataSourceStatuses.map((source) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary" key={source.name} type="button" onClick={() => onOpen(source.name)}>
             <span className="font-semibold">{source.name}</span>
-            <StatusBadge locale={locale} status={source.status}/>
+            <StatusBadge status={source.status}/>
           </button>))}
       </div>
     </section>);
 }
-function StatusBadge({ locale, status }: {
-    locale: "en" | "th";
+function StatusBadge({ status }: {
     status: string;
 }) {
-    const label = locale === "th"
-        ? status === "Synced" ? "Top revenue category" : status === "Warning" ? "Dead stock found" : status === "Offline" ? "Low-stock items found" : "Current profit margin"
-        : status;
+    const label = localizeLabel(status);
     const tone = status === "Synced" ? "border-success/40 bg-success/10 text-success" : status === "Warning" ? "border-warning/40 bg-warning/10 text-warning" : status === "Offline" ? "border-danger/40 bg-danger/10 text-danger" : "border-primary/40 bg-primary/10 text-primary";
     return <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}>{label}</span>;
 }
-function RevenueProfitTrend({ currency, data, locale, onOpen }: {
+function RevenueProfitTrend({ currency, data, onOpen }: {
     currency: ReportCurrency;
     data: ReportsAnalyticsHub["revenueProfitTrend"];
-    locale: "en" | "th";
     onOpen: (label: string) => void;
 }) {
     const max = Math.max(...data.map((point) => point.revenue), 1);
-    const copy = reportCopy[locale];
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">{t("ui.revenue.profit.trend")}</h2>
-      <Legend labels={performanceLegend(locale, "revenue")}/>
+      <h2 className="text-lg font-semibold">{t("revenueProfitTrend")}</h2>
+      <Legend labels={performanceLegend("revenue")}/>
       <div className="mt-5 grid gap-4">
-        {data.map((point) => (<button className="grid gap-2 rounded-md p-2 text-left hover:bg-background" key={point.label} type="button" onClick={() => onOpen(point.label)} title={performanceTooltip(point.revenue, max, locale, "revenue")}>
+        {data.map((point) => (<button className="grid gap-2 rounded-md p-2 text-left hover:bg-background" key={point.label} type="button" onClick={() => onOpen(point.label)} title={performanceTooltip(point.revenue, max, "revenue")}>
             <div className="flex items-center justify-between gap-3 text-sm">
               <span>{point.label}</span>
               <span>{formatCurrency(point.revenue, currency)} / {formatCurrency(point.profit, currency)} {currency}</span>
             </div>
-            <div className="text-xs text-muted-foreground">Margin {point.revenue > 0 ? Math.round(point.profit / point.revenue * 100) : 0}{t("ui.transactions")}{point.transactions ?? 0} | {performanceStatus(point.revenue, max, locale, "revenue")}</div>
+            <div className="text-xs text-muted-foreground">{t("margin")} {point.revenue > 0 ? Math.round(point.profit / point.revenue * 100) : 0}% | {t("transactions")} {point.transactions ?? 0} | {performanceStatus(point.revenue, max, "revenue")}</div>
             <div className="h-4 rounded-full bg-background"><div className={`h-4 rounded-full ${performanceColor(point.revenue, max)}`} style={{ width: `${Math.max(point.revenue / max * 100, 6)}%` }}/></div>
             <div className="h-2 rounded-full bg-background"><div className="h-2 rounded-full bg-success" style={{ width: `${Math.max(point.profit / max * 100, 4)}%` }}/></div>
           </button>))}
       </div>
     </section>);
 }
-function HourlySalesTrend({ data, locale, onOpen }: {
+function HourlySalesTrend({ data, onOpen }: {
     data: ReportsAnalyticsHub["hourlySales"];
-    locale: "en" | "th";
     onOpen: (hour: string) => void;
 }) {
     const max = Math.max(...data.map((hour) => hour.transactions), 1);
-    const copy = reportCopy[locale];
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">Hourly Sales Trend</h2>
+      <h2 className="text-lg font-semibold">{t("hourlySales")}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{peakHourLabel(data)}</p>
-      <Legend labels={performanceLegend(locale, "hour")}/>
+      <Legend labels={performanceLegend("hour")}/>
       <div className="mt-5 grid grid-cols-6 gap-2">
-        {data.map((hour) => (<button className="rounded-md border border-border bg-background p-2 text-center text-xs hover:border-primary" key={hour.hour} type="button" onClick={() => onOpen(hour.hour)} title={performanceTooltip(hour.transactions, max, locale, "hour")}>
+        {data.map((hour) => (<button className="rounded-md border border-border bg-background p-2 text-center text-xs hover:border-primary" key={hour.hour} type="button" onClick={() => onOpen(hour.hour)} title={performanceTooltip(hour.transactions, max, "hour")}>
             <div className="font-semibold">{hour.hour}</div>
             <div className="mx-auto mt-2 flex h-16 w-3 items-end rounded-full bg-card"><div className={`w-3 rounded-full ${performanceColor(hour.transactions, max)}`} style={{ height: `${Math.max(hour.transactions / max * 100, 3)}%` }}/></div>
             <div className="mt-1 text-muted-foreground">{hour.transactions}</div>
-            <div className="mt-1 truncate text-[10px]">{performanceStatus(hour.transactions, max, locale, "hour")}</div>
+            <div className="mt-1 truncate text-[10px]">{performanceStatus(hour.transactions, max, "hour")}</div>
           </button>))}
       </div>
     </section>);
@@ -534,14 +471,14 @@ function CategoryBreakdown({ currency, data, onOpen }: {
 }) {
     const max = Math.max(...data.map((row) => row.revenue), 1);
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">Product Category Breakdown</h2>
+      <h2 className="text-lg font-semibold">{t("salesByCategory")}</h2>
       <div className="mt-5 grid gap-4">
         {data.map((row) => (<button className="rounded-md border border-border bg-background p-4 text-left transition hover:border-primary" key={row.category} type="button" onClick={() => onOpen(row.category)}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="font-semibold">{row.category}</div>
-              <div className="text-sm text-muted-foreground">{formatCurrency(row.revenue, currency)} {currency} / {row.margin}{t("ui.margin")}</div>
+              <div className="text-sm text-muted-foreground">{formatCurrency(row.revenue, currency)} {currency} / {row.margin}{t("margin")}</div>
             </div>
-            <div className="mt-2 text-xs text-muted-foreground">Profit {formatCurrency(row.profit, currency)} {currency}{t("ui.units")}{formatNumber(row.unitsSold)}</div>
+            <div className="mt-2 text-xs text-muted-foreground">{t("profit")} {formatCurrency(row.profit, currency)} {currency} | {t("qty")} {formatNumber(row.unitsSold)}</div>
             <div className="mt-3 h-3 rounded-full bg-card"><div className="h-3 rounded-full bg-primary" style={{ width: `${row.revenue / max * 100}%` }}/></div>
           </button>))}
       </div>
@@ -552,12 +489,12 @@ function OperationalAlerts({ data, onOpen }: {
     onOpen: (title: string) => void;
 }) {
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">Inventory Alerts</h2>
+      <h2 className="text-lg font-semibold">{t("inventoryAlerts")}</h2>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {data.map((alert) => (<button className="rounded-md border border-border bg-background p-4 text-left hover:border-primary" key={alert.key} type="button" onClick={() => onOpen(alert.label)}>
-            <div className="text-sm text-muted-foreground">{alert.label}</div>
+            <div className="text-sm text-muted-foreground">{localizeLabel(alert.label)}</div>
             <div className="mt-2 text-2xl font-semibold">{alert.count}</div>
-            <div className="mt-3 text-xs font-semibold text-primary">{alert.action}</div>
+            <div className="mt-3 text-xs font-semibold text-primary">{localizeLabel(alert.action)}</div>
           </button>))}
       </div>
     </section>);
@@ -568,13 +505,13 @@ function TopSellers({ currency, data, onOpen }: {
     onOpen: (name: string) => void;
 }) {
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">Top Sellers</h2>
-      <p className="mt-1 text-xs text-muted-foreground" title={t("ui.product.revenue.helper")}>{t("ui.product.revenue")}</p>
+      <h2 className="text-lg font-semibold">{t("topSellers")}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">{t("productRevenue")}</p>
       <div className="mt-5 max-h-[520px] overflow-y-auto">
         {data.map((product, index) => (<button className="grid w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 border-b border-border py-3 text-left last:border-b-0" key={product.name} type="button" onClick={() => onOpen(product.name)}>
             <span className="text-sm font-semibold text-primary">{index + 1}</span>
-            <span className="min-w-0"><span className="block truncate font-semibold">{product.name}</span><span className="text-xs text-muted-foreground">Qty {product.qty}{t("ui.margin.2")}{product.margin}%</span></span>
-            <span className="text-right text-sm" title={t("ui.product.revenue.helper")}>{formatCurrency(product.revenue, currency)} {currency}<span className="block text-xs text-muted-foreground">Profit {formatCurrency(product.profit, currency)}</span></span>
+            <span className="min-w-0"><span className="block truncate font-semibold">{product.name}</span><span className="text-xs text-muted-foreground">{t("qty")} {product.qty} | {t("margin")} {product.margin}%</span></span>
+            <span className="text-right text-sm">{formatCurrency(product.revenue, currency)} {currency}<span className="block text-xs text-muted-foreground">{t("profit")} {formatCurrency(product.profit, currency)}</span></span>
           </button>))}
       </div>
     </section>);
@@ -584,19 +521,18 @@ function DeadStockWidget({ data, onOpen }: {
     onOpen: () => void;
 }) {
     return (<section className="rounded-lg border border-border bg-card p-5">
-      <h2 className="text-lg font-semibold">Dead Stock / Unsold Products</h2>
+      <h2 className="text-lg font-semibold">{t("deadStock")}</h2>
       <div className="mt-5 grid gap-3">
         {data.map((product) => (<button className="rounded-md border border-border bg-background p-4 text-left hover:border-primary" key={product.name} type="button" onClick={onOpen}>
-            <div className="flex items-center justify-between gap-3"><span className="font-semibold">{product.name}</span><span className="text-xs text-warning">{product.age}</span></div>
-            <div className="mt-2 text-sm text-muted-foreground">Stock {product.stock}{t("ui.value")}{formatLak(product.value)} LAK</div>
-            <div className="mt-2 text-xs font-semibold text-primary">{product.action}</div>
+            <div className="flex items-center justify-between gap-3"><span className="font-semibold">{product.name}</span><span className="text-xs text-warning">{localizeAge(product.age)}</span></div>
+            <div className="mt-2 text-sm text-muted-foreground">{t("stockOnHand")} {product.stock} | {t("stockValue")} {formatLak(product.value)} LAK</div>
+            <div className="mt-2 text-xs font-semibold text-primary">{localizeLabel(product.action)}</div>
           </button>))}
       </div>
     </section>);
 }
-function ReportCenter({ favorites, locale, onFavorite, onOpen, onSchedule, query }: {
+function ReportCenter({ favorites, onFavorite, onOpen, onSchedule, query }: {
     favorites: string[];
-    locale: "en" | "th";
     onFavorite: (title: string) => void;
     onOpen: (title: string) => void;
     onSchedule: (title: string) => void;
@@ -616,11 +552,11 @@ function ReportCenter({ favorites, locale, onFavorite, onOpen, onSchedule, query
     const hasResults = filteredFavorites.length > 0 || recent.length > 0 || executive.length > 0 || categories.length > 0;
     return (<div className="flex flex-col gap-6">
       <section className="grid gap-4 xl:grid-cols-3">
-        <MiniList title="Favorite Reports" items={filteredFavorites} onOpen={onOpen}/>
-        <MiniList title="Recently Opened Reports" items={recent} onOpen={onOpen}/>
-        <MiniList title="Pinned Executive Reports" items={executive} onOpen={onOpen}/>
+        <MiniList title={t("favorites")} items={filteredFavorites} onOpen={onOpen}/>
+        <MiniList title={t("reports")} items={recent} onOpen={onOpen}/>
+        <MiniList title={t("reportCenter")} items={executive} onOpen={onOpen}/>
       </section>
-      {!hasResults ? <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">{reportCopy[locale].noReports}</div> : null}
+      {!hasResults ? <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">{t("noReportsFound")}</div> : null}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {categories.map((category) => (<ReportCategoryCard key={category.title} category={category} favorites={favorites} onFavorite={onFavorite} onOpen={onOpen} onSchedule={onSchedule}/>))}
       </section>
@@ -641,11 +577,11 @@ function ReportCategoryCard({ category, favorites, onFavorite, onOpen, onSchedul
           <Star className={favorites.includes(category.title) ? "size-4 fill-primary text-primary" : "size-4"}/>
         </button>
       </div>
-      <h2 className="mt-4 text-lg font-semibold">{category.title}</h2>
+      <h2 className="mt-4 text-lg font-semibold">{localizeLabel(category.title)}</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{category.description}</p>
       <div className="mt-4 flex max-h-44 flex-col gap-2 overflow-y-auto">
         {category.reports.map((report) => (<div className="flex items-center justify-between gap-2 rounded-md border border-border bg-background p-2" key={report}>
-            <button className="min-w-0 truncate text-left text-sm font-medium hover:text-primary" type="button" onClick={() => onOpen(report)}>{report}</button>
+            <button className="min-w-0 truncate text-left text-sm font-medium hover:text-primary" type="button" onClick={() => onOpen(report)}>{localizeLabel(report)}</button>
             <div className="flex shrink-0 gap-1">
               <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onOpen(report)} title="Open"><Eye className="size-4"/></button>
               <button className="grid size-8 place-items-center rounded border border-border" type="button" onClick={() => onSchedule(report)} title="Schedule"><CalendarClock className="size-4"/></button>
@@ -654,8 +590,8 @@ function ReportCategoryCard({ category, favorites, onFavorite, onOpen, onSchedul
           </div>))}
       </div>
       <div className="mt-4 flex gap-2">
-        <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onOpen(category.reports[0] ?? category.title)}>Open</button>
-        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => onOpen(category.title)}>Export</button>
+        <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onOpen(category.reports[0] ?? category.title)}>{t("viewReport")}</button>
+        <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => onOpen(category.title)}>{t("export")}</button>
       </div>
     </article>);
 }
@@ -667,7 +603,7 @@ function MiniList({ items, onOpen, title }: {
     return (<section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold">{title}</h2>
       <div className="mt-4 flex flex-col gap-2">
-        {items.map((item) => <button className="rounded-md border border-border bg-background p-3 text-left text-sm font-semibold hover:border-primary" key={item} type="button" onClick={() => onOpen(item)}>{item}</button>)}
+        {items.map((item) => <button className="rounded-md border border-border bg-background p-3 text-left text-sm font-semibold hover:border-primary" key={item} type="button" onClick={() => onOpen(item)}>{localizeLabel(item)}</button>)}
       </div>
     </section>);
 }
@@ -684,10 +620,10 @@ function ExportMenu({ onExport }: {
     const [open, setOpen] = useState(false);
     return (<div className="relative">
       <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setOpen((value) => !value)}>
-        <Download className="size-4"/> Export <ChevronDown className="size-4"/>
+        <Download className="size-4"/> {t("export")} <ChevronDown className="size-4"/>
       </button>
       {open ? (<div className="absolute right-0 top-12 z-20 w-40 rounded-md border border-border bg-card p-1 shadow-xl">
-          {["PDF", "Excel", "CSV", "Print"].map((item) => <button className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-background" key={item} type="button" onClick={() => { setOpen(false); onExport(); }}>{item}</button>)}
+          {["PDF", "Excel", "CSV", t("print")].map((item) => <button className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-background" key={item} type="button" onClick={() => { setOpen(false); onExport(); }}>{item === "PDF" ? t("pdf") : item === "Excel" ? t("excel") : item === "CSV" ? t("csv") : item}</button>)}
         </div>) : null}
     </div>);
 }
@@ -747,6 +683,12 @@ function kpiReportHref(key: ReportKpiKey) {
     return "/reports/sales";
 }
 
+function localizeAge(age: string) {
+  const match = age.match(/^(\d+)\s+days$/);
+  if (match) return fillReportsCopy(t("days"), { days: match[1] });
+  return age;
+}
+
 function KpiDetailModal({ activeKpi, currency, hub, onClose, title }: {
     activeKpi: ReportKpiKey;
     currency: ReportCurrency;
@@ -757,16 +699,16 @@ function KpiDetailModal({ activeKpi, currency, hub, onClose, title }: {
     const details = kpiSummaryLines(hub, currency, activeKpi);
     return (<ModalFrame onClose={onClose} title={title}>
       <div className="grid gap-4 lg:grid-cols-2">
-        <SimpleBars title={`${title} Detail`} rows={hub.paymentBreakdown.map((row) => ({ label: row.label, value: row.value }))} currency={currency}/>
+        <SimpleBars title={`${title} Detail`} rows={hub.paymentBreakdown.map((row) => ({ label: paymentMethodLabel(row.label, activeLocale), value: row.value }))} currency={currency}/>
         <div className="rounded-lg border border-border bg-background p-4">
-          <h3 className="font-semibold">Summary</h3>
+          <h3 className="font-semibold">{t("salesSummary")}</h3>
           <div className="mt-4 flex flex-col gap-3">
             {details.length > 0
                 ? details.map((detail) => <div className="rounded-md border border-border bg-card p-3 text-sm" key={detail}>{detail}</div>)
-                : <div className="rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">No additional detail is available for this KPI.</div>}
+                : <div className="rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">{t("na")}</div>}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-semibold" href={kpiReportHref(activeKpi)}>View report</Link>
+            <Link className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-semibold" href={kpiReportHref(activeKpi)}>{t("viewReport")}</Link>
           </div>
         </div>
       </div>
@@ -801,34 +743,34 @@ function ReportDetailModal({ categoryBreakdown, currency, onClose, productRows, 
     const totalRevenue = categoryBreakdown.reduce((total, row) => total + row.revenue, 0);
     const totalProfit = categoryBreakdown.reduce((total, row) => total + row.profit, 0);
     const margin = totalRevenue > 0 ? `${((totalProfit / totalRevenue) * 100).toFixed(1)}%` : "0%";
-    return (<ModalFrame onClose={onClose} title={reportName}>
+    return (<ModalFrame onClose={onClose} title={localizeLabel(reportName)}>
       <div className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-4">
-          <Select label="Date Range" value="this_month" onChange={() => undefined} options={[{ label: "Today", value: "today" }, { label: "This Week", value: "this_week" }, { label: "This Month", value: "this_month" }]}/>
-          <Select label="Branch" value="current" onChange={() => undefined} options={[{ label: "Current branch", value: "current" }]}/>
-          <Select label="Category" value="" onChange={() => undefined} options={[{ label: "All Categories", value: "" }]}/>
-          <label className="flex items-end gap-2 text-sm"><input className="size-5 accent-[var(--primary)]" type="checkbox" checked={showProfit} onChange={(event) => setShowProfit(event.target.checked)}/> Show profit column</label>
+          <Select label={t("dateRange")} value="this_month" onChange={() => undefined} options={[{ label: t("today"), value: "today" }, { label: t("thisWeek"), value: "this_week" }, { label: t("thisMonth"), value: "this_month" }]}/>
+          <Select label={t("branch")} value="current" onChange={() => undefined} options={[{ label: t("currentBranch"), value: "current" }]}/>
+          <Select label={t("category")} value="" onChange={() => undefined} options={[{ label: t("allCategories"), value: "" }]}/>
+          <label className="flex items-end gap-2 text-sm"><input className="size-5 accent-[var(--primary)]" type="checkbox" checked={showProfit} onChange={(event) => setShowProfit(event.target.checked)}/> {t("showProfitColumn")}</label>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
-          <KpiMini label="Rows" value={formatNumber(rows.length)}/>
-          <KpiMini label="Revenue" value={`${formatCurrency(totalRevenue, currency)} ${currency}`}/>
-          <KpiMini label="Profit" value={`${formatCurrency(totalProfit, currency)} ${currency}`}/>
-          <KpiMini label="Margin" value={margin}/>
+          <KpiMini label={t("rows")} value={formatNumber(rows.length)}/>
+          <KpiMini label={t("revenue")} value={`${formatCurrency(totalRevenue, currency)} ${currency}`}/>
+          <KpiMini label={t("profit")} value={`${formatCurrency(totalProfit, currency)} ${currency}`}/>
+          <KpiMini label={t("margin")} value={margin}/>
         </div>
-        <SimpleBars title="Chart Area" rows={categoryBreakdown.map((row) => ({ label: row.category, value: row.revenue }))} currency={currency}/>
+        <SimpleBars title={t("revenueTrend")} rows={categoryBreakdown.map((row) => ({ label: row.category, value: row.revenue }))} currency={currency}/>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
-            <input className="field-input pl-10" placeholder={t("ui.search.sort.filter.rows")} value={query} onChange={(event) => setQuery(event.target.value)}/>
+            <input className="field-input pl-10" placeholder={t("searchReports")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </label>
           <div className="flex flex-wrap gap-2">
-            {["PDF", "Excel", "CSV", "Print", "Export selected rows", "Save as Favorite", "Schedule Report"].map((button) => <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" key={button} type="button">{button}</button>)}
+            {[t("pdf"), t("excel"), t("csv"), t("print"), t("export")].map((button) => <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" key={button} type="button">{button}</button>)}
           </div>
         </div>
         <div className="max-w-full overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground">
-              <tr>{["Product", "Category", "Qty", "Revenue", ...(showProfit ? ["Profit"] : []), "Margin"].map((column) => <th className="px-3 py-3" key={column}>{column}</th>)}</tr>
+              <tr>{[t("product"), t("category"), t("qty"), t("revenue"), ...(showProfit ? [t("profit")] : []), t("margin")].map((column) => <th className="px-3 py-3" key={column}>{column}</th>)}</tr>
             </thead>
             <tbody>
               {pagedRows.map((row) => <tr className="border-b border-border last:border-b-0" key={row.name}>
@@ -843,9 +785,9 @@ function ReportDetailModal({ categoryBreakdown, currency, onClose, productRows, 
           </table>
         </div>
         <div className="flex items-center justify-between gap-3 text-sm">
-          <button className="h-9 rounded-md border border-border px-3 disabled:opacity-40" type="button" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
-          <span>Page {page} of {pageCount}</span>
-          <button className="h-9 rounded-md border border-border px-3 disabled:opacity-40" type="button" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button>
+          <button className="h-9 rounded-md border border-border px-3 disabled:opacity-40" type="button" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>{t("previous")}</button>
+          <span>{fillReportsCopy(t("pageOf"), { page, pages: pageCount })}</span>
+          <button className="h-9 rounded-md border border-border px-3 disabled:opacity-40" type="button" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>{t("next")}</button>
         </div>
       </div>
     </ModalFrame>);
@@ -873,16 +815,15 @@ function GenericDetailModal({ onClose, productRows, title }: {
 }) {
     return <ModalFrame onClose={onClose} title={title}><ReportRowsTable productRows={productRows}/></ModalFrame>;
 }
-function DayDetailModal({ hub, locale, onClose, paymentBreakdown, title, topSellers }: {
+function DayDetailModal({ hub, onClose, paymentBreakdown, title, topSellers }: {
     hub: ReportsAnalyticsHub;
-    locale: "en" | "th";
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
-    const labels = ["Revenue", "Profit", t("ui.margin.3"), "Transactions", "Customers", "Refunds", "Discounts"];
-    const buttons = locale === "th" ? ["View Sales Report", "View Profit Report", "Export Day Report"] : ["View Sales Report", "View Profit Report", "Export Day Report"];
+    const labels = [t("revenue"), t("profit"), t("margin"), t("transactions"), t("customers"), t("refunds"), t("discounts")];
+    const buttons = [t("viewSalesReport"), t("viewReport"), t("export")];
     const dayKey = title.replace(/\s+Day Detail$/i, "").trim();
     const dayPoint = hub.revenueProfitTrend.find((point) => point.label === dayKey);
     const revenue = dayPoint?.revenue ?? 0;
@@ -903,21 +844,20 @@ function DayDetailModal({ hub, locale, onClose, paymentBreakdown, title, topSell
         {labels.map((label, index) => <KpiMini key={label} label={label} value={values[index] ?? "0"}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MiniList title={locale === "th" ? "Top categories" : "Top categories"} items={categoryNames} onOpen={() => undefined}/>
-        <MiniList title={locale === "th" ? "Top products" : "Top products"} items={topSellers.slice(0, 4).map((item) => item.name)} onOpen={() => undefined}/>
+        <MiniList title={t("salesByCategory")} items={categoryNames} onOpen={() => undefined}/>
+        <MiniList title={t("topSellingProducts")} items={topSellers.slice(0, 4).map((item) => item.name)} onOpen={() => undefined}/>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{buttons.map((button) => <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" key={button}>{button}</button>)}</div>
     </ModalFrame>);
 }
-function HourDetailModal({ hub, locale, onClose, paymentBreakdown, title, topSellers }: {
+function HourDetailModal({ hub, onClose, paymentBreakdown, title, topSellers }: {
     hub: ReportsAnalyticsHub;
-    locale: "en" | "th";
     onClose: () => void;
     paymentBreakdown: ReportsAnalyticsHub["paymentBreakdown"];
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
-    const labels = locale === "th" ? ["Revenue", "Profit", "Transactions", "Items sold"] : ["Revenue", "Profit", "Transactions", "Items sold"];
+    const labels = [t("revenue"), t("profit"), t("transactions"), t("itemsSold")];
     const hourKey = title.replace(/\s+Hour Detail$/i, "").trim();
     const hourPoint = hub.hourlySales.find((row) => row.hour === hourKey);
     const values = [
@@ -931,30 +871,26 @@ function HourDetailModal({ hub, locale, onClose, paymentBreakdown, title, topSel
         {labels.map((label, index) => <KpiMini key={label} label={label} value={values[index] ?? "0"}/>)}
       </div>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <MiniList title={locale === "th" ? "Top products sold in this hour" : "Top products sold in this hour"} items={topSellers.slice(0, 5).map((item) => item.name)} onOpen={() => undefined}/>
-        <SimpleBars title={locale === "th" ? "Payment breakdown" : "Payment breakdown"} rows={paymentBreakdown.map((row) => ({ label: row.label, value: row.value }))} currency="LAK"/>
+        <MiniList title={t("topSellingProducts")} items={topSellers.slice(0, 5).map((item) => item.name)} onOpen={() => undefined}/>
+        <SimpleBars title={t("paymentBreakdown")} rows={paymentBreakdown.map((row) => ({ label: paymentMethodLabel(row.label, activeLocale), value: row.value }))} currency="LAK"/>
       </div>
-      <button className="mt-4 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{locale === "th" ? "View Transactions" : "View Transactions"}</button>
+      <button className="mt-4 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{t("transactions")}</button>
     </ModalFrame>);
 }
-function DataSourceModal({ dataSourceStatuses, locale, onClose, source }: {
+function DataSourceModal({ dataSourceStatuses, onClose, source }: {
     dataSourceStatuses: DataSourceStatus[];
-    locale: "en" | "th";
     onClose: () => void;
     source: string;
 }) {
     const item = dataSourceStatuses.find((entry) => entry.name === source) ?? dataSourceStatuses[0];
-    return (<ModalFrame onClose={onClose} title={`${source} ${locale === "th" ? "Status" : "Status"}`}>
+    return (<ModalFrame onClose={onClose} title={source}>
       <div className="grid gap-3 md:grid-cols-2">
-        <KpiMini label={locale === "th" ? "Source module" : "Source module"} value={item.name}/>
-        <KpiMini label={locale === "th" ? t("ui.sync") : "Last sync time"} value="Live"/>
-        <KpiMini label={locale === "th" ? "Record count" : "Record count"} value={formatNumber(item.count)}/>
-        <div className="rounded-md border border-border bg-background p-3"><div className="text-xs text-muted-foreground">{locale === "th" ? "Status" : "Status"}</div><div className="mt-2"><StatusBadge locale={locale} status={item.status}/></div></div>
+        <KpiMini label={t("dataSourceStatus")} value={item.name}/>
+        <KpiMini label={t("synced")} value="Live"/>
+        <KpiMini label={t("rows")} value={formatNumber(item.count)}/>
+        <div className="rounded-md border border-border bg-background p-3"><div className="text-xs text-muted-foreground">{t("synced")}</div><div className="mt-2"><StatusBadge status={item.status}/></div></div>
       </div>
-      <div className="mt-4 rounded-md border border-border bg-background p-4 text-sm text-muted-foreground">
-        {locale === "th" ? "Data is loaded from PostgreSQL for the current company and branch." : "Data is loaded from PostgreSQL for the current company and branch."}
-      </div>
-      <MiniList title={locale === "th" ? "Related reports" : "Related reports"} items={item.reports} onOpen={() => undefined}/>
+      <MiniList title={t("reports")} items={item.reports} onOpen={() => undefined}/>
     </ModalFrame>);
 }
 function CategoryModal({ currency, onClose, title, topSellers }: {
@@ -963,15 +899,15 @@ function CategoryModal({ currency, onClose, title, topSellers }: {
     title: string;
     topSellers: ReportsAnalyticsHub["topSellers"];
 }) {
-    return <ModalFrame onClose={onClose} title={title}><SimpleBars title="Top products and margin analysis" rows={topSellers.slice(0, 5).map((item) => ({ label: item.name, value: item.revenue }))} currency={currency}/><div className="mt-4 flex gap-2"><Link className="h-10 rounded-md border border-border px-4 py-2 text-sm font-semibold" href="/promotions/new">Create Promotion</Link><Link className="h-10 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" href="/products">View Products</Link></div></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={title}><SimpleBars title={t("topSellingProducts")} rows={topSellers.slice(0, 5).map((item) => ({ label: item.name, value: item.revenue }))} currency={currency}/><div className="mt-4 flex gap-2"><Link className="h-10 rounded-md border border-border px-4 py-2 text-sm font-semibold" href="/promotions/new">{t("createPromotion")}</Link><Link className="h-10 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" href="/products">{t("productReport")}</Link></div></ModalFrame>;
 }
 function InventoryAlertModal({ onClose, productRows, title }: {
     onClose: () => void;
     productRows: ProductReportRow[];
     title: string;
 }) {
-    const action = title.includes("Expiring") ? "Create Promotion" : title.includes("Dead") ? "Clearance Promotion" : "Create PO";
-    return <ModalFrame onClose={onClose} title={`${title} Report`}><ReportRowsTable productRows={productRows}/><div className="mt-4"><button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{action}</button></div></ModalFrame>;
+    const action = title.includes("Expiring") ? t("createPromotion") : title.includes("Dead") ? t("createPromotion") : t("createPo");
+    return <ModalFrame onClose={onClose} title={`${title} ${t("reports")}`}><ReportRowsTable productRows={productRows}/><div className="mt-4"><button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{action}</button></div></ModalFrame>;
 }
 function ProductAnalyticsModal({ currency, onClose, revenueProfitTrend, title }: {
     currency: ReportCurrency;
@@ -979,40 +915,40 @@ function ProductAnalyticsModal({ currency, onClose, revenueProfitTrend, title }:
     revenueProfitTrend: ReportsAnalyticsHub["revenueProfitTrend"];
     title: string;
 }) {
-    return <ModalFrame onClose={onClose} title={title}><SimpleBars title="Product sales analytics" rows={revenueProfitTrend.map((row) => ({ label: row.label, value: row.revenue }))} currency={currency}/></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={title}><SimpleBars title={t("salesByProduct")} rows={revenueProfitTrend.map((row) => ({ label: row.label, value: row.revenue }))} currency={currency}/></ModalFrame>;
 }
 function DeadStockModal({ deadStockProducts, onClose }: {
     deadStockProducts: ReportsAnalyticsHub["deadStockProducts"];
     onClose: () => void;
 }) {
-    return <ModalFrame onClose={onClose} title="Dead Stock Report"><div className="grid gap-3">{deadStockProducts.map((item) => <div className="rounded-md border border-border bg-background p-3" key={item.name}><div className="font-semibold">{item.name}</div><div className="mt-1 text-sm text-muted-foreground">{item.age}{t("ui.stock")}{item.stock}{t("ui.value")}{formatLak(item.value)} LAK</div><button className="mt-3 h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{item.action}</button></div>)}</div></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={t("deadStock")}><div className="grid gap-3">{deadStockProducts.map((item) => <div className="rounded-md border border-border bg-background p-3" key={item.name}><div className="font-semibold">{item.name}</div><div className="mt-1 text-sm text-muted-foreground">{localizeAge(item.age)} | {t("stockOnHand")} {item.stock} | {t("stockValue")} {formatLak(item.value)} LAK</div><button className="mt-3 h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{localizeLabel(item.action)}</button></div>)}</div></ModalFrame>;
 }
 function HealthModal({ inventoryAlerts, onClose }: {
     inventoryAlerts: ReportsAnalyticsHub["inventoryAlerts"];
     onClose: () => void;
 }) {
-    const insights = inventoryAlerts.map((alert) => `${alert.label}: ${alert.count} items — ${alert.action}`);
-    return <ModalFrame onClose={onClose} title="Business Health Insights"><div className="grid gap-3">{insights.map((item) => <div className="rounded-md border border-border bg-background p-3 text-sm" key={item}>{item}</div>)}</div></ModalFrame>;
+    const insights = inventoryAlerts.map((alert) => `${localizeLabel(alert.label)}: ${alert.count} — ${localizeLabel(alert.action)}`);
+    return <ModalFrame onClose={onClose} title={t("businessHealth")}><div className="grid gap-3">{insights.map((item) => <div className="rounded-md border border-border bg-background p-3 text-sm" key={item}>{item}</div>)}</div></ModalFrame>;
 }
 function ExportModal({ onClose }: {
     onClose: () => void;
 }) {
-    return <ModalFrame onClose={onClose} title="Export Center"><div className="grid gap-3 md:grid-cols-4">{["PDF", "Excel", "CSV", "Print"].map((item) => <button className="rounded-md border border-border bg-background p-4 font-semibold hover:border-primary" key={item} type="button">{item}</button>)}</div></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={t("export")}><div className="grid gap-3 md:grid-cols-4">{[t("pdf"), t("excel"), t("csv"), t("print")].map((item) => <button className="rounded-md border border-border bg-background p-4 font-semibold hover:border-primary" key={item} type="button">{item}</button>)}</div></ModalFrame>;
 }
 function ScheduleModal({ onClose, reportName }: {
     onClose: () => void;
     reportName: string;
 }) {
-    return (<ModalFrame onClose={onClose} title="Schedule Report">
+    return (<ModalFrame onClose={onClose} title={t("schedule")}>
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium">Report name<input className="field-input mt-2" defaultValue={reportName}/></label>
-        <Select label="Frequency" value="Daily" onChange={() => undefined} options={[{ label: "Daily", value: "Daily" }, { label: "Weekly", value: "Weekly" }, { label: "Monthly", value: "Monthly" }]}/>
-        <label className="text-sm font-medium">Time<input className="field-input mt-2" type="time" defaultValue="08:00"/></label>
-        <Select label="Send to" value="Email" onChange={() => undefined} options={[{ label: "Email", value: "Email" }, { label: "Telegram", value: "Telegram" }, { label: "WhatsApp", value: "WhatsApp" }, { label: "EGO POS App notification", value: "EGO POS App notification" }]}/>
-        <Select label="File format" value="PDF" onChange={() => undefined} options={[{ label: "PDF", value: "PDF" }, { label: "Excel", value: "Excel" }]}/>
+        <label className="text-sm font-medium">{t("reports")}<input className="field-input mt-2" defaultValue={reportName}/></label>
+        <Select label={t("schedule")} value="Daily" onChange={() => undefined} options={[{ label: t("today"), value: "Daily" }, { label: t("thisWeek"), value: "Weekly" }, { label: t("thisMonth"), value: "Monthly" }]}/>
+        <label className="text-sm font-medium">{t("period")}<input className="field-input mt-2" type="time" defaultValue="08:00"/></label>
+        <Select label={t("export")} value="Email" onChange={() => undefined} options={[{ label: "Email", value: "Email" }, { label: "Telegram", value: "Telegram" }, { label: "WhatsApp", value: "WhatsApp" }, { label: "EGO POS App notification", value: "EGO POS App notification" }]}/>
+        <Select label={t("export")} value="PDF" onChange={() => undefined} options={[{ label: t("pdf"), value: "PDF" }, { label: t("excel"), value: "Excel" }]}/>
         <label className="flex items-end gap-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" defaultChecked/> Active</label>
       </div>
-      <button className="mt-5 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">Save Schedule</button>
+      <button className="mt-5 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{t("apply")}</button>
     </ModalFrame>);
 }
 function FavoritesModal({ favorites, onClose, onOpen }: {
@@ -1020,7 +956,7 @@ function FavoritesModal({ favorites, onClose, onOpen }: {
     onClose: () => void;
     onOpen: (title: string) => void;
 }) {
-    return <ModalFrame onClose={onClose} title="Favorites"><MiniList title="Favorite reports" items={favorites} onOpen={onOpen}/><div className="mt-4"><MiniList title="Pinned executive reports" items={executiveReports} onOpen={onOpen}/></div></ModalFrame>;
+    return <ModalFrame onClose={onClose} title={t("favorites")}><MiniList title={t("favorites")} items={favorites} onOpen={onOpen}/><div className="mt-4"><MiniList title={t("reportCenter")} items={executiveReports} onOpen={onOpen}/></div></ModalFrame>;
 }
 function ModalFrame({ children, onClose, title }: {
     children: React.ReactNode;
@@ -1030,8 +966,8 @@ function ModalFrame({ children, onClose, title }: {
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="max-h-[88vh] w-full max-w-6xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("ui.demo.ready.report.detail.with.filters.chart.")}</p></div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
+          <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p></div>
+          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
         </div>
         <div className="max-h-[72vh] overflow-y-auto p-5">{children}</div>
       </div>
@@ -1040,7 +976,7 @@ function ModalFrame({ children, onClose, title }: {
 function ReportRowsTable({ productRows }: { productRows: ProductReportRow[] }) {
     return (<div className="max-w-full overflow-x-auto rounded-lg border border-border">
       <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground"><tr>{["Name", "Category", "Qty", "Revenue", "Profit", "Margin"].map((column) => <th className="px-3 py-3" key={column} title={column === "Revenue" || column === "Profit" ? t("ui.product.revenue.helper") : undefined}>{column}</th>)}</tr></thead>
+        <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground"><tr>{[t("name"), t("category"), t("qty"), t("revenue"), t("profit"), t("margin")].map((column) => <th className="px-3 py-3" key={column}>{column}</th>)}</tr></thead>
         <tbody>{productRows.map((row) => {
             const margin = row.revenueLak > 0 ? `${((row.profitLak / row.revenueLak) * 100).toFixed(1)}%` : "0%";
             return (<tr className="border-b border-border last:border-b-0" key={row.productName}>
@@ -1080,40 +1016,30 @@ function performanceColor(value: number, max: number) {
         return "bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.16)]";
     return "bg-danger shadow-[0_0_12px_rgba(239,68,68,0.16)]";
 }
-function performanceLegend(locale: "en" | "th", type: "hour" | "revenue") {
-    if (locale === "th") {
-        return type === "hour"
-            ? ["Bills", "Customers", "Refunds"]
-            : ["Discounts", "View Sales Report", "View Profit Report"];
-    }
+function performanceLegend(type: "hour" | "revenue") {
     return type === "hour"
-        ? ["Green: High sales", "Orange: Normal sales", "Red: Low or no sales"]
-        : ["Green: High revenue", "Orange: Normal revenue", "Red: Low revenue"];
+        ? ["High sales", "Normal sales", "Low sales"]
+        : ["High revenue", "Normal revenue", "Low revenue"];
 }
-function performanceStatus(value: number, max: number, locale: "en" | "th", type: "hour" | "revenue") {
+function performanceStatus(value: number, max: number, type: "hour" | "revenue") {
     const ratio = max > 0 ? value / max : 0;
     if (type === "hour") {
         if (ratio >= 0.75)
-            return locale === "th" ? "High sales" : "High sales";
+            return "High sales";
         if (ratio >= 0.35)
-            return locale === "th" ? "Normal sales" : "Normal sales";
-        return locale === "th" ? "Low sales" : "Low sales";
+            return "Normal sales";
+        return "Low sales";
     }
     if (ratio >= 0.75)
-        return locale === "th" ? "High revenue" : "High revenue";
+        return "High revenue";
     if (ratio >= 0.35)
-        return locale === "th" ? "Normal revenue" : "Normal revenue";
-    return locale === "th" ? "Low revenue" : "Low revenue";
+        return "Normal revenue";
+    return "Low revenue";
 }
-function performanceTooltip(value: number, max: number, locale: "en" | "th", type: "hour" | "revenue") {
+function performanceTooltip(value: number, max: number, type: "hour" | "revenue") {
     const percent = Math.round((max > 0 ? value / max : 0) * 100);
-    const status = performanceStatus(value, max, locale, type);
-    if (locale === "th") {
-        const recommendation = percent >= 75 ? "Top categories" : percent >= 35 ? "Top products" : "Revenue";
-        return `Payment breakdown`;
-    }
-    const recommendation = percent >= 75 ? t("ui.prepare.more.cashier.coverage") : percent >= 35 ? t("ui.maintain.normal.operation") : t("ui.consider.promotion.or.staffing.reduction");
-    return `${status}. ${value} (${percent}% of max). ${recommendation}`;
+    const status = performanceStatus(value, max, type);
+    return `${status}. ${value} (${percent}% of max).`;
 }
 function formatCurrency(value: number, currency: ReportCurrency) {
     const converted = Math.round(value * currencyRates[currency]);

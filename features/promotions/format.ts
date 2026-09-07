@@ -1,3 +1,4 @@
+import { promotionTypeLabel } from "@/lib/i18n/promotions-copy";
 import type { PromotionType } from "@/features/promotions/types";
 
 export function formatLak(value: number) {
@@ -6,14 +7,6 @@ export function formatLak(value: number) {
   }).format(value);
 }
 
-export function formatPromotionType(type: PromotionType) {
-  const labels: Record<PromotionType, string> = {
-    buy_x_get_y: "Buy X Get Y",
-    combo_set: "Combo Set",
-    fixed_amount: "Fixed Amount Discount",
-    member_discount: "Member Discount",
-    percentage: "Percentage Discount",
-  };
-
-  return labels[type];
+export function formatPromotionType(type: PromotionType, locale?: string | null) {
+  return promotionTypeLabel(type, locale);
 }

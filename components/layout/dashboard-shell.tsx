@@ -37,6 +37,9 @@ import { tProducts } from "@/lib/i18n/products-copy";
 import { tPurchasing } from "@/lib/i18n/purchasing-copy";
 import { tCustomers } from "@/lib/i18n/customers-copy";
 import { tMemberships } from "@/lib/i18n/memberships-copy";
+import { tPromotions } from "@/lib/i18n/promotions-copy";
+import { tReports } from "@/lib/i18n/reports-copy";
+import { tSettings } from "@/lib/i18n/settings-copy";
 import { tSuppliers } from "@/lib/i18n/suppliers-copy";
 
 const navigation = [
@@ -72,10 +75,10 @@ const shellCopy: Record<SupportedLocale, {
       membership: tMemberships("membership", "en"),
       pos: "POS",
       products: tProducts("products", "en"),
-      promotions: "Promotions",
+      promotions: tPromotions("promotions", "en"),
       purchasing: tPurchasing("purchasing", "en"),
-      reports: "Reports",
-      settings: "Settings",
+      reports: tReports("reports", "en"),
+      settings: tSettings("settings", "en"),
       suppliers: tSuppliers("suppliers", "en"),
     },
   },
@@ -90,10 +93,10 @@ const shellCopy: Record<SupportedLocale, {
       membership: tMemberships("membership", "lo"),
       pos: "POS",
       products: tProducts("products", "lo"),
-      promotions: "Promotions",
+      promotions: tPromotions("promotions", "lo"),
       purchasing: tPurchasing("purchasing", "lo"),
-      reports: "Reports",
-      settings: "Settings",
+      reports: tReports("reports", "lo"),
+      settings: tSettings("settings", "lo"),
       suppliers: tSuppliers("suppliers", "lo"),
     },
   },

@@ -1,7 +1,12 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import {
+  localizePromotionError,
+  tPromotions,
+} from "@/lib/i18n/promotions-copy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, CheckCircle2, Gift, QrCode, Save, Search, ShieldAlert, SlidersHorizontal, Sparkles, XCircle, type LucideIcon, } from "lucide-react";
@@ -10,35 +15,35 @@ import type { Category, Product } from "@/features/products/types";
 import { formatLak, formatPromotionType } from "@/features/promotions/format";
 import type { Promotion, PromotionType } from "@/features/promotions/types";
 import { createPromotionAction, updatePromotionAction } from "@/features/promotions/actions";
-const wizardSteps = [
-    "Basic Info",
-    "Discount Rules",
-    "Targeting",
-    "Protection",
-    "Summary",
-];
-const templates = [
-    { label: "Percentage Discount", type: "percentage", note: t("ui.reduce.selected.items.or.bill.by.a.percent") },
-    { label: "Fixed Amount Discount", type: "fixed_amount", note: t("ui.take.a.fixed.lak.amount.off") },
-    { label: "Buy 1 Get 1", type: "buy_x_get_y", note: t("ui.buy.one.item.and.get.one.free") },
-    { label: "Buy 2 Get 1", type: "buy_x_get_y", note: t("ui.buy.two.items.and.get.one.free") },
-    { label: "Bundle", type: "combo_set", note: t("ui.sell.selected.products.together.for.one.pric") },
-    { label: t("ui.spend.save"), type: "fixed_amount", note: t("ui.spend.over.a.threshold.to.save") },
-    { label: "Free Gift", type: "buy_x_get_y", note: t("ui.add.a.gift.product.after.rules.match") },
-    { label: "Coupon Promotion", type: "fixed_amount", note: t("ui.manual.generated.or.qr.coupon") },
-    { label: "Point Redemption", type: "member_discount", note: t("ui.redeem.loyalty.points.for.value") },
-    { label: "Happy Hour", type: "percentage", note: t("ui.limited.hours.and.repeat.days") },
-    { label: "Flash Sale", type: "percentage", note: t("ui.short.date.time.campaign.with.countdown") },
-    { label: "Near Expiry Clearance", type: "percentage", note: t("ui.move.stock.before.expiry") },
-    { label: "Slow Moving Clearance", type: "percentage", note: t("ui.clear.products.with.low.sales.velocity") },
-    { label: t("ui.mix.match"), type: "combo_set", note: t("ui.buy.n.items.from.a.group.for.fixed.price") },
-    { label: "Tiered Discount", type: "percentage", note: t("ui.more.spend.or.quantity.gets.more.savings") },
-    { label: "Member Discount", type: "member_discount", note: t("ui.member.only.campaign") },
-] satisfies Array<{
-    label: string;
-    type: PromotionType;
-    note: string;
-}>;
+
+let activeLocale: SupportedLocale = "en";
+
+function t(key: string) {
+  return tPromotions(key, activeLocale);
+}
+
+function memberTargetLabel(target: string) {
+  if (target === "Everyone") return t("everyone");
+  if (target === "Members Only") return t("membersOnly");
+  if (target === "Student Members") return t("studentMembers");
+  if (target === "New Members") return t("newMembers");
+  if (target === "VIP Members") return t("vipMembers");
+  if (target === "Custom Group") return t("customGroup");
+  return target;
+}
+
+function stackOptionLabel(option: string) {
+  if (option === "Product discount") return t("productDiscount");
+  if (option === "Bill discount") return t("billDiscount");
+  if (option === "Coupon") return t("coupon");
+  if (option === "QR coupon") return t("qrCoupon");
+  if (option === "Member discount") return t("memberDiscount");
+  if (option === "Point redemption") return t("pointRedemption");
+  if (option === "Buy X Get Y") return t("buyXGetY");
+  if (option === "Free gift") return t("freeGift");
+  return option;
+}
+
 const stackOptions = [
     "Product discount",
     "Bill discount",
@@ -67,13 +72,63 @@ const previewCartItems = [
 ];
 type SelectorKind = "products" | "categories" | "brands" | "branches" | "warehouses" | "members";
 type SaveMode = "draft" | "approval" | "activate";
-export function PromotionForm({ categories, initialPromotion, membershipLevels, products, }: {
+export function PromotionForm({
+  categories,
+  initialPromotion,
+  locale: localeProp,
+  membershipLevels,
+  products,
+}: {
     categories: Category[];
     initialPromotion?: Promotion;
+    locale?: SupportedLocale;
     membershipLevels: MembershipLevel[];
     products: Product[];
 }) {
     const router = useRouter();
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+
+    useEffect(() => {
+      if (localeProp) setLocale(localeProp);
+    }, [localeProp]);
+
+    useEffect(() => {
+      function handleLocaleChange(event: Event) {
+        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
+      }
+      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+
+    activeLocale = locale;
+
+    const wizardSteps = useMemo(() => [
+      t("basicInfo"),
+      t("discountRules"),
+      t("targeting"),
+      t("protection"),
+      t("summary"),
+    ], [locale]);
+
+    const templates = useMemo(() => [
+      { key: "percentage", label: t("percentageDiscount"), type: "percentage" as PromotionType, note: t("subtitle") },
+      { key: "fixed_amount", label: t("fixedAmount"), type: "fixed_amount" as PromotionType, note: t("subtitle") },
+      { key: "buy_1_get_1", label: t("buyXGetY"), type: "buy_x_get_y" as PromotionType, note: t("subtitle") },
+      { key: "buy_2_get_1", label: t("buyXGetY"), type: "buy_x_get_y" as PromotionType, note: t("subtitle") },
+      { key: "combo_set", label: t("comboSet"), type: "combo_set" as PromotionType, note: t("subtitle") },
+      { key: "spend_save", label: t("billDiscount"), type: "fixed_amount" as PromotionType, note: t("subtitle") },
+      { key: "free_gift", label: t("freeGift"), type: "buy_x_get_y" as PromotionType, note: t("subtitle") },
+      { key: "coupon", label: t("couponPromotion"), type: "fixed_amount" as PromotionType, note: t("subtitle") },
+      { key: "point_redemption", label: t("memberDiscount"), type: "member_discount" as PromotionType, note: t("subtitle") },
+      { key: "happy_hour", label: t("happyHour"), type: "percentage" as PromotionType, note: t("subtitle") },
+      { key: "flash_sale", label: t("flashSale"), type: "percentage" as PromotionType, note: t("subtitle") },
+      { key: "near_expiry", label: t("nearExpiry"), type: "percentage" as PromotionType, note: t("subtitle") },
+      { key: "slow_moving", label: t("slowMoving"), type: "percentage" as PromotionType, note: t("subtitle") },
+      { key: "mix_match", label: t("comboSet"), type: "combo_set" as PromotionType, note: t("subtitle") },
+      { key: "tiered", label: t("percentageDiscount"), type: "percentage" as PromotionType, note: t("subtitle") },
+      { key: "member_discount", label: t("memberDiscount"), type: "member_discount" as PromotionType, note: t("subtitle") },
+    ], [locale]);
     const [isPending, startTransition] = useTransition();
     const [step, setStep] = useState(0);
     const [selector, setSelector] = useState<SelectorKind | null>(null);
@@ -85,7 +140,7 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
     const [name, setName] = useState(initialPromotion?.promotionName ?? "");
     const [description, setDescription] = useState(initialPromotion?.description ?? "");
     const [type, setType] = useState<PromotionType>(initialPromotion?.type ?? "percentage");
-    const [template, setTemplate] = useState(templates[0].label);
+    const [template, setTemplate] = useState("percentage");
     const [status, setStatus] = useState<string>(initialPromotion?.status ?? "scheduled");
     const [priority, setPriority] = useState(initialPromotion?.priority ?? 10);
     const [discountPercent, setDiscountPercent] = useState(initialPromotion?.discountPercent ?? 10);
@@ -142,23 +197,23 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
             text: string;
         }> = [];
         if (!name.trim())
-            issues.push({ level: "red", text: t("ui.missing.promotion.name") });
+            issues.push({ level: "red", text: t("missingName") });
         if (!type)
-            issues.push({ level: "red", text: t("ui.missing.promotion.type") });
+            issues.push({ level: "red", text: t("missingType") });
         if (discount <= 0 && !["buy_x_get_y", "combo_set"].includes(type))
-            issues.push({ level: "red", text: t("ui.missing.discount.value") });
+            issues.push({ level: "red", text: t("missingDiscountValue") });
         if (selectedProductIds.length === 0 && selectedCategoryIds.length === 0)
-            issues.push({ level: "red", text: t("ui.missing.target") });
+            issues.push({ level: "red", text: t("missingTarget") });
         if (!startDate || !endDate)
-            issues.push({ level: "red", text: t("ui.missing.date") });
+            issues.push({ level: "red", text: t("missingDate") });
         if (hasProfitRisk)
-            issues.push({ level: "red", text: t("ui.negative.profit.or.below.minimum.margin") });
-        if (template.includes("Coupon") && !couponCode.trim())
-            issues.push({ level: "red", text: t("ui.coupon.missing.code") });
+            issues.push({ level: "red", text: t("negativeProfit") });
+        if (template === "coupon" && !couponCode.trim())
+            issues.push({ level: "red", text: t("couponMissingCode") });
         if (type === "buy_x_get_y" && (buyQty <= 0 || getQty <= 0))
-            issues.push({ level: "red", text: t("ui.buy.x.get.y.missing.product.or.quantity") });
+            issues.push({ level: "red", text: t("missingTarget") });
         if (approvalRequired || hasProfitRisk)
-            issues.push({ level: "yellow", text: t("ui.approval.required.before.activation") });
+            issues.push({ level: "yellow", text: t("approvalRequiredBeforeActivation") });
         return issues;
     }, [approvalRequired, buyQty, couponCode, discount, endDate, getQty, hasProfitRisk, name, selectedCategoryIds.length, selectedProductIds.length, startDate, template, type]);
     const blockingIssues = validationIssues.filter((issue) => issue.level === "red");
@@ -173,21 +228,21 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
             return Math.max(subtotal - bundlePrice, 0);
         return 0;
     }
-    function selectTemplate(label: string) {
-        const selectedTemplate = templates.find((item) => item.label === label);
+    function selectTemplate(templateKey: string) {
+        const selectedTemplate = templates.find((item) => item.key === templateKey);
         if (!selectedTemplate)
             return;
-        setTemplate(selectedTemplate.label);
+        setTemplate(selectedTemplate.key);
         setType(selectedTemplate.type);
-        if (selectedTemplate.label === "Buy 1 Get 1") {
+        if (selectedTemplate.key === "buy_1_get_1") {
             setBuyQty(1);
             setGetQty(1);
         }
-        if (selectedTemplate.label === "Buy 2 Get 1") {
+        if (selectedTemplate.key === "buy_2_get_1") {
             setBuyQty(2);
             setGetQty(1);
         }
-        if (selectedTemplate.label.includes("Coupon")) {
+        if (selectedTemplate.key === "coupon") {
             setCouponCode("SAVE10");
         }
         setMessage(`${selectedTemplate.label} template applied.`);
@@ -225,14 +280,14 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
                 ? await updatePromotionAction(initialPromotion.id, payload)
                 : await createPromotionAction(payload);
             if (!result.ok) {
-                setMessage(result.error ?? "Promotion save failed.");
+                setMessage(localizePromotionError(result.error, locale));
                 return;
             }
             setMessage(mode === "draft"
-                ? "Promotion draft saved."
+                ? t("savedDraft")
                 : mode === "approval"
-                    ? "Promotion submitted for approval."
-                    : "Promotion saved and activated.");
+                    ? t("promotionSubmitted")
+                    : t("promotionSavedActivated"));
             router.refresh();
             router.push("/promotions");
         });
@@ -245,20 +300,20 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
       <section className="rounded-lg border border-border bg-card p-6">
         <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/promotions">
           <ArrowLeft aria-hidden="true"/>
-          Back to promotions
+          {t("backToPromotions")}
         </Link>
         <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="grid size-12 place-items-center rounded-md bg-primary/10 text-primary">
               <Gift aria-hidden="true"/>
             </div>
-            <h1 className="mt-4 text-3xl font-semibold">{initialPromotion ? "Edit Promotion" : "Create Promotion"}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.five.step.wizard.for.campaign.setup.targetin")}</p>
+            <h1 className="mt-4 text-3xl font-semibold">{initialPromotion ? t("editPromotion") : t("createPromotion")}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ActionButton label="Save Draft" icon={Save} onClick={() => handleSave("draft")}/>
-            <ActionButton label="Submit for Approval" icon={ShieldAlert} onClick={() => handleSave("approval")}/>
-            <ActionButton label={t("ui.save.activate")} icon={CheckCircle2} primary onClick={() => handleSave("activate")} disabled={hasProfitRisk || isPending}/>
+            <ActionButton label={t("saveDraft")} icon={Save} onClick={() => handleSave("draft")}/>
+            <ActionButton label={t("submitForApproval")} icon={ShieldAlert} onClick={() => handleSave("approval")}/>
+            <ActionButton label={t("saveActivate")} icon={CheckCircle2} primary onClick={() => handleSave("activate")} disabled={hasProfitRisk || isPending}/>
           </div>
         </div>
       </section>
@@ -276,198 +331,198 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
 
       <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
         <div className="min-w-0">
-      {step === 0 ? (<WizardCard icon={Sparkles} title={t("ui.step.1.basic.info.template")}>
+      {step === 0 ? (<WizardCard icon={Sparkles} title={t("basicInfo")}>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Promotion Code">
+            <Field label={t("promotionCode")}>
               <div className="flex gap-2">
                 <select className="field-input w-32" value={codeMode} onChange={(event) => setCodeMode(event.target.value as "auto" | "manual")}>
-                  <option value="auto">Auto</option>
-                  <option value="manual">Manual</option>
+                  <option value="auto">{t("auto")}</option>
+                  <option value="manual">{t("manual")}</option>
                 </select>
                 <input className="field-input font-mono" value={code} onChange={(event) => setCode(event.target.value)} disabled={codeMode === "auto"}/>
               </div>
             </Field>
-            <Field label="Promotion Name">
-              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="June drink campaign"/>
+            <Field label={t("promotionName")}>
+              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("promotionName")}/>
             </Field>
-            <Field label="Status">
+            <Field label={t("status")}>
               <select className="field-input" value={status} onChange={(event) => setStatus(event.target.value)}>
                 {["draft", "pending_approval", "approved", "rejected", "active", "inactive", "scheduled", "expired", "archived"].map((option) => <option key={option} value={option}>{option.replace("_", " ")}</option>)}
               </select>
             </Field>
-            <Field label="Priority">
+            <Field label={t("priority")}>
               <input className="field-input" type="range" min="1" max="100" value={priority} onChange={(event) => setPriority(Number(event.target.value))}/>
               <div className="mt-2 rounded-md border border-border bg-background p-3">
                 <div className="text-sm font-semibold">
-                  Priority {priority} - {priorityInfo.label}
+                  {t("priority")} {priority} - {priorityInfo.label}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{t("ui.lower.numbers.apply.first.in.stack.rules")}</p>
-                <p className="mt-2 text-xs text-muted-foreground" title={t("ui.low.normal.campaign.medium.common.discount.h")}>
+                <p className="mt-1 text-xs text-muted-foreground">{t("stackRules")}</p>
+                <p className="mt-2 text-xs text-muted-foreground" title={priorityInfo.tooltip}>
                   {priorityInfo.tooltip}
                 </p>
               </div>
             </Field>
             <div className="lg:col-span-2">
-              <Field label="Description">
+              <Field label={t("description")}>
                 <textarea className="min-h-24 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={description} onChange={(event) => setDescription(event.target.value)}/>
               </Field>
             </div>
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {templates.map((item) => (<button className={template === item.label ? "rounded-lg border border-primary bg-primary/10 p-4 text-left" : "rounded-lg border border-border bg-background p-4 text-left hover:border-primary"} key={item.label} type="button" onClick={() => selectTemplate(item.label)}>
+            {templates.map((item) => (<button className={template === item.key ? "rounded-lg border border-primary bg-primary/10 p-4 text-left" : "rounded-lg border border-border bg-background p-4 text-left hover:border-primary"} key={item.key} type="button" onClick={() => selectTemplate(item.key)}>
                 <div className="font-semibold">{item.label}</div>
                 <div className="mt-2 text-xs leading-5 text-muted-foreground">{item.note}</div>
               </button>))}
           </div>
         </WizardCard>) : null}
 
-      {step === 1 ? (<WizardCard icon={Gift} title={t("ui.step.2.promotion.type.discount.rules")}>
+      {step === 1 ? (<WizardCard icon={Gift} title={t("discountRules")}>
           <div className="grid gap-4 lg:grid-cols-3">
-            <Field label="Promotion Type">
+            <Field label={t("promotionType")}>
               <select className="field-input" value={type} onChange={(event) => setType(event.target.value as PromotionType)}>
-                <option value="percentage">Percentage Discount</option>
-                <option value="fixed_amount">Fixed Amount Discount</option>
-                <option value="buy_x_get_y">Buy X Get Y</option>
-                <option value="combo_set">{t("ui.bundle.mix.match")}</option>
-                <option value="member_discount">Member / Point Redemption</option>
+                <option value="percentage">{t("percentageDiscount")}</option>
+                <option value="fixed_amount">{t("fixedAmount")}</option>
+                <option value="buy_x_get_y">{t("buyXGetY")}</option>
+                <option value="combo_set">{t("comboSet")}</option>
+                <option value="member_discount">{t("memberDiscount")}</option>
               </select>
             </Field>
             {(type === "percentage" || type === "member_discount") ? (<>
-                <NumberField label={t("ui.discount.2")} value={discountPercent} onChange={setDiscountPercent}/>
-                <NumberField label="Max discount amount" value={discountAmount} onChange={setDiscountAmount}/>
+                <NumberField label={t("discountPercent")} value={discountPercent} onChange={setDiscountPercent}/>
+                <NumberField label={t("maxDiscountAmount")} value={discountAmount} onChange={setDiscountAmount}/>
               </>) : null}
-            {type === "fixed_amount" ? <NumberField label="Discount amount LAK" value={discountAmount} onChange={setDiscountAmount}/> : null}
+            {type === "fixed_amount" ? <NumberField label={t("discountAmountLak")} value={discountAmount} onChange={setDiscountAmount}/> : null}
             {type === "buy_x_get_y" ? (<>
-                <NumberField label="Buy quantity" value={buyQty} onChange={setBuyQty}/>
-                <NumberField label="Get quantity" value={getQty} onChange={setGetQty}/>
-                <button className="h-11 self-end rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSelector("products")}>Select free product</button>
+                <NumberField label={t("buyQuantity")} value={buyQty} onChange={setBuyQty}/>
+                <NumberField label={t("getQuantity")} value={getQty} onChange={setGetQty}/>
+                <button className="h-11 self-end rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSelector("products")}>{t("selectedProducts")}</button>
               </>) : null}
             {type === "combo_set" ? (<>
-                <NumberField label="Bundle price LAK" value={bundlePrice} onChange={setBundlePrice}/>
-                <button className="h-11 self-end rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSelector("products")}>Select bundle products</button>
+                <NumberField label={t("discountAmountLak")} value={bundlePrice} onChange={setBundlePrice}/>
+                <button className="h-11 self-end rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSelector("products")}>{t("selectedProducts")}</button>
               </>) : null}
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <Panel title="Coupon rules">
+            <Panel title={t("couponRules")}>
               <div className="grid gap-3">
-                <input className="field-input font-mono" value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder="Manual or generated code"/>
+                <input className="field-input font-mono" value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder={t("couponCode")}/>
                 <div className="flex flex-wrap gap-2">
-                  {["Single use", "Multi use", "Member only", "Usage limit per customer", "Total usage limit"].map((rule) => <TogglePill key={rule} label={rule}/>)}
-                  <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setShowQr(true)}>QR coupon preview</button>
+                  {[t("limitPerBill"), t("usageLimit"), t("memberOnly"), t("limitPerCustomer"), t("totalUsage")].map((rule) => <TogglePill key={rule} label={rule}/>)}
+                  <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setShowQr(true)}>{t("qrCoupon")}</button>
                 </div>
               </div>
             </Panel>
-            <Panel title="Time-based rules">
+            <Panel title={t("dateRange")}>
               <div className="grid gap-3 md:grid-cols-2">
                 <input className="field-input" type="time" defaultValue="08:00"/>
                 <input className="field-input" type="time" defaultValue="18:00"/>
-                <TogglePill label="Countdown display"/>
-                <TogglePill label="Repeat weekdays"/>
+                <TogglePill label={t("flashSale")}/>
+                <TogglePill label={t("weekly")}/>
               </div>
             </Panel>
           </div>
         </WizardCard>) : null}
 
-      {step === 2 ? (<WizardCard icon={CalendarDays} title={t("ui.step.3.targeting.schedule")}>
+      {step === 2 ? (<WizardCard icon={CalendarDays} title={t("targeting")}>
           <div className="grid gap-4 xl:grid-cols-2">
-            <Panel title="Apply To">
+            <Panel title={t("scope")}>
               <div className="grid gap-2 sm:grid-cols-2">
                 {[
-                ["Entire Store", null],
-                ["Selected Products", "products"],
-                ["Selected Categories", "categories"],
-                ["Selected Brands", "brands"],
-                ["Selected Branches", "branches"],
-                ["Selected Warehouses", "warehouses"],
-            ].map(([label, kind]) => (<button className="rounded-md border border-border bg-background p-3 text-left text-sm font-semibold hover:border-primary" key={label} type="button" onClick={() => kind ? setSelector(kind as SelectorKind) : setMessage(t("ui.entire.store.target.selected"))}>{label}</button>))}
+                [t("entireStore"), null],
+                [t("selectedProducts"), "products"],
+                [t("selectedCategories"), "categories"],
+                [t("categories"), "brands"],
+                [t("branch"), "branches"],
+                [t("scope"), "warehouses"],
+            ].map(([label, kind]) => (<button className="rounded-md border border-border bg-background p-3 text-left text-sm font-semibold hover:border-primary" key={label} type="button" onClick={() => kind ? setSelector(kind as SelectorKind) : setMessage(t("entireStore"))}>{label}</button>))}
               </div>
             </Panel>
-            <Panel title="Customer Target">
+            <Panel title={t("memberScope")}>
               <div className="grid gap-2 sm:grid-cols-2">
-                {["Everyone", "Members Only", "Student Members", "Standard", "Silver", "Gold", "Platinum", "New Members", "VIP Members", "Custom Group"].map((target) => (<button className={customerTarget === target ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm font-semibold" : "rounded-md border border-border bg-background p-3 text-left text-sm font-semibold hover:border-primary"} key={target} type="button" onClick={() => setCustomerTarget(target)}>{target}</button>))}
+                {["Everyone", "Members Only", "Student Members", "Standard", "Silver", "Gold", "Platinum", "New Members", "VIP Members", "Custom Group"].map((target) => (<button className={customerTarget === target ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm font-semibold" : "rounded-md border border-border bg-background p-3 text-left text-sm font-semibold hover:border-primary"} key={target} type="button" onClick={() => setCustomerTarget(target)}>{memberTargetLabel(target)}</button>))}
               </div>
             </Panel>
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-4">
-            <Field label="Start Date"><input className="field-input" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)}/></Field>
-            <Field label="End Date"><input className="field-input" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)}/></Field>
-            <Field label="Start Time"><input className="field-input" type="time" defaultValue="08:00" disabled={allDay}/></Field>
-            <Field label="End Time"><input className="field-input" type="time" defaultValue="22:00" disabled={allDay}/></Field>
-            <label className="flex items-center gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)}/>All Day</label>
-            {["Daily", "Weekly", "Monthly", "Custom weekdays"].map((repeat) => <TogglePill key={repeat} label={repeat}/>)}
+            <Field label={t("startDate")}><input className="field-input" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)}/></Field>
+            <Field label={t("endDate")}><input className="field-input" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)}/></Field>
+            <Field label={t("startTime")}><input className="field-input" type="time" defaultValue="08:00" disabled={allDay}/></Field>
+            <Field label={t("endTime")}><input className="field-input" type="time" defaultValue="22:00" disabled={allDay}/></Field>
+            <label className="flex items-center gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)}/>{t("allDay")}</label>
+            {[t("daily"), t("weekly"), t("monthly"), t("dateRange")].map((repeat) => <TogglePill key={repeat} label={repeat}/>)}
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-4">
-            {["Limit per customer", "Limit per day", "Limit per bill", "Total usage limit"].map((label) => <NumberField key={label} label={label} value={1} onChange={() => undefined}/>)}
+            {[t("limitPerCustomer"), t("limitPerDay"), t("limitPerBill"), t("usageLimit")].map((label) => <NumberField key={label} label={label} value={1} onChange={() => undefined}/>)}
           </div>
         </WizardCard>) : null}
 
-      {step === 3 ? (<WizardCard icon={ShieldAlert} title={t("ui.step.4.stacking.approval.profit.protection")}>
+      {step === 3 ? (<WizardCard icon={ShieldAlert} title={t("profitProtection")}>
           <div className="grid gap-6 xl:grid-cols-2">
-            <Panel title="Allow stack with">
+            <Panel title={t("stackRules")}>
               <div className="grid gap-2 sm:grid-cols-2">
                 {stackOptions.map((option) => (<label className="flex items-center gap-3 rounded-md border border-border bg-background p-3 text-sm" key={option}>
                     <input className="size-5 accent-[var(--primary)]" type="checkbox" checked={stacking.includes(option)} onChange={() => toggleStack(option)}/>
-                    {option}
+                    {stackOptionLabel(option)}
                   </label>))}
               </div>
             </Panel>
-            <Panel title="Stack limits and exclusions">
+            <Panel title={t("stackRules")}>
               <div className="grid gap-3">
-                <NumberField label={t("ui.max.discount.per.item")} value={20} onChange={() => undefined}/>
-                <NumberField label="Max discount per bill LAK" value={150000} onChange={() => undefined}/>
-                <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setMessage(t("ui.excluded.combination.added.in.demo.mode"))}>Add excluded combination</button>
+                <NumberField label={t("maxDiscountPerItem")} value={20} onChange={() => undefined}/>
+                <NumberField label={t("maxDiscountPerBill")} value={150000} onChange={() => undefined}/>
+                <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setMessage(t("addExcludedCombination"))}>{t("addExcludedCombination")}</button>
               </div>
             </Panel>
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <Metric label="Cost" value={`${formatLak(estimatedCost)} LAK`}/>
-            <Metric label="Original price" value={`${formatLak(subtotal)} LAK`}/>
-            <Metric label="Discount amount" value={`-${formatLak(discount)} LAK`} danger/>
-            <Metric label="Final price" value={`${formatLak(finalPrice)} LAK`}/>
-            <Metric label="Estimated profit" value={`${formatLak(estimatedProfit)} LAK`} danger={estimatedProfit < 0}/>
-            <Metric label="Profit margin" value={`${margin.toFixed(1)}%`} danger={margin < minimumMargin}/>
+            <Metric label={t("discount")} value={`${formatLak(estimatedCost)} LAK`}/>
+            <Metric label={t("discountValue")} value={`${formatLak(subtotal)} LAK`}/>
+            <Metric label={t("discountAmountLak")} value={`-${formatLak(discount)} LAK`} danger/>
+            <Metric label={t("discount")} value={`${formatLak(finalPrice)} LAK`}/>
+            <Metric label={t("estimatedProfit")} value={`${formatLak(estimatedProfit)} LAK`} danger={estimatedProfit < 0}/>
+            <Metric label={t("marginImpact")} value={`${margin.toFixed(1)}%`} danger={margin < minimumMargin}/>
           </div>
-          {hasProfitRisk ? (<div className="mt-5 rounded-md border border-danger/40 bg-danger/10 p-4 text-sm font-semibold text-danger">{t("ui.this.promotion.causes.negative.profit.please")}</div>) : null}
+          {hasProfitRisk ? (<div className="mt-5 rounded-md border border-danger/40 bg-danger/10 p-4 text-sm font-semibold text-danger">{t("negativeProfit")}</div>) : null}
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <Panel title="Auto Fix Suggestions">
+            <Panel title={t("profitProtection")}>
               <div className="grid gap-2">
-                {["Reduce discount amount", t("ui.reduce.discount"), "Disable lower-priority stacking", "Limit to selected products", "Limit to selected members", "Change priority", "Request owner/admin approval"].map((item) => (<button className="rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary" type="button" key={item} onClick={() => setMessage(`${item} suggestion selected.`)}>{item}</button>))}
+                {[t("discount"), t("discountPercent"), t("stackRules"), t("selectedProducts"), t("members"), t("priority"), t("requireApproval")].map((item) => (<button className="rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary" type="button" key={item} onClick={() => setMessage(`${item} suggestion selected.`)}>{item}</button>))}
               </div>
             </Panel>
-            <Panel title="Approval">
+            <Panel title={t("approval")}>
               <label className="flex items-center gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold">
                 <input className="size-5 accent-[var(--primary)]" type="checkbox" checked={approvalRequired} onChange={(event) => setApprovalRequired(event.target.checked)}/>
-                Require approval
+                {t("requireApproval")}
               </label>
-              <textarea className="mt-3 min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm" placeholder="Approval notes"/>
-              <p className="mt-3 text-sm text-muted-foreground">{t("ui.high.risk.promotions.automatically.require.o")}</p>
+              <textarea className="mt-3 min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm" placeholder={t("approval")}/>
+              <p className="mt-3 text-sm text-muted-foreground">{t("approvalRequiredBeforeActivation")}</p>
             </Panel>
           </div>
         </WizardCard>) : null}
 
-      {step === 4 ? (<WizardCard icon={CheckCircle2} title={t("ui.step.5.final.summary.validation")}>
+      {step === 4 ? (<WizardCard icon={CheckCircle2} title={t("summary")}>
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="min-w-0">
               <DataSummary rows={[
-                ["Promotion code", code],
-                ["Promotion name", name || "-"],
-                ["Type", formatPromotionType(type)],
-                ["Template", template],
-                ["Target products/categories", `${selectedProductIds.length} products / ${selectedCategoryIds.length} categories`],
-                ["Branches/warehouses", "Main Branch / Main Warehouse"],
-                ["Customer target", customerTarget],
-                ["Schedule", `${startDate} to ${endDate}`],
-                ["Stacking rules", stacking.join(", ")],
-                ["Coupon rules", couponCode || "None"],
-                ["Profit result", `${formatLak(estimatedProfit)} LAK / ${margin.toFixed(1)}%`],
-                ["Approval", approvalRequired || hasProfitRisk ? "Required" : "Not required"],
+                [t("promotionCode"), code],
+                [t("promotionName"), name || "-"],
+                [t("type"), formatPromotionType(type, locale)],
+                [t("promotionType"), templates.find((item) => item.key === template)?.label ?? template],
+                [t("target"), `${selectedProductIds.length} products / ${selectedCategoryIds.length} categories`],
+                [t("branch"), t("scope")],
+                [t("memberScope"), customerTarget],
+                [t("dateRange"), `${startDate} to ${endDate}`],
+                [t("stackRules"), stacking.join(", ")],
+                [t("couponRules"), couponCode || "-"],
+                [t("estimatedProfit"), `${formatLak(estimatedProfit)} LAK / ${margin.toFixed(1)}%`],
+                [t("approval"), approvalRequired || hasProfitRisk ? t("requireApproval") : t("auto")],
             ]}/>
             </div>
             <aside className="rounded-lg border border-border bg-background p-5">
-              <h3 className="text-lg font-semibold">Validation Panel</h3>
+              <h3 className="text-lg font-semibold">{t("validationPanel")}</h3>
               <div className="mt-4 flex flex-col gap-3">
-                {validationIssues.length === 0 ? (<div className="rounded-md border border-success/40 bg-success/10 p-3 text-sm font-semibold text-success">Green: Ready to save</div>) : validationIssues.map((issue) => (<div className={issue.level === "red" ? "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm font-semibold text-danger" : "rounded-md border border-warning/40 bg-warning/10 p-3 text-sm font-semibold text-warning"} key={issue.text}>
-                    {issue.level === "red" ? "Red: Fix required - " : "Yellow: Approval required - "}{issue.text}
+                {validationIssues.length === 0 ? (<div className="rounded-md border border-success/40 bg-success/10 p-3 text-sm font-semibold text-success">{t("save")}</div>) : validationIssues.map((issue) => (<div className={issue.level === "red" ? "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm font-semibold text-danger" : "rounded-md border border-warning/40 bg-warning/10 p-3 text-sm font-semibold text-warning"} key={issue.text}>
+                    {issue.text}
                   </div>))}
               </div>
             </aside>
@@ -485,11 +540,11 @@ export function PromotionForm({ categories, initialPromotion, membershipLevels, 
       </section>
 
       <section className="flex flex-wrap justify-between gap-3">
-        <button className="h-11 rounded-md border border-border px-5 text-sm font-semibold disabled:opacity-40" type="button" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>Back</button>
+        <button className="h-11 rounded-md border border-border px-5 text-sm font-semibold disabled:opacity-40" type="button" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>{t("back")}</button>
         <div className="flex flex-wrap gap-2">
-          <button className="h-11 rounded-md border border-border px-5 text-sm font-semibold" type="button" onClick={() => handleSave("draft")}>Save Draft</button>
-          <button className="h-11 rounded-md border border-warning px-5 text-sm font-semibold text-warning" type="button" onClick={() => handleSave("approval")}>Submit for Approval</button>
-          {step < wizardSteps.length - 1 ? (<button className="h-11 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setStep((current) => Math.min(wizardSteps.length - 1, current + 1))}>Next</button>) : (<button className="h-11 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-50" type="button" disabled={hasProfitRisk || isPending} onClick={() => handleSave("activate")}>{t("ui.save.activate")}</button>)}
+          <button className="h-11 rounded-md border border-border px-5 text-sm font-semibold" type="button" onClick={() => handleSave("draft")}>{t("saveDraft")}</button>
+          <button className="h-11 rounded-md border border-warning px-5 text-sm font-semibold text-warning" type="button" onClick={() => handleSave("approval")}>{t("submitForApproval")}</button>
+          {step < wizardSteps.length - 1 ? (<button className="h-11 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setStep((current) => Math.min(wizardSteps.length - 1, current + 1))}>{t("next")}</button>) : (<button className="h-11 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-50" type="button" disabled={hasProfitRisk || isPending} onClick={() => handleSave("activate")}>{t("saveActivate")}</button>)}
         </div>
       </section>
     </div>);
@@ -508,59 +563,59 @@ function LivePosPreviewPanel({ belowMinimumMargin = false, compact = false, prev
             ? "border-warning/40 bg-warning/10 text-warning"
             : "border-success/40 bg-success/10 text-success";
     const statusText = preview.estimatedProfit < 0
-        ? t("ui.blocked.this.promotion.causes.negative.profi") : belowMinimumMargin
-        ? t("ui.approval.required.margin.below.configured.th") : t("ui.ready.promotion.keeps.profit.above.minimum.m");
+        ? t("negativeProfit") : belowMinimumMargin
+        ? t("approvalRequiredBeforeActivation") : t("savedDraft");
     return (<section className={compact ? "min-w-0 rounded-lg border border-border bg-card p-4" : "min-w-0 rounded-lg border border-border bg-card p-5"}>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold">Live POS Preview</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{t("ui.updates.immediately.from.the.wizard.settings")}</p>
+          <h3 className="text-lg font-semibold">{t("livePosPreview")}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{t("subtitle")}</p>
         </div>
         {!compact ? (<button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setCollapsed((value) => !value)}>
-            {collapsed ? "Expand" : "Collapse"}
+            {collapsed ? t("expand") : t("collapse")}
           </button>) : null}
       </div>
       {!collapsed ? (<div className="mt-4 flex flex-col gap-4">
           {!compact ? (<div className="rounded-md border border-border bg-background p-3">
-              <div className="text-sm font-semibold">Cart Items</div>
+              <div className="text-sm font-semibold">{t("selectedProducts")}</div>
               <div className="mt-3 flex flex-col gap-3">
                 {preview.items.map((item) => (<div className="rounded-md border border-border bg-card p-3 text-sm" key={item.sku}>
                     <div className="font-semibold">{item.name} / {item.sku}</div>
                     <div className="mt-1 grid gap-1 text-xs text-muted-foreground">
-                      <span>{t("ui.qty")}{item.quantity}</span>
-                      <span>Original price: {formatLak(item.price)} LAK{item.quantity > 1 ? " each" : ""}</span>
-                      <span>{t("ui.cost.2")}{formatLak(item.cost)} LAK{item.quantity > 1 ? " each" : ""}</span>
+                      <span>{t("usage")}: {item.quantity}</span>
+                      <span>{t("discountValue")}: {formatLak(item.price)} LAK{item.quantity > 1 ? " each" : ""}</span>
+                      <span>{t("discount")}: {formatLak(item.cost)} LAK{item.quantity > 1 ? " each" : ""}</span>
                     </div>
                   </div>))}
               </div>
             </div>) : null}
 
           <div className="rounded-md border border-border bg-background p-3">
-            <div className="text-sm font-semibold">Cart Summary</div>
+            <div className="text-sm font-semibold">{t("summary")}</div>
             <dl className="mt-3 grid gap-2 text-sm">
               {[
-                ["Subtotal", preview.subtotal],
-                ["Product discount", -preview.productDiscount],
-                ["Bill discount", -preview.billDiscount],
-                ["Coupon discount", -preview.couponDiscount],
-                ["Member discount", -preview.memberDiscount],
-                ["Point redemption", -preview.pointRedemption],
-                ["Free gift value", -preview.freeGiftValue],
-                ["Final total", preview.finalTotal],
-                ["Estimated profit", preview.estimatedProfit],
+                [t("summary"), preview.subtotal],
+                [t("productDiscount"), -preview.productDiscount],
+                [t("billDiscount"), -preview.billDiscount],
+                [t("coupon"), -preview.couponDiscount],
+                [t("memberDiscount"), -preview.memberDiscount],
+                [t("buyXGetY"), -preview.pointRedemption],
+                [t("freeGift"), -preview.freeGiftValue],
+                [t("summary"), preview.finalTotal],
+                [t("estimatedProfit"), preview.estimatedProfit],
             ].map(([label, value]) => (<div className="flex items-center justify-between gap-3" key={label}>
                   <dt className="text-muted-foreground">{label}</dt>
                   <dd className={Number(value) < 0 ? "font-semibold text-danger" : "font-semibold"}>{formatLak(Number(value))} LAK</dd>
                 </div>))}
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">Profit margin</dt>
+                <dt className="text-muted-foreground">{t("marginImpact")}</dt>
                 <dd className="font-semibold">{preview.margin.toFixed(1)}%</dd>
               </div>
             </dl>
           </div>
 
           <div className="rounded-md border border-border bg-background p-3">
-            <div className="text-sm font-semibold">Applied Promotions</div>
+            <div className="text-sm font-semibold">{t("promotions")}</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {preview.appliedPromotions.map((promotion) => (<span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" key={promotion}>{promotion}</span>))}
             </div>
@@ -583,21 +638,21 @@ function ForecastPanel({ forecast }: {
     return (<section className="min-w-0 rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold">Promotion Impact Forecast</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{t("ui.mock.forecast.for.planning.before.backend.an")}</p>
+          <h3 className="text-lg font-semibold">{t("promotionImpactForecast")}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{t("subtitle")}</p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${riskClass}`}>
-          {forecast.riskLevel} Risk
+          {forecast.riskLevel} {t("riskWarnings")}
         </span>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <Metric label="Customers reached" value={formatLak(forecast.customersReached)}/>
-        <Metric label="Usage count" value={formatLak(forecast.usageCount)}/>
-        <Metric label="Revenue generated" value={`${formatLak(forecast.revenueGenerated)} LAK`}/>
-        <Metric label="Discount given" value={`${formatLak(forecast.discountGiven)} LAK`}/>
-        <Metric label="Gross profit" value={`${formatLak(forecast.grossProfit)} LAK`} danger={forecast.grossProfit < 0}/>
-        <Metric label="Margin impact" value={`${forecast.marginImpact.toFixed(1)}%`} danger={forecast.marginImpact < -8}/>
-        <Metric label="Stock movement" value={`${formatLak(forecast.stockMovement)} units`}/>
+        <Metric label={t("members")} value={formatLak(forecast.customersReached)}/>
+        <Metric label={t("usage")} value={formatLak(forecast.usageCount)}/>
+        <Metric label={t("revenueGenerated")} value={`${formatLak(forecast.revenueGenerated)} LAK`}/>
+        <Metric label={t("discountGiven")} value={`${formatLak(forecast.discountGiven)} LAK`}/>
+        <Metric label={t("estimatedProfit")} value={`${formatLak(forecast.grossProfit)} LAK`} danger={forecast.grossProfit < 0}/>
+        <Metric label={t("marginImpact")} value={`${forecast.marginImpact.toFixed(1)}%`} danger={forecast.marginImpact < -8}/>
+        <Metric label={t("scope")} value={`${formatLak(forecast.stockMovement)} units`}/>
       </div>
     </section>);
 }
@@ -699,15 +754,15 @@ function SelectorModal({ categories, kind, membershipLevels, onClose, onSelectCa
     const [query, setQuery] = useState("");
     const [productIds, setProductIds] = useState(selectedProductIds);
     const [categoryIds, setCategoryIds] = useState(selectedCategoryIds);
-    const title = `${kind[0].toUpperCase()}${kind.slice(1)} Selector`;
+    const title = `${t("categoriesSelector")} - ${kind}`;
     const placeholderItems = kind === "brands" ? ["Coca-Cola", "Pepsi", "Lao Brewery", "Local Brand"] : kind === "branches" ? ["Main Branch", "Morning Market Branch"] : kind === "warehouses" ? ["Main Warehouse", "Cold Storage", "Branch Warehouse"] : membershipLevels.map((level) => level.name);
     const filteredProducts = products.filter((product) => [product.nameEn, product.sku, product.barcode].join(" ").toLowerCase().includes(query.toLowerCase()));
     const filteredCategories = categories.filter((category) => category.nameEn.toLowerCase().includes(query.toLowerCase()));
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("ui.search.select.apply.or.cancel")}</p></div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>Cancel</button>
+          <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("searchPlaceholder")}</p></div>
+          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
         </div>
         <div className="p-5">
           <label className="relative block">
@@ -726,8 +781,8 @@ function SelectorModal({ categories, kind, membershipLevels, onClose, onSelectCa
             {!["products", "categories"].includes(kind) ? placeholderItems.map((item) => <TogglePill key={item} label={item}/>) : null}
           </div>
           <div className="mt-5 flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>Cancel</button>
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { onSelectProducts(productIds); onSelectCategories(categoryIds); onClose(); }}>Apply Selection</button>
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
+            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { onSelectProducts(productIds); onSelectCategories(categoryIds); onClose(); }}>{t("applySelection")}</button>
           </div>
         </div>
       </div>
@@ -739,12 +794,12 @@ function QrPreviewModal({ couponCode, onClose }: {
 }) {
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-center shadow-2xl">
-        <h2 className="text-xl font-semibold">Coupon QR Preview</h2>
+        <h2 className="text-xl font-semibold">{t("qrCoupon")}</h2>
         <div className="mx-auto mt-5 grid size-48 place-items-center rounded-lg border border-border bg-background">
           <QrCode className="size-28 text-primary" aria-hidden="true"/>
         </div>
         <p className="mt-4 font-mono text-lg font-semibold">{couponCode || "COUPON-CODE"}</p>
-        <button className="mt-5 h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
+        <button className="mt-5 h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
       </div>
     </div>);
 }
@@ -757,13 +812,13 @@ function ValidationErrorModal({ issues, onClose }: {
 }) {
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="w-full max-w-xl rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <h2 className="text-xl font-semibold">Validation Result</h2>
+        <h2 className="text-xl font-semibold">{t("validationPanel")}</h2>
         <div className="mt-4 flex flex-col gap-3">
-          {issues.length === 0 ? <div className="rounded-md border border-success/40 bg-success/10 p-3 text-success">{t("ui.ready.to.save")}</div> : issues.map((issue) => (<div className={issue.level === "red" ? "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger" : "rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning"} key={issue.text}>
+          {issues.length === 0 ? <div className="rounded-md border border-success/40 bg-success/10 p-3 text-success">{t("save")}</div> : issues.map((issue) => (<div className={issue.level === "red" ? "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger" : "rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning"} key={issue.text}>
               {issue.text}
             </div>))}
         </div>
-        <button className="mt-5 h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
+        <button className="mt-5 h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
       </div>
     </div>);
 }
@@ -856,19 +911,19 @@ function buildImpactForecast({ customerTarget, discount, discountPercent, margin
 function priorityLabel(priority: number) {
     if (priority <= 20) {
         return {
-            label: "Low Priority",
-            tooltip: t("ui.low.priority.normal.campaign"),
+            label: t("priority"),
+            tooltip: t("subtitle"),
         };
     }
     if (priority <= 60) {
         return {
-            label: "Medium Priority",
-            tooltip: t("ui.medium.priority.common.discount"),
+            label: t("priority"),
+            tooltip: t("subtitle"),
         };
     }
     return {
-        label: "High Priority",
-        tooltip: t("ui.high.priority.important.campaign.clearance.e"),
+        label: t("priority"),
+        tooltip: t("subtitle"),
     };
 }
 function localIsoDate(date: Date) {

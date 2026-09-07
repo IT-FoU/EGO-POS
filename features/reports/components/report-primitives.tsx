@@ -1,19 +1,22 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
+import type { SupportedLocale } from "@/lib/constants";
 import { formatLak, formatNumber } from "@/features/reports/format";
-import { t } from "@/lib/i18n/ui";
+import { tReports } from "@/lib/i18n/reports-copy";
 
 export function ReportHeader({
   description,
+  locale,
   title,
 }: {
   description: string;
+  locale?: SupportedLocale;
   title: string;
 }) {
   return (
     <section className="rounded-lg border border-border bg-card p-6">
-      <p className="text-sm font-medium text-primary">{t("ui.reports.analytics")}</p>
+      <p className="text-sm font-medium text-primary">{tReports("reportsAnalytics", locale)}</p>
       <h1 className="mt-2 text-3xl font-semibold">{title}</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
         {description}

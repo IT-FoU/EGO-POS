@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import type { SupportedLocale } from "@/lib/constants";
+import { promotionStatusLabel } from "@/lib/i18n/promotions-copy";
 import type { PromotionStatus } from "@/features/promotions/types";
 
 const statusStyles: Record<PromotionStatus, string> = {
@@ -8,15 +10,21 @@ const statusStyles: Record<PromotionStatus, string> = {
   scheduled: "border-warning/40 bg-warning/10 text-warning",
 };
 
-export function PromotionStatusBadge({ status }: { status: PromotionStatus }) {
+export function PromotionStatusBadge({
+  locale,
+  status,
+}: {
+  locale?: SupportedLocale;
+  status: PromotionStatus;
+}) {
   return (
     <span
       className={cn(
-        "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-semibold capitalize",
+        "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-semibold",
         statusStyles[status],
       )}
     >
-      {status}
+      {promotionStatusLabel(status, locale)}
     </span>
   );
 }
