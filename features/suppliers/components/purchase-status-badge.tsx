@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { SupplierPurchaseOrder } from "@/features/suppliers/types";
+import { purchaseOrderStatusLabel } from "@/lib/i18n/suppliers-copy";
 
 const statusStyles: Record<SupplierPurchaseOrder["status"], string> = {
   cancelled: "border-danger/40 bg-danger/10 text-danger",
@@ -10,18 +11,20 @@ const statusStyles: Record<SupplierPurchaseOrder["status"], string> = {
 };
 
 export function PurchaseStatusBadge({
+  locale,
   status,
 }: {
+  locale?: string | null;
   status: SupplierPurchaseOrder["status"];
 }) {
   return (
     <span
       className={cn(
-        "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-semibold capitalize",
+        "inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-semibold",
         statusStyles[status],
       )}
     >
-      {status}
+      {purchaseOrderStatusLabel(status, locale)}
     </span>
   );
 }

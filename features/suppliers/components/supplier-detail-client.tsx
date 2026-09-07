@@ -1,7 +1,19 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import {
+  documentTypeLabel,
+  fillSuppliersCopy,
+  ledgerNoteLabel,
+  ledgerTypeLabel,
+  localizeSupplierError,
+  paymentTermLabel,
+  supplierTagLabel,
+  tSuppliers,
+  warehouseDemoLabel,
+} from "@/lib/i18n/suppliers-copy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, CircleDollarSign, PackageCheck, PackageSearch, ReceiptText, Star, Truck, } from "lucide-react";
@@ -29,18 +41,35 @@ const productsSupplied = [
     { action: "View product", barcode: "885002", code: "PEP-CAN", cost: 115000, leadTime: 3, moq: "3 Carton", name: "Pepsi Can", preferred: false, supplierSku: "LB-PEP-CAN" },
     { action: "View product", barcode: "885003", code: "SNK-CLASSIC", cost: 42000, leadTime: 4, moq: "10 Pack", name: "Lay's Classic", preferred: false, supplierSku: "SN-LAY-CLASSIC" },
 ];
-export function SupplierDetailClient({ payments, purchaseOrders, receivings, supplier, }: {
+let activeLocale: SupportedLocale = "en";
+function t(key: string) {
+  return tSuppliers(key, activeLocale);
+}
+
+export function SupplierDetailClient({ payments, purchaseOrders, receivings, supplier, locale: localeProp, }: {
     payments: SupplierPayment[];
     purchaseOrders: SupplierPurchaseOrder[];
     receivings: SupplierReceiving[];
     supplier: Supplier;
+    locale?: SupportedLocale;
 }) {
     const router = useRouter();
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    useEffect(() => { if (localeProp) setLocale(localeProp); }, [localeProp]);
+    useEffect(() => {
+      function handleLocaleChange(event: Event) {
+        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
+      }
+      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+    activeLocale = locale;
     const [isPending, startTransition] = useTransition();
     const [message, setMessage] = useState<string | null>(null);
     const [modal, setModal] = useState<DetailModal | null>(null);
     const totalPurchaseValue = purchaseOrders.reduce((total, purchaseOrder) => total + purchaseOrder.totalLak, 0);
-    const lastPurchaseDate = purchaseOrders.map((purchaseOrder) => purchaseOrder.purchaseDate).sort().at(-1) ?? "No purchases";
+    const lastPurchaseDate = purchaseOrders.map((purchaseOrder) => purchaseOrder.purchaseDate).sort().at(-1) ?? "";
     const remainingCredit = Math.max(supplier.creditLimitLak - supplier.outstandingBalanceLak, 0);
     const autoRating = getAutoRating(supplier);
     const manualRating = getManualRating(supplier);
@@ -59,7 +88,7 @@ export function SupplierDetailClient({ payments, purchaseOrders, receivings, sup
       <section className="rounded-lg border border-border bg-card p-6">
         <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/suppliers">
           <ArrowLeft aria-hidden="true"/>
-          Back to suppliers
+          {t("backToSuppliers")}
         </Link>
         <div className="mt-5 flex min-w-0 flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
@@ -69,15 +98,15 @@ export function SupplierDetailClient({ payments, purchaseOrders, receivings, sup
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-3xl font-semibold" title={supplier.companyName}>{supplier.companyName}</h1>
-                <SupplierStatusBadge status={supplier.status}/>
+                <SupplierStatusBadge locale={activeLocale} status={supplier.status}/>
                 <RatingBadge rating={finalRating} score={supplierScore}/>
               </div>
-              <p className="mt-2 font-mono text-sm text-muted-foreground">{supplier.supplierCode} / {supplier.taxNumber || "No tax number"}</p>
+              <p className="mt-2 font-mono text-sm text-muted-foreground">{supplier.supplierCode} / {supplier.taxNumber || t("noTaxNumber")}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {supplierTags.map((tag) => (<span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary" key={tag}>{tag}</span>))}
+                {supplierTags.map((tag) => (<span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary" key={tag}>{supplierTagLabel(tag, activeLocale)}</span>))}
               </div>
               <div className="mt-4 grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
-                <span>{t("ui.contact")}{supplier.contactPerson || "-"}</span>
+                <span>{t("contact")}: {supplier.contactPerson || "-"}</span>
                 <span>{supplier.phone || "-"}</span>
                 <span>{supplier.email || "-"}</span>
                 <span className="truncate" title={supplier.address}>{supplier.address || "-"}</span>
@@ -85,85 +114,85 @@ export function SupplierDetailClient({ payments, purchaseOrders, receivings, sup
             </div>
           </div>
           <div className="rounded-md border border-border bg-background p-4 text-sm lg:w-80">
-            <div className="text-muted-foreground">Notes</div>
-            <p className="mt-2 line-clamp-4 leading-6">{supplier.notes || t("ui.no.supplier.notes")}</p>
+            <div className="text-muted-foreground">{t("notes")}</div>
+            <p className="mt-2 line-clamp-4 leading-6">{supplier.notes || t("noSupplierNotes")}</p>
           </div>
         </div>
       </section>
 
       <section className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <QuickAction href={`/purchasing/new?supplierId=${supplier.id}`} label="Create Purchase Order"/>
-        <QuickAction href="/purchasing/receiving" label="Receive Goods"/>
-        <QuickAction onClick={() => setModal({ kind: "payment_placeholder" })} label="Record Payment"/>
-        <QuickAction onClick={() => setModal({ kind: "ledger" })} label="Supplier Ledger"/>
-        <QuickAction href={`/suppliers/${supplier.id}`} label="Edit Supplier"/>
-        <QuickAction label={supplier.status === "active" ? "Deactivate Supplier" : "Activate Supplier"} onClick={() => setMessage(`${supplier.status === "active" ? "Deactivate" : "Activate"} supplier will use existing supplier status action in a later wiring pass.`)}/>
+        <QuickAction href={`/purchasing/new?supplierId=${supplier.id}`} label={t("createPurchaseOrder")}/>
+        <QuickAction href="/purchasing/receiving" label={t("receiveGoods")}/>
+        <QuickAction onClick={() => setModal({ kind: "payment_placeholder" })} label={t("recordPayment")}/>
+        <QuickAction onClick={() => setModal({ kind: "ledger" })} label={t("supplierLedger")}/>
+        <QuickAction href={`/suppliers/${supplier.id}`} label={t("editSupplier")}/>
+        <QuickAction label={supplier.status === "active" ? t("deactivateSupplier") : t("activateSupplier")} onClick={() => setMessage(fillSuppliersCopy(t("statusLater"), { action: supplier.status === "active" ? t("deactivate") : t("activate") }))}/>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={ReceiptText} label="Total orders" value={String(purchaseOrders.length)}/>
-        <Metric icon={CircleDollarSign} label="Total purchase value" value={`${formatLak(totalPurchaseValue)} LAK`}/>
-        <Metric icon={Truck} label="Average delivery time" value={formatDays(supplier.averageDeliveryDays)}/>
-        <Metric icon={PackageCheck} label="Last purchase date" value={lastPurchaseDate}/>
+        <Metric icon={ReceiptText} label={t("totalOrders")} value={String(purchaseOrders.length)}/>
+        <Metric icon={CircleDollarSign} label={t("totalPurchaseValue")} value={`${formatLak(totalPurchaseValue)} LAK`}/>
+        <Metric icon={Truck} label={t("averageDeliveryTime")} value={formatDays(supplier.averageDeliveryDays)}/>
+        <Metric icon={PackageCheck} label={t("lastPurchaseDate")} value={lastPurchaseDate || t("noPurchases")}/>
       </section>
 
       <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         <aside className="flex min-w-0 flex-col gap-6">
           <section className="min-w-0 rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Supplier profile</h2>
+            <h2 className="text-lg font-semibold">{t("supplierProfile")}</h2>
             <dl className="mt-5 flex flex-col gap-4 text-sm">
-              <Summary label="Contact person" value={supplier.contactPerson || "-"}/>
-              <Summary label="Phone" value={supplier.phone || "-"}/>
-              <Summary label="Email" value={supplier.email || "-"}/>
-              <Summary label="Tax number" value={supplier.taxNumber || "-"}/>
+              <Summary label={t("contactPerson")} value={supplier.contactPerson || "-"}/>
+              <Summary label={t("phone")} value={supplier.phone || "-"}/>
+              <Summary label={t("email")} value={supplier.email || "-"}/>
+              <Summary label={t("taxNumber")} value={supplier.taxNumber || "-"}/>
             </dl>
             <div className="mt-5 grid grid-cols-2 gap-2">
-              <ContactAction label="Call" href={supplier.phone ? `tel:${supplier.phone}` : undefined} disabled={!supplier.phone}/>
-              <ContactAction label="Email" href={supplier.email ? `mailto:${supplier.email}` : undefined} disabled={!supplier.email}/>
-              <ContactAction label="Copy Phone" onClick={() => copyText(supplier.phone)} disabled={!supplier.phone}/>
-              <ContactAction label="Copy Email" onClick={() => copyText(supplier.email)} disabled={!supplier.email}/>
+              <ContactAction label={t("call")} href={supplier.phone ? `tel:${supplier.phone}` : undefined} disabled={!supplier.phone}/>
+              <ContactAction label={t("email")} href={supplier.email ? `mailto:${supplier.email}` : undefined} disabled={!supplier.email}/>
+              <ContactAction label={t("copyPhone")} onClick={() => copyText(supplier.phone)} disabled={!supplier.phone}/>
+              <ContactAction label={t("copyEmail")} onClick={() => copyText(supplier.email)} disabled={!supplier.email}/>
             </div>
           </section>
 
           <section className="min-w-0 rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Credit terms</h2>
+            <h2 className="text-lg font-semibold">{t("creditTerms")}</h2>
             <dl className="mt-5 flex flex-col gap-4 text-sm">
-              <Summary label="Credit terms" value={supplier.creditTerms || "Not set"}/>
-              <Summary label="Default currency" value={supplierCurrency}/>
-              <Summary label="Credit limit" value={`${formatLak(supplier.creditLimitLak)} LAK`}/>
-              <Summary label="Outstanding balance" value={`${formatLak(supplier.outstandingBalanceLak)} LAK`}/>
-              <Summary label="Remaining credit" value={`${formatLak(remainingCredit)} LAK`}/>
-              <Summary label="Opening balance" value={`${formatLak(supplier.openingBalanceLak)} LAK`}/>
+              <Summary label={t("creditTerms")} value={supplier.creditTerms ? paymentTermLabel(supplier.creditTerms, activeLocale) : t("notSet")}/>
+              <Summary label={t("defaultCurrency")} value={supplierCurrency}/>
+              <Summary label={t("creditLimit")} value={`${formatLak(supplier.creditLimitLak)} LAK`}/>
+              <Summary label={t("outstandingBalance")} value={`${formatLak(supplier.outstandingBalanceLak)} LAK`}/>
+              <Summary label={t("remainingCredit")} value={`${formatLak(remainingCredit)} LAK`}/>
+              <Summary label={t("openingBalance")} value={`${formatLak(supplier.openingBalanceLak)} LAK`}/>
             </dl>
           </section>
 
           <section className="min-w-0 rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Supplier rating</h2>
+            <h2 className="text-lg font-semibold">{t("supplierRating")}</h2>
             <dl className="mt-5 flex flex-col gap-4 text-sm">
-              <Summary label="Auto rating" value={autoRating}/>
-              <Summary label="Manual override" value={manualRating ?? "None"}/>
-              <Summary label="Final rating" value={`${finalRating} (${supplierScore}/100)`}/>
-              <Summary label="Score" value={`${supplierScore}/100`}/>
-              <Summary label="Rating notes" value={t("ui.manual.demo.score.auto.score.calculation.is.")}/>
-              <Summary label="Rating explanation" value={t("ui.future.calculation.delivery.reliability.prod")}/>
-              <Summary label="Last rating update" value="Future integration"/>
+              <Summary label={t("autoRating")} value={autoRating}/>
+              <Summary label={t("manualOverride")} value={manualRating ?? t("none")}/>
+              <Summary label={t("finalRating")} value={`${finalRating} (${supplierScore}/100)`}/>
+              <Summary label={t("score")} value={`${supplierScore}/100`}/>
+              <Summary label={t("ratingNotes")} value={t("ratingNotesHint")}/>
+              <Summary label={t("ratingExplanation")} value={t("ratingExplanation")}/>
+              <Summary label={t("lastRatingUpdate")} value={t("futureIntegration")}/>
             </dl>
           </section>
 
           <section className="min-w-0 rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Serviced Warehouses</h2>
-            <p className="mt-2 text-xs text-muted-foreground">{t("ui.references.warehouseid.only.warehouse.owners")}</p>
+            <h2 className="text-lg font-semibold">{t("servicedWarehouses")}</h2>
+            <p className="mt-2 text-xs text-muted-foreground">{t("warehouseHint")}</p>
             <div className="mt-4 flex flex-col gap-2 text-sm">
-              {["Main Warehouse", "Cold Storage", "Branch Warehouse"].map((warehouse) => (<div className="rounded-md border border-border bg-background px-3 py-2" key={warehouse}>✓ {warehouse}</div>))}
+              {["Main Warehouse", "Cold Storage", "Branch Warehouse"].map((warehouse) => (<div className="rounded-md border border-border bg-background px-3 py-2" key={warehouse}>✓ {warehouseDemoLabel(warehouse, activeLocale)}</div>))}
             </div>
           </section>
 
           <section className="min-w-0 rounded-lg border border-border bg-card p-5">
-            <h2 className="text-lg font-semibold">Documents</h2>
+            <h2 className="text-lg font-semibold">{t("documents")}</h2>
             <div className="mt-4 flex flex-col gap-2 text-sm">
               {["Business License", "Tax Certificate", "Bank Account", "Contract"].map((document) => (<div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2" key={document}>
-                  <span>{document}</span>
-                  <span className="text-xs text-muted-foreground">UI placeholder</span>
+                  <span>{documentTypeLabel(document, activeLocale)}</span>
+                  <span className="text-xs text-muted-foreground">{t("uiPlaceholder")}</span>
                 </div>))}
             </div>
           </section>
@@ -188,44 +217,44 @@ export function SupplierDetailClient({ payments, purchaseOrders, receivings, sup
                     status: String(formData.get("status") ?? "active") as "active" | "inactive",
                 });
                 if (!result.ok) {
-                    setMessage(result.error ?? t("ui.supplier.update.failed"));
+                    setMessage(localizeSupplierError(result.error ?? t("updateFailed"), activeLocale));
                     return;
                 }
-                setMessage(t("ui.supplier.updated.successfully"));
+                setMessage(t("updatedSuccessfully"));
                 router.refresh();
             });
         }}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Edit supplier</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{t("ui.update.core.supplier.contact.and.status.deta")}</p>
+                <h2 className="text-lg font-semibold">{t("editSupplier")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("editSupplierSubtitle")}</p>
               </div>
               <button className="h-11 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-50" type="submit" disabled={isPending}>
-                {isPending ? t("ui.saving") : "Save supplier"}
+                {isPending ? t("saving") : t("saveSupplier")}
               </button>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                Company name
+                {t("companyName")}
                 <input className="field-input" name="companyName" defaultValue={supplier.companyName} required/>
               </label>
               <label className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                Contact person
+                {t("contactPerson")}
                 <input className="field-input" name="contactPerson" defaultValue={supplier.contactPerson}/>
               </label>
               <label className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                Phone
+                {t("phone")}
                 <input className="field-input" name="phone" defaultValue={supplier.phone}/>
               </label>
               <label className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                Email
+                {t("email")}
                 <input className="field-input" name="email" defaultValue={supplier.email} type="email"/>
               </label>
               <label className="flex min-w-0 flex-col gap-2 text-sm font-medium md:col-span-2">
-                Status
+                {t("status")}
                 <select className="field-input" name="status" defaultValue={supplier.status}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">{t("statusActive")}</option>
+                  <option value="inactive">{t("statusInactive")}</option>
                 </select>
               </label>
             </div>
@@ -248,15 +277,15 @@ function PurchaseOrdersHistory({ onView, purchaseOrders }: {
     onView: (row: SupplierPurchaseOrder) => void;
     purchaseOrders: SupplierPurchaseOrder[];
 }) {
-    return (<HistoryCard title="Purchase Orders History" empty={t("ui.no.purchase.orders.for.this.supplier")}>
+    return (<HistoryCard title={t("purchaseOrdersHistory")} empty={t("noPurchaseOrders")}>
       <table className="w-full min-w-[620px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
-            <th className="px-3 py-3">PO No</th>
-            <th className="px-3 py-3">Date</th>
-            <th className="px-3 py-3 text-right">Amount</th>
-            <th className="px-3 py-3">Status</th>
-            <th className="px-3 py-3 text-right">Action</th>
+            <th className="px-3 py-3">{t("poNo")}</th>
+            <th className="px-3 py-3">{t("date")}</th>
+            <th className="px-3 py-3 text-right">{t("amount")}</th>
+            <th className="px-3 py-3">{t("status")}</th>
+            <th className="px-3 py-3 text-right">{t("action")}</th>
           </tr>
         </thead>
         <tbody>
@@ -264,27 +293,27 @@ function PurchaseOrdersHistory({ onView, purchaseOrders }: {
               <td className="px-3 py-3 font-mono">{purchaseOrder.purchaseNo}</td>
               <td className="px-3 py-3">{purchaseOrder.purchaseDate}</td>
               <td className="px-3 py-3 text-right font-semibold">{formatLak(purchaseOrder.totalLak)} LAK</td>
-              <td className="px-3 py-3"><PurchaseStatusBadge status={purchaseOrder.status}/></td>
+              <td className="px-3 py-3"><PurchaseStatusBadge locale={activeLocale} status={purchaseOrder.status}/></td>
               <td className="px-3 py-3 text-right"><ViewButton onClick={() => onView(purchaseOrder)}/></td>
             </tr>))}
         </tbody>
       </table>
-      {purchaseOrders.length === 0 ? <EmptyText text={t("ui.no.purchase.orders.for.this.supplier")}/> : null}
+      {purchaseOrders.length === 0 ? <EmptyText text={t("noPurchaseOrders")}/> : null}
     </HistoryCard>);
 }
 function ReceivingHistory({ onView, receivings }: {
     onView: (row: SupplierReceiving) => void;
     receivings: SupplierReceiving[];
 }) {
-    return (<HistoryCard title="Receiving History" empty={t("ui.no.receiving.records.for.this.supplier")}>
+    return (<HistoryCard title={t("receivingHistory")} empty={t("noReceiving")}>
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
-            <th className="px-3 py-3">Receive No</th>
-            <th className="px-3 py-3">PO No</th>
-            <th className="px-3 py-3">Date</th>
-            <th className="px-3 py-3">Warehouse</th>
-            <th className="px-3 py-3 text-right">Action</th>
+            <th className="px-3 py-3">{t("receiveNo")}</th>
+            <th className="px-3 py-3">{t("poNo")}</th>
+            <th className="px-3 py-3">{t("date")}</th>
+            <th className="px-3 py-3">{t("warehouse")}</th>
+            <th className="px-3 py-3 text-right">{t("action")}</th>
           </tr>
         </thead>
         <tbody>
@@ -297,22 +326,22 @@ function ReceivingHistory({ onView, receivings }: {
             </tr>))}
         </tbody>
       </table>
-      {receivings.length === 0 ? <EmptyText text={t("ui.no.receiving.records.for.this.supplier")}/> : null}
+      {receivings.length === 0 ? <EmptyText text={t("noReceiving")}/> : null}
     </HistoryCard>);
 }
 function PaymentHistory({ onView, payments }: {
     onView: (row: SupplierPayment) => void;
     payments: SupplierPayment[];
 }) {
-    return (<HistoryCard title="Payment History" empty={t("ui.no.payments.for.this.supplier")}>
+    return (<HistoryCard title={t("paymentHistory")} empty={t("noPayments")}>
       <table className="w-full min-w-[580px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
-            <th className="px-3 py-3">Payment No</th>
-            <th className="px-3 py-3">Date</th>
-            <th className="px-3 py-3">Method</th>
-            <th className="px-3 py-3 text-right">Amount</th>
-            <th className="px-3 py-3 text-right">Action</th>
+            <th className="px-3 py-3">{t("paymentNo")}</th>
+            <th className="px-3 py-3">{t("date")}</th>
+            <th className="px-3 py-3">{t("method")}</th>
+            <th className="px-3 py-3 text-right">{t("amount")}</th>
+            <th className="px-3 py-3 text-right">{t("action")}</th>
           </tr>
         </thead>
         <tbody>
@@ -325,29 +354,29 @@ function PaymentHistory({ onView, payments }: {
             </tr>))}
         </tbody>
       </table>
-      {payments.length === 0 ? <EmptyText text={t("ui.no.payments.for.this.supplier")}/> : null}
+      {payments.length === 0 ? <EmptyText text={t("noPayments")}/> : null}
     </HistoryCard>);
 }
 function ProductsSuppliedCard() {
-    return (<HistoryCard title="Products Supplied" empty={t("ui.supplier.product.linking.is.a.future.integra")}>
-      <div className="mb-3 rounded-md border border-dashed border-border bg-background p-3 text-xs text-muted-foreground">{t("ui.ui.placeholder.only.this.section.must.refere")}</div>
+    return (<HistoryCard title={t("productsSupplied")} empty={t("productsSuppliedHint")}>
+      <div className="mb-3 rounded-md border border-dashed border-border bg-background p-3 text-xs text-muted-foreground">{t("productsSuppliedHint")}</div>
       <div className="grid gap-3 md:grid-cols-3">
-        <Summary label="SKU count" value={String(productsSupplied.length)}/>
-        <Summary label="Preferred supplier status" value="Future per-product setting"/>
-        <Summary label="Integration" value="Future SupplierProduct relationship"/>
+        <Summary label={t("skuCount")} value={String(productsSupplied.length)}/>
+        <Summary label={t("preferredSupplierStatus")} value={t("futurePerProduct")}/>
+        <Summary label={t("integration")} value={t("futureSupplierProduct")}/>
       </div>
       <div className="mt-4 max-w-full overflow-x-auto">
         <table className="w-full min-w-[820px] text-left text-sm">
           <thead className="border-b border-border text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-3 py-3">Product code / barcode</th>
-              <th className="px-3 py-3">Product name</th>
-              <th className="px-3 py-3">Supplier SKU</th>
-              <th className="px-3 py-3 text-right">Last cost</th>
-              <th className="px-3 py-3">MOQ</th>
-              <th className="px-3 py-3 text-right">Lead time</th>
-              <th className="px-3 py-3">Preferred</th>
-              <th className="px-3 py-3 text-right">Action</th>
+              <th className="px-3 py-3">{t("productCodeBarcode")}</th>
+              <th className="px-3 py-3">{t("productName")}</th>
+              <th className="px-3 py-3">{t("supplierSku")}</th>
+              <th className="px-3 py-3 text-right">{t("lastCost")}</th>
+              <th className="px-3 py-3">{t("moq")}</th>
+              <th className="px-3 py-3 text-right">{t("leadTime")}</th>
+              <th className="px-3 py-3">{t("preferred")}</th>
+              <th className="px-3 py-3 text-right">{t("action")}</th>
             </tr>
           </thead>
           <tbody>
@@ -358,7 +387,7 @@ function ProductsSuppliedCard() {
                 <td className="px-3 py-3 text-right">{formatLak(product.cost)} LAK</td>
                 <td className="px-3 py-3">{product.moq}</td>
                 <td className="px-3 py-3 text-right">{product.leadTime}d</td>
-                <td className="px-3 py-3">{product.preferred ? "Yes" : "No"}</td>
+                <td className="px-3 py-3">{product.preferred ? t("yes") : t("no")}</td>
                 <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{product.action}</button></td>
               </tr>))}
           </tbody>
@@ -373,33 +402,33 @@ function LedgerCard({ ledgerRows, onOpen }: {
     return (<section className="min-w-0 rounded-lg border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Supplier Ledger</h2>
-          <p className="mt-1 text-xs text-muted-foreground">{t("ui.ui.placeholder.until.ap.po.payment.ledger.is")}</p>
+          <h2 className="text-lg font-semibold">{t("supplierLedger")}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{t("ledgerHint")}</p>
         </div>
-        <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={onOpen}>Open ledger</button>
+        <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={onOpen}>{t("openLedger")}</button>
       </div>
       <div className="mt-4 max-w-full overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="border-b border-border text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-3 py-3">Date</th>
-              <th className="px-3 py-3">Type</th>
-              <th className="px-3 py-3">Reference</th>
-              <th className="px-3 py-3 text-right">Debit</th>
-              <th className="px-3 py-3 text-right">Credit</th>
-              <th className="px-3 py-3 text-right">Balance</th>
-              <th className="px-3 py-3">Note</th>
+              <th className="px-3 py-3">{t("date")}</th>
+              <th className="px-3 py-3">{t("type")}</th>
+              <th className="px-3 py-3">{t("reference")}</th>
+              <th className="px-3 py-3 text-right">{t("debit")}</th>
+              <th className="px-3 py-3 text-right">{t("credit")}</th>
+              <th className="px-3 py-3 text-right">{t("balance")}</th>
+              <th className="px-3 py-3">{t("note")}</th>
             </tr>
           </thead>
           <tbody>
             {ledgerRows.slice(0, 5).map((row) => (<tr className="border-b border-border last:border-b-0" key={`${row.type}-${row.reference}-${row.date}`}>
                 <td className="px-3 py-3">{row.date}</td>
-                <td className="px-3 py-3">{row.type}</td>
+                <td className="px-3 py-3">{ledgerTypeLabel(row.type, activeLocale)}</td>
                 <td className="px-3 py-3 font-mono">{row.reference}</td>
                 <td className="px-3 py-3 text-right">{row.debit ? `${formatLak(row.debit)} LAK` : "-"}</td>
                 <td className="px-3 py-3 text-right">{row.credit ? `${formatLak(row.credit)} LAK` : "-"}</td>
                 <td className="px-3 py-3 text-right font-semibold">{formatLak(row.balance)} LAK</td>
-                <td className="px-3 py-3 text-muted-foreground">{row.note}</td>
+                <td className="px-3 py-3 text-muted-foreground">{ledgerNoteLabel(row.note, activeLocale)}</td>
               </tr>))}
           </tbody>
         </table>
@@ -419,7 +448,7 @@ function HistoryCard({ children, empty, title }: {
 function ViewButton({ onClick }: {
     onClick: () => void;
 }) {
-    return <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={onClick}>View Detail</button>;
+    return <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={onClick}>{t("viewDetail")}</button>;
 }
 function EmptyText({ text }: {
     text: string;
@@ -432,11 +461,11 @@ function DetailModalView({ ledgerRows, modal, onClose, supplier, }: {
     onClose: () => void;
     supplier: Supplier;
 }) {
-    const title = modal.kind === "po" ? "Purchase Order Detail" :
-        modal.kind === "receiving" ? "Receiving Detail" :
-            modal.kind === "payment" ? "Payment Detail" :
-                modal.kind === "ledger" ? "Supplier Ledger" :
-                    "Record Payment";
+    const title = modal.kind === "po" ? t("purchaseOrderDetail") :
+        modal.kind === "receiving" ? t("receivingDetail") :
+            modal.kind === "payment" ? t("paymentDetail") :
+                modal.kind === "ledger" ? t("supplierLedger") :
+                    t("recordPayment");
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
       <div className="max-h-[86vh] w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
@@ -444,14 +473,14 @@ function DetailModalView({ ledgerRows, modal, onClose, supplier, }: {
             <h2 className="text-xl font-semibold">{title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{supplier.companyName}</p>
           </div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>Close</button>
+          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
         </div>
         <div className="max-h-[68vh] overflow-y-auto p-5">
           {modal.kind === "po" ? <PoDetail row={modal.row} supplier={supplier}/> : null}
           {modal.kind === "receiving" ? <ReceivingDetail row={modal.row}/> : null}
           {modal.kind === "payment" ? <PaymentDetail row={modal.row}/> : null}
           {modal.kind === "ledger" ? <LedgerDetail rows={ledgerRows}/> : null}
-          {modal.kind === "payment_placeholder" ? (<PlaceholderPanel title="Record Payment">{t("ui.payment.modal.is.a.placeholder.final.impleme")}</PlaceholderPanel>) : null}
+          {modal.kind === "payment_placeholder" ? (<PlaceholderPanel title={t("recordPayment")}>{t("paymentModalPlaceholder")}</PlaceholderPanel>) : null}
         </div>
       </div>
     </div>);
@@ -461,20 +490,20 @@ function PoDetail({ row, supplier }: {
     supplier: Supplier;
 }) {
     return (<div className="grid gap-3 text-sm md:grid-cols-2">
-      <Detail label="PO No" value={row.purchaseNo}/>
-      <Detail label="Date" value={row.purchaseDate}/>
-      <Detail label="Supplier" value={supplier.companyName}/>
-      <Detail label="Warehouse" value={row.warehouseName || "-"}/>
-      <Detail label="Items count" value="Future item detail"/>
-      <Detail label="Subtotal" value={`${formatLak(row.totalLak)} LAK`}/>
-      <Detail label="Discount" value="0 LAK"/>
-      <Detail label="Tax if used" value="0 LAK"/>
-      <Detail label="Total" value={`${formatLak(row.totalLak)} LAK`}/>
-      <Detail label="Status" value={row.status}/>
-      <Detail label="Created by" value="Current purchasing user placeholder"/>
-      <Detail label="Notes" value={t("ui.purchasing.notes.will.be.connected.later")}/>
+      <Detail label={t("poNo")} value={row.purchaseNo}/>
+      <Detail label={t("date")} value={row.purchaseDate}/>
+      <Detail label={t("supplier")} value={supplier.companyName}/>
+      <Detail label={t("warehouse")} value={row.warehouseName || "-"}/>
+      <Detail label={t("itemsCount")} value={t("futureItemDetail")}/>
+      <Detail label={t("subtotal")} value={`${formatLak(row.totalLak)} LAK`}/>
+      <Detail label={t("discount")} value="0 LAK"/>
+      <Detail label={t("taxIfUsed")} value="0 LAK"/>
+      <Detail label={t("total")} value={`${formatLak(row.totalLak)} LAK`}/>
+      <Detail label={t("status")} value={row.status}/>
+      <Detail label={t("createdBy")} value={t("currentPurchasingUser")}/>
+      <Detail label={t("notes")} value={t("purchasingNotesLater")}/>
       <Link className="md:col-span-2 inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" href="/purchasing">
-        View in Purchasing
+        {t("viewInPurchasing")}
       </Link>
     </div>);
 }
@@ -482,17 +511,17 @@ function ReceivingDetail({ row }: {
     row: SupplierReceiving;
 }) {
     return (<div className="grid gap-3 text-sm md:grid-cols-2">
-      <Detail label="Receive No" value={row.receiveNo}/>
-      <Detail label="PO No" value={row.purchaseNo}/>
-      <Detail label="Date" value={row.receivedDate}/>
-      <Detail label="Warehouse" value={row.warehouseName || "-"}/>
-      <Detail label="Items received" value={String(row.itemCount)}/>
-      <Detail label="Damaged items" value="Future receiving field"/>
-      <Detail label="Expiry check status" value="Future lot/expiry review"/>
-      <Detail label="Received by" value="Current receiving user placeholder"/>
-      <Detail label="Notes" value={t("ui.receiving.notes.will.be.connected.later")}/>
+      <Detail label={t("receiveNo")} value={row.receiveNo}/>
+      <Detail label={t("poNo")} value={row.purchaseNo}/>
+      <Detail label={t("date")} value={row.receivedDate}/>
+      <Detail label={t("warehouse")} value={row.warehouseName || "-"}/>
+      <Detail label={t("itemsReceived")} value={String(row.itemCount)}/>
+      <Detail label={t("damagedItems")} value={t("futureReceivingField")}/>
+      <Detail label={t("expiryCheckStatus")} value={t("futureLotExpiry")}/>
+      <Detail label={t("receivedBy")} value={t("currentReceivingUser")}/>
+      <Detail label={t("notes")} value={t("receivingNotesLater")}/>
       <Link className="md:col-span-2 inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" href="/purchasing/receiving">
-        View receiving document
+        {t("viewReceivingDocument")}
       </Link>
     </div>);
 }
@@ -500,17 +529,17 @@ function PaymentDetail({ row }: {
     row: SupplierPayment;
 }) {
     return (<div className="grid gap-3 text-sm md:grid-cols-2">
-      <Detail label="Payment No" value={row.paymentNo}/>
-      <Detail label="Date" value={row.paymentDate}/>
-      <Detail label="Method" value={row.method}/>
-      <Detail label="Amount" value={`${formatLak(row.amountLak)} LAK`}/>
-      <Detail label="Currency" value="LAK"/>
-      <Detail label="Exchange rate if applicable" value="1.00"/>
-      <Detail label="Reference number" value="Future payment reference"/>
-      <Detail label="Paid by" value="Current user placeholder"/>
-      <Detail label="Notes" value={row.note || "-"}/>
+      <Detail label={t("paymentNo")} value={row.paymentNo}/>
+      <Detail label={t("date")} value={row.paymentDate}/>
+      <Detail label={t("method")} value={row.method}/>
+      <Detail label={t("amount")} value={`${formatLak(row.amountLak)} LAK`}/>
+      <Detail label={t("currency")} value="LAK"/>
+      <Detail label={t("exchangeRate")} value="1.00"/>
+      <Detail label={t("referenceNumber")} value={t("futurePaymentReference")}/>
+      <Detail label={t("paidBy")} value={t("currentUserPlaceholder")}/>
+      <Detail label={t("notes")} value={row.note || "-"}/>
       <button className="md:col-span-2 h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">
-        View payment record
+        {t("viewPaymentRecord")}
       </button>
     </div>);
 }
@@ -518,31 +547,31 @@ function LedgerDetail({ rows }: {
     rows: LedgerRow[];
 }) {
     return (<div>
-      <p className="mb-4 rounded-md border border-dashed border-border bg-background p-3 text-sm text-muted-foreground">{t("ui.ui.placeholder.final.ledger.must.combine.po.")}</p>
+      <p className="mb-4 rounded-md border border-dashed border-border bg-background p-3 text-sm text-muted-foreground">{t("ledgerCombineHint")}</p>
       <div className="max-w-full overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="border-b border-border text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-3 py-3">Date</th>
-              <th className="px-3 py-3">Type</th>
-              <th className="px-3 py-3">Reference</th>
-              <th className="px-3 py-3 text-right">Debit</th>
-              <th className="px-3 py-3 text-right">Credit</th>
-              <th className="px-3 py-3 text-right">Balance</th>
-              <th className="px-3 py-3">Note</th>
-              <th className="px-3 py-3 text-right">Action</th>
+              <th className="px-3 py-3">{t("date")}</th>
+              <th className="px-3 py-3">{t("type")}</th>
+              <th className="px-3 py-3">{t("reference")}</th>
+              <th className="px-3 py-3 text-right">{t("debit")}</th>
+              <th className="px-3 py-3 text-right">{t("credit")}</th>
+              <th className="px-3 py-3 text-right">{t("balance")}</th>
+              <th className="px-3 py-3">{t("note")}</th>
+              <th className="px-3 py-3 text-right">{t("action")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (<tr className="border-b border-border last:border-b-0" key={`${row.type}-${row.reference}-${row.date}`}>
                 <td className="px-3 py-3">{row.date}</td>
-                <td className="px-3 py-3">{row.type}</td>
+                <td className="px-3 py-3">{ledgerTypeLabel(row.type, activeLocale)}</td>
                 <td className="px-3 py-3 font-mono">{row.reference}</td>
                 <td className="px-3 py-3 text-right">{row.debit ? `${formatLak(row.debit)} LAK` : "-"}</td>
                 <td className="px-3 py-3 text-right">{row.credit ? `${formatLak(row.credit)} LAK` : "-"}</td>
                 <td className="px-3 py-3 text-right font-semibold">{formatLak(row.balance)} LAK</td>
-                <td className="px-3 py-3 text-muted-foreground">{row.note}</td>
-                <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">View</button></td>
+                <td className="px-3 py-3 text-muted-foreground">{ledgerNoteLabel(row.note, activeLocale)}</td>
+                <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{t("view")}</button></td>
               </tr>))}
           </tbody>
         </table>

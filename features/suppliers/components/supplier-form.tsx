@@ -1,7 +1,13 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import {
+  localizeSupplierError,
+  paymentTermLabel,
+  tSuppliers,
+} from "@/lib/i18n/suppliers-copy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Save } from "lucide-react";
@@ -10,10 +16,27 @@ import { createSupplierAction } from "@/features/suppliers/actions";
 import type { Supplier } from "@/features/suppliers/types";
 const paymentTermOptions = ["Cash", "7 days", "15 days", "30 days", "60 days", "90 days", "Custom"];
 const ratingOptions = ["A", "B", "C", "D"];
-export function SupplierForm({ existingSuppliers = [] }: {
+let activeLocale: SupportedLocale = "en";
+function t(key: string) {
+  return tSuppliers(key, activeLocale);
+}
+
+export function SupplierForm({ existingSuppliers = [], locale: localeProp }: {
     existingSuppliers?: Supplier[];
+    locale?: SupportedLocale;
 }) {
     const router = useRouter();
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    useEffect(() => { if (localeProp) setLocale(localeProp); }, [localeProp]);
+    useEffect(() => {
+      function handleLocaleChange(event: Event) {
+        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
+      }
+      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+    activeLocale = locale;
     const [isPending, startTransition] = useTransition();
     const [country, setCountry] = useState("Laos");
     const [creditLimitLak, setCreditLimitLak] = useState(0);
@@ -55,10 +78,10 @@ export function SupplierForm({ existingSuppliers = [] }: {
         startTransition(async () => {
             const result = await createSupplierAction(payload);
             if (!result.ok) {
-                setMessage(result.error ?? t("ui.supplier.save.failed"));
+                setMessage(localizeSupplierError(result.error ?? t("saveFailed"), activeLocale));
                 return;
             }
-            setMessage(t("ui.supplier.saved.successfully"));
+            setMessage(t("savedSuccessfully"));
             router.refresh();
             router.push("/suppliers");
         });
@@ -67,19 +90,19 @@ export function SupplierForm({ existingSuppliers = [] }: {
       <section className="rounded-lg border border-border bg-card p-6">
         <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/suppliers">
           <ArrowLeft aria-hidden="true"/>
-          Back to suppliers
+          {t("backToSuppliers")}
         </Link>
         <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="grid size-12 place-items-center rounded-md bg-primary/10 text-primary">
               <Building2 aria-hidden="true"/>
             </div>
-            <h1 className="mt-4 text-3xl font-semibold">Create supplier</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{t("ui.create.a.supplier.profile.with.contact.tax.n")}</p>
+            <h1 className="mt-4 text-3xl font-semibold">{t("createSupplier")}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{t("createSupplierSubtitle")}</p>
           </div>
           <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" disabled={isPending} type="submit">
             <Save aria-hidden="true"/>
-            {isPending ? t("ui.saving") : "Save"}
+            {isPending ? t("saving") : t("save")}
           </button>
         </div>
       </section>
@@ -90,84 +113,84 @@ export function SupplierForm({ existingSuppliers = [] }: {
 
       <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Supplier information</h2>
+          <h2 className="text-lg font-semibold">{t("supplierInformation")}</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Field label="Supplier Code">
+            <Field label={t("supplierCode")}>
               <input className="field-input font-mono" name="supplierCode" defaultValue={nextSupplierCode} placeholder="SUP-001" required/>
-              <p className="text-xs text-muted-foreground">{t("ui.auto.generated.suggestion.manual.override.is")}</p>
+              <p className="text-xs text-muted-foreground">{t("autoCodeHint")}</p>
             </Field>
-            <Field label="Company Name">
-              <input className="field-input" name="companyName" placeholder="Supplier company name" required/>
+            <Field label={t("companyName")}>
+              <input className="field-input" name="companyName" placeholder={t("companyNamePlaceholder")} required/>
             </Field>
-            <Field label="Contact Name">
-              <input className="field-input" name="contactPerson" placeholder="Contact person" required/>
+            <Field label={t("contactName")}>
+              <input className="field-input" name="contactPerson" placeholder={t("contactPersonPlaceholder")} required/>
             </Field>
-            <Field label="Phone">
+            <Field label={t("phone")}>
               <input className="field-input" name="phone" placeholder="+856 20 ..." required/>
             </Field>
-            <Field label="Email">
-              <input className="field-input" name="email" placeholder={t("ui.supplier.example.com")} type="email"/>
+            <Field label={t("email")}>
+              <input className="field-input" name="email" placeholder={t("emailPlaceholder")} type="email"/>
             </Field>
-            <Field label="Tax Number">
-              <input className="field-input font-mono" name="taxNumber" placeholder={t("ui.lao.tax")}/>
+            <Field label={t("taxNumber")}>
+              <input className="field-input font-mono" name="taxNumber" placeholder={t("taxPlaceholder")}/>
             </Field>
-            <Field label="Payment Terms">
+            <Field label={t("paymentTerms")}>
               <select className="field-input" name="creditTerms" defaultValue="Cash">
-                {paymentTermOptions.map((option) => (<option key={option} value={option}>{option}</option>))}
+                {paymentTermOptions.map((option) => (<option key={option} value={option}>{paymentTermLabel(option, activeLocale)}</option>))}
               </select>
             </Field>
-            <Field label="Supplier Rating">
+            <Field label={t("supplierRating")}>
               <select className="field-input" value={rating} onChange={(event) => setRating(event.target.value)}>
-                {ratingOptions.map((option) => (<option key={option} value={option}>Rating {option}</option>))}
+                {ratingOptions.map((option) => (<option key={option} value={option}>{tSuppliers("ratingOption", activeLocale).replace("{letter}", option)}</option>))}
               </select>
             </Field>
-            <Field label="Credit Limit">
+            <Field label={t("creditLimit")}>
               <input className="field-input" min="0" name="creditLimit" type="number" value={creditLimitLak} onChange={(event) => setCreditLimitLak(Number(event.target.value))}/>
             </Field>
-            <Field label="Opening Balance">
+            <Field label={t("openingBalance")}>
               <input className="field-input" min="0" name="openingBalance" type="number" value={openingBalanceLak} onChange={(event) => setOpeningBalanceLak(Number(event.target.value))}/>
             </Field>
-            <Field label="Country">
+            <Field label={t("country")}>
               <input className="field-input" value={country} onChange={(event) => setCountry(event.target.value)}/>
             </Field>
-            <Field label="Province">
-              <input className="field-input" value={province} onChange={(event) => setProvince(event.target.value)} placeholder="Vientiane Capital"/>
+            <Field label={t("province")}>
+              <input className="field-input" value={province} onChange={(event) => setProvince(event.target.value)} placeholder={t("provincePlaceholder")}/>
             </Field>
-            <Field label="District">
-              <input className="field-input" value={district} onChange={(event) => setDistrict(event.target.value)} placeholder="Chanthabouly"/>
+            <Field label={t("district")}>
+              <input className="field-input" value={district} onChange={(event) => setDistrict(event.target.value)} placeholder={t("districtPlaceholder")}/>
             </Field>
-            <Field label="Village">
-              <input className="field-input" value={village} onChange={(event) => setVillage(event.target.value)} placeholder="Village"/>
+            <Field label={t("village")}>
+              <input className="field-input" value={village} onChange={(event) => setVillage(event.target.value)} placeholder={t("villagePlaceholder")}/>
             </Field>
-            <Field className="md:col-span-2" label="Full Address">
-              <textarea className="min-h-24 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={fullAddress} onChange={(event) => setFullAddress(event.target.value)} placeholder={t("ui.street.building.delivery.instructions")}/>
+            <Field className="md:col-span-2" label={t("fullAddress")}>
+              <textarea className="min-h-24 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={fullAddress} onChange={(event) => setFullAddress(event.target.value)} placeholder={t("addressPlaceholder")}/>
             </Field>
             <section className="md:col-span-2 rounded-md border border-dashed border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">Linked products placeholder</h3>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("ui.future.supplier.product.relationship.will.re")}</p>
+              <h3 className="text-sm font-semibold">{t("linkedProductsPlaceholder")}</h3>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("linkedProductsFormHint")}</p>
             </section>
             <section className="md:col-span-2 rounded-md border border-dashed border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">Supplier documents placeholder</h3>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("ui.upload.backend.is.not.connected.yet.planned.")}</p>
+              <h3 className="text-sm font-semibold">{t("supplierDocumentsPlaceholder")}</h3>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("documentsFormHint")}</p>
             </section>
             <div className="md:col-span-2">
-              <Field label="Notes">
-                <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="note" placeholder="Supplier notes"/>
+              <Field label={t("notes")}>
+                <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="note" placeholder={t("notesPlaceholder")}/>
               </Field>
             </div>
           </div>
         </div>
 
         <aside className="rounded-lg border border-border bg-card p-5">
-          <h2 className="text-lg font-semibold">Local preview</h2>
+          <h2 className="text-lg font-semibold">{t("localPreview")}</h2>
           <dl className="mt-5 flex flex-col gap-4 text-sm">
-            <Summary label="Credit limit" value={`${formatLak(creditLimitLak)} LAK`}/>
-            <Summary label="Opening balance" value={`${formatLak(openingBalanceLak)} LAK`}/>
-            <Summary label="Remaining credit" value={`${formatLak(remainingCredit)} LAK`}/>
-            <Summary label="Suggested code" value={nextSupplierCode}/>
-            <Summary label="Payment terms" value="Saved to supplier credit terms"/>
-            <Summary label="Rating" value={`Rating ${rating} (stored in notes for now)`}/>
-            <Summary label="Database status" value="Real database"/>
+            <Summary label={t("creditLimit")} value={`${formatLak(creditLimitLak)} LAK`}/>
+            <Summary label={t("openingBalance")} value={`${formatLak(openingBalanceLak)} LAK`}/>
+            <Summary label={t("remainingCredit")} value={`${formatLak(remainingCredit)} LAK`}/>
+            <Summary label={t("suggestedCode")} value={nextSupplierCode}/>
+            <Summary label={t("paymentTerms")} value={t("paymentTermsSaved")}/>
+            <Summary label={t("rating")} value={tSuppliers("ratingStored", activeLocale).replace("{letter}", rating)}/>
+            <Summary label={t("databaseStatus")} value={t("realDatabase")}/>
           </dl>
         </aside>
       </section>

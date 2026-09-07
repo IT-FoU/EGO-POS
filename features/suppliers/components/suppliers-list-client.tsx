@@ -1,7 +1,18 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import {
+  documentTypeLabel,
+  fillSuppliersCopy,
+  invoiceStatusLabel,
+  paymentTermLabel,
+  supplierStatusLabel,
+  supplierTagLabel,
+  tSuppliers,
+  warehouseDemoLabel,
+} from "@/lib/i18n/suppliers-copy";
 import Link from "next/link";
 import { Building2, CreditCard, Eye, FileText, PackageSearch, Plus, Search, Star, Truck } from "lucide-react";
 import type { Supplier, SupplierPayment, SupplierPurchaseOrder, SupplierStatus } from "@/features/suppliers/types";
@@ -12,11 +23,28 @@ const statusOptions: Array<SupplierStatus | "all"> = ["all", "active", "inactive
 const paymentTermOptions = ["all", "Cash", "7 days", "15 days", "30 days", "60 days", "90 days", "Custom"];
 type SupplierFilter = SupplierStatus | "all" | "has_outstanding" | "credit_exceeded";
 type SummaryModalKind = "active" | "credit_limit" | "outstanding" | "purchases" | "paid" | "average_monthly" | "last_purchase" | "debt" | "credit_exceeded" | "documents";
-export function SuppliersListClient({ payments, purchaseOrders, suppliers, }: {
+let activeLocale: SupportedLocale = "en";
+function t(key: string) {
+  return tSuppliers(key, activeLocale);
+}
+
+export function SuppliersListClient({ payments, purchaseOrders, suppliers, locale: localeProp, }: {
     payments: SupplierPayment[];
     purchaseOrders: SupplierPurchaseOrder[];
     suppliers: Supplier[];
+    locale?: SupportedLocale;
 }) {
+    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    useEffect(() => { if (localeProp) setLocale(localeProp); }, [localeProp]);
+    useEffect(() => {
+      function handleLocaleChange(event: Event) {
+        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
+      }
+      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    }, []);
+    activeLocale = locale;
     const [query, setQuery] = useState("");
     const [status, setStatus] = useState<SupplierFilter>("all");
     const [paymentTerms, setPaymentTerms] = useState("all");
@@ -68,49 +96,49 @@ export function SuppliersListClient({ payments, purchaseOrders, suppliers, }: {
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <p className="text-sm font-medium text-primary">Supplier Management</p>
-            <h1 className="mt-2 text-3xl font-semibold">Suppliers</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("ui.supplier.profiles.with.credit.outstanding.ba")}</p>
+            <p className="text-sm font-medium text-primary">{t("supplierManagement")}</p>
+            <h1 className="mt-2 text-3xl font-semibold">{t("suppliers")}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{t("suppliersSubtitle")}</p>
           </div>
           <Link className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href="/suppliers/new">
             <Plus aria-hidden="true"/>
-            Create supplier
+            {t("createSupplier")}
           </Link>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Metric icon={Building2} label="Active suppliers" value={String(activeSuppliers)} onClick={() => setSummaryModal("active")}/>
-        <Metric icon={Truck} label="Total credit limit" value={`${formatLak(totalCreditLimit)} LAK`} onClick={() => setSummaryModal("credit_limit")}/>
-        <Metric icon={Eye} label="Outstanding balance" value={`${formatLak(totalOutstanding)} LAK`} onClick={() => setSummaryModal("outstanding")}/>
-        <Metric icon={PackageSearch} label="Total purchases" value={`${formatLak(totalPurchaseValue)} LAK`} onClick={() => setSummaryModal("purchases")}/>
-        <Metric icon={CreditCard} label="Total paid" value={`${formatLak(totalPaid)} LAK`} onClick={() => setSummaryModal("paid")}/>
+        <Metric icon={Building2} label={t("activeSuppliers")} value={String(activeSuppliers)} onClick={() => setSummaryModal("active")}/>
+        <Metric icon={Truck} label={t("totalCreditLimit")} value={`${formatLak(totalCreditLimit)} LAK`} onClick={() => setSummaryModal("credit_limit")}/>
+        <Metric icon={Eye} label={t("outstandingBalance")} value={`${formatLak(totalOutstanding)} LAK`} onClick={() => setSummaryModal("outstanding")}/>
+        <Metric icon={PackageSearch} label={t("totalPurchases")} value={`${formatLak(totalPurchaseValue)} LAK`} onClick={() => setSummaryModal("purchases")}/>
+        <Metric icon={CreditCard} label={t("totalPaid")} value={`${formatLak(totalPaid)} LAK`} onClick={() => setSummaryModal("paid")}/>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard label="Average monthly purchase" value={`${formatLak(Math.round(totalPurchaseValue / 12))} LAK`} onClick={() => setSummaryModal("average_monthly")}/>
-        <SummaryCard label="Last purchase date" value={getLastPurchaseDate(purchaseOrders)} onClick={() => setSummaryModal("last_purchase")}/>
-        <SummaryCard label="Suppliers with debt" value={String(suppliers.filter((supplier) => supplier.outstandingBalanceLak > 0).length)} onClick={() => setSummaryModal("debt")}/>
-        <SummaryCard label="Credit exceeded" value={String(suppliers.filter((supplier) => supplier.creditLimitLak > 0 && supplier.outstandingBalanceLak > supplier.creditLimitLak).length)} onClick={() => setSummaryModal("credit_exceeded")}/>
-        <SummaryCard label="Documents" value="UI placeholder" onClick={() => setSummaryModal("documents")}/>
+        <SummaryCard label={t("averageMonthlyPurchase")} value={`${formatLak(Math.round(totalPurchaseValue / 12))} LAK`} onClick={() => setSummaryModal("average_monthly")}/>
+        <SummaryCard label={t("lastPurchaseDate")} value={getLastPurchaseDate(purchaseOrders) || t("noPurchases")} onClick={() => setSummaryModal("last_purchase")}/>
+        <SummaryCard label={t("suppliersWithDebt")} value={String(suppliers.filter((supplier) => supplier.outstandingBalanceLak > 0).length)} onClick={() => setSummaryModal("debt")}/>
+        <SummaryCard label={t("creditExceeded")} value={String(suppliers.filter((supplier) => supplier.creditLimitLak > 0 && supplier.outstandingBalanceLak > supplier.creditLimitLak).length)} onClick={() => setSummaryModal("credit_exceeded")}/>
+        <SummaryCard label={t("documents")} value={t("uiPlaceholder")} onClick={() => setSummaryModal("documents")}/>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">
         <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
           <label className="relative flex-1">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"/>
-            <input className="field-input pl-10" placeholder={t("ui.search.code.company.contact.phone.email.tax.")} value={query} onChange={(event) => setQuery(event.target.value)}/>
+            <input className="field-input pl-10" placeholder={t("searchSuppliers")} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </label>
-          <select className="field-input" value={status} onChange={(event) => setStatus(event.target.value as SupplierFilter)} aria-label="Filter by supplier status">
+          <select className="field-input" value={status} onChange={(event) => setStatus(event.target.value as SupplierFilter)} aria-label={t("filterByStatus")}>
             {statusOptions.map((option) => (<option value={option} key={option}>
-                {option === "all" ? "All statuses" : option}
+                {option === "all" ? t("allStatuses") : supplierStatusLabel(option, activeLocale)}
               </option>))}
-            <option value="has_outstanding">Has outstanding balance</option>
-            <option value="credit_exceeded">Credit limit exceeded</option>
+            <option value="has_outstanding">{t("hasOutstanding")}</option>
+            <option value="credit_exceeded">{t("creditLimitExceeded")}</option>
           </select>
-          <select className="field-input" value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} aria-label="Filter by payment terms">
+          <select className="field-input" value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} aria-label={t("filterByPaymentTerms")}>
             {paymentTermOptions.map((option) => (<option value={option} key={option}>
-                {option === "all" ? "All payment terms" : option}
+                {option === "all" ? t("allPaymentTerms") : paymentTermLabel(option, activeLocale)}
               </option>))}
           </select>
         </div>
@@ -121,15 +149,15 @@ export function SuppliersListClient({ payments, purchaseOrders, suppliers, }: {
           <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
             <thead className="border-b border-border bg-background text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-semibold">Supplier code</th>
-                <th className="px-4 py-3 font-semibold">Company name</th>
-                <th className="px-4 py-3 font-semibold">Contact person</th>
-                <th className="px-4 py-3 font-semibold">Phone</th>
-                <th className="px-4 py-3 text-right font-semibold">Credit limit</th>
-                <th className="px-4 py-3 text-right font-semibold">Outstanding</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Rating</th>
-                <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                <th className="px-4 py-3 font-semibold">{t("supplierCode")}</th>
+                <th className="px-4 py-3 font-semibold">{t("companyName")}</th>
+                <th className="px-4 py-3 font-semibold">{t("contactPerson")}</th>
+                <th className="px-4 py-3 font-semibold">{t("phone")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{t("creditLimit")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{t("outstanding")}</th>
+                <th className="px-4 py-3 font-semibold">{t("status")}</th>
+                <th className="px-4 py-3 font-semibold">{t("rating")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -150,7 +178,7 @@ export function SuppliersListClient({ payments, purchaseOrders, suppliers, }: {
                     </button>
                   </td>
                   <td className="px-4 py-4">
-                    <SupplierStatusBadge status={supplier.status}/>
+                    <SupplierStatusBadge locale={activeLocale} status={supplier.status}/>
                   </td>
                   <td className="px-4 py-4">
                     <RatingBadge rating={getSupplierRating(supplier)}/>
@@ -159,19 +187,19 @@ export function SuppliersListClient({ payments, purchaseOrders, suppliers, }: {
                     <div className="flex justify-end gap-1">
                       <button className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setSelectedSupplier(supplier)}>
                         <Eye aria-hidden="true" className="size-4"/>
-                        View
+                        {t("view")}
                       </button>
                       <Link className="inline-flex h-9 items-center rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" href={`/suppliers/${supplier.id}`}>
-                        Edit
+                        {t("edit")}
                       </Link>
-                      <button className="inline-flex h-9 items-center rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setNotice(t("ui.record.payment.will.be.connected.through.pur"))}>
-                        Pay
+                      <button className="inline-flex h-9 items-center rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setNotice(t("paySupplierLater"))}>
+                        {t("pay")}
                       </button>
                       <Link className="inline-flex h-9 items-center rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" href={`/purchasing/new?supplierId=${supplier.id}`}>
-                        PO
+                        {t("po")}
                       </Link>
-                      <button className="inline-flex h-9 items-center rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setNotice(`${supplier.status === "active" ? "Deactivate" : "Activate"} supplier action will use the existing status update flow in a later wiring pass.`)}>
-                        {supplier.status === "active" ? "Deactivate" : "Activate"}
+                      <button className="inline-flex h-9 items-center rounded-md border border-border px-2 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => setNotice(fillSuppliersCopy(t("statusLater"), { action: supplier.status === "active" ? t("deactivate") : t("activate") }))}>
+                        {supplier.status === "active" ? t("deactivate") : t("activate")}
                       </button>
                     </div>
                   </td>
@@ -179,7 +207,7 @@ export function SuppliersListClient({ payments, purchaseOrders, suppliers, }: {
             </tbody>
           </table>
         </div>
-        {filteredSuppliers.length === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("ui.no.suppliers.match.the.current.search.and.fi")}</div>) : null}
+        {filteredSuppliers.length === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("noSuppliersMatch")}</div>) : null}
       </section>
     </div>);
 }
@@ -202,61 +230,61 @@ function SupplierDetailModal({ onClose, onOpenInvoices, payments, purchaseOrders
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div className="min-w-0">
             <h2 className="truncate text-xl font-semibold" title={supplier.companyName}>{supplier.companyName}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Supplier detail summary and future integration placeholders</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("supplierDetailSummary")}</p>
           </div>
           <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>
-            Close
+            {t("close")}
           </button>
         </div>
         <div className="max-h-[76vh] overflow-y-auto p-5">
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Detail label="Supplier code" value={supplier.supplierCode || "-"}/>
-            <Detail label="Tax number" value={supplier.taxNumber || "-"}/>
-            <Detail label="Payment terms" value={supplier.creditTerms || "Not set"}/>
-            <Detail label="Final rating" value={`${rating} (${score}/100)`}/>
-            <Detail label="Score" value={`${score}/100`}/>
-            <Detail label="Rating notes" value={t("ui.manual.demo.score.auto.calculation.is.future")}/>
-            <Detail label="Default currency" value={getSupplierCurrency(supplier)}/>
-            <Detail label="Contact person" value={supplier.contactPerson || "-"}/>
-            <Detail label="Phone" value={supplier.phone || "-"}/>
-            <Detail label="Email" value={supplier.email || "-"}/>
-            <Detail label="Status" value={supplier.status}/>
-            <Detail label="Credit limit" value={`${formatLak(supplier.creditLimitLak)} LAK`}/>
+            <Detail label={t("supplierCode")} value={supplier.supplierCode || "-"}/>
+            <Detail label={t("taxNumber")} value={supplier.taxNumber || "-"}/>
+            <Detail label={t("paymentTerms")} value={supplier.creditTerms ? paymentTermLabel(supplier.creditTerms, activeLocale) : t("notSet")}/>
+            <Detail label={t("finalRating")} value={`${rating} (${score}/100)`}/>
+            <Detail label={t("score")} value={`${score}/100`}/>
+            <Detail label={t("ratingNotes")} value={t("ratingNotesHint")}/>
+            <Detail label={t("defaultCurrency")} value={getSupplierCurrency(supplier)}/>
+            <Detail label={t("contactPerson")} value={supplier.contactPerson || "-"}/>
+            <Detail label={t("phone")} value={supplier.phone || "-"}/>
+            <Detail label={t("email")} value={supplier.email || "-"}/>
+            <Detail label={t("status")} value={supplierStatusLabel(supplier.status, activeLocale)}/>
+            <Detail label={t("creditLimit")} value={`${formatLak(supplier.creditLimitLak)} LAK`}/>
             <button className="rounded-md border border-warning/40 bg-warning/10 p-3 text-left" type="button" onClick={onOpenInvoices}>
-              <dt className="text-xs text-warning">Outstanding balance</dt>
+              <dt className="text-xs text-warning">{t("outstandingBalance")}</dt>
               <dd className="mt-1 font-semibold text-warning">{formatLak(supplier.outstandingBalanceLak)} LAK</dd>
             </button>
-            <Detail label="Total purchases" value={`${formatLak(totalPurchases)} LAK`}/>
-            <Detail label="Total paid" value={`${formatLak(totalPaid)} LAK`}/>
-            <Detail label="Last purchase date" value={lastPurchaseDate}/>
-            <Detail label="Average monthly purchase" value={`${formatLak(averageMonthlyPurchase)} LAK`}/>
-            <Detail label="Products supplied" value="UI placeholder: linked productId relationships not connected yet"/>
-            <Detail label="Address" value={supplier.address || "-"}/>
+            <Detail label={t("totalPurchases")} value={`${formatLak(totalPurchases)} LAK`}/>
+            <Detail label={t("totalPaid")} value={`${formatLak(totalPaid)} LAK`}/>
+            <Detail label={t("lastPurchaseDate")} value={lastPurchaseDate || t("noPurchases")}/>
+            <Detail label={t("averageMonthlyPurchase")} value={`${formatLak(averageMonthlyPurchase)} LAK`}/>
+            <Detail label={t("productsSupplied")} value={t("productsSuppliedValue")}/>
+            <Detail label={t("address")} value={supplier.address || "-"}/>
           </section>
           <section className="mt-5 rounded-md border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Supplier tags</h3>
+            <h3 className="text-sm font-semibold">{t("supplierTags")}</h3>
             <div className="mt-3 flex flex-wrap gap-2">
-              {tags.map((tag) => (<span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary" key={tag}>{tag}</span>))}
+              {tags.map((tag) => (<span className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary" key={tag}>{supplierTagLabel(tag, activeLocale)}</span>))}
             </div>
           </section>
 
           <section className="mt-5 grid gap-4 lg:grid-cols-3">
-            <PlaceholderCard icon={PackageSearch} title="Linked products">{t("ui.one.supplier.can.supply.many.products.and.on")}</PlaceholderCard>
-            <PlaceholderCard icon={FileText} title="Documents">{t("ui.business.license.tax.certificate.bank.accoun")}</PlaceholderCard>
-            <PlaceholderCard icon={Star} title="Rating notes">{t("ui.delivery.reliability.placeholder.product.qua")}</PlaceholderCard>
+            <PlaceholderCard icon={PackageSearch} title={t("linkedProducts")}>{t("linkedProductsHint")}</PlaceholderCard>
+            <PlaceholderCard icon={FileText} title={t("documents")}>{t("documentsHint")}</PlaceholderCard>
+            <PlaceholderCard icon={Star} title={t("ratingNotes")}>{t("ratingNotesHint")}</PlaceholderCard>
           </section>
           <section className="mt-5 rounded-md border border-dashed border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Serviced Warehouses</h3>
-            <p className="mt-2 text-xs text-muted-foreground">{t("ui.references.warehouseid.only.warehouse.data.r")}</p>
+            <h3 className="text-sm font-semibold">{t("servicedWarehouses")}</h3>
+            <p className="mt-2 text-xs text-muted-foreground">{t("warehouseHint")}</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {["Main Warehouse", "Cold Storage", "Branch Warehouse"].map((warehouse) => (<div className="rounded-md border border-border px-3 py-2 text-sm" key={warehouse}>✓ {warehouse}</div>))}
+              {["Main Warehouse", "Cold Storage", "Branch Warehouse"].map((warehouse) => (<div className="rounded-md border border-border px-3 py-2 text-sm" key={warehouse}>✓ {warehouseDemoLabel(warehouse, activeLocale)}</div>))}
             </div>
           </section>
 
           <section className="mt-5 grid gap-4 lg:grid-cols-3">
-            <HistoryPlaceholder title="Purchase history placeholder" value={`${purchaseOrders.length} real/demo purchase records visible on full supplier page.`}/>
-            <HistoryPlaceholder title="Payment history placeholder" value={`${payments.length} real/demo payment records visible on full supplier page.`}/>
-            <HistoryPlaceholder title="Documents placeholder" value={t("ui.document.upload.and.storage.will.be.connecte")}/>
+            <HistoryPlaceholder title={t("purchaseHistoryPlaceholder")} value={`${purchaseOrders.length} real/demo purchase records visible on full supplier page.`}/>
+            <HistoryPlaceholder title={t("paymentHistoryPlaceholder")} value={`${payments.length} real/demo payment records visible on full supplier page.`}/>
+            <HistoryPlaceholder title={t("documentsPlaceholder")} value={t("documentsPlaceholder")}/>
           </section>
         </div>
       </div>
@@ -272,11 +300,11 @@ function OutstandingInvoicesModal({ onClose, purchaseOrders, supplier, }: {
       <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
-            <h2 className="text-xl font-semibold">Outstanding invoices</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{supplier.companyName}{t("ui.mock.demo.placeholder.until.ap.invoices.are.")}</p>
+            <h2 className="text-xl font-semibold">{t("outstandingInvoices")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{supplier.companyName}{t("invoicePlaceholderNote")}</p>
           </div>
           <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>
-            Close
+            {t("close")}
           </button>
         </div>
         <div className="max-h-[66vh] overflow-y-auto p-5">
@@ -284,14 +312,14 @@ function OutstandingInvoicesModal({ onClose, purchaseOrders, supplier, }: {
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-3">Invoice number</th>
-                  <th className="px-3 py-3">Purchase date</th>
-                  <th className="px-3 py-3">Due date</th>
-                  <th className="px-3 py-3 text-right">Original amount</th>
-                  <th className="px-3 py-3 text-right">Paid amount</th>
-                  <th className="px-3 py-3 text-right">Remaining</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3 text-right">Action</th>
+                  <th className="px-3 py-3">{t("invoiceNumber")}</th>
+                  <th className="px-3 py-3">{t("purchaseDate")}</th>
+                  <th className="px-3 py-3">{t("dueDate")}</th>
+                  <th className="px-3 py-3 text-right">{t("originalAmount")}</th>
+                  <th className="px-3 py-3 text-right">{t("paidAmount")}</th>
+                  <th className="px-3 py-3 text-right">{t("remaining")}</th>
+                  <th className="px-3 py-3">{t("status")}</th>
+                  <th className="px-3 py-3 text-right">{t("action")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -305,14 +333,14 @@ function OutstandingInvoicesModal({ onClose, purchaseOrders, supplier, }: {
                     <td className="px-3 py-3"><InvoiceStatus status={invoice.status}/></td>
                     <td className="px-3 py-3 text-right">
                       <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">
-                        View purchase
+                        {t("viewPurchase")}
                       </button>
                     </td>
                   </tr>))}
               </tbody>
             </table>
           </div>
-          {invoices.length === 0 ? (<div className="rounded-md border border-border bg-background p-6 text-center text-sm text-muted-foreground">{t("ui.no.outstanding.invoices.real.ap.invoice.ledg")}</div>) : null}
+          {invoices.length === 0 ? (<div className="rounded-md border border-border bg-background p-6 text-center text-sm text-muted-foreground">{t("noOutstandingInvoices")}</div>) : null}
         </div>
       </div>
     </div>);
@@ -331,10 +359,10 @@ function SummaryListModal({ kind, onClose, onViewSupplier, payments, purchaseOrd
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
             <h2 className="text-xl font-semibold">{title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("ui.summary.modal.some.values.are.demo.placehold")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("summaryModalNote")}</p>
           </div>
           <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>
-            Close
+            {t("close")}
           </button>
         </div>
         <div className="max-h-[66vh] overflow-y-auto p-5">
@@ -356,13 +384,13 @@ function ActiveSuppliersTable({ onViewSupplier, suppliers }: {
     onViewSupplier: (supplier: Supplier) => void;
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier code", "Company name", "Contact person", "Phone", "Status", "View"]}>
+        return (<ModalTable headers={[t("supplierCode"), t("companyName"), t("contactPerson"), t("phone"), t("status"), t("view")]}>
       {suppliers.map((supplier) => (<tr className="border-b border-border last:border-b-0" key={supplier.id}>
           <td className="px-3 py-3 font-mono">{supplier.supplierCode}</td>
           <td className="px-3 py-3 font-semibold">{supplier.companyName}</td>
           <td className="px-3 py-3">{supplier.contactPerson}</td>
           <td className="px-3 py-3">{supplier.phone}</td>
-          <td className="px-3 py-3"><SupplierStatusBadge status={supplier.status}/></td>
+          <td className="px-3 py-3"><SupplierStatusBadge locale={activeLocale} status={supplier.status}/></td>
           <td className="px-3 py-3 text-right"><ViewSupplierButton supplier={supplier} onViewSupplier={onViewSupplier}/></td>
         </tr>))}
     </ModalTable>);
@@ -371,7 +399,7 @@ function CreditLimitTable({ onViewSupplier, suppliers }: {
     onViewSupplier: (supplier: Supplier) => void;
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "Credit limit", "Used credit", "Available credit", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("creditLimit"), t("usedCredit"), t("availableCredit"), t("view")]}>
       {suppliers.map((supplier) => {
             const available = Math.max(supplier.creditLimitLak - supplier.outstandingBalanceLak, 0);
             return (<tr className="border-b border-border last:border-b-0" key={supplier.id}>
@@ -389,13 +417,13 @@ function OutstandingSummaryTable({ onViewSupplier, purchaseOrders, suppliers }: 
     purchaseOrders: SupplierPurchaseOrder[];
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "Invoice/PO", "Due date", "Remaining amount", "Overdue status", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("invoicePo"), t("dueDate"), t("remainingAmount"), t("overdueStatus"), t("view")]}>
       {suppliers.filter((supplier) => supplier.outstandingBalanceLak > 0).map((supplier) => {
             const order = purchaseOrders.find((item) => item.supplierId === supplier.id);
             return (<tr className="border-b border-border last:border-b-0" key={supplier.id}>
             <td className="px-3 py-3 font-semibold">{supplier.companyName}</td>
-            <td className="px-3 py-3 font-mono">{order?.purchaseNo ?? "AP placeholder"}</td>
-            <td className="px-3 py-3">{order ? addDays(order.purchaseDate, 30) : "Future AP"}</td>
+            <td className="px-3 py-3 font-mono">{order?.purchaseNo ?? t("apPlaceholder")}</td>
+            <td className="px-3 py-3">{order ? addDays(order.purchaseDate, 30) : t("futureAp")}</td>
             <td className="px-3 py-3 text-right text-warning">{formatLak(supplier.outstandingBalanceLak)} LAK</td>
             <td className="px-3 py-3"><InvoiceStatus status="Overdue"/></td>
             <td className="px-3 py-3 text-right"><ViewSupplierButton supplier={supplier} onViewSupplier={onViewSupplier}/></td>
@@ -407,14 +435,14 @@ function PurchaseSummaryTable({ purchaseOrders, suppliers }: {
     purchaseOrders: SupplierPurchaseOrder[];
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "PO No", "Date", "Amount", "Status", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("poNo"), t("date"), t("amount"), t("status"), t("view")]}>
       {purchaseOrders.map((order) => (<tr className="border-b border-border last:border-b-0" key={order.id}>
           <td className="px-3 py-3 font-semibold">{supplierName(suppliers, order.supplierId)}</td>
           <td className="px-3 py-3 font-mono">{order.purchaseNo}</td>
           <td className="px-3 py-3">{order.purchaseDate}</td>
           <td className="px-3 py-3 text-right">{formatLak(order.totalLak)} LAK</td>
-          <td className="px-3 py-3"><PurchaseStatusBadge status={order.status}/></td>
-          <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">View</button></td>
+          <td className="px-3 py-3"><PurchaseStatusBadge locale={activeLocale} status={order.status}/></td>
+          <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{t("view")}</button></td>
         </tr>))}
     </ModalTable>);
 }
@@ -422,14 +450,14 @@ function PaidSummaryTable({ payments, suppliers }: {
     payments: SupplierPayment[];
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "Payment No", "Date", "Method", "Amount", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("paymentNo"), t("date"), t("method"), t("amount"), t("view")]}>
       {payments.map((payment) => (<tr className="border-b border-border last:border-b-0" key={payment.id}>
           <td className="px-3 py-3 font-semibold">{supplierName(suppliers, payment.supplierId)}</td>
           <td className="px-3 py-3 font-mono">{payment.paymentNo}</td>
           <td className="px-3 py-3">{payment.paymentDate}</td>
           <td className="px-3 py-3 capitalize">{payment.method}</td>
           <td className="px-3 py-3 text-right">{formatLak(payment.amountLak)} LAK</td>
-          <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">View</button></td>
+          <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{t("view")}</button></td>
         </tr>))}
     </ModalTable>);
 }
@@ -446,8 +474,8 @@ function MonthlySummaryTable({ purchaseOrders }: {
         total: number;
     }>()));
     return (<div>
-      <div className="mb-4 rounded-md border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">{t("ui.simple.chart.placeholder.monthly.purchase.ba")}</div>
-      <ModalTable headers={["Month", "Total purchase", "Supplier count", "Chart"]}>
+      <div className="mb-4 rounded-md border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">{t("chartPlaceholder")}</div>
+      <ModalTable headers={[t("month"), t("totalPurchase"), t("supplierCount"), t("chart")]}>
         {rows.map(([month, row]) => (<tr className="border-b border-border last:border-b-0" key={month}>
             <td className="px-3 py-3">{month}</td>
             <td className="px-3 py-3 text-right">{formatLak(row.total)} LAK</td>
@@ -461,13 +489,13 @@ function LatestPurchaseTable({ purchaseOrders, suppliers }: {
     purchaseOrders: SupplierPurchaseOrder[];
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "PO No", "Date", "Amount", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("poNo"), t("date"), t("amount"), t("view")]}>
       {[...purchaseOrders].sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate)).slice(0, 12).map((order) => (<tr className="border-b border-border last:border-b-0" key={order.id}>
           <td className="px-3 py-3 font-semibold">{supplierName(suppliers, order.supplierId)}</td>
           <td className="px-3 py-3 font-mono">{order.purchaseNo}</td>
           <td className="px-3 py-3">{order.purchaseDate}</td>
           <td className="px-3 py-3 text-right">{formatLak(order.totalLak)} LAK</td>
-          <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">View</button></td>
+          <td className="px-3 py-3 text-right"><button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button">{t("view")}</button></td>
         </tr>))}
     </ModalTable>);
 }
@@ -475,12 +503,12 @@ function DebtSuppliersTable({ onViewSupplier, suppliers }: {
     onViewSupplier: (supplier: Supplier) => void;
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "Outstanding balance", "Credit limit", "Due date", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("outstandingBalance"), t("creditLimit"), t("dueDate"), t("view")]}>
       {suppliers.map((supplier) => (<tr className="border-b border-border last:border-b-0" key={supplier.id}>
           <td className="px-3 py-3 font-semibold">{supplier.companyName}</td>
           <td className="px-3 py-3 text-right">{formatLak(supplier.outstandingBalanceLak)} LAK</td>
           <td className="px-3 py-3 text-right">{formatLak(supplier.creditLimitLak)} LAK</td>
-          <td className="px-3 py-3">AP placeholder</td>
+          <td className="px-3 py-3">{t("apPlaceholder")}</td>
           <td className="px-3 py-3 text-right"><ViewSupplierButton supplier={supplier} onViewSupplier={onViewSupplier}/></td>
         </tr>))}
     </ModalTable>);
@@ -489,7 +517,7 @@ function CreditExceededTable({ onViewSupplier, suppliers }: {
     onViewSupplier: (supplier: Supplier) => void;
     suppliers: Supplier[];
 }) {
-    return (<ModalTable headers={["Supplier", "Credit limit", "Outstanding balance", "Exceeded amount", "View"]}>
+        return (<ModalTable headers={[t("supplier"), t("creditLimit"), t("outstandingBalance"), t("exceededAmount"), t("view")]}>
       {suppliers.map((supplier) => (<tr className="border-b border-border last:border-b-0" key={supplier.id}>
           <td className="px-3 py-3 font-semibold">{supplier.companyName}</td>
           <td className="px-3 py-3 text-right">{formatLak(supplier.creditLimitLak)} LAK</td>
@@ -504,12 +532,12 @@ function DocumentsTable({ onViewSupplier, suppliers }: {
     suppliers: Supplier[];
 }) {
     const documentTypes = ["Tax certificate", "Business license", "Contract", "Bank account"];
-    return (<ModalTable headers={["Supplier", "Document type", "Status", "Expiry date", "View"]}>
-      {suppliers.flatMap((supplier) => documentTypes.slice(0, 2).map((documentType) => (<tr className="border-b border-border last:border-b-0" key={`${supplier.id}-${documentType}`}>
+        return (<ModalTable headers={[t("supplier"), t("documentType"), t("status"), t("expiryDate"), t("view")]}>
+      {suppliers.flatMap((supplier) => documentTypes.slice(0, 2).map((documentType) => (<tr className="border-b border-border last:border-b-0" key={`${supplier.id}-${documentTypeLabel(documentType, activeLocale)}`}>
           <td className="px-3 py-3 font-semibold">{supplier.companyName}</td>
-          <td className="px-3 py-3">{documentType}</td>
-          <td className="px-3 py-3">UI placeholder</td>
-          <td className="px-3 py-3">Future document expiry</td>
+          <td className="px-3 py-3">{documentTypeLabel(documentType, activeLocale)}</td>
+          <td className="px-3 py-3">{t("uiPlaceholder")}</td>
+          <td className="px-3 py-3">{t("futureDocumentExpiry")}</td>
           <td className="px-3 py-3 text-right"><ViewSupplierButton supplier={supplier} onViewSupplier={onViewSupplier}/></td>
         </tr>)))}
     </ModalTable>);
@@ -531,25 +559,25 @@ function ViewSupplierButton({ onViewSupplier, supplier }: {
     onViewSupplier: (supplier: Supplier) => void;
     supplier: Supplier;
 }) {
-    return <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => onViewSupplier(supplier)}>View</button>;
+    return <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => onViewSupplier(supplier)}>{t("view")}</button>;
 }
 function summaryTitle(kind: SummaryModalKind) {
     const titles: Record<SummaryModalKind, string> = {
-        active: "Active suppliers",
-        average_monthly: "Average monthly purchase",
-        credit_exceeded: "Credit exceeded",
-        credit_limit: "Total credit limit",
-        debt: "Suppliers with debt",
-        documents: "Documents",
-        last_purchase: "Last purchase date",
-        outstanding: "Outstanding balance",
-        paid: "Total paid",
-        purchases: "Total purchases",
+        active: t("activeSuppliers"),
+        average_monthly: t("averageMonthlyPurchase"),
+        credit_exceeded: t("creditExceeded"),
+        credit_limit: t("totalCreditLimit"),
+        debt: t("suppliersWithDebt"),
+        documents: t("documents"),
+        last_purchase: t("lastPurchaseDate"),
+        outstanding: t("outstandingBalance"),
+        paid: t("totalPaid"),
+        purchases: t("totalPurchases"),
     };
     return titles[kind];
 }
 function supplierName(suppliers: Supplier[], supplierId: string) {
-    return suppliers.find((supplier) => supplier.id === supplierId)?.companyName ?? "Unknown supplier";
+    return suppliers.find((supplier) => supplier.id === supplierId)?.companyName ?? tSuppliers("unknownSupplier");
 }
 function Metric({ icon: Icon, label, onClick, value, }: {
     icon: typeof Building2;
@@ -623,7 +651,7 @@ function InvoiceStatus({ status }: {
     status: string;
 }) {
     const tone = status === "Overdue" ? "bg-danger/10 text-danger" : status === "Partial" ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground";
-    return <span className={`rounded-md px-2 py-1 text-xs font-semibold ${tone}`}>{status}</span>;
+    return <span className={`rounded-md px-2 py-1 text-xs font-semibold ${tone}`}>{invoiceStatusLabel(status, activeLocale)}</span>;
 }
 function normalizeTerms(terms: string) {
     const normalized = terms.trim().toLowerCase();
@@ -689,7 +717,7 @@ function getSupplierCurrency(supplier: Supplier) {
     return "LAK";
 }
 function getLastPurchaseDate(orders: SupplierPurchaseOrder[]) {
-    return orders.map((order) => order.purchaseDate).filter(Boolean).sort().at(-1) ?? "No purchases";
+    return orders.map((order) => order.purchaseDate).filter(Boolean).sort().at(-1) ?? "";
 }
 function buildOutstandingInvoices(supplier: Supplier, orders: SupplierPurchaseOrder[]) {
     if (supplier.outstandingBalanceLak <= 0)

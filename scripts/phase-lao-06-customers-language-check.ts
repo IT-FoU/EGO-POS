@@ -106,7 +106,7 @@ check(
     shell.includes('tCustomers("customers", "lo")') &&
     en.customers === "Customers" &&
     lo.customers === laoCustomers &&
-    shell.includes('membership: "Membership"'),
+    (shell.includes('membership: "Membership"') || shell.includes('tMemberships("membership"')),
 );
 
 check(

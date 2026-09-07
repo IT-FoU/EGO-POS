@@ -1,8 +1,15 @@
 "use client";
 
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState, useTransition } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { SupportedLocale } from "@/lib/constants";
+import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import {
+  fillMembershipsCopy,
+  localizeMembershipError,
+  tMemberships,
+  type MembershipsCopyKey,
+} from "@/lib/i18n/memberships-copy";
 import {
   BadgePercent,
   Edit3,
@@ -47,16 +54,53 @@ const emptyForm: FormState = {
   name: "",
 };
 
-function copy(key: string, fallback: string) {
-  const value = t(key);
-  return value === key ? fallback : value;
+const MembershipsLocaleContext = createContext<SupportedLocale>("en");
+
+function useCopy() {
+  const locale = useContext(MembershipsLocaleContext);
+  return (key: MembershipsCopyKey) => tMemberships(key, locale);
+}
+
+function useMembershipsLocale() {
+  return useContext(MembershipsLocaleContext);
 }
 
 function formatLak(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
 
-export function MembershipLevelsClient({ levels }: { levels: MembershipLevelRecord[] }) {
+export function MembershipLevelsClient({
+  levels,
+  locale: localeProp,
+}: {
+  levels: MembershipLevelRecord[];
+  locale?: SupportedLocale;
+}) {
+  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+
+  useEffect(() => {
+    if (localeProp) setLocale(localeProp);
+  }, [localeProp]);
+
+  useEffect(() => {
+    function handleLocaleChange(event: Event) {
+      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
+      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
+    }
+    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
+  }, []);
+
+  return (
+    <MembershipsLocaleContext.Provider value={locale}>
+      <MembershipLevelsView levels={levels} />
+    </MembershipsLocaleContext.Provider>
+  );
+}
+
+function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
+  const copy = useCopy();
+  const locale = useMembershipsLocale();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -104,10 +148,10 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
   }
 
   function validate() {
-    if (!form.name.trim()) return copy("ui.membership.level.name.is.required", "Membership level name is required.");
-    if (form.minSpendLak < 0) return copy("ui.minimum.spend.cannot.be.negative", "Minimum spend cannot be negative.");
+    if (!form.name.trim()) return copy("nameRequired");
+    if (form.minSpendLak < 0) return copy("minSpendNegative");
     if (form.discountPercent < 0 || form.discountPercent > 100) {
-      return copy("ui.discount.percent.must.be.between.0.and.100", "Discount percent must be between 0 and 100.");
+      return copy("discountRange");
     }
     return null;
   }
@@ -130,12 +174,12 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
       };
       const result = form.id ? await updateMembershipLevelAction(form.id, payload) : await createMembershipLevelAction(payload);
       if (!result.ok) {
-        setMessage({ text: result.error ?? copy("ui.membership.level.save.failed", "Membership level save failed."), tone: "error" });
+        setMessage({ text: localizeMembershipError(result.error ?? copy("saveFailed"), locale), tone: "error" });
         return;
       }
 
       setMessage({
-        text: form.id ? copy("ui.membership.level.updated", "Membership level updated.") : copy("ui.membership.level.created", "Membership level created."),
+        text: form.id ? copy("updated") : copy("created"),
         tone: "success",
       });
       setForm(emptyForm);
@@ -145,31 +189,31 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
   }
 
   function archiveLevel(level: MembershipLevelRecord) {
-    if (!window.confirm(copy("ui.deactivate.membership.level.confirmation", "Deactivate this membership level?"))) return;
+    if (!window.confirm(copy("archiveConfirm"))) return;
     setOpenMenuId(null);
     setMessage(null);
     startTransition(async () => {
       const result = await archiveMembershipLevelAction(level.id);
       if (!result.ok) {
-        setMessage({ text: result.error ?? copy("ui.membership.level.archive.failed", "Membership level archive failed."), tone: "error" });
+        setMessage({ text: localizeMembershipError(result.error ?? copy("archiveFailed"), locale), tone: "error" });
         return;
       }
-      setMessage({ text: copy("ui.membership.level.archived", "Membership level archived."), tone: "success" });
+      setMessage({ text: copy("archived"), tone: "success" });
       router.refresh();
     });
   }
 
   function deleteLevel(level: MembershipLevelRecord) {
-    if (!window.confirm(copy("ui.delete.membership.level.confirmation", "Delete this membership level? Referenced levels will be archived instead."))) return;
+    if (!window.confirm(copy("deleteConfirm"))) return;
     setOpenMenuId(null);
     setMessage(null);
     startTransition(async () => {
       const result = await deleteMembershipLevelAction(level.id);
       if (!result.ok) {
-        setMessage({ text: result.error ?? copy("ui.membership.level.delete.failed", "Membership level delete failed."), tone: "error" });
+        setMessage({ text: localizeMembershipError(result.error ?? copy("deleteFailed"), locale), tone: "error" });
         return;
       }
-      setMessage({ text: copy("ui.membership.level.deleted.or.safely.archived.", "Membership level deleted or safely archived."), tone: "success" });
+      setMessage({ text: copy("deletedOrArchived"), tone: "success" });
       router.refresh();
     });
   }
@@ -182,12 +226,9 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
   return (
     <div className="flex min-w-0 flex-col gap-5 overflow-x-hidden">
       <header className="min-w-0">
-        <h1 className="text-2xl font-semibold">{copy("ui.membership", "Membership")}</h1>
+        <h1 className="text-2xl font-semibold">{copy("membership")}</h1>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-          {copy(
-            "ui.membership.mvp.copy",
-            "Manage membership levels using the fields that are saved and used by POS today: level name, spend threshold, percent discount, and active status.",
-          )}
+          {copy("subtitle")}
         </p>
       </header>
 
@@ -204,18 +245,18 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
       ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard icon={BadgePercent} label={copy("ui.active.levels", "Active levels")} value={String(activeLevels.length)} onClick={() => setStatusFilter("active")} />
-        <KpiCard icon={Users} label={copy("ui.customers.in.levels", "Customers in levels")} value={formatLak(customerCount)} />
-        <KpiCard icon={BadgePercent} label={copy("ui.inactive.levels", "Inactive levels")} value={String(inactiveLevels.length)} onClick={() => setStatusFilter("inactive")} />
-        <KpiCard icon={BadgePercent} label={copy("ui.highest.discount", "Highest discount")} value={`${formatLak(highestDiscount)}%`} />
+        <KpiCard icon={BadgePercent} label={copy("activeLevels")} value={String(activeLevels.length)} onClick={() => setStatusFilter("active")} />
+        <KpiCard icon={Users} label={copy("customersInLevels")} value={formatLak(customerCount)} />
+        <KpiCard icon={BadgePercent} label={copy("inactiveLevels")} value={String(inactiveLevels.length)} onClick={() => setStatusFilter("inactive")} />
+        <KpiCard icon={BadgePercent} label={copy("highestDiscount")} value={`${formatLak(highestDiscount)}%`} />
       </section>
 
       <section className="rounded-lg border border-border bg-card">
         <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold">{copy("ui.membership.levels", "Membership levels")}</h2>
+            <h2 className="text-base font-semibold">{copy("membershipLevels")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {copy("ui.loyalty.settings.store.settings.note", "Loyalty point rules are managed in Store Settings. This page edits membership levels only.")}
+              {copy("loyaltyNote")}
             </p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -223,19 +264,19 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 className="field-input pl-9"
-                placeholder={copy("ui.search.levels", "Search levels")}
+                placeholder={copy("searchLevels")}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
             <button className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setDrawer({ type: "filters" })}>
               <Filter aria-hidden="true" className="size-4" />
-              {copy("ui.filters", "Filters")}
+              {copy("filters")}
               {activeFilterCount ? <span className="rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">{activeFilterCount}</span> : null}
             </button>
             <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={openCreateDrawer}>
               <Plus aria-hidden="true" className="size-4" />
-              {copy("ui.create.level", "Create level")}
+              {copy("createLevel")}
             </button>
           </div>
         </div>
@@ -244,12 +285,12 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
           <table className="w-full min-w-[760px] table-fixed text-left text-sm">
             <thead className="border-b border-border text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="w-[30%] px-4 py-3">{copy("ui.level.name", "Level name")}</th>
-                <th className="w-[18%] px-4 py-3 text-right">{copy("ui.minimum.spend", "Minimum spend")}</th>
-                <th className="w-[16%] px-4 py-3 text-right">{copy("ui.discount.percent", "Discount percent")}</th>
-                <th className="w-[14%] px-4 py-3 text-right">{copy("ui.customers", "Customers")}</th>
-                <th className="w-[12%] px-4 py-3">{copy("ui.status", "Status")}</th>
-                <th className="w-[10%] px-4 py-3 text-right">{copy("ui.action", "Action")}</th>
+                <th className="w-[30%] px-4 py-3">{copy("levelName")}</th>
+                <th className="w-[18%] px-4 py-3 text-right">{copy("minimumSpend")}</th>
+                <th className="w-[16%] px-4 py-3 text-right">{copy("discountPercent")}</th>
+                <th className="w-[14%] px-4 py-3 text-right">{copy("customers")}</th>
+                <th className="w-[12%] px-4 py-3">{copy("status")}</th>
+                <th className="w-[10%] px-4 py-3 text-right">{copy("action")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -270,19 +311,19 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
                         className="inline-grid size-9 place-items-center rounded-md border border-border transition hover:border-primary"
                         type="button"
                         onClick={() => setOpenMenuId((current) => (current === level.id ? null : level.id))}
-                        aria-label={`Open actions for ${level.name}`}
+                        aria-label={fillMembershipsCopy(copy("openActions"), { name: level.name })}
                       >
                         <MoreHorizontal aria-hidden="true" className="size-4" />
                       </button>
                       {openMenuId === level.id ? (
                         <div className="absolute right-4 top-12 z-10 w-44 rounded-md border border-border bg-card p-1 text-left shadow-xl">
-                          <MenuButton icon={Eye} label={copy("ui.view", "View")} onClick={() => {
+                          <MenuButton icon={Eye} label={copy("view")} onClick={() => {
                             setOpenMenuId(null);
                             setDrawer({ type: "view", level });
                           }} />
-                          <MenuButton icon={Edit3} label={copy("ui.edit", "Edit")} onClick={() => openEditDrawer(level)} />
-                          {level.isActive ? <MenuButton icon={Trash2} label={copy("ui.archive", "Archive")} onClick={() => archiveLevel(level)} /> : null}
-                          <MenuButton icon={Trash2} label={copy("ui.delete", "Delete")} onClick={() => deleteLevel(level)} tone="danger" />
+                          <MenuButton icon={Edit3} label={copy("edit")} onClick={() => openEditDrawer(level)} />
+                          {level.isActive ? <MenuButton icon={Trash2} label={copy("archive")} onClick={() => archiveLevel(level)} /> : null}
+                          <MenuButton icon={Trash2} label={copy("delete")} onClick={() => deleteLevel(level)} tone="danger" />
                         </div>
                       ) : null}
                     </td>
@@ -291,7 +332,7 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
               ) : (
                 <tr>
                   <td className="px-4 py-8 text-center text-sm text-muted-foreground" colSpan={6}>
-                    {copy("ui.no.membership.levels.found", "No membership levels found.")}
+                    {copy("noLevelsFound")}
                   </td>
                 </tr>
               )}
@@ -301,7 +342,7 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
       </section>
 
       {drawer?.type === "create" || drawer?.type === "edit" ? (
-        <WideDrawer title={drawer.type === "create" ? copy("ui.create.level", "Create level") : copy("ui.edit.level", "Edit level")} onClose={() => setDrawer(null)}>
+        <WideDrawer title={drawer.type === "create" ? copy("createLevel") : copy("editLevel")} onClose={() => setDrawer(null)}>
           <LevelForm form={form} isPending={isPending} onCancel={() => setDrawer(null)} onSave={saveLevel} onUpdate={update} />
         </WideDrawer>
       ) : null}
@@ -313,22 +354,22 @@ export function MembershipLevelsClient({ levels }: { levels: MembershipLevelReco
       ) : null}
 
       {drawer?.type === "filters" ? (
-        <WideDrawer title={copy("ui.filters", "Filters")} onClose={() => setDrawer(null)}>
+        <WideDrawer title={copy("filters")} onClose={() => setDrawer(null)}>
           <div className="mx-auto grid w-full max-w-3xl gap-4">
-            <FormSection title={copy("ui.status", "Status")}>
+            <FormSection title={copy("status")}>
               <SegmentedControl
                 value={statusFilter}
                 onChange={setStatusFilter}
                 options={[
-                  { label: copy("ui.all", "All"), value: "all" },
-                  { label: copy("ui.active", "Active"), value: "active" },
-                  { label: copy("ui.inactive", "Inactive"), value: "inactive" },
+                  { label: copy("all"), value: "all" },
+                  { label: copy("active"), value: "active" },
+                  { label: copy("inactive"), value: "inactive" },
                 ]}
               />
             </FormSection>
             <div className="flex justify-end">
               <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={clearFilters}>
-                {copy("ui.clear.filters", "Clear filters")}
+                {copy("clearFilters")}
               </button>
             </div>
           </div>
@@ -351,45 +392,43 @@ function LevelForm({
   onSave: (event: React.FormEvent<HTMLFormElement>) => void;
   onUpdate: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 }) {
+  const copy = useCopy();
   return (
     <form className="flex min-h-full flex-col" onSubmit={onSave}>
       <div className="mx-auto grid w-full max-w-4xl flex-1 gap-5 pb-28">
-        <FormSection title={copy("ui.level.information", "Level information")}>
-          <Field label={copy("ui.level.name", "Level name")}>
+        <FormSection title={copy("levelInformation")}>
+          <Field label={copy("levelName")}>
             <input className="field-input" required value={form.name} onChange={(event) => onUpdate("name", event.target.value)} />
           </Field>
-          <Field label={copy("ui.status", "Status")}>
+          <Field label={copy("status")}>
             <select className="field-input" value={form.isActive ? "active" : "inactive"} onChange={(event) => onUpdate("isActive", event.target.value === "active")}>
-              <option value="active">{copy("ui.active", "Active")}</option>
-              <option value="inactive">{copy("ui.inactive", "Inactive")}</option>
+              <option value="active">{copy("active")}</option>
+              <option value="inactive">{copy("inactive")}</option>
             </select>
           </Field>
         </FormSection>
 
-        <FormSection title={copy("ui.membership.rules", "Membership rules")} description={copy("ui.membership.rules.mvp.note", "Phase 1 supports percent discount and spend threshold only.")}>
-          <Field label={`${copy("ui.minimum.spend", "Minimum spend")} LAK`}>
+        <FormSection title={copy("membershipRules")} description={copy("membershipRulesNote")}>
+          <Field label={`${copy("minimumSpend")} LAK`}>
             <NumberInput value={form.minSpendLak} onChange={(value) => onUpdate("minSpendLak", value)} />
           </Field>
-          <Field label={copy("ui.discount.percent", "Discount percent")}>
+          <Field label={copy("discountPercent")}>
             <NumberInput max={100} step="0.01" value={form.discountPercent} onChange={(value) => onUpdate("discountPercent", value)} />
           </Field>
         </FormSection>
 
         <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
-          {copy(
-            "ui.membership.future.rules.note",
-            "Fixed discounts, rounding, duration, welcome points, point expiry, exclusions, and inline loyalty settings are future phases and are not saved from this page.",
-          )}
+          {copy("futureRulesNote")}
         </div>
       </div>
 
       <footer className="sticky bottom-0 -mx-5 flex justify-end gap-2 border-t border-border bg-background/95 px-5 py-4 backdrop-blur">
         <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onCancel}>
-          {copy("ui.cancel", "Cancel")}
+          {copy("cancel")}
         </button>
         <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending || !form.name.trim()} type="submit">
           <Save aria-hidden="true" className="size-4" />
-          {isPending ? copy("ui.saving", "Saving") : form.id ? copy("ui.save.level", "Save level") : copy("ui.create.level", "Create level")}
+          {isPending ? copy("saving") : form.id ? copy("saveLevel") : copy("createLevel")}
         </button>
       </footer>
     </form>
@@ -397,25 +436,26 @@ function LevelForm({
 }
 
 function LevelDetails({ level, onEdit }: { level: MembershipLevelRecord; onEdit: () => void }) {
+  const copy = useCopy();
   return (
     <div className="mx-auto grid w-full max-w-4xl gap-5">
       <InfoGrid
         rows={[
-          [copy("ui.level.name", "Level name"), level.name],
-          [copy("ui.minimum.spend", "Minimum spend"), `${formatLak(level.minSpendLak)} LAK`],
-          [copy("ui.discount.percent", "Discount percent"), `${formatLak(level.discountPercent)}%`],
-          [copy("ui.customers", "Customers"), String(level.customerCount)],
-          [copy("ui.promotions", "Promotions"), String(level.promotionCount)],
-          [copy("ui.status", "Status"), level.isActive ? copy("ui.active", "Active") : copy("ui.inactive", "Inactive")],
+          [copy("levelName"), level.name],
+          [copy("minimumSpend"), `${formatLak(level.minSpendLak)} LAK`],
+          [copy("discountPercent"), `${formatLak(level.discountPercent)}%`],
+          [copy("customers"), String(level.customerCount)],
+          [copy("promotions"), String(level.promotionCount)],
+          [copy("status"), level.isActive ? copy("active") : copy("inactive")],
         ]}
       />
       <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
-        {copy("ui.pos.membership.discount.note", "POS currently uses the active customer membership percent discount only. Advanced membership rules are intentionally hidden until backend support exists.")}
+        {copy("posDiscountNote")}
       </div>
       <div className="flex justify-end">
         <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onEdit}>
           <Edit3 aria-hidden="true" className="size-4" />
-          {copy("ui.edit.level", "Edit level")}
+          {copy("editLevel")}
         </button>
       </div>
     </div>
@@ -440,6 +480,7 @@ function KpiCard({ icon: Icon, label, onClick, value }: { icon: typeof BadgePerc
 }
 
 function StatusBadge({ active }: { active: boolean }) {
+  const copy = useCopy();
   return (
     <span
       className={cn(
@@ -447,7 +488,7 @@ function StatusBadge({ active }: { active: boolean }) {
         active ? "border-success/30 bg-success/10 text-success" : "border-muted-foreground/30 bg-muted text-muted-foreground",
       )}
     >
-      {active ? copy("ui.active", "Active") : copy("ui.inactive", "Inactive")}
+      {active ? copy("active") : copy("inactive")}
     </span>
   );
 }
@@ -479,13 +520,14 @@ function MenuButton({
 }
 
 function WideDrawer({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+  const copy = useCopy();
   return (
     <div className="fixed bottom-0 right-0 top-0 z-50 flex w-full justify-end bg-black/45">
       <section className="flex h-full w-full max-w-5xl flex-col border-l border-border bg-background shadow-2xl">
         <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <button className="mb-1 text-xs font-semibold text-muted-foreground transition hover:text-primary" type="button" onClick={onClose}>
-              {copy("ui.back.to.membership", "Back to Membership")}
+              {copy("backToMembership")}
             </button>
             <h2 className="truncate text-lg font-semibold">{title}</h2>
           </div>

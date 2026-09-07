@@ -36,6 +36,8 @@ import { tInventory } from "@/lib/i18n/inventory-copy";
 import { tProducts } from "@/lib/i18n/products-copy";
 import { tPurchasing } from "@/lib/i18n/purchasing-copy";
 import { tCustomers } from "@/lib/i18n/customers-copy";
+import { tMemberships } from "@/lib/i18n/memberships-copy";
+import { tSuppliers } from "@/lib/i18n/suppliers-copy";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -67,14 +69,14 @@ const shellCopy: Record<SupportedLocale, {
       customers: tCustomers("customers", "en"),
       dashboard: "Dashboard",
       inventory: tInventory("inventory", "en"),
-      membership: "Membership",
+      membership: tMemberships("membership", "en"),
       pos: "POS",
       products: tProducts("products", "en"),
       promotions: "Promotions",
       purchasing: tPurchasing("purchasing", "en"),
       reports: "Reports",
       settings: "Settings",
-      suppliers: "Suppliers",
+      suppliers: tSuppliers("suppliers", "en"),
     },
   },
   lo: {
@@ -85,14 +87,14 @@ const shellCopy: Record<SupportedLocale, {
       customers: tCustomers("customers", "lo"),
       dashboard: "ໜ້າຫຼັກ",
       inventory: tInventory("inventory", "lo"),
-      membership: "Membership",
+      membership: tMemberships("membership", "lo"),
       pos: "POS",
       products: tProducts("products", "lo"),
       promotions: "Promotions",
       purchasing: tPurchasing("purchasing", "lo"),
       reports: "Reports",
       settings: "Settings",
-      suppliers: "Suppliers",
+      suppliers: tSuppliers("suppliers", "lo"),
     },
   },
 };

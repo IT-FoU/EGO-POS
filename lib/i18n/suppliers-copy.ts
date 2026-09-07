@@ -1,0 +1,735 @@
+import { normalizeLocale } from "@/lib/i18n/locale";
+
+const en = {
+  action: "Action",
+  actions: "Actions",
+  activate: "Activate",
+  activateSupplier: "Activate Supplier",
+  activeSuppliers: "Active suppliers",
+  address: "Address",
+  addressPlaceholder: "Street, building, delivery instructions",
+  allPaymentTerms: "All payment terms",
+  allStatuses: "All statuses",
+  amount: "Amount",
+  apPlaceholder: "AP placeholder",
+  approvalRequired: "Approval required.",
+  autoCodeHint: "Auto-generated suggestion. Manual override is allowed.",
+  autoRating: "Auto rating",
+  availableCredit: "Available credit",
+  averageDeliveryTime: "Average delivery time",
+  averageMonthlyPurchase: "Average monthly purchase",
+  backToSuppliers: "Back to suppliers",
+  backupSupplier: "Backup Supplier",
+  balance: "Balance",
+  bankAccount: "Bank Account",
+  branchWarehouse: "Branch Warehouse",
+  businessLicense: "Business License",
+  call: "Call",
+  chart: "Chart",
+  chartPlaceholder: "Simple chart placeholder. Monthly purchase bars will connect later.",
+  close: "Close",
+  coldStorage: "Cold Storage",
+  companyName: "Company name",
+  companyNamePlaceholder: "Supplier company name",
+  consignmentSupplier: "Consignment Supplier",
+  contact: "Contact",
+  contactName: "Contact Name",
+  contactPerson: "Contact person",
+  contactPersonPlaceholder: "Contact person",
+  contract: "Contract",
+  copyEmail: "Copy Email",
+  copyPhone: "Copy Phone",
+  country: "Country",
+  createFailed: "Supplier create failed.",
+  createPurchaseOrder: "Create Purchase Order",
+  createSupplier: "Create supplier",
+  createSupplierSubtitle: "Create a supplier profile with contact, tax number, payment terms, credit, and notes.",
+  createdBy: "Created by",
+  credit: "Credit",
+  creditExceeded: "Credit exceeded",
+  creditLimit: "Credit limit",
+  creditLimitExceeded: "Credit limit exceeded",
+  creditTerms: "Credit terms",
+  currency: "Currency",
+  currentPurchasingUser: "Current purchasing user placeholder",
+  currentReceivingUser: "Current receiving user placeholder",
+  currentUserPlaceholder: "Current user placeholder",
+  damagedItems: "Damaged items",
+  databaseStatus: "Database status",
+  date: "Date",
+  deactivate: "Deactivate",
+  deactivateSupplier: "Deactivate Supplier",
+  debit: "Debit",
+  defaultCurrency: "Default currency",
+  deleteFailed: "Supplier archive failed.",
+  discount: "Discount",
+  district: "District",
+  districtPlaceholder: "Chanthabouly",
+  documentType: "Document type",
+  documents: "Documents",
+  documentsFormHint: "Upload backend is not connected yet.",
+  documentsHint: "Business license, tax certificate, bank account, and contract.",
+  documentsPlaceholder: "Document upload and storage will be connected later.",
+  dueDate: "Due date",
+  edit: "Edit",
+  editSupplier: "Edit Supplier",
+  editSupplierSubtitle: "Update core supplier contact and status details.",
+  email: "Email",
+  emailPlaceholder: "supplier@example.com",
+  exceededAmount: "Exceeded amount",
+  exchangeRate: "Exchange rate if applicable",
+  expiryCheckStatus: "Expiry check status",
+  expiryDate: "Expiry date",
+  failedToLoad: "Failed to load suppliers.",
+  filterByPaymentTerms: "Filter by payment terms",
+  filterByStatus: "Filter by supplier status",
+  finalRating: "Final rating",
+  fullAddress: "Full Address",
+  futureAp: "Future AP",
+  futureDocumentExpiry: "Future document expiry",
+  futureIntegration: "Future integration",
+  futureItemDetail: "Future item detail",
+  futureLotExpiry: "Future lot/expiry review",
+  futurePaymentReference: "Future payment reference",
+  futurePerProduct: "Future per-product setting",
+  futureReceivingField: "Future receiving field",
+  futureSupplierProduct: "Future SupplierProduct relationship",
+  goodsReceived: "Goods received",
+  hasOutstanding: "Has outstanding balance",
+  importer: "Importer",
+  integration: "Integration",
+  invalidCreditLimit: "Invalid credit limit.",
+  invalidEmail: "Invalid email.",
+  invalidPhone: "Invalid phone.",
+  invoiceNumber: "Invoice number",
+  invoicePlaceholderNote: " Mock demo placeholder until AP invoices are connected.",
+  invoicePo: "Invoice/PO",
+  itemsCount: "Items count",
+  itemsReceived: "Items received",
+  itemsReceivedNote: "{count} items received",
+  lastCost: "Last cost",
+  lastPurchaseDate: "Last purchase date",
+  lastRatingUpdate: "Last rating update",
+  leadTime: "Lead time",
+  ledgerCombineHint: "UI placeholder. Final ledger must combine PO, receiving, and payment.",
+  ledgerHint: "UI placeholder until AP / PO / payment ledger is connected.",
+  linkedProducts: "Linked products",
+  linkedProductsFormHint: "Future supplier-product relationship will reference productId.",
+  linkedProductsHint: "One supplier can supply many products.",
+  linkedProductsPlaceholder: "Linked products placeholder",
+  loadingSuppliers: "Loading suppliers...",
+  localPreview: "Local preview",
+  localSupplier: "Local Supplier",
+  mainSupplier: "Main Supplier",
+  mainWarehouse: "Main Warehouse",
+  manualOverride: "Manual override",
+  method: "Method",
+  month: "Month",
+  moq: "MOQ",
+  nameRequired: "Supplier name is required.",
+  no: "No",
+  noOutstandingInvoices: "No outstanding invoices.",
+  noPayments: "No payments for this supplier.",
+  noPurchaseOrders: "No purchase orders for this supplier.",
+  noPurchases: "No purchases",
+  noReceiving: "No receiving records for this supplier.",
+  noSupplierNotes: "No supplier notes",
+  noSuppliersMatch: "No suppliers match the current search and filters.",
+  noTaxNumber: "No tax number",
+  none: "None",
+  notSet: "Not set",
+  note: "Note",
+  notes: "Notes",
+  notesPlaceholder: "Supplier notes",
+  openLedger: "Open ledger",
+  openingBalance: "Opening balance",
+  originalAmount: "Original amount",
+  outstanding: "Outstanding",
+  outstandingBalance: "Outstanding balance",
+  outstandingInvoices: "Outstanding invoices",
+  overdueStatus: "Overdue status",
+  paidAmount: "Paid amount",
+  paidBy: "Paid by",
+  pay: "Pay",
+  paySupplierLater: "Record payment will be connected through Purchasing.",
+  paymentDetail: "Payment Detail",
+  paymentHistory: "Payment History",
+  paymentHistoryPlaceholder: "Payment history placeholder",
+  paymentModalPlaceholder: "Payment modal is a placeholder. Final implementation is in Purchasing.",
+  paymentNo: "Payment No",
+  paymentTerms: "Payment terms",
+  paymentTermsSaved: "Saved to supplier credit terms",
+  permissionDenied: "Permission denied.",
+  phone: "Phone",
+  po: "PO",
+  poNo: "PO No",
+  preferred: "Preferred",
+  preferredSupplier: "Preferred Supplier",
+  preferredSupplierStatus: "Preferred supplier status",
+  productCodeBarcode: "Product code / barcode",
+  productName: "Product name",
+  productsSupplied: "Products supplied",
+  productsSuppliedHint: "UI placeholder only. This section must reference linked products later.",
+  productsSuppliedValue: "UI placeholder: linked productId relationships not connected yet",
+  province: "Province",
+  provincePlaceholder: "Vientiane Capital",
+  purchaseDate: "Purchase date",
+  purchaseHistoryPlaceholder: "Purchase history placeholder",
+  purchaseOrderDetail: "Purchase Order Detail",
+  purchaseOrderPlaceholder: "Purchase order placeholder",
+  purchaseOrdersHistory: "Purchase Orders History",
+  purchasingNotesLater: "Purchasing notes will be connected later.",
+  rating: "Rating",
+  ratingExplanation: "Future calculation: delivery reliability, product quality, credit behavior.",
+  ratingNotes: "Rating notes",
+  ratingNotesHint: "Delivery reliability, product quality, and credit behavior placeholders.",
+  ratingOption: "Rating {letter}",
+  ratingStored: "Rating {letter} (stored in notes for now)",
+  realDatabase: "Real database",
+  receiveGoods: "Receive Goods",
+  receiveNo: "Receive No",
+  receivedBy: "Received by",
+  receivingDetail: "Receiving Detail",
+  receivingHistory: "Receiving History",
+  receivingNotesLater: "Receiving notes will be connected later.",
+  recordPayment: "Record Payment",
+  reference: "Reference",
+  referenceNumber: "Reference number",
+  remaining: "Remaining",
+  remainingAmount: "Remaining amount",
+  remainingCredit: "Remaining credit",
+  save: "Save",
+  saveFailed: "Supplier save failed.",
+  saveSupplier: "Save supplier",
+  savedSuccessfully: "Supplier saved successfully.",
+  saving: "Saving",
+  score: "Score",
+  searchSuppliers: "Search code, company, contact, phone, email, tax",
+  servicedWarehouses: "Serviced Warehouses",
+  skuCount: "SKU count",
+  status: "Status",
+  statusActive: "Active",
+  statusCancelled: "Cancelled",
+  statusDraft: "Draft",
+  statusInactive: "Inactive",
+  statusLater: "{action} supplier action will use the existing status update flow in a later wiring pass.",
+  statusOrdered: "Ordered",
+  statusOverdue: "Overdue",
+  statusPartial: "Partial",
+  statusPartialReceived: "Partial Received",
+  statusReceived: "Received",
+  statusUnpaid: "Unpaid",
+  subtotal: "Subtotal",
+  suggestedCode: "Suggested code",
+  summaryModalNote: "Summary modal. Some values are demo placeholders.",
+  supplier: "Supplier",
+  supplierCode: "Supplier code",
+  supplierCount: "Supplier count",
+  supplierCredit: "Supplier credit",
+  supplierDetailSummary: "Supplier detail summary and future integration placeholders",
+  supplierDocumentsPlaceholder: "Supplier documents placeholder",
+  supplierInformation: "Supplier information",
+  supplierLedger: "Supplier Ledger",
+  supplierManagement: "Supplier Management",
+  supplierNotFound: "Supplier not found.",
+  supplierPaymentNote: "Supplier payment",
+  supplierProfile: "Supplier profile",
+  supplierRating: "Supplier Rating",
+  supplierSku: "Supplier SKU",
+  supplierTags: "Supplier tags",
+  suppliers: "Suppliers",
+  suppliersSubtitle: "Supplier profiles with credit, outstanding balance, purchases, and contact details.",
+  suppliersWithDebt: "Suppliers with debt",
+  taxCertificate: "Tax Certificate",
+  taxIfUsed: "Tax if used",
+  taxNumber: "Tax number",
+  taxPlaceholder: "LAO TAX",
+  term15: "15 days",
+  term30: "30 days",
+  term60: "60 days",
+  term7: "7 days",
+  term90: "90 days",
+  termCash: "Cash",
+  termCustom: "Custom",
+  total: "Total",
+  totalCreditLimit: "Total credit limit",
+  totalOrders: "Total orders",
+  totalPaid: "Total paid",
+  totalPurchase: "Total purchase",
+  totalPurchaseValue: "Total purchase value",
+  totalPurchases: "Total purchases",
+  type: "Type",
+  uiPlaceholder: "UI placeholder",
+  unknownSupplier: "Unknown supplier",
+  updateFailed: "Supplier update failed.",
+  updatedSuccessfully: "Supplier updated successfully.",
+  usedCredit: "Used credit",
+  view: "View",
+  viewDetail: "View Detail",
+  viewInPurchasing: "View in Purchasing",
+  viewPaymentRecord: "View payment record",
+  viewProduct: "View product",
+  viewPurchase: "View purchase",
+  viewReceivingDocument: "View receiving document",
+  village: "Village",
+  villagePlaceholder: "Village",
+  warehouse: "Warehouse",
+  warehouseHint: "References warehouseId only. Warehouse data remains in Inventory / Purchasing.",
+  yes: "Yes",
+};
+
+const lo = {
+  action: "ຄຳສັ່ງ",
+  actions: "ຈັດການ",
+  activate: "ໃຊ້ງານ",
+  activateSupplier: "ໃຊ້ງານ ຜູ້ສະໜອງ",
+  activeSuppliers: "ຜູ້ສະໜອງ ໃຊ້ງານ",
+  address: "ທີ່ຢູ່",
+  addressPlaceholder: "ທີ່ຢູ່",
+  allPaymentTerms: "ທັງໝົດ ການຈ່າຍ",
+  allStatuses: "ທຸກສະຖານະ",
+  amount: "ຈຳນວນ",
+  apPlaceholder: "AP",
+  approvalRequired: "ຕ້ອງອະນຸມັດກ່ອນ.",
+  autoCodeHint: "ລະຫັດຜູ້ສະໜອງ SUP-001.",
+  autoRating: "ສະຖານະ",
+  availableCredit: "ເຄຣດິດຄົງເຫຼືອ",
+  averageDeliveryTime: "ພາຍຫຼັງ",
+  averageMonthlyPurchase: "ຊື້ລວມ",
+  backToSuppliers: "ກັບໄປຜູ້ສະໜອງ",
+  backupSupplier: "ຜູ້ສະໜອງ",
+  balance: "ຍອດຄົງ",
+  bankAccount: "Bank",
+  branchWarehouse: "ສາງ",
+  businessLicense: "ໄວໆນີ້",
+  call: "ໂທ",
+  chart: "Chart",
+  chartPlaceholder: "ຊື້ລວມ. ພາຍຫຼັງ.",
+  close: "ປິດ",
+  coldStorage: "ສາງ",
+  companyName: "ຊື່ ຜູ້ສະໜອງ",
+  companyNamePlaceholder: "ຊື່ ຜູ້ສະໜອງ",
+  consignmentSupplier: "ຜູ້ສະໜອງ",
+  contact: "ຕິດຕໍ່",
+  contactName: "ຕິດຕໍ່",
+  contactPerson: "ຕິດຕໍ່",
+  contactPersonPlaceholder: "ຕິດຕໍ່",
+  contract: "ໄວໆນີ້",
+  copyEmail: "ອີເມວ",
+  copyPhone: "ໂທ",
+  country: "ທີ່ຢູ່",
+  createFailed: "ສ້າງ ຜູ້ສະໜອງ ບໍ່ສຳເລັດ.",
+  createPurchaseOrder: "ສ້າງ PO ໃໝ່",
+  createSupplier: "ສ້າງຜູ້ສະໜອງ",
+  createSupplierSubtitle: "ຕິດຕໍ່, ການຈ່າຍ, ວົງເງິນສິນເຊື່ອ, ໝາຍເຫດ.",
+  createdBy: "ຕິດຕໍ່",
+  credit: "ວົງເງິນສິນເຊື່ອ",
+  creditExceeded: "ວົງເງິນສິນເຊື່ອ",
+  creditLimit: "ວົງເງິນສິນເຊື່ອ",
+  creditLimitExceeded: "ວົງເງິນສິນເຊື່ອ",
+  creditTerms: "ວົງເງິນສິນເຊື່ອ",
+  currency: "ສະກຸນ",
+  currentPurchasingUser: "Purchasing",
+  currentReceivingUser: "ຮັບສິນຄ້າ",
+  currentUserPlaceholder: "ພາຍຫຼັງ",
+  damagedItems: "ໄວໆນີ້",
+  databaseStatus: "ສະຖານະຖານຂໍ້ມູນ",
+  date: "ວັນທີ",
+  deactivate: "ຢຸດໃຊ້",
+  deactivateSupplier: "ຢຸດໃຊ້ ຜູ້ສະໜອງ",
+  debit: "ຈຳນວນ",
+  defaultCurrency: "ສະກຸນ",
+  deleteFailed: "ໂຫຼດເກັບຖາວອນ ຜູ້ສະໜອງບໍ່ສຳເລັດ.",
+  discount: "% ສ່ວນຫຼຸດ",
+  district: "ທີ່ຢູ່",
+  districtPlaceholder: "Chanthabouly",
+  documentType: "ໄວໆນີ້",
+  documents: "ໄວໆນີ້",
+  documentsFormHint: "ພາຍຫຼັງ",
+  documentsHint: "ພາຍຫຼັງ",
+  documentsPlaceholder: "ພາຍຫຼັງ",
+  dueDate: "ວັນຄົບກຳນົດ",
+  edit: "ແກ້ໄຂ",
+  editSupplier: "ແກ້ໄຂ ຜູ້ສະໜອງ",
+  editSupplierSubtitle: "ແກ້ໄຂ ຕິດຕໍ່ / ສະຖານະ.",
+  email: "ອີເມວ",
+  emailPlaceholder: "supplier@example.com",
+  exceededAmount: "ວົງເງິນສິນເຊື່ອ",
+  exchangeRate: "1.00",
+  expiryCheckStatus: "ວັນໝົດອາຍຸ",
+  expiryDate: "ວັນໝົດອາຍຸ",
+  failedToLoad: "ໂຫຼດຜູ້ສະໜອງບໍ່ສຳເລັດ.",
+  filterByPaymentTerms: "ກັ່ນຕອງຕາມສະຖານະ ການຈ່າຍ",
+  filterByStatus: "ກັ່ນຕອງຕາມສະຖານະ ຜູ້ສະໜອງ",
+  finalRating: "ສະຖານະ",
+  fullAddress: "ທີ່ຢູ່",
+  futureAp: "AP",
+  futureDocumentExpiry: "ພາຍຫຼັງ",
+  futureIntegration: "ພາຍຫຼັງ",
+  futureItemDetail: "ພາຍຫຼັງ",
+  futureLotExpiry: "ພາຍຫຼັງ",
+  futurePaymentReference: "ພາຍຫຼັງ",
+  futurePerProduct: "ພາຍຫຼັງ",
+  futureReceivingField: "ພາຍຫຼັງ",
+  futureSupplierProduct: "ພາຍຫຼັງ",
+  goodsReceived: "ຮັບສິນຄ້າ",
+  hasOutstanding: "ຍອດຄ້າງ",
+  importer: "ຜູ້ສະໜອງ",
+  integration: "ພາຍຫຼັງ",
+  invalidCreditLimit: "ວົງເງິນສິນເຊື່ອ",
+  invalidEmail: "ອີເມວ",
+  invalidPhone: "ໂທ",
+  invoiceNumber: "INV",
+  invoicePlaceholderNote: " AP. ພາຍຫຼັງ.",
+  invoicePo: "INV / PO",
+  itemsCount: "ສິນຄ້າ",
+  itemsReceived: "ຮັບສິນຄ້າ",
+  itemsReceivedNote: "{count} ຮັບສິນຄ້າ",
+  lastCost: "ຈຳນວນ",
+  lastPurchaseDate: "PO ຫຼ້າສຸດ",
+  lastRatingUpdate: "ພາຍຫຼັງ",
+  leadTime: "ພາຍຫຼັງ",
+  ledgerCombineHint: "PO / ຮັບສິນຄ້າ / ການຈ່າຍ. ພາຍຫຼັງ.",
+  ledgerHint: "AP / PO / ການຈ່າຍ. ພາຍຫຼັງ.",
+  linkedProducts: "ສິນຄ້າ",
+  linkedProductsFormHint: "ສິນຄ້າ ID. ພາຍຫຼັງ.",
+  linkedProductsHint: "ຜູ້ສະໜອງ / ສິນຄ້າ.",
+  linkedProductsPlaceholder: "ສິນຄ້າ",
+  loadingSuppliers: "ກຳລັງໂຫຼດຜູ້ສະໜອງ...",
+  localPreview: "ຕົວຢ່າງທ້ອງຖິ່ນ",
+  localSupplier: "ຜູ້ສະໜອງ",
+  mainSupplier: "ຜູ້ສະໜອງ",
+  mainWarehouse: "ສາງ",
+  manualOverride: "ແກ້ໄຂ",
+  method: "ວິທີ",
+  month: "ວັນທີ",
+  moq: "MOQ",
+  nameRequired: "ຊື່ ຜູ້ສະໜອງ.",
+  no: "ຢຸດໃຊ້",
+  noOutstandingInvoices: "ບໍ່ມີລາຍຈ່າຍ",
+  noPayments: "ບໍ່ມີລາຍຈ່າຍ ຜູ້ສະໜອງ.",
+  noPurchaseOrders: "ບໍ່ມີໃບສັ່ງຊື້",
+  noPurchases: "ບໍ່ມີໃບສັ່ງຊື້",
+  noReceiving: "ບໍ່ພົບຜົນ ຮັບສິນຄ້າ.",
+  noSupplierNotes: "ໝາຍເຫດ -",
+  noSuppliersMatch: "ບໍ່ພົບຜູ້ສະໜອງ.",
+  noTaxNumber: "-",
+  none: "-",
+  notSet: "-",
+  note: "ໝາຍເຫດ",
+  notes: "ໝາຍເຫດ",
+  notesPlaceholder: "ໝາຍເຫດ",
+  openLedger: "ເບິ່ງ",
+  openingBalance: "ຍອດເປີດ",
+  originalAmount: "ຈຳນວນ",
+  outstanding: "ຍອດຄ້າງ",
+  outstandingBalance: "ຍອດຄ້າງ",
+  outstandingInvoices: "ຍອດຄ້າງ",
+  overdueStatus: "ເກີນກຳນົດ",
+  paidAmount: "ຈ່າຍແລ້ວ",
+  paidBy: "ຈ່າຍແລ້ວ",
+  pay: "ຈ່າຍຜູ້ສະໜອງ",
+  paySupplierLater: "ຈ່າຍຜູ້ສະໜອງ. Purchasing.",
+  paymentDetail: "ການຈ່າຍ",
+  paymentHistory: "ປະຫວັດເຄຣດິດ",
+  paymentHistoryPlaceholder: "ປະຫວັດເຄຣດິດ",
+  paymentModalPlaceholder: "ການຈ່າຍ. Purchasing.",
+  paymentNo: "ການຈ່າຍ",
+  paymentTerms: "ການຈ່າຍ",
+  paymentTermsSaved: "ການຈ່າຍ",
+  permissionDenied: "ບໍ່ມີສິດ.",
+  phone: "ໂທ",
+  po: "PO",
+  poNo: "PO",
+  preferred: "ໃຊ້ງານ",
+  preferredSupplier: "ຜູ້ສະໜອງ",
+  preferredSupplierStatus: "ຜູ້ສະໜອງ",
+  productCodeBarcode: "ສິນຄ້າ / Barcode",
+  productName: "ສິນຄ້າ",
+  productsSupplied: "ສິນຄ້າ",
+  productsSuppliedHint: "ສິນຄ້າ. ພາຍຫຼັງ.",
+  productsSuppliedValue: "ສິນຄ້າ. ພາຍຫຼັງ.",
+  province: "ທີ່ຢູ່",
+  provincePlaceholder: "Vientiane Capital",
+  purchaseDate: "ວັນທີ",
+  purchaseHistoryPlaceholder: "ປະຫວັດຊື້",
+  purchaseOrderDetail: "ໃບສັ່ງຊື້",
+  purchaseOrderPlaceholder: "ໃບສັ່ງຊື້",
+  purchaseOrdersHistory: "ໃບສັ່ງຊື້",
+  purchasingNotesLater: "ພາຍຫຼັງ",
+  rating: "ສະຖານະ",
+  ratingExplanation: "ພາຍຫຼັງ",
+  ratingNotes: "ໝາຍເຫດ",
+  ratingNotesHint: "ພາຍຫຼັງ",
+  ratingOption: "Rating {letter}",
+  ratingStored: "Rating {letter}",
+  realDatabase: "ຖານຂໍ້ມູນຈິງ",
+  receiveGoods: "ຮັບສິນຄ້າ",
+  receiveNo: "ຮັບສິນຄ້າ",
+  receivedBy: "ຮັບສິນຄ້າ",
+  receivingDetail: "ຮັບສິນຄ້າ",
+  receivingHistory: "ຮັບສິນຄ້າ",
+  receivingNotesLater: "ພາຍຫຼັງ",
+  recordPayment: "ບັນທຶກການຈ່າຍ",
+  reference: "ອ້າງອີງ",
+  referenceNumber: "ອ້າງອີງ",
+  remaining: "ຍອດຄ້າງ",
+  remainingAmount: "ຍອດຄ້າງ",
+  remainingCredit: "ເຄຣດິດຄົງເຫຼືອ",
+  save: "ບັນທຶກ",
+  saveFailed: "ໂຫຼດບັນທຶກ ຜູ້ສະໜອງບໍ່ສຳເລັດ.",
+  saveSupplier: "ບັນທຶກ ຜູ້ສະໜອງ",
+  savedSuccessfully: "ບັນທຶກ ຜູ້ສະໜອງ.",
+  saving: "ກຳລັງບັນທຶກ",
+  score: "ສະຖານະ",
+  searchSuppliers: "ຄົ້ນຜູ້ສະໜອງ",
+  servicedWarehouses: "ສາງ",
+  skuCount: "SKU",
+  status: "ສະຖານະ",
+  statusActive: "ໃຊ້ງານ",
+  statusCancelled: "ຍົກເລີກ",
+  statusDraft: "ຮ່າງ",
+  statusInactive: "ຢຸດໃຊ້",
+  statusLater: "{action} ຜູ້ສະໜອງ. ພາຍຫຼັງ.",
+  statusOrdered: "ສັ່ງແລ້ວ",
+  statusOverdue: "ເກີນກຳນົດ",
+  statusPartial: "ບາງສ່ວນ",
+  statusPartialReceived: "ຮັບບາງສ່ວນ",
+  statusReceived: "ຮັບແລ້ວ",
+  statusUnpaid: "ຍັງບໍ່ຈ່າຍ",
+  subtotal: "ຍອດລວມ",
+  suggestedCode: "ລະຫັດຜູ້ສະໜອງ",
+  summaryModalNote: "ຕົວຢ່າງທ້ອງຖິ່ນ",
+  supplier: "ຜູ້ສະໜອງ",
+  supplierCode: "ລະຫັດຜູ້ສະໜອງ",
+  supplierCount: "ຜູ້ສະໜອງ",
+  supplierCredit: "ສິນເຊື່ອຜູ້ສະໜອງ",
+  supplierDetailSummary: "ຜູ້ສະໜອງ / ພາຍຫຼັງ.",
+  supplierDocumentsPlaceholder: "ພາຍຫຼັງ",
+  supplierInformation: "ຂໍ້ມູນຜູ້ສະໜອງ",
+  supplierLedger: "ຜູ້ສະໜອງ",
+  supplierManagement: "ຈັດການຜູ້ສະໜອງ",
+  supplierNotFound: "ບໍ່ພົບຜົນ",
+  supplierPaymentNote: "ການຈ່າຍ",
+  supplierProfile: "ຜູ້ສະໜອງ",
+  supplierRating: "ສະຖານະ",
+  supplierSku: "SKU",
+  supplierTags: "ຜູ້ສະໜອງ",
+  suppliers: "ຜູ້ສະໜອງ",
+  suppliersSubtitle: "ລາຍຜູ້ສະໜອງ ແລະ ສະຫຼຸບການຊື້, ຈ່າຍຄ້າງ, ຕິດຕໍ່, ສິນເຊື່ອ, ແລະ ສະຖານະ.",
+  suppliersWithDebt: "ຍອດຄ້າງ",
+  taxCertificate: "ໄວໆນີ້",
+  taxIfUsed: "ຈຳນວນ",
+  taxNumber: "ລະຫັດຜູ້ສະໜອງ",
+  taxPlaceholder: "LAO TAX",
+  term15: "15 days",
+  term30: "30 days",
+  term60: "60 days",
+  term7: "7 days",
+  term90: "90 days",
+  termCash: "ເງິນສົດ",
+  termCustom: "ທັງໝົດ",
+  total: "ລວມ",
+  totalCreditLimit: "ວົງເງິນສິນເຊື່ອ",
+  totalOrders: "ໃບສັ່ງຊື້",
+  totalPaid: "ຈ່າຍແລ້ວ",
+  totalPurchase: "ຊື້ລວມ",
+  totalPurchaseValue: "ຊື້ລວມ",
+  totalPurchases: "ຊື້ລວມ",
+  type: "ສະຖານະ",
+  uiPlaceholder: "ພາຍຫຼັງ",
+  unknownSupplier: "ຜູ້ສະໜອງ",
+  updateFailed: "ແກ້ ຜູ້ສະໜອງ ບໍ່ສຳເລັດ.",
+  updatedSuccessfully: "ແກ້ໄຂ ຜູ້ສະໜອງ.",
+  usedCredit: "ຍອດຄ້າງ",
+  view: "ເບິ່ງ",
+  viewDetail: "ເບິ່ງ",
+  viewInPurchasing: "ຈັດຊື້",
+  viewPaymentRecord: "ການຈ່າຍ",
+  viewProduct: "ເບິ່ງ ສິນຄ້າ",
+  viewPurchase: "ເບິ່ງ PO",
+  viewReceivingDocument: "ຮັບສິນຄ້າ",
+  village: "ທີ່ຢູ່",
+  villagePlaceholder: "ທີ່ຢູ່",
+  warehouse: "ສາງ",
+  warehouseHint: "ສາງ ID. Inventory / Purchasing.",
+  yes: "ໃຊ້ງານ",
+};
+
+export type SuppliersCopyKey = keyof typeof en;
+export type SuppliersCopy = Record<SuppliersCopyKey, string>;
+
+const dictionaries: Record<"en" | "lo", SuppliersCopy> = { en, lo: lo as SuppliersCopy };
+export const SUPPLIERS_COPY = dictionaries;
+
+function resolveSuppliersLocale(locale?: string | null): "en" | "lo" {
+  if (locale) {
+    return normalizeLocale(locale);
+  }
+  if (typeof document !== "undefined") {
+    return normalizeLocale(document.documentElement.dataset.locale);
+  }
+  return "en";
+}
+
+export function getSuppliersCopy(locale?: string | null): SuppliersCopy {
+  return dictionaries[resolveSuppliersLocale(locale)];
+}
+
+export function tSuppliers(key: string, locale?: string | null) {
+  const copy = getSuppliersCopy(locale);
+  if (key in copy) {
+    return copy[key as SuppliersCopyKey];
+  }
+  return en[key as SuppliersCopyKey] ?? key;
+}
+
+export function fillSuppliersCopy(template: string, vars: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`));
+}
+
+export function suppliersCopyKeyParity() {
+  const enKeys = Object.keys(en).sort();
+  const loKeys = Object.keys(lo).sort();
+  return enKeys.length === loKeys.length && enKeys.every((key, index) => key === loKeys[index]);
+}
+
+export function suppliersCopyHasNoReplacementChars() {
+  return !Object.values(lo).some((value) => value.includes("\uFFFD"));
+}
+
+export function supplierStatusLabel(status: string, locale?: string | null) {
+  if (status === "active") return tSuppliers("statusActive", locale);
+  if (status === "inactive") return tSuppliers("statusInactive", locale);
+  return status;
+}
+
+export function paymentTermLabel(term: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    Cash: "termCash",
+    "7 days": "term7",
+    "15 days": "term15",
+    "30 days": "term30",
+    "60 days": "term60",
+    "90 days": "term90",
+    Custom: "termCustom",
+  };
+  const key = map[term];
+  return key ? tSuppliers(key, locale) : term;
+}
+
+export function invoiceStatusLabel(status: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    Overdue: "statusOverdue",
+    Partial: "statusPartial",
+    Unpaid: "statusUnpaid",
+  };
+  const key = map[status];
+  return key ? tSuppliers(key, locale) : status;
+}
+
+export function purchaseOrderStatusLabel(status: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    cancelled: "statusCancelled",
+    draft: "statusDraft",
+    ordered: "statusOrdered",
+    partial: "statusPartialReceived",
+    received: "statusReceived",
+  };
+  const key = map[status];
+  return key ? tSuppliers(key, locale) : status;
+}
+
+export function supplierTagLabel(tag: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    "Preferred Supplier": "preferredSupplier",
+    "Local Supplier": "localSupplier",
+    "Main Supplier": "mainSupplier",
+    "Backup Supplier": "backupSupplier",
+    Importer: "importer",
+    "Consignment Supplier": "consignmentSupplier",
+  };
+  const key = map[tag];
+  return key ? tSuppliers(key, locale) : tag;
+}
+
+export function warehouseDemoLabel(name: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    "Main Warehouse": "mainWarehouse",
+    "Cold Storage": "coldStorage",
+    "Branch Warehouse": "branchWarehouse",
+  };
+  const key = map[name];
+  return key ? tSuppliers(key, locale) : name;
+}
+
+export function documentTypeLabel(name: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    "Tax certificate": "taxCertificate",
+    "Tax Certificate": "taxCertificate",
+    "Business license": "businessLicense",
+    "Business License": "businessLicense",
+    Contract: "contract",
+    "Bank account": "bankAccount",
+    "Bank Account": "bankAccount",
+  };
+  const key = map[name];
+  return key ? tSuppliers(key, locale) : name;
+}
+
+export function ledgerTypeLabel(type: string, locale?: string | null) {
+  const map: Record<string, SuppliersCopyKey> = {
+    PO: "po",
+    "Goods received": "goodsReceived",
+    Payment: "paymentDetail",
+  };
+  const key = map[type];
+  return key ? tSuppliers(key, locale) : type;
+}
+
+export function ledgerNoteLabel(note: string, locale?: string | null) {
+  if (note === "Purchase order placeholder") return tSuppliers("purchaseOrderPlaceholder", locale);
+  if (note === "Supplier payment") return tSuppliers("supplierPaymentNote", locale);
+  const received = note.match(/^(\d+) items received$/);
+  if (received) {
+    return fillSuppliersCopy(tSuppliers("itemsReceivedNote", locale), { count: received[1] });
+  }
+  return note;
+}
+
+const knownErrors: Record<string, SuppliersCopyKey> = {
+  "companyName is required.": "nameRequired",
+  "Supplier save failed.": "saveFailed",
+  "Supplier saved successfully.": "savedSuccessfully",
+  "Supplier update failed.": "updateFailed",
+  "Supplier updated successfully.": "updatedSuccessfully",
+};
+
+export function localizeSupplierError(error?: string | null, locale?: string | null) {
+  if (!error) {
+    return tSuppliers("failedToLoad", locale);
+  }
+  if (error.startsWith("Permission denied")) {
+    return tSuppliers("permissionDenied", locale);
+  }
+  if (error.startsWith("Approval required") || error.includes("approval required")) {
+    return tSuppliers("approvalRequired", locale);
+  }
+  const exact = knownErrors[error];
+  if (exact) {
+    return tSuppliers(exact, locale);
+  }
+  if (error.startsWith("companyName is required")) {
+    return tSuppliers("nameRequired", locale);
+  }
+  if (error.startsWith("creditLimit")) {
+    return tSuppliers("invalidCreditLimit", locale);
+  }
+  if (error.startsWith("email")) {
+    return tSuppliers("invalidEmail", locale);
+  }
+  if (error.startsWith("phone")) {
+    return tSuppliers("invalidPhone", locale);
+  }
+  return error;
+}

@@ -56,6 +56,8 @@ check(
   shell.includes('tInventory("inventory", "en")') &&
     shell.includes('tInventory("inventory", "lo")') &&
     (shell.includes('customers: "Customers"') || shell.includes('tCustomers("customers"')) &&
+    (shell.includes('membership: "Membership"') || shell.includes('tMemberships("membership"')) &&
+    (shell.includes('suppliers: "Suppliers"') || shell.includes('tSuppliers("suppliers"')) &&
     shell.includes('settings: "Settings"') &&
     shell.includes('promotions: "Promotions"') &&
     !toggle.includes('updateLocale("th")') &&
