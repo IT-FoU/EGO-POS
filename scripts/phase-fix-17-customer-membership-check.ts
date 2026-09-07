@@ -143,7 +143,10 @@ check("Allocator uses advisory lock + bounded retry", () => {
 
 check("Create form defaults to no membership", () => {
   assert(formSrc.includes('defaultValue=""'), "create form must not default to first level");
-  assert(formSrc.includes('t("ui.no.membership")'), "create form must offer No Membership");
+  assert(
+    formSrc.includes('t("ui.no.membership")') || formSrc.includes('t("noMembership")'),
+    "create form must offer No Membership",
+  );
 });
 
 check("Localization EN No Membership", () => {

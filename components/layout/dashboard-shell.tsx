@@ -35,6 +35,7 @@ import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout
 import { tInventory } from "@/lib/i18n/inventory-copy";
 import { tProducts } from "@/lib/i18n/products-copy";
 import { tPurchasing } from "@/lib/i18n/purchasing-copy";
+import { tCustomers } from "@/lib/i18n/customers-copy";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -63,7 +64,7 @@ const shellCopy: Record<SupportedLocale, {
     freePlan: "Free Plan",
     lockedFeature: "Paid feature locked",
     nav: {
-      customers: "Customers",
+      customers: tCustomers("customers", "en"),
       dashboard: "Dashboard",
       inventory: tInventory("inventory", "en"),
       membership: "Membership",
@@ -81,7 +82,7 @@ const shellCopy: Record<SupportedLocale, {
     freePlan: "Free Plan",
     lockedFeature: "Paid feature locked",
     nav: {
-      customers: "Customers",
+      customers: tCustomers("customers", "lo"),
       dashboard: "ໜ້າຫຼັກ",
       inventory: tInventory("inventory", "lo"),
       membership: "Membership",
