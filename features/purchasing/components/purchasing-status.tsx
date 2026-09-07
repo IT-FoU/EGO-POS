@@ -4,7 +4,12 @@ import type {
   PurchaseStatus,
   Supplier,
 } from "@/features/purchasing/types";
-import { PURCHASE_STATUS_LABELS } from "@/features/purchasing/purchase-status";
+import {
+  payableStatusLabel,
+  purchaseStatusLabel,
+  supplierStatusLabel,
+} from "@/lib/i18n/purchasing-copy";
+import type { SupportedLocale } from "@/lib/constants";
 
 const purchaseStyles: Record<PurchaseStatus, string> = {
   cancelled: "border-danger/40 bg-danger/10 text-danger",
@@ -26,16 +31,34 @@ const supplierStyles: Record<Supplier["status"], string> = {
   inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
-export function PurchaseStatusBadge({ status }: { status: PurchaseStatus }) {
-  return <Badge className={purchaseStyles[status]} label={PURCHASE_STATUS_LABELS[status]} />;
+export function PurchaseStatusBadge({
+  locale,
+  status,
+}: {
+  locale?: SupportedLocale;
+  status: PurchaseStatus;
+}) {
+  return <Badge className={purchaseStyles[status]} label={purchaseStatusLabel(status, locale)} />;
 }
 
-export function PayableStatusBadge({ status }: { status: PayableStatus }) {
-  return <Badge className={payableStyles[status]} label={status} />;
+export function PayableStatusBadge({
+  locale,
+  status,
+}: {
+  locale?: SupportedLocale;
+  status: PayableStatus;
+}) {
+  return <Badge className={payableStyles[status]} label={payableStatusLabel(status, locale)} />;
 }
 
-export function SupplierStatusBadge({ status }: { status: Supplier["status"] }) {
-  return <Badge className={supplierStyles[status]} label={status} />;
+export function SupplierStatusBadge({
+  locale,
+  status,
+}: {
+  locale?: SupportedLocale;
+  status: Supplier["status"];
+}) {
+  return <Badge className={supplierStyles[status]} label={supplierStatusLabel(status, locale)} />;
 }
 
 function Badge({ className, label }: { className: string; label: string }) {

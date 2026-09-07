@@ -33,6 +33,8 @@ export function mapPrismaPurchaseOrderItem(item: Row): PurchaseOrderItem {
     lotNumber: item.lotNumber ?? undefined,
     productId: item.productId,
     productName: item.product?.nameEn ?? item.product?.nameLo ?? "",
+    productNameEn: item.product?.nameEn ?? "",
+    productNameLo: item.product?.nameLo ?? "",
     quantity: toNumber(item.quantity),
     receivedQuantity: toNumber(item.receivedQuantity),
     sku: item.product?.sku ?? "",

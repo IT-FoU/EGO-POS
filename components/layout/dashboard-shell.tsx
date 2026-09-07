@@ -34,6 +34,7 @@ import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-perm
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
 import { tInventory } from "@/lib/i18n/inventory-copy";
 import { tProducts } from "@/lib/i18n/products-copy";
+import { tPurchasing } from "@/lib/i18n/purchasing-copy";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -69,7 +70,7 @@ const shellCopy: Record<SupportedLocale, {
       pos: "POS",
       products: tProducts("products", "en"),
       promotions: "Promotions",
-      purchasing: "Purchasing",
+      purchasing: tPurchasing("purchasing", "en"),
       reports: "Reports",
       settings: "Settings",
       suppliers: "Suppliers",
@@ -87,7 +88,7 @@ const shellCopy: Record<SupportedLocale, {
       pos: "POS",
       products: tProducts("products", "lo"),
       promotions: "Promotions",
-      purchasing: "Purchasing",
+      purchasing: tPurchasing("purchasing", "lo"),
       reports: "Reports",
       settings: "Settings",
       suppliers: "Suppliers",

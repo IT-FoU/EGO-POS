@@ -87,7 +87,7 @@ check(
     pageClient.includes('href="/purchasing/receiving"') &&
     !purchasingNew.includes("inventory-copy") &&
     !purchasingReceiving.includes("inventory-copy") &&
-    shell.includes('purchasing: "Purchasing"') &&
+    (shell.includes('purchasing: "Purchasing"') || shell.includes('tPurchasing("purchasing"')) &&
     !shell.includes("tInventory(\"purchaseOrder\""),
 );
 

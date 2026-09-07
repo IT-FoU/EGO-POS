@@ -19,6 +19,8 @@ export type PurchaseOrderItem = {
   id: string;
   productId: string;
   productName: string;
+  productNameEn?: string;
+  productNameLo?: string;
   sku: string;
   barcode: string;
   unitName: string;
