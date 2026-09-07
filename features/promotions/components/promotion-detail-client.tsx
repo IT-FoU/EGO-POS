@@ -145,10 +145,10 @@ export function PromotionDetailClient({
               <input className="field-input" name="promotionName" defaultValue={promotion.promotionName} required/>
               <input className="field-input" name="priority" type="number" min="1" defaultValue={promotion.priority}/>
               <select className="field-input" name="status" defaultValue={promotion.status}>
-                <option value="active">{t("active")}</option>
-                <option value="scheduled">{t("scheduled")}</option>
-                <option value="inactive">{t("inactive")}</option>
-                <option value="expired">{t("expired")}</option>
+                <option value="active">{promotionStatusLabel("active", locale)}</option>
+                <option value="scheduled">{promotionStatusLabel("scheduled", locale)}</option>
+                <option value="inactive">{promotionStatusLabel("inactive", locale)}</option>
+                <option value="expired">{promotionStatusLabel("expired", locale)}</option>
               </select>
               <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={isPending || hasProfitRisk} type="submit">
                 {isPending ? t("saving") : t("savePromotion")}

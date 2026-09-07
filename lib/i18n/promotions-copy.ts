@@ -19,6 +19,7 @@ const en = {
   "approvalQueue": "Approval Queue",
   "approvalRequired": "Approval required.",
   "approvalRequiredBeforeActivation": "Approval required before activation.",
+  "approved": "Approved",
   "archive": "Archive",
   "archiveCompleted": "Archive completed for {name}.",
   "archiveFailed": "Promotion archive failed.",
@@ -130,6 +131,7 @@ const en = {
   "overlappingPromotions": "Overlapping Promotions",
   "percentageDiscount": "Percentage Discount",
   "permissionDenied": "Permission denied.",
+  "pendingApproval": "Pending Approval",
   "priority": "Priority",
   "productDiscount": "Product discount",
   "productScope": "Product Scope",
@@ -148,6 +150,7 @@ const en = {
   "protection": "Protection",
   "qrCoupon": "QR coupon",
   "requireApproval": "Require approval",
+  "rejected": "Rejected",
   "retry": "Retry",
   "revenueGenerated": "Revenue Generated",
   "review": "Review",
@@ -227,7 +230,7 @@ const lo = {
   "activate": "ໃຊ້ງານ",
   "activateCompleted": "ເປີດໃຊ້ {name} ແລ້ວ.",
   "activateFailed": "ເປີດໃຊ້ ບໍ່ສຳເລັດ.",
-  "active": "ໃຊ້ງານ",
+  "active": "ເປີດໃຊ້ງານ",
   "activePromotions": "ໂປຣໂມຊັນ ໃຊ້ງານ",
   "addExcludedCombination": "ເພີ່ມຄູ່ທີ່ຫ້າມຊ້ອນ",
   "allDay": "ທັງວັນ",
@@ -240,11 +243,12 @@ const lo = {
   "approvalQueue": "ຄິວອະນຸມັດ",
   "approvalRequired": "ຕ້ອງອະນຸມັດກ່ອນ.",
   "approvalRequiredBeforeActivation": "ຕ້ອງອະນຸມັດກ່ອນເປີດໃຊ້.",
+  "approved": "ອະນຸມັດແລ້ວ",
   "archive": "ເກັບຖາວອນ",
   "archiveCompleted": "ເກັບຖາວອນ {name} ແລ້ວ.",
   "archiveFailed": "ເກັບຖາວອນ ໂປຣໂມຊັນ ບໍ່ສຳເລັດ.",
   "archivePromotion": "ເກັບຖາວອນ ໂປຣໂມຊັນ",
-  "archived": "ເກັບຖາວອນ",
+  "archived": "ເກັບເຂົ້າຄັງ",
   "archivedSuccessfully": "ເກັບຖາວອນ ໂປຣໂມຊັນ ແລ້ວ.",
   "auto": "ອັດຕະໂນມັດ",
   "autoApply": "ນຳໃຊ້ອັດຕະໂນມັດ",
@@ -255,7 +259,7 @@ const lo = {
   "branch": "ສາຂາ",
   "bulkActions": "ຄຳສັ່ງຫຼາຍລາຍການ",
   "buyQuantity": "ຈຳນວນຊື້",
-  "buyXGetY": "຋ື້ X ແຖມ Y",
+  "buyXGetY": "ຊື້ X ແຖມ Y",
   "calendar": "ປະຕິທິນ ໂປຣໂມຊັນ",
   "cancel": "ຍົກເລີກ",
   "categories": "ໝວດ",
@@ -314,7 +318,7 @@ const lo = {
   "happyHour": "ໂມງສ່ວນຫຼຸດ",
   "healthScore": "ຄະແນນສຸຂະພາບ",
   "import": "ນຳເຂົ້າ",
-  "inactive": "ຢຸດໃຊ້",
+  "inactive": "ປິດໃຊ້ງານ",
   "integrationMap": "ແຜນຜະສົມ",
   "lastModified": "ແກ້ໄຂລ່າສຸດ",
   "limitPerBill": "ຈຳກັດຕໍ່ບິນ",
@@ -351,6 +355,7 @@ const lo = {
   "overlappingPromotions": "ໂປຣໂມຊັນຊ້ອນກັນ",
   "percentageDiscount": "% ສ່ວນຫຼຸດ",
   "permissionDenied": "ບໍ່ມີສິດ.",
+  "pendingApproval": "ລໍຖ້າອະນຸມັດ",
   "priority": "ລຳດັບຄວາມສຳຄັນ",
   "productDiscount": "ສ່ວນຫຼຸດສິນຄ້າ",
   "productScope": "ຂອບເຂດສິນຄ້າ",
@@ -369,6 +374,7 @@ const lo = {
   "protection": "ປ້ອງກັນ",
   "qrCoupon": "Coupon QR",
   "requireApproval": "ຕ້ອງອະນຸມັດ",
+  "rejected": "ປະຕິເສດ",
   "retry": "ລອງໃໝ່",
   "revenueGenerated": "ຍອດຂາຍ",
   "review": "ກວດກາ",
@@ -380,7 +386,7 @@ const lo = {
   "savePromotion": "ບັນທຶກ ໂປຣໂມຊັນ",
   "savedDraft": "ບັນທຶກຮ່າງແລ້ວ.",
   "saving": "ກຳລັງບັນທຶກ...",
-  "scheduled": "ກຳນົດເວລາ",
+  "scheduled": "ກຳນົດເວລາແລ້ວ",
   "scheduledPromotions": "ໂປຣໂມຊັນ ກຳນົດເວລາ",
   "scope": "ຂອບເຂດ",
   "searchPlaceholder": "ຄົ້ນຫາ ຊື່, ລະຫັດ, ປະເພດ",
@@ -478,13 +484,35 @@ export function promotionsCopyHasNoReplacementChars() {
   return !Object.values(lo).some((value) => value.includes("\uFFFD"));
 }
 
+export const PROMOTION_UI_STATUS_VALUES = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "active",
+  "inactive",
+  "scheduled",
+  "expired",
+  "archived",
+] as const;
+
+const promotionStatusCopyKeys: Record<string, PromotionsCopyKey> = {
+  active: "active",
+  approved: "approved",
+  archived: "archived",
+  draft: "draft",
+  expired: "expired",
+  inactive: "inactive",
+  pending_approval: "pendingApproval",
+  "pending approval": "pendingApproval",
+  rejected: "rejected",
+  scheduled: "scheduled",
+};
+
 export function promotionStatusLabel(status: string, locale?: string | null) {
-  if (status === "active") return tPromotions("active", locale);
-  if (status === "inactive") return tPromotions("inactive", locale);
-  if (status === "scheduled") return tPromotions("scheduled", locale);
-  if (status === "expired") return tPromotions("expired", locale);
-  if (status === "draft") return tPromotions("draft", locale);
-  if (status === "archived") return tPromotions("archived", locale);
+  const normalized = status.trim().toLowerCase().replaceAll(" ", "_");
+  const key = promotionStatusCopyKeys[normalized] ?? promotionStatusCopyKeys[status];
+  if (key) return tPromotions(key, locale);
   return status.replaceAll("_", " ");
 }
 

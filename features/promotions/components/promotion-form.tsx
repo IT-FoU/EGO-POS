@@ -3,9 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import type { SupportedLocale } from "@/lib/constants";
 import {
+  PROMOTION_UI_STATUS_VALUES,
   fillPromotionsCopy,
   localizePromotionError,
   promotionRiskLabel,
+  promotionStatusLabel,
   tPromotions,
 } from "@/lib/i18n/promotions-copy";
 import { usePromotionsLocale } from "@/features/promotions/use-promotions-locale";
@@ -15,6 +17,7 @@ import { ArrowLeft, CalendarDays, CheckCircle2, Gift, QrCode, Save, Search, Shie
 import type { MembershipLevel } from "@/features/customers/types";
 import type { Category, Product } from "@/features/products/types";
 import { formatLak, formatPromotionType } from "@/features/promotions/format";
+import { PROMOTION_TEMPLATES } from "@/features/promotions/promotion-templates";
 import type { Promotion, PromotionType } from "@/features/promotions/types";
 import { createPromotionAction, updatePromotionAction } from "@/features/promotions/actions";
 
@@ -113,24 +116,11 @@ export function PromotionForm({
       t("summary"),
     ], [locale]);
 
-    const templates = useMemo(() => [
-      { key: "percentage", label: t("percentageDiscount"), type: "percentage" as PromotionType, note: t("subtitle") },
-      { key: "fixed_amount", label: t("fixedAmount"), type: "fixed_amount" as PromotionType, note: t("subtitle") },
-      { key: "buy_1_get_1", label: t("buyXGetY"), type: "buy_x_get_y" as PromotionType, note: t("subtitle") },
-      { key: "buy_2_get_1", label: t("buyXGetY"), type: "buy_x_get_y" as PromotionType, note: t("subtitle") },
-      { key: "combo_set", label: t("comboSet"), type: "combo_set" as PromotionType, note: t("subtitle") },
-      { key: "spend_save", label: t("billDiscount"), type: "fixed_amount" as PromotionType, note: t("subtitle") },
-      { key: "free_gift", label: t("freeGift"), type: "buy_x_get_y" as PromotionType, note: t("subtitle") },
-      { key: "coupon", label: t("couponPromotion"), type: "fixed_amount" as PromotionType, note: t("subtitle") },
-      { key: "point_redemption", label: t("memberDiscount"), type: "member_discount" as PromotionType, note: t("subtitle") },
-      { key: "happy_hour", label: t("happyHour"), type: "percentage" as PromotionType, note: t("subtitle") },
-      { key: "flash_sale", label: t("flashSale"), type: "percentage" as PromotionType, note: t("subtitle") },
-      { key: "near_expiry", label: t("nearExpiry"), type: "percentage" as PromotionType, note: t("subtitle") },
-      { key: "slow_moving", label: t("slowMoving"), type: "percentage" as PromotionType, note: t("subtitle") },
-      { key: "mix_match", label: t("comboSet"), type: "combo_set" as PromotionType, note: t("subtitle") },
-      { key: "tiered", label: t("percentageDiscount"), type: "percentage" as PromotionType, note: t("subtitle") },
-      { key: "member_discount", label: t("memberDiscount"), type: "member_discount" as PromotionType, note: t("subtitle") },
-    ], [locale]);
+    const templates = useMemo(() => PROMOTION_TEMPLATES.map((item) => ({
+      ...item,
+      label: t(item.labelKey),
+      note: t("subtitle"),
+    })), [locale]);
     const [isPending, startTransition] = useTransition();
     const [step, setStep] = useState(0);
     const [selector, setSelector] = useState<SelectorKind | null>(null);
@@ -236,16 +226,14 @@ export function PromotionForm({
             return;
         setTemplate(selectedTemplate.key);
         setType(selectedTemplate.type);
-        if (selectedTemplate.key === "buy_1_get_1") {
-            setBuyQty(1);
-            setGetQty(1);
+        if (selectedTemplate.defaults?.buyQuantity != null) {
+            setBuyQty(selectedTemplate.defaults.buyQuantity);
         }
-        if (selectedTemplate.key === "buy_2_get_1") {
-            setBuyQty(2);
-            setGetQty(1);
+        if (selectedTemplate.defaults?.getQuantity != null) {
+            setGetQty(selectedTemplate.defaults.getQuantity);
         }
-        if (selectedTemplate.key === "coupon") {
-            setCouponCode("SAVE10");
+        if (selectedTemplate.defaults?.couponCode) {
+            setCouponCode(selectedTemplate.defaults.couponCode);
         }
         setMessage(fillPromotionsCopy(t("templateApplied"), { name: selectedTemplate.label }));
     }
@@ -349,7 +337,7 @@ export function PromotionForm({
             </Field>
             <Field label={t("status")}>
               <select className="field-input" value={status} onChange={(event) => setStatus(event.target.value)}>
-                {["draft", "pending_approval", "approved", "rejected", "active", "inactive", "scheduled", "expired", "archived"].map((option) => <option key={option} value={option}>{option.replace("_", " ")}</option>)}
+                {PROMOTION_UI_STATUS_VALUES.map((option) => <option key={option} value={option}>{promotionStatusLabel(option, locale)}</option>)}
               </select>
             </Field>
             <Field label={t("priority")}>

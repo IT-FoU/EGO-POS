@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   PROMOTIONS_COPY,
+  PROMOTION_UI_STATUS_VALUES,
   fillPromotionsCopy,
   promotionsCopyHasNoReplacementChars,
   promotionsCopyKeyParity,
@@ -10,6 +11,11 @@ import {
   promotionTypeLabel,
   tPromotions,
 } from "../lib/i18n/promotions-copy";
+import {
+  PROMOTION_TEMPLATES,
+  getPromotionTemplate,
+  promotionTemplatesHaveUniqueBehavior,
+} from "../features/promotions/promotion-templates";
 
 function read(relativePath: string): string {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -44,6 +50,8 @@ const actions = read("features/promotions/actions.ts");
 const repo = read("features/promotions/prisma-repository.ts");
 const checkout = read("features/promotions/promotion-checkout.ts");
 const service = read("features/promotions/promotion-service.ts");
+const dto = read("features/promotions/dto.ts");
+const templateRegistry = read("features/promotions/promotion-templates.ts");
 const reportsSales = read("app/(dashboard)/reports/sales/page.tsx");
 const settingsForm = read("features/settings/components/settings-form.tsx");
 
@@ -227,6 +235,118 @@ check(
     lo.allProducts.includes(String.fromCharCode(0x0edd, 0x0ebb, 0x0e94)) &&
     lo.newMembers.includes(String.fromCharCode(0x0ec3, 0x0edd, 0x0ec8)) &&
     lo.studentMembers.includes(String.fromCharCode(0x0eae, 0x0ebd, 0x0e99)),
+);
+
+const canonicalBuyXGetYLo = String.fromCharCode(
+  0x0e8a, 0x0eb7, 0x0ec9, 0x20, 0x58, 0x20, 0x0ec1, 0x0e96, 0x0ea1, 0x20, 0x59,
+);
+const wrongBuyXGetYLetter = String.fromCharCode(0x0e8b);
+const expectedStatusLabels = {
+  draft: { en: "Draft", lo: lo.draft },
+  pending_approval: { en: "Pending Approval", lo: lo.pendingApproval },
+  approved: { en: "Approved", lo: lo.approved },
+  rejected: { en: "Rejected", lo: lo.rejected },
+  active: { en: "Active", lo: lo.active },
+  inactive: { en: "Inactive", lo: lo.inactive },
+  scheduled: { en: "Scheduled", lo: lo.scheduled },
+  expired: { en: "Expired", lo: lo.expired },
+  archived: { en: "Archived", lo: lo.archived },
+} as const;
+const expectedTemplateTypes: Record<string, string> = {
+  percentage: "percentage",
+  fixed_amount: "fixed_amount",
+  buy_x_get_y: "buy_x_get_y",
+  combo_set: "combo_set",
+  spend_save: "fixed_amount",
+  free_gift: "buy_x_get_y",
+  coupon: "fixed_amount",
+  happy_hour: "percentage",
+  flash_sale: "percentage",
+  near_expiry: "percentage",
+  slow_moving: "percentage",
+  member_discount: "member_discount",
+};
+const removedDuplicateTemplateKeys = ["buy_1_get_1", "buy_2_get_1", "mix_match", "tiered", "point_redemption"];
+const englishStatusWords = /^(draft|pending approval|approved|rejected|active|inactive|scheduled|expired|archived)$/i;
+
+check(
+  "14. Lao Buy X Get Y uses canonical ຊື້ X ແຖມ Y",
+  lo.buyXGetY === canonicalBuyXGetYLo &&
+    en.buyXGetY === "Buy X Get Y" &&
+    promotionTypeLabel("buy_x_get_y", "lo") === canonicalBuyXGetYLo &&
+    promotionTypeLabel("buy_x_get_y", "en") === "Buy X Get Y" &&
+    !lo.buyXGetY.includes(wrongBuyXGetYLetter) &&
+    !copySource.includes(wrongBuyXGetYLetter) &&
+    !Object.values(lo).some((value) => value.includes(wrongBuyXGetYLetter)) &&
+    form.includes('t("buyXGetY")') &&
+    list.includes('t("buyXGetY")') &&
+    stackPage.includes('t("buyXGetY")'),
+);
+
+check(
+  "15. Lao status controls never show raw English labels",
+  PROMOTION_UI_STATUS_VALUES.every((status) => !englishStatusWords.test(promotionStatusLabel(status, "lo"))) &&
+    promotionStatusLabel("pending_approval", "lo") === lo.pendingApproval &&
+    promotionStatusLabel("pending approval", "lo") === lo.pendingApproval &&
+    form.includes("promotionStatusLabel(option, locale)") &&
+    !form.includes('option.replace("_", " ")') &&
+    detail.includes('promotionStatusLabel("active", locale)') &&
+    list.includes("promotionStatusLabel(option, locale)") &&
+    lo.draft === String.fromCharCode(0x0eae, 0x0ec8, 0x0eb2, 0x0e87) &&
+    lo.active !== "Active" &&
+    lo.inactive !== "Inactive",
+);
+
+check(
+  "16. Internal promotion status values remain unchanged",
+  PROMOTION_UI_STATUS_VALUES.join(",") === "draft,pending_approval,approved,rejected,active,inactive,scheduled,expired,archived" &&
+    dto.includes('const statuses = ["active", "inactive", "scheduled", "expired"] as const') &&
+    form.includes("PROMOTION_UI_STATUS_VALUES") &&
+    form.includes("value={option}") &&
+    detail.includes('value="active"') &&
+    detail.includes('value="scheduled"') &&
+    detail.includes('value="inactive"') &&
+    detail.includes('value="expired"'),
+);
+
+check(
+  "17. English locale still renders English status labels",
+  (Object.keys(expectedStatusLabels) as Array<keyof typeof expectedStatusLabels>).every((status) => {
+    const expected = expectedStatusLabels[status];
+    return promotionStatusLabel(status, "en") === expected.en && promotionStatusLabel(status, "lo") === expected.lo;
+  }) &&
+    promotionStatusLabel("active", "en") === "Active" &&
+    promotionStatusLabel("pending_approval", "en") === "Pending Approval",
+);
+
+check(
+  "18. Promotion template registry has no duplicate behavioral templates",
+  promotionTemplatesHaveUniqueBehavior() &&
+    PROMOTION_TEMPLATES.length === 12 &&
+    PROMOTION_TEMPLATES.filter((item) => item.labelKey === "percentageDiscount").length === 1 &&
+    PROMOTION_TEMPLATES.filter((item) => item.labelKey === "fixedAmount").length === 1 &&
+    PROMOTION_TEMPLATES.filter((item) => item.labelKey === "buyXGetY").length === 1 &&
+    PROMOTION_TEMPLATES.filter((item) => item.labelKey === "comboSet").length === 1 &&
+    PROMOTION_TEMPLATES.filter((item) => item.labelKey === "couponPromotion").length === 1 &&
+    PROMOTION_TEMPLATES.filter((item) => item.labelKey === "memberDiscount").length === 1 &&
+    removedDuplicateTemplateKeys.every((key) => !PROMOTION_TEMPLATES.some((item) => item.key === key)) &&
+    !form.includes("buy_1_get_1") &&
+    !form.includes("buy_2_get_1") &&
+    !form.includes("mix_match") &&
+    !form.includes('"tiered"') &&
+    !form.includes("point_redemption") &&
+    form.includes("PROMOTION_TEMPLATES") &&
+    templateRegistry.includes('key: "buy_x_get_y"'),
+);
+
+check(
+  "19. Template selection still creates the correct promotion type",
+  Object.entries(expectedTemplateTypes).every(([key, type]) => getPromotionTemplate(key)?.type === type) &&
+    getPromotionTemplate("buy_x_get_y")?.labelKey === "buyXGetY" &&
+    getPromotionTemplate("coupon")?.type === "fixed_amount" &&
+    getPromotionTemplate("member_discount")?.type === "member_discount" &&
+    form.includes("setType(selectedTemplate.type)") &&
+    form.includes("selectedTemplate.defaults"),
 );
 
 console.log(
