@@ -46,6 +46,9 @@ const lo = SETTINGS_COPY.lo;
 const shell = read("components/layout/dashboard-shell.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
 const settingsLoading = read("app/(dashboard)/settings/loading.tsx");
+const accessDenied = read("components/permissions/store-access-denied.tsx");
+const productsLayout = read("app/(dashboard)/products/layout.tsx");
+const reportsLayout = read("app/(dashboard)/reports/layout.tsx");
 const settingsForm = read("features/settings/components/settings-form.tsx");
 const settingsStaff = read("features/settings/components/staff-control-section.tsx");
 const storeActivity = read("features/store-activity/components/store-activity-logs-client.tsx");
@@ -176,7 +179,8 @@ check(
     roundingMethodLabel("nearest", "en") === "Nearest" &&
     localizeRoleTemplate("Owner", "lo") === lo.owner &&
     localizeRoleTemplate("Staff/Cashier", "lo") === lo.staffCashier &&
-    localizeTerminalOption("Back Office", "lo") === lo.backOffice &&
+    localizeTerminalOption("Back Office", "lo") === "Back Office" &&
+    localizeTerminalOption("Back Office", "en") === "Back Office" &&
     localizeTerminalOption("POS-01", "lo") === "POS-01" &&
     localizePermissionModule("Dashboard", "lo") === lo.moduleDashboard &&
     localizePermissionAction("View", "en") === "View",
@@ -243,6 +247,9 @@ check(
     lo.pin === "PIN" &&
     lo.vat === "VAT" &&
     lo.backOffice === "Back Office" &&
+    en.backOffice === "Back Office" &&
+    lo.allowBackOffice.includes("Back Office") &&
+    en.allowBackOffice.includes("Back Office") &&
     settingsForm.includes(">LAK<") &&
     settingsForm.includes(">THB<") &&
     settingsForm.includes(">USD<") &&
@@ -308,7 +315,24 @@ check(
     settingsActions.includes("updateSettingsAction") &&
     settingsRepo.includes("getPrismaSettings") &&
     settingsPage.includes("locale={locale}") &&
-    settingsLoading.includes("copy.loadingSettings"),
+    settingsLoading.includes("copy.loadingSettings") &&
+    settingsPage.includes("canManageStoreSettings"),
+);
+
+check(
+  "14. Settings permission-denied copy is locale-aware",
+  settingsPage.includes('tSettings("accessDeniedTitle"') &&
+    settingsPage.includes('tSettings("accessDeniedBody"') &&
+    accessDenied.includes('title = "Access denied"') &&
+    accessDenied.includes('description = "You do not have permission to view this section."') &&
+    tSettings("accessDeniedTitle", "en") === "Access denied" &&
+    tSettings("accessDeniedBody", "en") === "You do not have permission to view this section." &&
+    tSettings("accessDeniedTitle", "lo") === lo.accessDeniedTitle &&
+    tSettings("accessDeniedBody", "lo") === lo.accessDeniedBody &&
+    laoScript.test(lo.accessDeniedTitle) &&
+    laoScript.test(lo.accessDeniedBody) &&
+    productsLayout.includes("return <StoreAccessDenied />") &&
+    reportsLayout.includes("return <StoreAccessDenied />"),
 );
 
 const leftoverHits = leftoverEnglishPhrases.filter((phrase) =>

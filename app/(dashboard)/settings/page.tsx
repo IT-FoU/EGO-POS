@@ -8,15 +8,20 @@ import { canManageStoreSettings } from "@/features/permissions/store-ui-permissi
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+import { tSettings } from "@/lib/i18n/settings-copy";
 
 export default async function SettingsPage() {
   const session = await requireSession();
-  if (!canManageStoreSettings(session.user.roles)) {
-    return <StoreAccessDenied />;
-  }
-
   const cookieStore = await cookies();
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  if (!canManageStoreSettings(session.user.roles)) {
+    return (
+      <StoreAccessDenied
+        description={tSettings("accessDeniedBody", locale)}
+        title={tSettings("accessDeniedTitle", locale)}
+      />
+    );
+  }
   const tenant = tenantFromSession(session);
   const [settings, qrSnapshot, staffSnapshot] = await Promise.all([
     getPrismaSettings(tenant),
