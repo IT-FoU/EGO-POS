@@ -30,11 +30,11 @@ export function PosWorkspaceModal({ children, headerActions, headerClassName, on
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-y-0 left-0 right-0 z-[60] overflow-x-hidden bg-black/70 lg:left-72">
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className="flex h-[85dvh] max-h-[85dvh] w-[85vw] max-w-[1280px] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl max-sm:h-[calc(100dvh-2rem)] max-sm:max-h-[calc(100dvh-2rem)] max-sm:w-[calc(100vw-2rem)]"
+        className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"
         role="dialog"
       >
         <header className={cn("flex shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-5 py-4", headerClassName)}>
