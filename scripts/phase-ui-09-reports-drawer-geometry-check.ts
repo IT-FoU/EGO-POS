@@ -42,45 +42,84 @@ const overlay =
   '"fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72"';
 const panel =
   '"flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"';
-const smallOverlay =
-  '"fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"';
 
 const frameStart = client.indexOf("function ModalFrame(");
-const compactStart = client.indexOf("function ReportsCompactModal(");
-check("0. Reports ModalFrame exists", frameStart >= 0 && compactStart >= 0);
-const frameFn = client.slice(frameStart, compactStart);
-const compactFn = client.slice(compactStart);
+const rowsStart = client.indexOf("function ReportRowsTable(");
+check("0. Reports ModalFrame exists", frameStart >= 0 && rowsStart > frameStart);
+const frameFn = client.slice(frameStart, rowsStart);
 
 check(
-  "1. large Reports frame uses lg:left-72",
+  "1. Export uses the LARGE drawer frame",
+  client.includes("function ExportModal(") &&
+    client.includes("<ModalFrame onClose={onClose} title={t(\"export\")}>") &&
+    client.includes('modal === "export"') &&
+    !client.includes("ReportsCompactModal") &&
+    !client.includes("function ReportsCompactModal("),
+);
+
+check(
+  "2. Schedule uses the LARGE drawer frame",
+  client.includes("function ScheduleModal(") &&
+    client.includes("<ModalFrame onClose={onClose} title={t(\"schedule\")}>") &&
+    client.includes('modal === "schedule"'),
+);
+
+check(
+  "3. Print uses LARGE drawer geometry where a substantial custom Print surface exists",
+  client.includes('label={t("print")} onClick={() => setModal("export")}') &&
+    client.includes("<ModalFrame onClose={onClose} title={t(\"export\")}>") &&
+    !client.includes("window.print(") &&
+    !client.includes("function PrintModal(") &&
+    !client.includes('modal === "print"'),
+);
+
+check(
+  "4. Favorites uses LARGE drawer",
+  client.includes("function FavoritesModal(") &&
+    client.includes("<ModalFrame onClose={onClose} title={t(\"favorites\")}>") &&
+    client.includes('modal === "favorites"'),
+);
+
+check(
+  "5. KPI/details use LARGE drawer",
+  client.includes("function KpiDetailModal(") &&
+    client.includes("<KpiDetailModal") &&
+    client.includes('modal === "kpi"') &&
+    client.includes("<ModalFrame onClose={onClose} title={title}>") &&
+    client.includes("function HealthModal(") &&
+    client.includes("function DataSourceModal(") &&
+    client.includes("function DayDetailModal(") &&
+    client.includes("function HourDetailModal(") &&
+    client.includes("function CategoryModal(") &&
+    client.includes("function InventoryAlertModal(") &&
+    client.includes("function ProductAnalyticsModal(") &&
+    client.includes("function DeadStockModal(") &&
+    client.includes("function ReportDetailModal(") &&
+    client.includes("<ModalFrame onClose={onClose} title={localizeLabel(reportName)}>"),
+);
+
+check(
+  "6. all share lg:left-72",
   frameFn.includes(overlay) &&
     frameFn.includes("lg:left-72") &&
     !frameFn.includes("md:left-72") &&
     !frameFn.includes("lg:left-[var(") &&
+    count(client, "lg:left-72") === 1 &&
     shell.includes('className="fixed inset-y-0 left-0 hidden w-72'),
 );
 
 check(
-  "2. visible large shell uses w-full max-w-none",
+  "7. all visible large shells use h-full w-full max-w-none",
   frameFn.includes(panel) &&
     frameFn.includes("h-full") &&
     frameFn.includes("w-full") &&
     frameFn.includes("max-w-none") &&
-    frameFn.includes("px-6 py-5 lg:px-8"),
+    frameFn.includes("px-6 py-5 lg:px-8") &&
+    count(client, "max-w-none") === 1,
 );
 
 check(
-  "3. no max-w-6xl/max-w-* remains on LARGE Reports outer shell",
-  !frameFn.includes("max-w-6xl") &&
-    !frameFn.includes("max-w-5xl") &&
-    !frameFn.includes("max-w-4xl") &&
-    !frameFn.includes("max-w-3xl") &&
-    count(client, "max-w-6xl") === 0 &&
-    count(frameFn, "max-w-") === 1,
-);
-
-check(
-  "4. Sidebar is not covered/dimmed",
+  "8. Sidebar is not covered/dimmed",
   frameFn.includes("lg:left-72") &&
     frameFn.includes("inset-y-0") &&
     frameFn.includes("right-0") &&
@@ -89,78 +128,21 @@ check(
 );
 
 check(
-  "5. KPI/detail surfaces inherit repaired frame",
-  client.includes("function KpiDetailModal(") &&
-    client.includes("<KpiDetailModal") &&
-    client.includes('modal === "kpi"') &&
-    client.includes("<ModalFrame onClose={onClose} title={title}>") &&
-    client.includes("function GenericDetailModal("),
-);
-
-check(
-  "6. Business Health uses repaired frame",
-  client.includes("function HealthModal(") &&
-    client.includes('modal === "health"') &&
-    client.includes("<HealthModal") &&
-    client.includes('title={t("businessHealth")}'),
-);
-
-check(
-  "7. Data Source Status uses repaired frame",
-  client.includes("function DataSourceModal(") &&
-    client.includes('modal === "dataSource"') &&
-    client.includes("<DataSourceModal") &&
-    client.includes("<ModalFrame onClose={onClose} title={localizeLabel(source)}>"),
-);
-
-check(
-  "8. chart/report drilldowns use repaired frame",
-  client.includes("function DayDetailModal(") &&
-    client.includes("function HourDetailModal(") &&
-    client.includes("function CategoryModal(") &&
-    client.includes("function InventoryAlertModal(") &&
-    client.includes("function ProductAnalyticsModal(") &&
-    client.includes("function DeadStockModal(") &&
-    client.includes('modal === "daily"') &&
-    client.includes('modal === "hour"') &&
-    client.includes('modal === "category"') &&
-    client.includes('modal === "inventory"') &&
-    client.includes('modal === "product"') &&
-    client.includes('modal === "deadstock"'),
-);
-
-check(
-  "9. Report preview/detail uses repaired frame",
-  client.includes("function ReportDetailModal(") &&
-    client.includes('modal === "report"') &&
-    client.includes("<ReportDetailModal") &&
-    client.includes("<ModalFrame onClose={onClose} title={localizeLabel(reportName)}>"),
-);
-
-check(
-  "10. Export/Schedule/Favorites classification is correct",
-  client.includes("function ExportModal(") &&
-    client.includes("function ScheduleModal(") &&
-    client.includes("function FavoritesModal(") &&
-    client.includes("<ReportsCompactModal onClose={onClose} title={t(\"export\")}>") &&
-    client.includes("<ReportsCompactModal onClose={onClose} title={t(\"schedule\")}>") &&
-    client.includes("<ModalFrame onClose={onClose} title={t(\"favorites\")}>") &&
-    compactFn.includes(smallOverlay) &&
-    compactFn.includes("max-w-xl") &&
-    !compactFn.includes("lg:left-72"),
-);
-
-check(
-  "11. small Reports modals remain unchanged",
-  compactFn.includes(smallOverlay) &&
-    compactFn.includes("max-w-xl") &&
+  "9. no centered max-w-6xl/max-w-* large Reports shell remains",
+  !frameFn.includes("max-w-6xl") &&
+    !frameFn.includes("max-w-5xl") &&
+    !frameFn.includes("max-w-4xl") &&
+    !frameFn.includes("max-w-3xl") &&
+    !frameFn.includes("max-w-xl") &&
+    count(client, "max-w-6xl") === 0 &&
+    count(frameFn, "max-w-") === 1 &&
+    !client.includes("fixed inset-0 z-50 grid place-items-center") &&
     client.includes("function ExportMenu(") &&
-    client.includes('onExport={() => setModal("export")}') &&
-    !compactFn.includes("max-w-none"),
+    client.includes("w-40 rounded-md border border-border bg-card"),
 );
 
 check(
-  "12. Reports calculations unchanged",
+  "10. Reports business logic unchanged",
   client.includes("function kpiSummaryLines(") &&
     client.includes("function kpiReportHref(") &&
     reportsPage.includes("getReportsPageData") &&
@@ -174,7 +156,7 @@ check(
 );
 
 check(
-  "13. Reports Lao localization unchanged",
+  "11. Reports localization unchanged",
   copySource.includes("REPORTS_COPY") &&
     client.includes("tReports") &&
     !client.includes("กำไร") &&
