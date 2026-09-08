@@ -135,6 +135,16 @@ type DemoSaleRecord = {
     totalAmount: number;
     warehouseId: string;
 };
+type SaleFieldPrompt = {
+    field: "note" | "customerName" | "paymentMode";
+    label: string;
+    sale: DemoSaleRecord;
+    value: string;
+};
+type SaleDeletePrompt = {
+    reason: string;
+    sale: DemoSaleRecord;
+};
 
 type ManagerApprovalRequest = {
     action: "refund" | "void";
@@ -230,6 +240,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     );
     const [saleCompletedReceipt, setSaleCompletedReceipt] = useState<ReceiptSnapshot | null>(null);
     const [recentSalesOpen, setRecentSalesOpen] = useState(false);
+    const [saleFieldPrompt, setSaleFieldPrompt] = useState<SaleFieldPrompt | null>(null);
+    const [saleDeletePrompt, setSaleDeletePrompt] = useState<SaleDeletePrompt | null>(null);
     const [returnExchangeOpen, setReturnExchangeOpen] = useState(false);
     const [returnExchangeTab, setReturnExchangeTab] = useState<ReturnExchangeTab>("return");
     const [returnExchangeSaleId, setReturnExchangeSaleId] = useState<string | undefined>();
@@ -1281,9 +1293,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         const label = field === "note" ? "Note" : field === "customerName" ? "Customer" : "Payment method";
-        const value = window.prompt(`Update ${label}`, String(sale[field] ?? ""));
-        if (value === null)
+        setSaleFieldPrompt({ field, label, sale, value: String(sale[field] ?? "") });
+    }
+    function saveSaleFieldPrompt() {
+        if (!saleFieldPrompt) {
             return;
+        }
+        const { field, label, sale, value } = saleFieldPrompt;
+        const action = field === "note" ? "edit_sale_note" : field === "customerName" ? "edit_sale_customer" : "edit_sale_payment";
         const nextValue = field === "paymentMode" && !isPaymentMode(value) ? sale.paymentMode : value.trim();
         const now = new Date().toISOString();
         const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(sale.saleNo, (currentSale) => ({
@@ -1294,12 +1311,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setRecentSales(nextSales);
         recordPosAudit(action, "allowed", "not_required", `${sale.saleNo} ${label.toLowerCase()} updated.`);
         setMessage(`${sale.saleNo} updated.`);
+        setSaleFieldPrompt(null);
     }
     function softDeleteSale(sale: DemoSaleRecord) {
         if (!enforcePosAction("delete_sale")) {
             return;
         }
-        const reason = window.prompt("Delete reason");
+        setSaleDeletePrompt({ reason: "", sale });
+    }
+    function confirmSoftDeleteSale() {
+        if (!saleDeletePrompt) {
+            return;
+        }
+        const { reason, sale } = saleDeletePrompt;
         if (!reason?.trim()) {
             setMessage("Delete reason is required.");
             return;
@@ -1316,6 +1340,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setRecentSales(nextSales);
         recordPosAudit("delete_sale", "allowed", "not_required", `${sale.saleNo} soft deleted.`);
         setMessage(`${sale.saleNo} soft deleted.`);
+        setSaleDeletePrompt(null);
     }
     function duplicateSaleToCart(sale: DemoSaleRecord) {
         if (!enforcePosAction("duplicate_sale")) {
@@ -1905,6 +1930,26 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }}/>) : null}
 
       {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onExchange={(sale) => openReturnExchange("exchange", sale)} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
+      {saleFieldPrompt ? (<div className="fixed inset-0 z-[70]">
+        <PosSmallModal closeAriaLabel={t("ui.close")} closeOnBackdrop={false} closeOnEscape={true} footer={<div className="flex justify-end gap-2">
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSaleFieldPrompt(null)}>{t("ui.cancel")}</button>
+            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={saveSaleFieldPrompt}>Save</button>
+          </div>} onClose={() => setSaleFieldPrompt(null)} size="md" title={`Update ${saleFieldPrompt.label}`}>
+          <Field label={saleFieldPrompt.label}>
+            <input className="field-input" value={saleFieldPrompt.value} autoFocus onChange={(event) => setSaleFieldPrompt({ ...saleFieldPrompt, value: event.target.value })}/>
+          </Field>
+        </PosSmallModal>
+      </div>) : null}
+      {saleDeletePrompt ? (<div className="fixed inset-0 z-[70]">
+        <PosSmallModal closeAriaLabel={t("ui.cancel")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSaleDeletePrompt(null)}>{t("ui.cancel")}</button>
+            <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmSoftDeleteSale}>{t("ui.delete")}</button>
+          </div>} onClose={() => setSaleDeletePrompt(null)} size="md" title="Delete reason">
+          <Field label="Delete reason">
+            <input className="field-input" value={saleDeletePrompt.reason} autoFocus onChange={(event) => setSaleDeletePrompt({ ...saleDeletePrompt, reason: event.target.value })}/>
+          </Field>
+        </PosSmallModal>
+      </div>) : null}
       {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onClose={() => setReturnExchangeOpen(false)} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}

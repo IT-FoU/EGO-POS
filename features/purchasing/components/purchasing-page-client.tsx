@@ -27,6 +27,7 @@ import {
   type ManualPurchaseAction,
 } from "@/features/purchasing/purchase-status";
 import { updatePurchaseStatusAction } from "@/features/purchasing/actions";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 import { cn } from "@/lib/utils";
 import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
@@ -66,20 +67,14 @@ export function PurchasingPageClient({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseStatus | "all">("all");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [cancelOrder, setCancelOrder] = useState<PurchaseOrder | null>(null);
   const locale = useAppLocale(localeProp);
   const [todayIso, setTodayIso] = useState("");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const t = (key: string) => tPurchasing(key, locale);
 
-  function runStatusAction(order: PurchaseOrder, action: ManualPurchaseAction) {
+  function applyStatusAction(order: PurchaseOrder, action: ManualPurchaseAction) {
     const nextStatus = MANUAL_ACTION_TARGET[action];
-    if (
-      action === "cancel" &&
-      typeof window !== "undefined" &&
-      !window.confirm(fillPurchasingCopy(t("confirmCancel"), { no: order.purchaseNo }))
-    ) {
-      return;
-    }
     setProfileMessage(null);
     setPendingId(order.id);
     startTransition(async () => {
@@ -97,6 +92,23 @@ export function PurchasingPageClient({
       );
       router.refresh();
     });
+  }
+
+  function runStatusAction(order: PurchaseOrder, action: ManualPurchaseAction) {
+    if (action === "cancel") {
+      setCancelOrder(order);
+      return;
+    }
+    applyStatusAction(order, action);
+  }
+
+  function confirmCancelPurchase() {
+    if (!cancelOrder) {
+      return;
+    }
+    const order = cancelOrder;
+    setCancelOrder(null);
+    applyStatusAction(order, "cancel");
   }
 
   useEffect(() => {
@@ -419,6 +431,39 @@ export function PurchasingPageClient({
           </div>
         </section>
       </section>
+
+      {cancelOrder ? (
+        <AppSmallModal
+          closeAriaLabel={t("close")}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={
+            <div className="flex justify-end gap-2">
+              <button
+                className="h-10 rounded-md border border-border px-4 text-sm font-semibold"
+                type="button"
+                onClick={() => setCancelOrder(null)}
+              >
+                {t("cancel")}
+              </button>
+              <button
+                className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white"
+                type="button"
+                onClick={confirmCancelPurchase}
+              >
+                {fillPurchasingCopy(t("confirmCancel"), { no: cancelOrder.purchaseNo })}
+              </button>
+            </div>
+          }
+          onClose={() => setCancelOrder(null)}
+          size="sm"
+          title={fillPurchasingCopy(t("confirmCancel"), { no: cancelOrder.purchaseNo })}
+        >
+          <p className="text-sm text-muted-foreground">
+            {fillPurchasingCopy(t("confirmCancel"), { no: cancelOrder.purchaseNo })}
+          </p>
+        </AppSmallModal>
+      ) : null}
     </div>
   );
 }

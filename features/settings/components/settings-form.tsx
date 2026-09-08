@@ -55,6 +55,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());
+    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const [displaySettings, setDisplaySettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
     const [promotionDraft, setPromotionDraft] = useState("");
@@ -101,12 +102,13 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         setLogoStage((current) => cancelStagedImage(current));
     }
     function removeLogo() {
-        if (!window.confirm(tSettings("removeLogoConfirm", locale))) {
-            return;
-        }
+        setSettingsConfirm("removeLogo");
+    }
+    function applyRemoveLogo() {
         clearCompanyLogoUrl();
         setLogoStage(removeStagedImage());
         setMessage({ text: tSettings("remove", locale), tone: "success" });
+        setSettingsConfirm(null);
     }
     function persistCustomerDisplaySettings(nextSettings: CustomerDisplaySettings) {
         setDisplaySettings(nextSettings);
@@ -121,18 +123,20 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function resetAppearancePage() {
-        if (!window.confirm(tSettings("resetThisPageConfirm", locale))) {
-            return;
-        }
+        setSettingsConfirm("resetThisPage");
+    }
+    function applyResetAppearancePage() {
         persistCustomerDisplaySettings(resetCustomerDisplayAppearanceSettings(displaySettings));
         setMessage({ text: tSettings("resetThisPageSuccess", locale), tone: "success" });
+        setSettingsConfirm(null);
     }
     function resetAllDisplaySettings() {
-        if (!window.confirm(tSettings("resetAllCustomerDisplayConfirm", locale))) {
-            return;
-        }
+        setSettingsConfirm("resetAll");
+    }
+    function applyResetAllDisplaySettings() {
         persistCustomerDisplaySettings(resetAllCustomerDisplaySettings());
         setMessage({ text: tSettings("resetAllCustomerDisplaySuccess", locale), tone: "success" });
+        setSettingsConfirm(null);
     }
     function updateDisplayAutoReturn(seconds: number) {
         persistCustomerDisplaySettings({ ...displaySettings, autoReturnSeconds: Math.max(1, seconds) });
@@ -477,6 +481,15 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         <div className="mt-5"><StoreActivityLogsClient locale={locale} /></div>
       </section>
 
+      {settingsConfirm ? (<AppSmallModal closeAriaLabel={tSettings("closeModal", locale)} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSettingsConfirm(null)}>{tSettings("cancel", locale)}</button>
+            {settingsConfirm === "removeLogo" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyRemoveLogo}>{tSettings("remove", locale)}</button>) : null}
+            {settingsConfirm === "resetThisPage" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAppearancePage}>{tSettings("resetThisPage", locale)}</button>) : null}
+            {settingsConfirm === "resetAll" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAllDisplaySettings}>{tSettings("resetAllCustomerDisplay", locale)}</button>) : null}
+          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : tSettings("resetAllCustomerDisplay", locale)}>
+          <p className="text-sm text-muted-foreground">{settingsConfirm === "removeLogo" ? tSettings("removeLogoConfirm", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPageConfirm", locale) : tSettings("resetAllCustomerDisplayConfirm", locale)}</p>
+          {settingsConfirm === "resetAll" ? (<p className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>) : null}
+        </AppSmallModal>) : null}
     </div>);
 }
 type BankDraft = {

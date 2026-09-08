@@ -142,8 +142,10 @@ check(
     client.includes("if (form.minSpendLak < 0)") &&
     client.includes("discountPercent: form.discountPercent") &&
     client.includes("minSpendLak: form.minSpendLak") &&
-    client.includes("window.confirm(copy(\"archiveConfirm\"))") &&
-    client.includes("window.confirm(copy(\"deleteConfirm\"))") &&
+    client.includes('"archiveConfirm"') &&
+    client.includes('"deleteConfirm"') &&
+    !client.includes("window.confirm") &&
+    client.includes("<AppSmallModal") &&
     page.includes("getMembershipLevels") &&
     actions.includes("createMembershipLevelAction") &&
     suppliersList.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72"') &&

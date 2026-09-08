@@ -147,7 +147,10 @@ check(
   settingsForm.includes('tSettings("removeLogoConfirm"') &&
     settingsForm.includes('tSettings("resetThisPageConfirm"') &&
     settingsForm.includes('tSettings("resetAllCustomerDisplayConfirm"') &&
-    settingsForm.includes("window.confirm") &&
+    settingsForm.includes('settingsConfirm === "removeLogo"') &&
+    settingsForm.includes('settingsConfirm === "resetThisPage"') &&
+    settingsForm.includes('settingsConfirm === "resetAll"') &&
+    !settingsForm.includes("window.confirm") &&
     settingsForm.includes("persistCustomerDisplaySettings") &&
     displaySettings.includes("export function resetAllCustomerDisplaySettings") &&
     displayClient.includes("fixed inset-0 h-[100dvh] w-screen overflow-hidden"),

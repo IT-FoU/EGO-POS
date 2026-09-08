@@ -35,8 +35,6 @@ const posClient = read("features/pos/components/pos-page-client.tsx");
 const productForm = read("features/products/components/product-form.tsx");
 const dashboard = read("features/dashboard/components/dashboard-interactions-client.tsx");
 const reports = read("features/reports/components/reports-analytics-client.tsx");
-const membership = read("features/membership-levels/components/membership-levels-client.tsx");
-const purchasing = read("features/purchasing/components/purchasing-page-client.tsx");
 const posWorkspace = read("features/pos/components/pos-workspace-modal.tsx");
 
 const overlayClass = 'className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"';
@@ -156,12 +154,8 @@ check(
 );
 
 check(
-  "12. native confirms and no-change modules remain",
-  membership.includes("window.confirm") &&
-    purchasing.includes("window.confirm") &&
-    settingsForm.includes("window.confirm") &&
-    posClient.includes("window.prompt") &&
-    !dashboard.includes("fixed inset-0") &&
+  "12. no-change modules remain",
+  !dashboard.includes("fixed inset-0") &&
     !reports.includes("place-items-center bg-black") &&
     dashboard.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"'),
 );

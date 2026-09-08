@@ -30,6 +30,7 @@ import {
   updateMembershipLevelAction,
 } from "@/features/membership-levels/actions";
 import type { MembershipLevelRecord } from "@/features/membership-levels/types";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 import { cn } from "@/lib/utils";
 
 type Drawer =
@@ -95,6 +96,7 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [levelConfirm, setLevelConfirm] = useState<{ kind: "archive" | "delete"; level: MembershipLevelRecord } | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
 
   const filteredLevels = useMemo(() => {
@@ -176,31 +178,32 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
   }
 
   function archiveLevel(level: MembershipLevelRecord) {
-    if (!window.confirm(copy("archiveConfirm"))) return;
     setOpenMenuId(null);
-    setMessage(null);
-    startTransition(async () => {
-      const result = await archiveMembershipLevelAction(level.id);
-      if (!result.ok) {
-        setMessage({ text: localizeMembershipError(result.error ?? copy("archiveFailed"), locale), tone: "error" });
-        return;
-      }
-      setMessage({ text: copy("archived"), tone: "success" });
-      router.refresh();
-    });
+    setLevelConfirm({ kind: "archive", level });
   }
 
   function deleteLevel(level: MembershipLevelRecord) {
-    if (!window.confirm(copy("deleteConfirm"))) return;
     setOpenMenuId(null);
+    setLevelConfirm({ kind: "delete", level });
+  }
+
+  function confirmLevelAction() {
+    if (!levelConfirm) return;
+    const { kind, level } = levelConfirm;
+    setLevelConfirm(null);
     setMessage(null);
     startTransition(async () => {
-      const result = await deleteMembershipLevelAction(level.id);
+      const result = kind === "archive"
+        ? await archiveMembershipLevelAction(level.id)
+        : await deleteMembershipLevelAction(level.id);
       if (!result.ok) {
-        setMessage({ text: localizeMembershipError(result.error ?? copy("deleteFailed"), locale), tone: "error" });
+        setMessage({
+          text: localizeMembershipError(result.error ?? copy(kind === "archive" ? "archiveFailed" : "deleteFailed"), locale),
+          tone: "error",
+        });
         return;
       }
-      setMessage({ text: copy("deletedOrArchived"), tone: "success" });
+      setMessage({ text: copy(kind === "archive" ? "archived" : "deletedOrArchived"), tone: "success" });
       router.refresh();
     });
   }
@@ -392,6 +395,41 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
             </FormSection>
           </DrawerContent>
         </WideDrawer>
+      ) : null}
+
+      {levelConfirm ? (
+        <AppSmallModal
+          closeAriaLabel={copy("close")}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={
+            <div className="flex justify-end gap-2">
+              <button
+                className="h-10 rounded-md border border-border px-4 text-sm font-semibold"
+                type="button"
+                onClick={() => setLevelConfirm(null)}
+              >
+                {copy("cancel")}
+              </button>
+              <button
+                className={levelConfirm.kind === "delete"
+                  ? "h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white"
+                  : "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground"}
+                type="button"
+                onClick={confirmLevelAction}
+              >
+                {levelConfirm.kind === "delete" ? copy("delete") : copy("archive")}
+              </button>
+            </div>
+          }
+          onClose={() => setLevelConfirm(null)}
+          size="sm"
+          title={levelConfirm.kind === "delete" ? copy("delete") : copy("archive")}
+        >
+          <p className="text-sm text-muted-foreground">
+            {copy(levelConfirm.kind === "delete" ? "deleteConfirm" : "archiveConfirm")}
+          </p>
+        </AppSmallModal>
       ) : null}
     </div>
   );

@@ -32,6 +32,7 @@ type CategoryDialogState = {
     mode: "add" | "edit" | "delete";
     categoryId?: string;
 } | null;
+type ProductStatusConfirm = "archive" | "delete" | null;
 type InitialStockPreviewValue = {
     addOpeningStock: boolean;
     receiveUnitId: string;
@@ -125,6 +126,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     });
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
+    const [statusConfirm, setStatusConfirm] = useState<ProductStatusConfirm>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
     const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
     const [duplicateBarcodeMatch, setDuplicateBarcodeMatch] = useState<DuplicateBarcodeMatch | null>(null);
@@ -537,10 +539,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary disabled:opacity-50" type="button" disabled={isPending} onClick={duplicateProduct}>
               {t("duplicateProduct")}
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-warning disabled:opacity-50" type="button" disabled={isPending} onClick={() => changeProductStatus("archive")}>
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-warning disabled:opacity-50" type="button" disabled={isPending} onClick={() => setStatusConfirm("archive")}>
               {t("archive")}
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-danger px-4 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={isPending} onClick={() => changeProductStatus("delete")}>
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-danger px-4 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={isPending} onClick={() => setStatusConfirm("delete")}>
               {t("delete")}
             </button>
           </div>) : null}
@@ -550,6 +552,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           {message}
         </div>) : null}
       {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      {statusConfirm && product ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStatusConfirm(null)}>{t("cancel")}</button>
+            {statusConfirm === "archive" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
+          </div>} onClose={() => setStatusConfirm(null)} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
+          <p className="rounded-md border border-border bg-background p-3 text-sm font-semibold">{productName || product.nameEn || product.nameLo}</p>
+        </ProductSmallModal>) : null}
       {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} snapshot={previewSnapshot}/>) : null}
       {aliasDrawerUnitId ? (<BarcodeAliasDrawer aliasInput={aliasInput} aliases={barcodeAliases[aliasDrawerUnitId] ?? []} onAddAlias={() => addBarcodeAlias(aliasDrawerUnitId)} onAliasInputChange={setAliasInput} onClose={() => setAliasDrawerUnitId(null)} onRemoveAlias={(aliasIndex) => removeBarcodeAlias(aliasDrawerUnitId, aliasIndex)} onUpdateMainBarcode={(barcodeValue) => updateUnit(aliasDrawerUnitId, { barcode: barcodeValue })} unit={units.find((unit) => unit.id === aliasDrawerUnitId)}/>) : null}
       <input type="hidden" name="status" value={product?.status ?? "active"}/>
