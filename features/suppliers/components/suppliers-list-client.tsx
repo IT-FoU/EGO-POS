@@ -216,8 +216,8 @@ function SupplierDetailModal({ onClose, onOpenInvoices, payments, purchaseOrders
     const rating = getSupplierRating(supplier);
     const score = getSupplierScore(rating);
     const tags = getSupplierTags(supplier);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <div className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div className="min-w-0">
             <h2 className="truncate text-xl font-semibold" title={supplier.companyName}>{supplier.companyName}</h2>
@@ -227,7 +227,7 @@ function SupplierDetailModal({ onClose, onOpenInvoices, payments, purchaseOrders
             {t("close")}
           </button>
         </div>
-        <div className="max-h-[76vh] overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Detail label={t("supplierCode")} value={supplier.supplierCode || "-"}/>
             <Detail label={t("taxNumber")} value={supplier.taxNumber || "-"}/>
@@ -287,8 +287,8 @@ function OutstandingInvoicesModal({ onClose, purchaseOrders, supplier, }: {
     supplier: Supplier;
 }) {
     const invoices = buildOutstandingInvoices(supplier, purchaseOrders);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <div className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
             <h2 className="text-xl font-semibold">{t("outstandingInvoices")}</h2>
@@ -298,7 +298,7 @@ function OutstandingInvoicesModal({ onClose, purchaseOrders, supplier, }: {
             {t("close")}
           </button>
         </div>
-        <div className="max-h-[66vh] overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="max-w-full overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="border-b border-border text-xs uppercase text-muted-foreground">
@@ -345,8 +345,8 @@ function SummaryListModal({ kind, onClose, onViewSupplier, payments, purchaseOrd
     suppliers: Supplier[];
 }) {
     const title = summaryTitle(kind);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <div className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
             <h2 className="text-xl font-semibold">{title}</h2>
@@ -356,7 +356,7 @@ function SummaryListModal({ kind, onClose, onViewSupplier, payments, purchaseOrd
             {t("close")}
           </button>
         </div>
-        <div className="max-h-[66vh] overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {kind === "active" ? <ActiveSuppliersTable suppliers={suppliers.filter((supplier) => supplier.status === "active")} onViewSupplier={onViewSupplier}/> : null}
           {kind === "credit_limit" ? <CreditLimitTable suppliers={suppliers} onViewSupplier={onViewSupplier}/> : null}
           {kind === "outstanding" ? <OutstandingSummaryTable suppliers={suppliers} purchaseOrders={purchaseOrders} onViewSupplier={onViewSupplier}/> : null}

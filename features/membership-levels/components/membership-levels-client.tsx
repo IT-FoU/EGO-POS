@@ -509,7 +509,7 @@ function MenuButton({
 function WideDrawer({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
   const copy = useCopy();
   return (
-    <div className="fixed bottom-0 right-0 top-0 z-50 flex w-full justify-end bg-black/45">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 flex justify-end overflow-x-hidden bg-black/45 lg:left-72">
       <section className="flex h-full w-full max-w-5xl flex-col border-l border-border bg-background shadow-2xl">
         <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">
