@@ -45,113 +45,103 @@ const mixedPayment = sliceBetween(posClient, "function MixedPaymentModal(", "fun
 const saleCompleted = sliceBetween(posClient, "function SaleCompletedModal(", "function ManagerApprovalModal(");
 
 check(
-  "1. Unit Selector is centered",
+  "1. all three remain centered",
   posClient.includes('import { PosSmallModal } from "@/features/pos/components/pos-small-modal"') &&
     unitSelector.includes("<PosSmallModal") &&
+    mixedPayment.includes("<PosSmallModal") &&
+    saleCompleted.includes("<PosSmallModal") &&
     unitSelector.includes('size="md"') &&
+    mixedPayment.includes('size="md"') &&
+    saleCompleted.includes('size="sm"') &&
     shell.includes(overlayClass) &&
     shell.includes("place-items-center") &&
     !unitSelector.includes("lg:left-72") &&
-    !unitSelector.includes("inset-y-0"),
-);
-
-check(
-  "2. Unit Selector uses bg-black/60",
-  shell.includes("bg-black/60") &&
-    !shell.includes("bg-black/70") &&
-    !unitSelector.includes("bg-black/70"),
-);
-
-check(
-  "3. Unit Selector uses z-50",
-  shell.includes("fixed inset-0 z-50") &&
-    !shell.includes("z-40") &&
-    !unitSelector.includes("z-40"),
-);
-
-check(
-  "4. Unit Selector uses max-w-lg",
-  unitSelector.includes('size="md"') &&
-    shell.includes('size === "sm" ? "max-w-md" : "max-w-lg"') &&
-    !unitSelector.includes("max-w-2xl") &&
-    !unitSelector.includes("max-w-md"),
-);
-
-check(
-  "5. Mixed Payment is centered",
-  mixedPayment.includes("<PosSmallModal") &&
-    mixedPayment.includes('size="md"') &&
-    !mixedPayment.includes("flex items-center justify-center") &&
-    !mixedPayment.includes("lg:left-72"),
-);
-
-check(
-  "6. Mixed Payment uses the same overlay/chrome family",
-  mixedPayment.includes("<PosSmallModal") &&
-    shell.includes(overlayClass) &&
-    shell.includes(cardClass) &&
-    shell.includes(closeClass) &&
-    shell.includes("rounded-lg") &&
-    shell.includes("border border-border") &&
-    shell.includes("bg-card") &&
-    shell.includes("shadow-2xl"),
-);
-
-check(
-  "7. Mixed Payment remains max-w-lg",
-  mixedPayment.includes('size="md"') &&
-    !mixedPayment.includes("max-w-2xl") &&
-    !mixedPayment.includes('size="sm"') &&
-    mixedPayment.includes('setPaymentMode("mixed")') &&
-    mixedPayment.includes("{t(\"ui.apply.mixed.payment\")}"),
-);
-
-check(
-  "8. Sale Completed is centered",
-  saleCompleted.includes("<PosSmallModal") &&
-    saleCompleted.includes('size="sm"') &&
-    !saleCompleted.includes("flex items-center justify-center") &&
+    !mixedPayment.includes("lg:left-72") &&
     !saleCompleted.includes("lg:left-72"),
 );
 
 check(
-  "9. Sale Completed uses max-w-md",
-  saleCompleted.includes('size="sm"') &&
+  "2. shared visual standard unchanged",
+  shell.includes(overlayClass) &&
+    shell.includes(cardClass) &&
+    shell.includes(closeClass) &&
+    shell.includes("bg-black/60") &&
+    !shell.includes("bg-black/70") &&
+    shell.includes("fixed inset-0 z-50") &&
+    !shell.includes("z-40") &&
     shell.includes('size === "sm" ? "max-w-md" : "max-w-lg"') &&
-    !saleCompleted.includes("max-w-lg") &&
-    !saleCompleted.includes("max-w-2xl"),
-);
-
-check(
-  "10. Sale Completed uses z-50",
-  saleCompleted.includes("<PosSmallModal") &&
-    shell.includes("z-50") &&
-    !saleCompleted.includes("z-40") &&
-    !shell.includes("z-40"),
-);
-
-check(
-  "11. all three use role=dialog / aria-modal",
-  shell.includes('role="dialog"') &&
-    shell.includes('aria-modal="true"') &&
-    unitSelector.includes("<PosSmallModal") &&
-    mixedPayment.includes("<PosSmallModal") &&
-    saleCompleted.includes("<PosSmallModal"),
-);
-
-check(
-  "12. all three share consistent close/header styling",
-  shell.includes(closeClass) &&
     shell.includes("text-lg font-semibold") &&
-    shell.includes("<X className=\"size-4\" aria-hidden=\"true\" />") &&
-    unitSelector.includes("closeAriaLabel={t(\"ui.close.unit.selector\")}") &&
-    !unitSelector.includes("grid size-9") &&
-    !mixedPayment.includes("grid size-9") &&
-    !saleCompleted.includes("grid size-9"),
+    shell.includes('role="dialog"') &&
+    shell.includes('aria-modal="true"') &&
+    shell.includes("dialogRef.current?.focus()") &&
+    !posClient.includes("max-w-2xl"),
 );
 
 check(
-  "13. no POS Large Drawer geometry changed",
+  "3. Unit Selector dismissal policy is explicitly configured",
+  unitSelector.includes("closeOnBackdrop={true}") &&
+    unitSelector.includes("closeOnEscape={true}") &&
+    unitSelector.includes("onClose={onClose}") &&
+    unitSelector.includes("closeAriaLabel={t(\"ui.close.unit.selector\")}") &&
+    shell.includes("onClick={closeOnBackdrop ? onClose : undefined}") &&
+    shell.includes("event.key === \"Escape\" && closeOnEscape"),
+);
+
+check(
+  "4. Mixed Payment backdrop does not close",
+  mixedPayment.includes("closeOnBackdrop={false}") &&
+    mixedPayment.includes("onClose={onClose}") &&
+    shell.includes("onClick={closeOnBackdrop ? onClose : undefined}"),
+);
+
+check(
+  "5. Mixed Payment Escape does not close",
+  mixedPayment.includes("closeOnEscape={false}") &&
+    shell.includes("closeOnEscape = false") &&
+    shell.includes("event.key === \"Escape\" && closeOnEscape"),
+);
+
+check(
+  "6. Sale Completed backdrop does not close",
+  saleCompleted.includes("closeOnBackdrop={false}") &&
+    saleCompleted.includes("onClose={onClose}"),
+);
+
+check(
+  "7. Sale Completed Escape does not bypass the workflow",
+  saleCompleted.includes("closeOnEscape={false}") &&
+    saleCompleted.includes("{t(\"ui.print.receipt\")}") &&
+    saleCompleted.includes("{t(\"ui.view.receipt\")}") &&
+    saleCompleted.includes("{t(\"ui.save.and.new.sale\")}"),
+);
+
+check(
+  "8. explicit close/actions still work",
+  unitSelector.includes("onClose={onClose}") &&
+    mixedPayment.includes("onClose={onClose}") &&
+    mixedPayment.includes('setPaymentMode("mixed")') &&
+    mixedPayment.includes("{t(\"ui.apply.mixed.payment\")}") &&
+    saleCompleted.includes("onClose={onClose}") &&
+    saleCompleted.includes("onClick={onPrint}") &&
+    saleCompleted.includes("onClick={onView}") &&
+    saleCompleted.includes("onClick={onNewSale}") &&
+    shell.includes("onClick={onClose}") &&
+    shell.includes(closeClass),
+);
+
+check(
+  "9. POS business logic unchanged",
+  posClient.includes("async function holdSale") &&
+    posClient.includes("async function resumeSale") &&
+    posClient.includes("function completeSale()") &&
+    posClient.includes("function addToCart(product: PosProduct, selectedUnit?: PosProductUnit)") &&
+    mixedPayment.includes('setPaymentMode("mixed")') &&
+    unitSelector.includes("onSelect(unit)") &&
+    posActions.includes("export async function completeSaleAction"),
+);
+
+check(
+  "10. Large Drawer geometry unchanged",
   frame.includes(largeOverlay) &&
     frame.includes("lg:left-72") &&
     !frame.includes("fixed inset-0") &&
@@ -161,22 +151,6 @@ check(
     ownShift.includes("<PosWorkspaceModal") &&
     cashInOut.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.cash.in.cash.out")}>') &&
     returnExchange.includes("<PosWorkspaceModal onClose={onClose} title={tPos(\"ui.return.exchange.void\")}>"),
-);
-
-check(
-  "14. POS checkout/payment/business logic unchanged",
-  posClient.includes("async function holdSale") &&
-    posClient.includes("async function resumeSale") &&
-    posClient.includes("function completeSale()") &&
-    posClient.includes("function addToCart(product: PosProduct, selectedUnit?: PosProductUnit)") &&
-    mixedPayment.includes('setPaymentMode("mixed")') &&
-    unitSelector.includes("onSelect(unit)") &&
-    saleCompleted.includes("{t(\"ui.print.receipt\")}") &&
-    saleCompleted.includes("{t(\"ui.view.receipt\")}") &&
-    saleCompleted.includes("{t(\"ui.save.and.new.sale\")}") &&
-    posActions.includes("export async function completeSaleAction") &&
-    shell.includes("event.key === \"Escape\"") &&
-    !posClient.includes("max-w-2xl"),
 );
 
 console.log("\nphase-ui-11-pos-small-modal-geometry-check: PASS");

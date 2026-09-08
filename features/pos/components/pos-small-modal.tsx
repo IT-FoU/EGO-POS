@@ -11,6 +11,8 @@ type PosSmallModalSize = "sm" | "md";
 type PosSmallModalProps = {
   children: React.ReactNode;
   closeAriaLabel?: string;
+  closeOnBackdrop?: boolean;
+  closeOnEscape?: boolean;
   dataPrintMode?: string;
   description?: string;
   footer?: React.ReactNode;
@@ -22,6 +24,8 @@ type PosSmallModalProps = {
 export function PosSmallModal({
   children,
   closeAriaLabel,
+  closeOnBackdrop = false,
+  closeOnEscape = false,
   dataPrintMode,
   description,
   footer,
@@ -38,7 +42,7 @@ export function PosSmallModal({
     dialogRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && closeOnEscape) {
         event.preventDefault();
         event.stopPropagation();
         onClose();
@@ -50,12 +54,12 @@ export function PosSmallModal({
       window.removeEventListener("keydown", handleKeyDown);
       previous?.focus();
     };
-  }, [onClose]);
+  }, [closeOnEscape, onClose]);
 
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"
-      onClick={onClose}
+      onClick={closeOnBackdrop ? onClose : undefined}
     >
       <section
         ref={dialogRef}

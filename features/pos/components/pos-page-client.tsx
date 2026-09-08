@@ -2458,7 +2458,7 @@ function UnitSelectorModal({ onClose, onSelect, product, }: {
     product: PosProduct;
 }) {
     const units = resolvePosSaleUnits(product);
-    return (<PosSmallModal closeAriaLabel={t("ui.close.unit.selector")} description={localizedProductName(product)} onClose={onClose} size="md" title={t("ui.select.sale.unit")}>
+    return (<PosSmallModal closeAriaLabel={t("ui.close.unit.selector")} closeOnBackdrop={true} closeOnEscape={true} description={localizedProductName(product)} onClose={onClose} size="md" title={t("ui.select.sale.unit")}>
         <div className="grid gap-2">
           {units.map((unit) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left transition hover:border-primary" key={unit.id} type="button" onClick={() => onSelect(unit)}>
               <span>
@@ -2497,7 +2497,7 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardA
 }) {
     const paid = cashAmount + qrAmount + cardAmount + transferAmount;
     const valid = paid >= totalAmount;
-    return (<PosSmallModal footer={<button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
+    return (<PosSmallModal closeOnBackdrop={false} closeOnEscape={false} footer={<button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
           {t("ui.apply.mixed.payment")}
         </button>} onClose={onClose} size="md" title={t("ui.mixed.payment")}>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -2527,7 +2527,7 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
     printMode: ReceiptPrintMode;
     receipt: ReceiptSnapshot;
 }) {
-    return (<PosSmallModal dataPrintMode={printMode} description={t("ui.do.you.want.to.print.receipt")} onClose={onClose} size="sm" title={t("ui.payment.completed")}>
+    return (<PosSmallModal closeOnBackdrop={false} closeOnEscape={false} dataPrintMode={printMode} description={t("ui.do.you.want.to.print.receipt")} onClose={onClose} size="sm" title={t("ui.payment.completed")}>
         <dl className="grid gap-2 rounded-md border border-border bg-background p-3 text-sm">
           <InfoLine label={t("ui.bill.number")} value={receipt.saleNo}/>
           <InfoLine label={t("ui.total")} value={`${formatLak(receipt.totalAmount)} LAK`}/>
