@@ -748,34 +748,34 @@ function SelectorModal({ categories, kind, membershipLevels, onClose, onSelectCa
     const placeholderItems = kind === "brands" ? ["Coca-Cola", "Pepsi", "Lao Brewery", "Local Brand"] : kind === "branches" ? ["Main Branch", "Morning Market Branch"] : kind === "warehouses" ? ["Main Warehouse", "Cold Storage", "Branch Warehouse"] : membershipLevels.map((level) => level.name);
     const filteredProducts = products.filter((product) => [product.nameEn, product.sku, product.barcode].join(" ").toLowerCase().includes(query.toLowerCase()));
     const filteredCategories = categories.filter((category) => category.nameEn.toLowerCase().includes(query.toLowerCase()));
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("searchPlaceholder")}</p></div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-        </div>
-        <div className="p-5">
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4 lg:px-8">
+          <div className="min-w-0"><h2 className="truncate text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("searchPlaceholder")}</p></div>
+          <button className="h-9 shrink-0 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
+        </header>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 lg:px-8">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true"/>
             <input className="field-input pl-10" placeholder={`Search ${kind}`} value={query} onChange={(event) => setQuery(event.target.value)}/>
           </label>
-          <div className="mt-5 grid max-h-[46vh] gap-3 overflow-y-auto md:grid-cols-2">
-            {kind === "products" ? filteredProducts.map((product) => (<label className="flex items-center gap-3 rounded-md border border-border bg-background p-3 text-sm" key={product.id}>
+          <div className="mt-5 grid min-w-0 gap-3 md:grid-cols-2">
+            {kind === "products" ? filteredProducts.map((product) => (<label className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-background p-3 text-sm" key={product.id}>
                 <input className="size-5 accent-[var(--primary)]" type="checkbox" checked={productIds.includes(product.id)} onChange={() => setProductIds((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])}/>
-                <span><span className="font-semibold">{product.nameEn}</span><span className="block text-xs text-muted-foreground">{product.sku}</span></span>
+                <span className="min-w-0"><span className="font-semibold">{product.nameEn}</span><span className="block text-xs text-muted-foreground">{product.sku}</span></span>
               </label>)) : null}
-            {kind === "categories" ? filteredCategories.map((category) => (<label className="flex items-center gap-3 rounded-md border border-border bg-background p-3 text-sm" key={category.id}>
+            {kind === "categories" ? filteredCategories.map((category) => (<label className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-background p-3 text-sm" key={category.id}>
                 <input className="size-5 accent-[var(--primary)]" type="checkbox" checked={categoryIds.includes(category.id)} onChange={() => setCategoryIds((current) => current.includes(category.id) ? current.filter((id) => id !== category.id) : [...current, category.id])}/>
-                <span>{category.nameEn}</span>
+                <span className="min-w-0">{category.nameEn}</span>
               </label>)) : null}
             {!["products", "categories"].includes(kind) ? placeholderItems.map((item) => <TogglePill key={item} label={item}/>) : null}
           </div>
-          <div className="mt-5 flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { onSelectProducts(productIds); onSelectCategories(categoryIds); onClose(); }}>{t("applySelection")}</button>
-          </div>
         </div>
-      </div>
+        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-6 py-4 lg:px-8">
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
+          <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { onSelectProducts(productIds); onSelectCategories(categoryIds); onClose(); }}>{t("applySelection")}</button>
+        </footer>
+      </section>
     </div>);
 }
 function QrPreviewModal({ couponCode, onClose }: {

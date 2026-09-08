@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import type { SupportedLocale } from "@/lib/constants";
 import {
   fillPromotionsCopy,
@@ -260,31 +260,41 @@ export function PromotionsListClient({
         setModal("confirm");
     }
 }
+function PromotionsLargeFrame({ children, footer, onClose, subtitle, title, }: {
+    children: ReactNode;
+    footer?: ReactNode;
+    onClose: () => void;
+    subtitle?: string;
+    title: string;
+}) {
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4 lg:px-8">
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-semibold">{title}</h2>
+            {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+          </div>
+          <button className="h-9 shrink-0 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
+        </header>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 lg:px-8">{children}</div>
+        {footer ? (<footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-6 py-4 lg:px-8">{footer}</footer>) : null}
+      </section>
+    </div>);
+}
 function UtilityModal({ kind, onClose, promotions }: {
     kind: BaseUtilityModalKind;
     onClose: () => void;
     promotions: Promotion[];
 }) {
     const title = modalTitle(kind);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div>
-            <h2 className="text-xl font-semibold">{title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
-          </div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
-        </div>
-        <div className="max-h-[68vh] overflow-y-auto p-5">
-          {kind === "profit" ? <ProfitProtectionPanel /> : null}
-          {kind === "approval" ? <ApprovalPanel promotions={promotions}/> : null}
-          {kind === "coupon" ? <CouponPanel /> : null}
-          {kind === "near_expiry" ? <NearExpiryPanel /> : null}
-          {kind === "slow_moving" ? <SlowMovingPanel /> : null}
-          {["import", "export", "bulk"].includes(kind) ? <PlaceholderPanel title={title}>{t("subtitle")}</PlaceholderPanel> : null}
-        </div>
-      </div>
-    </div>);
+    return (<PromotionsLargeFrame title={title} subtitle={t("subtitle")} onClose={onClose}>
+      {kind === "profit" ? <ProfitProtectionPanel /> : null}
+      {kind === "approval" ? <ApprovalPanel promotions={promotions}/> : null}
+      {kind === "coupon" ? <CouponPanel /> : null}
+      {kind === "near_expiry" ? <NearExpiryPanel /> : null}
+      {kind === "slow_moving" ? <SlowMovingPanel /> : null}
+      {["import", "export", "bulk"].includes(kind) ? <PlaceholderPanel title={title}>{t("subtitle")}</PlaceholderPanel> : null}
+    </PromotionsLargeFrame>);
 }
 function ProfitProtectionPanel() {
     const rows = [
@@ -371,16 +381,8 @@ function PromotionDetailModal({ onClose, promotion }: {
 }) {
     const auditEvents = [t("auditCreated"), t("auditEdited"), t("auditDuplicated"), t("auditActivated"), t("auditUsedInSale"), t("auditProfitWarning")];
     const forecast = buildPromotionForecast(promotion);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[88vh] w-full max-w-5xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div>
-            <h2 className="text-xl font-semibold">{promotion.promotionName}</h2>
-            <p className="mt-1 font-mono text-sm text-muted-foreground">{promotion.promotionCode}</p>
-          </div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
-        </div>
-        <div className="grid max-h-[70vh] gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+    return (<PromotionsLargeFrame title={promotion.promotionName} subtitle={promotion.promotionCode} onClose={onClose}>
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
           <div className="min-w-0">
             <DataTable headers={[t("summary"), t("summary")]}>
               {[
@@ -421,8 +423,7 @@ function PromotionDetailModal({ onClose, promotion }: {
             </div>
           </aside>
         </div>
-      </div>
-    </div>);
+    </PromotionsLargeFrame>);
 }
 function DuplicatePromotionModal({ isPending, onClose, onSave, promotion }: {
     isPending: boolean;
@@ -475,16 +476,7 @@ function CardDetailModal({ onClose, promotions, title }: {
     promotions: Promotion[];
     title: string;
 }) {
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div>
-            <h2 className="text-xl font-semibold">{title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
-          </div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
-        </div>
-        <div className="max-h-[68vh] overflow-y-auto p-5">
+    return (<PromotionsLargeFrame title={title} subtitle={t("subtitle")} onClose={onClose}>
           <DataTable headers={[t("promotions"), t("status"), t("usage"), t("revenueGenerated"), t("discountGiven")]}>
             {promotions.map((promotion) => (<tr className="border-b border-border last:border-b-0" key={promotion.id}>
                 <td className="px-3 py-3 font-semibold">{promotion.promotionName}</td>
@@ -494,18 +486,16 @@ function CardDetailModal({ onClose, promotions, title }: {
                 <td className="px-3 py-3 text-right">{formatLak(promotion.totalDiscountLak)} LAK</td>
               </tr>))}
           </DataTable>
-        </div>
-      </div>
-    </div>);
+    </PromotionsLargeFrame>);
 }
 function PlaceholderPanel({ children, title }: {
-    children: React.ReactNode;
+    children: ReactNode;
     title: string;
 }) {
     return <div className="rounded-md border border-dashed border-border bg-background p-4"><h3 className="font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{children}</p></div>;
 }
 function DataTable({ children, headers }: {
-    children: React.ReactNode;
+    children: ReactNode;
     headers: string[];
 }) {
     return (<div className="max-w-full overflow-x-auto">

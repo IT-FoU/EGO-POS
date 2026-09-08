@@ -66,7 +66,8 @@
     "test:ui-03-products-drawer": "tsx scripts/phase-ui-03-products-drawer-geometry-check.ts",
     "test:ui-06-customers-drawer": "tsx scripts/phase-ui-06-customers-drawer-geometry-check.ts",
     "test:ui-07-membership-drawer": "tsx scripts/phase-ui-07-membership-drawer-geometry-check.ts",
-    "test:ui-07-suppliers-drawer": "tsx scripts/phase-ui-07-suppliers-drawer-geometry-check.ts"
+    "test:ui-07-suppliers-drawer": "tsx scripts/phase-ui-07-suppliers-drawer-geometry-check.ts",
+    "test:ui-08-promotions-drawer": "tsx scripts/phase-ui-08-promotions-drawer-geometry-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",
