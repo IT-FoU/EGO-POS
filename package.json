@@ -71,7 +71,8 @@
     "test:ui-09-reports-drawer": "tsx scripts/phase-ui-09-reports-drawer-geometry-check.ts",
     "test:ui-10-settings-drawer": "tsx scripts/phase-ui-10-settings-drawer-geometry-check.ts",
     "test:ui-11-pos-small-modal": "tsx scripts/phase-ui-11-pos-small-modal-geometry-check.ts",
-    "test:ui-12-products-small-modal": "tsx scripts/phase-ui-12-products-small-modal-geometry-check.ts"
+    "test:ui-12-products-small-modal": "tsx scripts/phase-ui-12-products-small-modal-geometry-check.ts",
+    "test:ui-13-small-modal-round1": "tsx scripts/phase-ui-13-small-modal-round1-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

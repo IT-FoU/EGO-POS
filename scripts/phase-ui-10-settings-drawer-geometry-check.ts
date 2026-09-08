@@ -121,23 +121,25 @@ check(
 check(
   "9. Delete Bank remains small centered modal",
   settingsForm.includes('title={tSettings("deleteBankTitle"') &&
-    settingsForm.includes("function SettingsDialog(") &&
-    settingsForm.includes(smallOverlay) &&
-    settingsForm.includes("max-w-2xl"),
+    settingsForm.includes("<AppSmallModal") &&
+    settingsForm.includes('size="sm"') &&
+    !settingsForm.includes("function SettingsDialog(") &&
+    !settingsForm.includes("max-w-2xl"),
 );
 
 check(
   "10. Delete QR remains small centered modal",
   settingsForm.includes('title={tSettings("deleteQrAccountTitle"') &&
-    settingsForm.includes("function SettingsDialog(") &&
-    settingsForm.includes(smallOverlay),
+    settingsForm.includes("<AppSmallModal") &&
+    settingsForm.includes('size="sm"'),
 );
 
 check(
   "11. QR Preview remains small centered modal",
   settingsForm.includes('title={tSettings("qrPreview"') &&
-    settingsForm.includes("{previewAccount ? (<SettingsDialog") &&
-    settingsForm.includes("max-w-2xl"),
+    settingsForm.includes("{previewAccount ? (<AppSmallModal") &&
+    settingsForm.includes('size="sm"') &&
+    !settingsForm.includes("max-w-2xl"),
 );
 
 check(

@@ -382,15 +382,11 @@ function CustomerPopup({
     : modal.type === "import"
       ? t("importCustomers")
       : t("exportCustomers");
-  const isInsightDrawer = modal.type === "customers";
+  const isLargeDrawer = modal.type === "customers" || modal.type === "import" || modal.type === "export";
 
   return (
-    <div className={isInsightDrawer
-      ? "fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72"
-      : "fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"}>
-      <div className={isInsightDrawer
-        ? "flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"
-        : "max-h-[86vh] w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl"}>
+    <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <div className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
         <div className="flex items-center justify-between gap-4 border-b border-border p-5">
           <div>
             <h2 className="text-xl font-semibold">{title}</h2>
@@ -406,7 +402,8 @@ function CustomerPopup({
         </div>
 
         {modal.type === "import" ? (
-          <div className="grid gap-4 p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <div className="grid gap-4">
             <div className="rounded-md border border-border bg-background p-4">
               <div className="font-semibold">{t("importWorkflow")}</div>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("importHint")}</p>
@@ -414,11 +411,13 @@ function CustomerPopup({
             <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">
               {t("selectCsvExcel")}
             </button>
+            </div>
           </div>
         ) : null}
 
         {modal.type === "export" ? (
-          <div className="grid gap-4 p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <div className="grid gap-4">
             <div className="rounded-md border border-border bg-background p-4">
               <div className="font-semibold">{t("exportWorkflow")}</div>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{t("exportHint")}</p>
@@ -430,6 +429,7 @@ function CustomerPopup({
               <button className="h-11 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button">
                 {t("exportExcel")}
               </button>
+            </div>
             </div>
           </div>
         ) : null}

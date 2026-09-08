@@ -17,6 +17,7 @@ import { PromotionStatusBadge } from "@/features/promotions/components/promotion
 import { formatLak, formatPromotionType } from "@/features/promotions/format";
 import type { Promotion, PromotionStatus } from "@/features/promotions/types";
 import { archivePromotionAction, createPromotionAction, updatePromotionAction } from "@/features/promotions/actions";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 const statusOptions: Array<PromotionStatus | "all"> = ["all", "active", "scheduled", "inactive", "expired"];
 const branchNames = ["Main Branch", "Branch Warehouse", "Mini Mart Counter"];
 const createdByNames = ["Owner", "Manager", "Promotion Admin"];
@@ -433,20 +434,15 @@ function DuplicatePromotionModal({ isPending, onClose, onSave, promotion }: {
 }) {
     const [name, setName] = useState(`${promotion.promotionName} Copy`);
     const [code, setCode] = useState(`${promotion.promotionCode}-COPY`);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-xl rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <h2 className="text-xl font-semibold">{t("duplicatePromotion")}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
-        <div className="mt-5 grid gap-4">
+    return (<AppSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={true} description={t("subtitle")} footer={<div className="flex justify-end gap-2">
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
+          <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onSave(code, name)} disabled={!code.trim() || !name.trim() || isPending}>{t("duplicate")}</button>
+        </div>} onClose={onClose} size="xl" title={t("duplicatePromotion")}>
+        <div className="grid gap-4">
           <label className="text-sm font-medium">{t("newPromotionCode")}<input className="field-input mt-2 font-mono" value={code} onChange={(event) => setCode(event.target.value)}/></label>
           <label className="text-sm font-medium">{t("newPromotionName")}<input className="field-input mt-2" value={name} onChange={(event) => setName(event.target.value)}/></label>
         </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-          <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onSave(code, name)} disabled={!code.trim() || !name.trim() || isPending}>{t("duplicate")}</button>
-        </div>
-      </div>
-    </div>);
+      </AppSmallModal>);
 }
 function ConfirmPromotionModal({ action, isPending, onClose, onConfirm, promotion }: {
     action: ConfirmAction;
@@ -456,20 +452,16 @@ function ConfirmPromotionModal({ action, isPending, onClose, onConfirm, promotio
     promotion: Promotion;
 }) {
     const danger = action === "delete";
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <h2 className="text-xl font-semibold">{confirmActionLabel(action)} {t("promotions")}</h2>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          {t("confirm")} {confirmActionLabel(action).toLowerCase()} - <span className="font-semibold text-foreground">{promotion.promotionName}</span>.
-        </p>
-        <div className="mt-6 flex justify-end gap-2">
+    return (<AppSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
           <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
           <button className={danger ? "h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white disabled:opacity-50" : "h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"} type="button" onClick={onConfirm} disabled={isPending}>
             {t("confirm")}
           </button>
-        </div>
-      </div>
-    </div>);
+        </div>} onClose={onClose} size="sm" title={`${confirmActionLabel(action)} ${t("promotions")}`}>
+        <p className="text-sm leading-6 text-muted-foreground">
+          {t("confirm")} {confirmActionLabel(action).toLowerCase()} - <span className="font-semibold text-foreground">{promotion.promotionName}</span>.
+        </p>
+      </AppSmallModal>);
 }
 function CardDetailModal({ onClose, promotions, title }: {
     onClose: () => void;

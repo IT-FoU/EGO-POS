@@ -109,16 +109,18 @@ check(
 );
 
 check(
-  "5. compact Supplier Detail dialogs remain unchanged",
+  "5. Supplier detail surfaces use Large Drawer except Record Payment placeholder",
   detail.includes("function DetailModalView(") &&
-    detail.includes(smallOverlay) &&
-    detail.includes(smallPanel) &&
+    detail.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72"') &&
+    detail.includes('"flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"') &&
     detail.includes('modal.kind === "po"') &&
     detail.includes('modal.kind === "receiving"') &&
     detail.includes('modal.kind === "payment"') &&
     detail.includes('modal.kind === "ledger"') &&
     detail.includes('modal.kind === "payment_placeholder"') &&
-    !detail.includes("lg:left-72"),
+    detail.includes("<AppSmallModal") &&
+    detail.includes('size="md"') &&
+    !detail.includes(smallPanel),
 );
 
 check(
@@ -132,7 +134,7 @@ check(
     posFrame.includes('className="fixed inset-y-0 left-0 right-0 z-[60] overflow-x-hidden bg-black/70 lg:left-72"') &&
     productList.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"') &&
     customersList.includes("fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72") &&
-    membershipClient.includes("fixed inset-y-0 left-0 right-0 z-50 flex justify-end overflow-x-hidden bg-black/45 lg:left-72"),
+    membershipClient.includes("fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"),
 );
 
 console.log("\nphase-ui-07-suppliers-drawer-geometry-check: PASS");

@@ -20,6 +20,7 @@ import { formatLak, formatPromotionType } from "@/features/promotions/format";
 import { PROMOTION_TEMPLATES } from "@/features/promotions/promotion-templates";
 import type { Promotion, PromotionType } from "@/features/promotions/types";
 import { createPromotionAction, updatePromotionAction } from "@/features/promotions/actions";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 
 let activeLocale: SupportedLocale = "en";
 
@@ -782,16 +783,16 @@ function QrPreviewModal({ couponCode, onClose }: {
     couponCode: string;
     onClose: () => void;
 }) {
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-center shadow-2xl">
-        <h2 className="text-xl font-semibold">{t("qrCoupon")}</h2>
-        <div className="mx-auto mt-5 grid size-48 place-items-center rounded-lg border border-border bg-background">
-          <QrCode className="size-28 text-primary" aria-hidden="true"/>
+    return (<AppSmallModal closeAriaLabel={t("close")} closeOnBackdrop={true} closeOnEscape={true} footer={<div className="flex justify-end">
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
+        </div>} onClose={onClose} size="sm" title={t("qrCoupon")}>
+        <div className="text-center">
+          <div className="mx-auto grid size-48 place-items-center rounded-lg border border-border bg-background">
+            <QrCode className="size-28 text-primary" aria-hidden="true"/>
+          </div>
+          <p className="mt-4 font-mono text-lg font-semibold">{couponCode || "COUPON-CODE"}</p>
         </div>
-        <p className="mt-4 font-mono text-lg font-semibold">{couponCode || "COUPON-CODE"}</p>
-        <button className="mt-5 h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
-      </div>
-    </div>);
+      </AppSmallModal>);
 }
 function ValidationErrorModal({ issues, onClose }: {
     issues: Array<{
@@ -800,17 +801,15 @@ function ValidationErrorModal({ issues, onClose }: {
     }>;
     onClose: () => void;
 }) {
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-xl rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <h2 className="text-xl font-semibold">{t("validationPanel")}</h2>
-        <div className="mt-4 flex flex-col gap-3">
+    return (<AppSmallModal closeAriaLabel={t("close")} closeOnBackdrop={true} closeOnEscape={true} footer={<div className="flex justify-end">
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
+        </div>} onClose={onClose} size="md" title={t("validationPanel")}>
+        <div className="flex flex-col gap-3">
           {issues.length === 0 ? <div className="rounded-md border border-success/40 bg-success/10 p-3 text-success">{t("save")}</div> : issues.map((issue) => (<div className={issue.level === "red" ? "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger" : "rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning"} key={issue.text}>
               {issue.text}
             </div>))}
         </div>
-        <button className="mt-5 h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
-      </div>
-    </div>);
+      </AppSmallModal>);
 }
 function buildLivePosPreview({ couponEnabled, customerTarget, discountAmount, discountPercent, freeGiftEnabled, getQty, memberEnabled, minimumMargin, pointEnabled, type, }: {
     couponEnabled: boolean;

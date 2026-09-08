@@ -146,15 +146,15 @@ check(
 );
 
 check(
-  "8. small Promotions modals remain unchanged",
-  duplicateFn.includes(smallOverlay) &&
-    duplicateFn.includes("max-w-xl") &&
-    confirmFn.includes(smallOverlay) &&
-    confirmFn.includes("max-w-lg") &&
-    qrFn.includes(smallOverlay) &&
-    qrFn.includes("max-w-md") &&
-    validationFn.includes(smallOverlay) &&
-    validationFn.includes("max-w-xl") &&
+  "8. Promotions compact modals use the shared Small Modal family",
+  duplicateFn.includes("<AppSmallModal") &&
+    duplicateFn.includes('size="xl"') &&
+    confirmFn.includes("<AppSmallModal") &&
+    confirmFn.includes('size="sm"') &&
+    qrFn.includes("<AppSmallModal") &&
+    qrFn.includes('size="sm"') &&
+    validationFn.includes("<AppSmallModal") &&
+    (validationFn.includes('size="md"') || validationFn.includes('size="xl"')) &&
     !duplicateFn.includes("lg:left-72") &&
     !confirmFn.includes("lg:left-72") &&
     !qrFn.includes("lg:left-72") &&

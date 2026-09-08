@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, CircleDollarSign, PackageCheck, PackageSearch, ReceiptText, Star, Truck, } from "lucide-react";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { Supplier, SupplierPayment, SupplierPurchaseOrder, SupplierReceiving } from "@/features/suppliers/types";
 import { PurchaseStatusBadge } from "@/features/suppliers/components/purchase-status-badge";
 import { SupplierStatusBadge } from "@/features/suppliers/components/supplier-status-badge";
@@ -457,8 +458,13 @@ function DetailModalView({ ledgerRows, modal, onClose, supplier, }: {
             modal.kind === "payment" ? t("paymentDetail") :
                 modal.kind === "ledger" ? t("supplierLedger") :
                     t("recordPayment");
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    if (modal.kind === "payment_placeholder") {
+        return (<AppSmallModal closeAriaLabel={t("close")} closeOnBackdrop={true} closeOnEscape={true} description={supplier.companyName} onClose={onClose} size="md" title={title}>
+        <PlaceholderPanel title={t("recordPayment")}>{t("paymentModalPlaceholder")}</PlaceholderPanel>
+      </AppSmallModal>);
+    }
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border p-5">
           <div>
             <h2 className="text-xl font-semibold">{title}</h2>
@@ -466,14 +472,13 @@ function DetailModalView({ ledgerRows, modal, onClose, supplier, }: {
           </div>
           <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
         </div>
-        <div className="max-h-[68vh] overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {modal.kind === "po" ? <PoDetail row={modal.row} supplier={supplier}/> : null}
           {modal.kind === "receiving" ? <ReceivingDetail row={modal.row}/> : null}
           {modal.kind === "payment" ? <PaymentDetail row={modal.row}/> : null}
           {modal.kind === "ledger" ? <LedgerDetail rows={ledgerRows}/> : null}
-          {modal.kind === "payment_placeholder" ? (<PlaceholderPanel title={t("recordPayment")}>{t("paymentModalPlaceholder")}</PlaceholderPanel>) : null}
         </div>
-      </div>
+      </section>
     </div>);
 }
 function PoDetail({ row, supplier }: {

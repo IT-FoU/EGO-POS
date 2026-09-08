@@ -37,6 +37,7 @@ import { publishCustomerDisplayQrCatalog } from "@/features/pos/customer-display
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
 import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
 import {
   readReceiptPrintModePreference,
@@ -938,25 +939,25 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           </div>
         </SettingsLargeDrawer>) : null}
 
-      {bankToDelete ? (<SettingsDialog locale={locale} title={tSettings("deleteBankTitle", locale)} onClose={() => setBankToDelete(null)}>
-          <p className="text-sm text-muted-foreground">{tSettings("deleteBankConfirm", locale)}</p>
-          {qrAccounts.some((account) => account.bankId === bankToDelete.id) ? (<div className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">{tSettings("bankHasAccountsWarning", locale)}</div>) : null}
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
+      {bankToDelete ? (<AppSmallModal closeAriaLabel={tSettings("closeModal", locale)} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex flex-wrap justify-end gap-2">
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setBankToDelete(null)}>{tSettings("cancel", locale)}</button>
             <button className="h-10 rounded-md border border-warning/50 px-4 text-sm font-semibold text-warning" type="button" onClick={() => disableBank(bankToDelete)}>{tSettings("archiveInstead", locale)}</button>
             <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteBank}>{tSettings("delete", locale)}</button>
-          </div>
-        </SettingsDialog>) : null}
+          </div>} onClose={() => setBankToDelete(null)} size="sm" title={tSettings("deleteBankTitle", locale)}>
+          <p className="text-sm text-muted-foreground">{tSettings("deleteBankConfirm", locale)}</p>
+          {qrAccounts.some((account) => account.bankId === bankToDelete.id) ? (<div className="mt-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">{tSettings("bankHasAccountsWarning", locale)}</div>) : null}
+        </AppSmallModal>) : null}
 
-      {accountToDelete ? (<SettingsDialog locale={locale} title={tSettings("deleteQrAccountTitle", locale)} onClose={() => setAccountToDelete(null)}>
-          <p className="text-sm text-muted-foreground">{tSettings("deleteQrAccountConfirm", locale)}</p>
-          <div className="mt-5 flex justify-end gap-2">
+      {accountToDelete ? (<AppSmallModal closeAriaLabel={tSettings("closeModal", locale)} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setAccountToDelete(null)}>{tSettings("cancel", locale)}</button>
             <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteAccount}>{tSettings("delete", locale)}</button>
-          </div>
-        </SettingsDialog>) : null}
+          </div>} onClose={() => setAccountToDelete(null)} size="sm" title={tSettings("deleteQrAccountTitle", locale)}>
+          <p className="text-sm text-muted-foreground">{tSettings("deleteQrAccountConfirm", locale)}</p>
+        </AppSmallModal>) : null}
 
-      {previewAccount ? (<SettingsDialog locale={locale} title={tSettings("qrPreview", locale)} onClose={() => setPreviewAccount(null)}>
+      {previewAccount ? (<AppSmallModal closeAriaLabel={tSettings("closeModal", locale)} closeOnBackdrop={true} closeOnEscape={true} footer={<div className="flex justify-end">
+            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setPreviewAccount(null)}>{tSettings("done", locale)}</button>
+          </div>} onClose={() => setPreviewAccount(null)} size="sm" title={tSettings("qrPreview", locale)}>
           <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
             <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
               {previewAccount.qrImageUrl ? (
@@ -972,28 +973,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
               <div>{tSettings("status", locale)}: {previewAccount.isActive ? tSettings("active", locale) : tSettings("inactive", locale)}</div>
             </div>
           </div>
-          <div className="mt-5 flex justify-end">
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => setPreviewAccount(null)}>{tSettings("done", locale)}</button>
-          </div>
-        </SettingsDialog>) : null}
-    </div>);
-}
-function SettingsDialog({ children, locale, onClose, title }: {
-    children: React.ReactNode;
-    locale?: SupportedLocale;
-    onClose: () => void;
-    title: string;
-}) {
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={onClose} aria-label={tSettings("closeModal", locale)}>
-            <X className="size-4" aria-hidden="true"/>
-          </button>
-        </div>
-        <div className="mt-4">{children}</div>
-      </div>
+        </AppSmallModal>) : null}
     </div>);
 }
 function DialogActions({ locale, onCancel, onSave, saveLabel }: {

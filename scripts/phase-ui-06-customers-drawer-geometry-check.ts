@@ -38,7 +38,7 @@ const smallOverlay =
 
 check(
   "1. Customers large frame uses lg:left-72",
-  popupFn.includes("const isInsightDrawer = modal.type === \"customers\"") &&
+  popupFn.includes("const isLargeDrawer = modal.type === \"customers\" || modal.type === \"import\" || modal.type === \"export\"") &&
     popupFn.includes(insightOverlay) &&
     !popupFn.includes("md:left-72") &&
     shell.includes('className="fixed inset-y-0 left-0 hidden w-72'),
@@ -48,7 +48,7 @@ check(
   "2. no desktop full-viewport scrim remains for repaired large Customers surfaces",
   popupFn.includes(insightOverlay) &&
     popupFn.includes('"flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"') &&
-    popupFn.includes("isInsightDrawer") &&
+    popupFn.includes("isLargeDrawer") &&
     !popupFn.includes("lg:left-[var(") &&
     !popupFn.includes("5rem"),
 );
@@ -58,7 +58,7 @@ check(
   popupFn.includes("lg:left-72") &&
     popupFn.includes("inset-y-0") &&
     popupFn.includes("right-0") &&
-    popupFn.includes("isInsightDrawer") &&
+    popupFn.includes("isLargeDrawer") &&
     !insightOverlay.includes("inset-0 z-50 grid"),
 );
 
@@ -86,13 +86,15 @@ check(
 );
 
 check(
-  "6. small centered Customers dialogs remain unchanged",
-  popupFn.includes(smallOverlay) &&
-    popupFn.includes('"max-h-[86vh] w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl"') &&
+  "6. Import/Export use the same Customers Large Drawer geometry",
+  popupFn.includes("isLargeDrawer") &&
+    popupFn.includes(insightOverlay) &&
+    popupFn.includes('"flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"') &&
     list.includes('onClick={() => setModal({ type: "import" })}') &&
     list.includes('onClick={() => setModal({ type: "export" })}') &&
     popupFn.includes('modal.type === "import"') &&
-    popupFn.includes('modal.type === "export"'),
+    popupFn.includes('modal.type === "export"') &&
+    !popupFn.includes("max-w-3xl"),
 );
 
 check(
