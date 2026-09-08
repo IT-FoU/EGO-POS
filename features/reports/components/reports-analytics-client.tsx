@@ -931,13 +931,15 @@ function HealthModal({ inventoryAlerts, onClose }: {
 function ExportModal({ onClose }: {
     onClose: () => void;
 }) {
-    return <ModalFrame onClose={onClose} title={t("export")}><div className="grid gap-3 md:grid-cols-4">{[t("pdf"), t("excel"), t("csv"), t("print")].map((item) => <button className="rounded-md border border-border bg-background p-4 font-semibold hover:border-primary" key={item} type="button">{item}</button>)}</div></ModalFrame>;
+    return (<ReportsCompactModal onClose={onClose} title={t("export")}>
+      <div className="grid gap-3 sm:grid-cols-2">{[t("pdf"), t("excel"), t("csv"), t("print")].map((item) => <button className="rounded-md border border-border bg-background p-4 font-semibold hover:border-primary" key={item} type="button">{item}</button>)}</div>
+    </ReportsCompactModal>);
 }
 function ScheduleModal({ onClose, reportName }: {
     onClose: () => void;
     reportName: string;
 }) {
-    return (<ModalFrame onClose={onClose} title={t("schedule")}>
+    return (<ReportsCompactModal onClose={onClose} title={t("schedule")}>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-medium">{t("reports")}<input className="field-input mt-2" defaultValue={localizeLabel(reportName)}/></label>
         <Select label={t("schedule")} value="Daily" onChange={() => undefined} options={[{ label: t("scheduleDaily"), value: "Daily" }, { label: t("scheduleWeekly"), value: "Weekly" }, { label: t("scheduleMonthly"), value: "Monthly" }]}/>
@@ -947,7 +949,7 @@ function ScheduleModal({ onClose, reportName }: {
         <label className="flex items-end gap-3 text-sm font-semibold"><input className="size-5 accent-[var(--primary)]" type="checkbox" defaultChecked/> {t("active")}</label>
       </div>
       <button className="mt-5 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button">{t("apply")}</button>
-    </ModalFrame>);
+    </ReportsCompactModal>);
 }
 function FavoritesModal({ favorites, onClose, onOpen }: {
     favorites: string[];
@@ -961,13 +963,28 @@ function ModalFrame({ children, onClose, title }: {
     onClose: () => void;
     title: string;
 }) {
+    return (<div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72">
+      <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4 lg:px-8">
+          <div className="min-w-0"><h2 className="truncate text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p></div>
+          <button className="h-9 shrink-0 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
+        </header>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 lg:px-8">{children}</div>
+      </section>
+    </div>);
+}
+function ReportsCompactModal({ children, onClose, title }: {
+    children: React.ReactNode;
+    onClose: () => void;
+    title: string;
+}) {
     return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[88vh] w-full max-w-6xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-          <div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p></div>
-          <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
-        </div>
-        <div className="max-h-[72vh] overflow-y-auto p-5">{children}</div>
+      <div className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+        <header className="flex items-start justify-between gap-4 border-b border-border p-5">
+          <div className="min-w-0"><h2 className="truncate text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p></div>
+          <button className="h-9 shrink-0 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
+        </header>
+        <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
       </div>
     </div>);
 }
