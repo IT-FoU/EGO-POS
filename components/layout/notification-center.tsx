@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Bell, CalendarClock, CreditCard, Info, PackageX, TrendingDown, Truck, } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 type NotificationSeverity = "info" | "warning" | "critical";
 type NotificationItem = {
     href?: string;
@@ -42,9 +43,10 @@ const iconByType = {
     subscriptionExpired: CalendarClock,
     system: Info,
 };
-export function NotificationCenter({ locale }: {
+export function NotificationCenter({ locale: localeProp }: {
     locale?: string;
 }) {
+    const locale = useAppLocale(localeProp);
     const [isOpen, setIsOpen] = useState(false);
     const copy = locale === "lo" ? labels.lo : labels.en;
     const notifications = useMemo<NotificationItem[]>(() => [

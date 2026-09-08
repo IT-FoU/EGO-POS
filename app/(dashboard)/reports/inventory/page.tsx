@@ -22,16 +22,19 @@ export default async function InventoryReportPage() {
     <div className="flex flex-col gap-6">
       <ReportHeader
         description={tReports("inventoryReports", locale)}
+        descriptionKey="inventoryReports"
         locale={locale}
         title={tReports("inventoryReport", locale)}
+        titleKey="inventoryReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Warehouse} label={tReports("currentStock", locale)} value={formatNumber(currentStock)} />
-        <MetricCard icon={AlertTriangle} label={tReports("lowStock", locale)} value={formatNumber(lowStock.length)} />
-        <MetricCard icon={Boxes} label={tReports("deadStock", locale)} value={formatNumber(deadStock.length)} />
-        <MetricCard icon={CalendarClock} label={tReports("expiringSoon", locale)} value={formatNumber(expiringStock.length)} />
+        <MetricCard icon={Warehouse} label={tReports("currentStock", locale)} labelKey="currentStock" value={formatNumber(currentStock)} />
+        <MetricCard icon={AlertTriangle} label={tReports("lowStock", locale)} labelKey="lowStock" value={formatNumber(lowStock.length)} />
+        <MetricCard icon={Boxes} label={tReports("deadStock", locale)} labelKey="deadStock" value={formatNumber(deadStock.length)} />
+        <MetricCard icon={CalendarClock} label={tReports("expiringSoon", locale)} labelKey="expiringSoon" value={formatNumber(expiringStock.length)} />
       </section>
       <DataTable
+        columnKeys={["product", "sku", "category", "currentStock", "minStock", "expiryDate", "daysWithoutSale"]}
         columns={[
           tReports("product", locale),
           tReports("sku", locale),

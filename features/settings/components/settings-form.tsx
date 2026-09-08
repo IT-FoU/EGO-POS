@@ -2,6 +2,7 @@
 
 import { fillSettingsCopy, localizeCustomerDisplayTemplateDescription, localizeSettingsError, receiptPrintModeLabel, roundingMethodLabel, tSettings } from "@/lib/i18n/settings-copy";
 import type { SupportedLocale } from "@/lib/constants";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
@@ -40,7 +41,7 @@ import {
   readReceiptPrintModePreference,
   writeReceiptPrintModePreference,
 } from "@/features/settings/receipt-print-mode";
-export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, locale, qrBranches, }: {
+export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches, }: {
     initialQrAccounts: QrPaymentAccountRecord[];
     initialQrBanks: QrPaymentBankRecord[];
     initialSettings: SettingsFormData;
@@ -48,6 +49,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     locale: SupportedLocale;
     qrBranches: BranchOption[];
 }) {
+    const locale = useAppLocale(localeProp);
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());

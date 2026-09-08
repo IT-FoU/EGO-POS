@@ -7,7 +7,7 @@ import {
   tProducts,
 } from "@/lib/i18n/products-copy";
 import { localizedProductName } from "@/features/pos/product-display-name";
-import { readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
 const t = tProducts;
@@ -62,7 +62,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
     locale?: SupportedLocale;
 }) {
     const router = useRouter();
-    const locale = localeProp ?? readClientLocale();
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tProducts(key, locale);
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
@@ -839,6 +839,7 @@ function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, product
     products: Product[];
     selectedProducts: Product[];
 }) {
+    const locale = useAppLocale();
     const [target, setTarget] = useState<"all" | "category" | "selected">("all");
     const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
     const [adjustmentMode, setAdjustmentMode] = useState<"increase_percent" | "decrease_percent" | "increase_amount" | "decrease_amount">("increase_percent");
@@ -862,7 +863,7 @@ function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, product
         <ProductToolNotice text={t("bulkPreviewNotice")}/>
         <section className="grid gap-4 rounded-lg border border-border bg-background p-4 lg:grid-cols-3">
           <label className="grid gap-1 text-sm font-semibold">{t("applyTo")}<select className="field-input" value={target} onChange={(event) => setTarget(event.target.value as typeof target)}><option value="all">{t("applyToAll")}</option><option value="selected">{t("applyToSelected")}</option><option value="category">{t("applyToCategory")}</option></select></label>
-          <label className="grid gap-1 text-sm font-semibold">{t("category")}<select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={target !== "category"}>{categories.map((category) => <option key={category.id} value={category.id}>{readClientLocale() === "lo" ? (category.nameLo || category.nameEn) : (category.nameEn || category.nameLo)}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-semibold">{t("category")}<select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={target !== "category"}>{categories.map((category) => <option key={category.id} value={category.id}>{locale === "lo" ? (category.nameLo || category.nameEn) : (category.nameEn || category.nameLo)}</option>)}</select></label>
           <label className="grid gap-1 text-sm font-semibold">{t("adjustment")}<select className="field-input" value={adjustmentMode} onChange={(event) => setAdjustmentMode(event.target.value as typeof adjustmentMode)}><option value="increase_percent">{t("increasePercent")}</option><option value="decrease_percent">{t("decreasePercent")}</option><option value="increase_amount">{t("increaseAmount")}</option><option value="decrease_amount">{t("decreaseAmount")}</option></select></label>
           <label className="grid gap-1 text-sm font-semibold">{t("value")}<input className="field-input" inputMode="decimal" value={formatMoneyInput(adjustmentValue)} onChange={(event) => setAdjustmentValue(event.target.value.replace(/[^\d.]/g, ""))}/></label>
           <label className="grid gap-1 text-sm font-semibold">{t("rounding")}<select className="field-input" value={roundingLak} onChange={(event) => setRoundingLak(Number(event.target.value))}><option value={0}>{t("noRounding")}</option><option value={500}>{t("round500")}</option><option value={1000}>{t("round1000")}</option></select></label>

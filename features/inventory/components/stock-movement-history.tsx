@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { StockMovement } from "@/features/inventory/types";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { inventoryMovementLabel, inventoryPaymentLabel, tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 type MovementFilter = "all" | "quick_stock_in" | "adjustment" | "count" | "purchase_receive" | "transfer";
 
@@ -20,26 +20,9 @@ export function StockMovementHistory({ movements, locale: localeProp }: {
     movements: StockMovement[];
     locale?: SupportedLocale;
 }) {
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
     const [filter, setFilter] = useState<MovementFilter>("all");
-
-    useEffect(() => {
-        if (localeProp) {
-            setLocale(localeProp);
-        }
-    }, [localeProp]);
-
-    useEffect(() => {
-        function handleLocaleChange(event: Event) {
-            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-            if (isSupportedLocale(detail?.locale)) {
-                setLocale(detail.locale);
-            }
-        }
-        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
 
     const filters: Array<{ label: string; value: MovementFilter }> = [
         { label: t("all"), value: "all" },

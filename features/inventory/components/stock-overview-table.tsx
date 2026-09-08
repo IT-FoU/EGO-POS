@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import type { InventoryItem } from "@/features/inventory/types";
 import { formatQuantity } from "@/features/inventory/format";
 import { InventoryImage } from "@/features/inventory/components/inventory-image";
@@ -8,7 +8,7 @@ import { ExpiryBadge, StockAlert } from "@/features/inventory/components/invento
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 function buildBreakdown(item: InventoryItem) {
     const units = [...(item.units ?? [])].filter((unit) => unit.conversionQty > 0 && unit.status === "active");
@@ -49,26 +49,9 @@ export function StockOverviewTable({ items, locale: localeProp }: {
     items: InventoryItem[];
     locale?: SupportedLocale;
 }) {
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
     const [expandedId, setExpandedId] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (localeProp) {
-            setLocale(localeProp);
-        }
-    }, [localeProp]);
-
-    useEffect(() => {
-        function handleLocaleChange(event: Event) {
-            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-            if (isSupportedLocale(detail?.locale)) {
-                setLocale(detail.locale);
-            }
-        }
-        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
 
     return (<section className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="border-b border-border p-5">

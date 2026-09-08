@@ -92,9 +92,12 @@ check(
     loginPageSource.includes("getServerLocale") &&
     loginPageSource.includes("LOCALE_COOKIE_NAME"),
 );
+const appLocaleSource = readFileSync(resolve(process.cwd(), "lib/i18n/use-app-locale.tsx"), "utf8");
 check(
   "J. Dashboard shell reads stored locale and listens for changes",
-  dashboardShellSource.includes("readClientLocale") && dashboardShellSource.includes("LOCALE_CHANGE_EVENT"),
+  dashboardShellSource.includes("useAppLocale") &&
+    appLocaleSource.includes("readClientLocale") &&
+    appLocaleSource.includes("LOCALE_CHANGE_EVENT"),
 );
 check(
   "K. Root layout bootstraps locale from cookie with English default",

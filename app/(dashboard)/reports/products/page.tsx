@@ -19,30 +19,35 @@ export default async function ProductReportPage() {
     <div className="flex flex-col gap-6">
       <ReportHeader
         description={tReports("productReports", locale)}
+        descriptionKey="productReports"
         locale={locale}
         title={tReports("productReport", locale)}
+        titleKey="productReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Package} label={tReports("productsTracked", locale)} value={formatNumber(productRows.length)} />
-        <MetricCard icon={TrendingUp} label={tReports("topSeller", locale)} value={topSelling[0]?.productName ?? tReports("na", locale)} />
-        <MetricCard icon={BarChart3} label={tReports("productRevenue", locale)} value={`${formatLak(totalRevenue)} LAK`} />
-        <MetricCard icon={TrendingDown} label={tReports("productProfit", locale)} value={`${formatLak(totalProfit)} LAK`} />
+        <MetricCard icon={Package} label={tReports("productsTracked", locale)} labelKey="productsTracked" value={formatNumber(productRows.length)} />
+        <MetricCard icon={TrendingUp} label={tReports("topSeller", locale)} labelKey="topSeller" value={topSelling[0]?.productName ?? tReports("na", locale)} />
+        <MetricCard icon={BarChart3} label={tReports("productRevenue", locale)} labelKey="productRevenue" value={`${formatLak(totalRevenue)} LAK`} />
+        <MetricCard icon={TrendingDown} label={tReports("productProfit", locale)} labelKey="productProfit" value={`${formatLak(totalProfit)} LAK`} />
       </section>
       <section className="grid gap-6 xl:grid-cols-2">
         <BarChart
           rows={topSelling.map((row) => ({ label: row.productName, qty: row.quantitySold }))}
           title={tReports("topSellingProducts", locale)}
+          titleKey="topSellingProducts"
           valueKey="qty"
           valueType="number"
         />
         <BarChart
           rows={lowSelling.map((row) => ({ label: row.productName, qty: row.quantitySold }))}
           title={tReports("lowSellingProducts", locale)}
+          titleKey="lowSellingProducts"
           valueKey="qty"
           valueType="number"
         />
       </section>
       <DataTable
+        columnKeys={["product", "category", "qtySold", "revenue", "profit"]}
         columns={[
           tReports("product", locale),
           tReports("category", locale),

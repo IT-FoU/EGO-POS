@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, PackageCheck, Save } from "lucide-react";
@@ -11,7 +11,7 @@ import { PurchaseStatusBadge } from "@/features/purchasing/components/purchasing
 import { receiveGoodsAction } from "@/features/purchasing/actions";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { localizePurchasingError, tPurchasing } from "@/lib/i18n/purchasing-copy";
 
 type ReceiveLine = {
@@ -39,7 +39,7 @@ export function ReceivingPageClient({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const receivableOrders = purchaseOrders.filter((order) => order.status === "ordered" || order.status === "partial");
   const [selectedOrderId, setSelectedOrderId] = useState(receivableOrders[0]?.id ?? "");
   const selectedOrder = receivableOrders.find((order) => order.id === selectedOrderId) ?? receivableOrders[0];
@@ -55,19 +55,6 @@ export function ReceivingPageClient({
       })) ?? [],
   );
   const t = (key: string) => tPurchasing(key, locale);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   const progress = useMemo(() => {
     if (!selectedOrder) return { ordered: 0, received: 0, receiving: 0 };

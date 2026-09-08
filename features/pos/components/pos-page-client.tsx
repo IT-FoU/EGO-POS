@@ -2,6 +2,7 @@
 
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
@@ -169,6 +170,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     warehouseId: string;
 }) {
     const router = useRouter();
+    useAppLocale();
     const [isPending, startTransition] = useTransition();
     const checkoutInFlightRef = useRef(false);
     const postSaleInFlightRef = useRef(false);

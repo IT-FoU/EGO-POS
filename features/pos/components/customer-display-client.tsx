@@ -26,7 +26,8 @@ import {
   resolveCustomerDisplayStoreName,
 } from "@/features/pos/customer-display-copy";
 import { localizedProductName } from "@/features/pos/product-display-name";
-import { LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { LOCALE_CHANGE_EVENT } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 import { t } from "@/lib/i18n/ui";
 import { cn } from "@/lib/utils";
@@ -74,13 +75,12 @@ export function CustomerDisplayClient() {
   const [settings, setSettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
   const [slideIndex, setSlideIndex] = useState(0);
   const [logoUrl, setLogoUrl] = useState("");
-  const [locale, setLocale] = useState<SupportedLocale>("en");
+  const locale = useAppLocale();
 
   useEffect(() => {
     function readState() {
       setSettings(readCustomerDisplaySettingsFromStorage());
       setLogoUrl(readCompanyLogoUrl());
-      setLocale(readClientLocale());
       const storedState = readJsonFromStorage<PosDisplayState | null>(POS_DISPLAY_KEY, null);
       setDisplayState(storedState ? { ...emptyState, ...storedState } : emptyState);
     }

@@ -14,7 +14,7 @@ import { WarehouseSelector } from "@/features/inventory/components/warehouse-sel
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { fillInventoryCopy, inventoryStockFilterLabel, tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 function movementProductName(movement: StockMovement, locale: SupportedLocale) {
     if (movement.productNameEn || movement.productNameLo) {
@@ -31,7 +31,7 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
     locale?: SupportedLocale;
 }) {
     const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
     const [activePanel, setActivePanel] = useState<InventoryDashboardPanel>(null);
     const [stockFilter, setStockFilter] = useState<InventoryStockFilter>("all");
@@ -42,23 +42,6 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
     const [listPage, setListPage] = useState(initialListPage);
     const [, startTransition] = useTransition();
     const skipFetch = useRef(true);
-
-    useEffect(() => {
-        if (localeProp) {
-            setLocale(localeProp);
-        }
-    }, [localeProp]);
-
-    useEffect(() => {
-        function handleLocaleChange(event: Event) {
-            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-            if (isSupportedLocale(detail?.locale)) {
-                setLocale(detail.locale);
-            }
-        }
-        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
 
     useEffect(() => {
         setItems(initialItems);

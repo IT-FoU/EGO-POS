@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
   documentTypeLabel,
   fillSuppliersCopy,
@@ -54,16 +54,7 @@ export function SupplierDetailClient({ payments, purchaseOrders, receivings, sup
     locale?: SupportedLocale;
 }) {
     const router = useRouter();
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
-    useEffect(() => { if (localeProp) setLocale(localeProp); }, [localeProp]);
-    useEffect(() => {
-      function handleLocaleChange(event: Event) {
-        const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-        if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-      }
-      window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-      return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
+    const locale = useAppLocale(localeProp);
     activeLocale = locale;
     const [isPending, startTransition] = useTransition();
     const [message, setMessage] = useState<string | null>(null);

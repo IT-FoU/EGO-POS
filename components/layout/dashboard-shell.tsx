@@ -27,9 +27,9 @@ import { FullScreenToggle } from "@/components/layout/full-screen-toggle";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { COMPANY_LOGO_CHANGE_EVENT, readCompanyLogoUrl } from "@/features/brand/company-logo";
-import { APP_NAME, DEFAULT_LOCALE, SLOGAN } from "@/lib/constants";
+import { APP_NAME, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
 import { tInventory } from "@/lib/i18n/inventory-copy";
@@ -119,23 +119,7 @@ export function DashboardShell({
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [planName, setPlanName] = useState("Free Plan");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(DEFAULT_LOCALE);
-
-  useEffect(() => {
-    setLocale(readClientLocale(session.user.locale));
-  }, [session.user.locale]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) {
-        setLocale(detail.locale);
-      }
-    }
-
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
+  const locale = useAppLocale(session.user.locale);
 
   useEffect(() => {
     setPendingHref(null);
@@ -246,7 +230,7 @@ export function DashboardShell({
               <CustomerDisplayQrToggle />
               <CustomerDisplayToggle />
               <FullScreenToggle locale={locale} />
-              <LanguageToggle locale={locale} onLocaleChange={setLocale} />
+              <LanguageToggle locale={locale} />
               <ThemeToggle />
               <SignOutButton />
             </div>

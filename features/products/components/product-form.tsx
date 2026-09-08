@@ -7,7 +7,7 @@ import {
   productStatusLabel,
   tProducts,
 } from "@/lib/i18n/products-copy";
-import { readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
 const t = tProducts;
@@ -98,7 +98,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     sourceFlow?: string;
     locale?: SupportedLocale;
 }) {
-    const locale = localeProp ?? readClientLocale();
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tProducts(key, locale);
     const router = useRouter();
     const [isPending, startTransition] = useTransition();

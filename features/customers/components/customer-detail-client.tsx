@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleDollarSign, CreditCard, Gift, Barcode, Phone, QrCode, ReceiptText, Star, Tags, User } from "lucide-react";
@@ -10,7 +10,7 @@ import { MembershipBadge } from "@/features/customers/components/membership-badg
 import { calculateAvailablePoints, formatLak } from "@/features/customers/format";
 import { createCustomerPaymentAction, updateCustomerAction } from "@/features/customers/actions";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
   customerPaymentMethodLabel,
   fillCustomersCopy,
@@ -45,7 +45,7 @@ export function CustomerDetailClient({
   const [paymentNote, setPaymentNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<CustomerTab>("profile");
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const t = (key: string) => tCustomers(key, locale);
   const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints);
   const remainingCredit = Math.max(customer.creditLimitLak - customer.outstandingBalanceLak, 0);
@@ -61,19 +61,6 @@ export function CustomerDetailClient({
     { id: "credit", label: t("creditHistory") },
     { id: "notes", label: t("notes") },
   ];
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   return (
     <div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">

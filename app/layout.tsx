@@ -5,12 +5,14 @@ import "./globals.css";
 import { LocalizationRepairRuntime } from "@/components/i18n/localization-repair-runtime";
 import { LocaleBootstrap } from "@/components/i18n/locale-bootstrap";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AppLocaleProvider } from "@/lib/i18n/use-app-locale";
 import { DEFAULT_LOCALE } from "@/lib/constants";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 const notoSansLao = Noto_Sans_Lao({
-  display: "swap",
-  subsets: ["lao"],
+  adjustFontFallback: false,
+  display: "block",
+  subsets: ["lao", "latin"],
   variable: "--font-noto-sans-lao",
   weight: ["400", "600", "700"],
 });
@@ -30,16 +32,18 @@ export default async function RootLayout({
 
   return (
     <html
-      className={locale === "lo" ? `${notoSansLao.className} ${notoSansLao.variable}` : undefined}
+      className={`${notoSansLao.className} ${notoSansLao.variable}`}
       data-locale={locale}
       lang={locale}
       suppressHydrationWarning
     >
       <body>
         <ThemeProvider>
-          <LocaleBootstrap initialLocale={locale} />
-          <LocalizationRepairRuntime />
-          {children}
+          <AppLocaleProvider initialLocale={locale}>
+            <LocaleBootstrap initialLocale={locale} />
+            <LocalizationRepairRuntime />
+            {children}
+          </AppLocaleProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -19,7 +19,8 @@ import { DashboardDateRangeControls } from "@/features/dashboard/components/dash
 import type { DashboardAlert, DashboardRangeKey, DashboardSnapshot } from "@/features/dashboard/dashboard-service";
 import { formatBusinessDateLabel, formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
 import { localizeDashboardAlerts } from "@/features/dashboard/localize-dashboard-alerts";
-import type { DashboardCopy } from "@/lib/i18n/dashboard-copy";
+import { getDashboardCopy, type DashboardCopy } from "@/lib/i18n/dashboard-copy";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "top_products";
 
@@ -60,12 +61,14 @@ function formatDateTime(value: string | null) {
 export function DashboardInteractionsClient({
   alertsSlot,
   canViewProfit,
-  copy,
+  copy: _ssrCopy,
   customEnd,
   customStart,
   snapshot,
   storeName,
 }: DashboardInteractionsClientProps) {
+  const locale = useAppLocale();
+  const copy = getDashboardCopy(locale);
   const [detail, setDetail] = useState<DetailKind | null>(null);
   const periodStart = snapshot.period.start;
   const totalPaymentsLak = snapshot.paymentBreakdown.reduce((total, payment) => total + payment.totalLak, 0);

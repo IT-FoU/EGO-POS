@@ -6,6 +6,7 @@ import { readStringFromStorage, runDemoStorageMigrations, writeStringToStorage }
 import {
   applyDocumentLocale,
   isClientLocaleSynced,
+  LOCALE_CHANGE_EVENT,
   LOCALE_COOKIE_NAME,
   readClientLocale,
 } from "@/lib/i18n/locale";
@@ -26,6 +27,7 @@ export function LocaleBootstrap({ initialLocale }: { initialLocale?: string }) {
     }
 
     document.cookie = `${LOCALE_COOKIE_NAME}=${locale};path=/;max-age=31536000;SameSite=Lax`;
+    window.dispatchEvent(new CustomEvent(LOCALE_CHANGE_EVENT, { detail: { locale } }));
   }, [initialLocale]);
 
   return null;

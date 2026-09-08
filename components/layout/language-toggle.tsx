@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { DEFAULT_LOCALE } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, persistClientLocale, readClientLocale } from "@/lib/i18n/locale";
+import { persistClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { runDemoStorageMigrations } from "@/lib/demo/storage";
 
 export function LanguageToggle({
@@ -14,34 +14,17 @@ export function LanguageToggle({
   locale?: string;
   onLocaleChange?: (locale: SupportedLocale) => void;
 }) {
-  const [currentLocale, setCurrentLocale] = useState<SupportedLocale>(
-    isSupportedLocale(locale) ? locale : DEFAULT_LOCALE,
-  );
+  const currentLocale = useAppLocale(locale);
 
   useEffect(() => {
     runDemoStorageMigrations();
-    const nextLocale = readClientLocale(locale);
-    setCurrentLocale(nextLocale);
   }, [locale]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) {
-        setCurrentLocale(detail.locale);
-      }
-    }
-
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   function updateLocale(nextLocale: SupportedLocale) {
     if (nextLocale === currentLocale) {
       return;
     }
     persistClientLocale(nextLocale);
-    setCurrentLocale(nextLocale);
     onLocaleChange?.(nextLocale);
   }
 

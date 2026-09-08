@@ -46,8 +46,7 @@ check(
     lo.products !== en.products &&
     shell.includes('tProducts("products", "en")') &&
     shell.includes('tProducts("products", "lo")') &&
-    shell.includes("LOCALE_CHANGE_EVENT") &&
-    shell.includes("readClientLocale") &&
+    shell.includes("useAppLocale") &&
     !shell.includes('products: "Products"'),
 );
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, useTransition } from "react";
+import { createContext, useContext, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
   fillMembershipsCopy,
   localizeMembershipError,
@@ -76,20 +76,7 @@ export function MembershipLevelsClient({
   levels: MembershipLevelRecord[];
   locale?: SupportedLocale;
 }) {
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
+  const locale = useAppLocale(localeProp);
 
   return (
     <MembershipsLocaleContext.Provider value={locale}>

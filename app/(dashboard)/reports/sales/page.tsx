@@ -16,29 +16,34 @@ export default async function SalesReportPage() {
     <div className="flex flex-col gap-6">
       <ReportHeader
         description={tReports("salesSummary", locale)}
+        descriptionKey="salesSummary"
         locale={locale}
         title={tReports("salesReport", locale)}
+        titleKey="salesReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={CircleDollarSign} label={tReports("revenue", locale)} value={`${formatLak(monthly.revenueLak)} LAK`} />
-        <MetricCard icon={BarChart3} label={tReports("profit", locale)} value={`${formatLak(monthly.profitLak)} LAK`} />
-        <MetricCard icon={Scale} label={tReports("tax", locale)} value={`${formatLak(monthly.taxLak)} LAK`} />
-        <MetricCard icon={ReceiptText} label={tReports("transactions", locale)} value={formatNumber(monthly.transactions)} />
+        <MetricCard icon={CircleDollarSign} label={tReports("revenue", locale)} labelKey="revenue" value={`${formatLak(monthly.revenueLak)} LAK`} />
+        <MetricCard icon={BarChart3} label={tReports("profit", locale)} labelKey="profit" value={`${formatLak(monthly.profitLak)} LAK`} />
+        <MetricCard icon={Scale} label={tReports("tax", locale)} labelKey="tax" value={`${formatLak(monthly.taxLak)} LAK`} />
+        <MetricCard icon={ReceiptText} label={tReports("transactions", locale)} labelKey="transactions" value={formatNumber(monthly.transactions)} />
       </section>
       <section className="grid gap-6 xl:grid-cols-2">
         <BarChart
           rows={revenueTrend.map((point) => ({ label: localizeReportLabel(point.label, locale), revenue: point.revenueLak }))}
           title={tReports("revenueTrend", locale)}
+          titleKey="revenueTrend"
           valueKey="revenue"
         />
         <BarChart
           rows={revenueTrend.map((point) => ({ label: localizeReportLabel(point.label, locale), sales: point.salesCount }))}
           title={tReports("salesTrend", locale)}
+          titleKey="salesTrend"
           valueKey="sales"
           valueType="number"
         />
       </section>
       <DataTable
+        columnKeys={["period", "revenue", "profit", "tax", "transactions"]}
         columns={[
           tReports("period", locale),
           tReports("revenue", locale),

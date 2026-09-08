@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Barcode, PackagePlus, Plus, Save, Search, Trash2 } from "lucide-react";
@@ -12,7 +12,7 @@ import { WarehouseSelector } from "@/features/inventory/components/warehouse-sel
 import { createPurchaseOrderAction } from "@/features/purchasing/actions";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { fillPurchasingCopy, localizePurchasingError, tPurchasing } from "@/lib/i18n/purchasing-copy";
 
 type DraftLine = {
@@ -48,7 +48,7 @@ export function PurchaseOrderForm({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
   const [currency, setCurrency] = useState<CurrencyCode>("LAK");
@@ -58,19 +58,6 @@ export function PurchaseOrderForm({
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const t = (key: string) => tPurchasing(key, locale);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   const filteredProducts = useMemo(() => {
     const normalized = productQuery.toLowerCase();

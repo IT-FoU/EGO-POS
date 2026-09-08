@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { formatLak } from "@/features/pos/format";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import type { OwnShiftReport } from "@/features/reports/own-shift-report-service";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { tPos } from "@/lib/i18n/pos-copy";
 import { cn } from "@/lib/utils";
 
@@ -176,7 +177,7 @@ function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
 }
 
 export function OwnShiftReportModal({ locale, onClose }: OwnShiftReportDrawerProps) {
-  const [detectedLocale, setDetectedLocale] = useState(locale);
+  const detectedLocale = useAppLocale(locale);
   const c = copy(detectedLocale);
   const [report, setReport] = useState<OwnShiftReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -203,7 +204,6 @@ export function OwnShiftReportModal({ locale, onClose }: OwnShiftReportDrawerPro
   }
 
   useEffect(() => {
-    setDetectedLocale(document.documentElement.dataset.locale || locale);
     void loadReport();
   }, []);
 

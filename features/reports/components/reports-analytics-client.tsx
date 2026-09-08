@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BarChart3, CalendarClock, ChevronDown, Download, Eye, FileSpreadsheet, FileText, HeartPulse, Printer, RefreshCcw, Search, Send, Star, TrendingUp, type LucideIcon, } from "lucide-react";
@@ -13,7 +13,7 @@ import { formatLak, formatNumber } from "@/features/reports/format";
 import type { ProductReportRow, ReportKpiKey } from "@/features/reports/types";
 import type { SupportedLocale } from "@/lib/constants";
 import { formatBusinessMediumDateTime } from "@/lib/datetime/business-timezone";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
   datePresetLabel,
   fillReportsCopy,
@@ -88,16 +88,7 @@ export function ReportsAnalyticsClient({
     productRows: ProductReportRow[];
 }) {
     const router = useRouter();
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
-    useEffect(() => { if (localeProp) setLocale(localeProp); }, [localeProp]);
-    useEffect(() => {
-        function handleLocaleChange(event: Event) {
-            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-            if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-        }
-        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
+    const locale = useAppLocale(localeProp);
     activeLocale = locale;
     const [tab, setTab] = useState<TabKey>("dashboard");
     const [reportQuery, setReportQuery] = useState("");

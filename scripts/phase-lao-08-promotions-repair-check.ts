@@ -34,6 +34,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const lo = PROMOTIONS_COPY.lo;
 const en = PROMOTIONS_COPY.en;
 const hook = read("features/promotions/use-promotions-locale.ts");
+const appLocale = read("lib/i18n/use-app-locale.tsx");
 const list = read("features/promotions/components/promotions-list-client.tsx");
 const form = read("features/promotions/components/promotion-form.tsx");
 const detail = read("features/promotions/components/promotion-detail-client.tsx");
@@ -83,9 +84,10 @@ function isStillEnglishUi(value: string) {
 
 check(
   "1. Promotions EN -> LO updates without refresh",
-  hook.includes("LOCALE_CHANGE_EVENT") &&
-    hook.includes("readClientLocale") &&
-    hook.includes("setLocale(detail.locale)") &&
+  hook.includes("useAppLocale as usePromotionsLocale") &&
+    appLocale.includes("LOCALE_CHANGE_EVENT") &&
+    appLocale.includes("readClientLocale") &&
+    appLocale.includes("setLocale(detail.locale)") &&
     list.includes("usePromotionsLocale") &&
     form.includes("usePromotionsLocale") &&
     detail.includes("usePromotionsLocale") &&
@@ -98,7 +100,7 @@ check(
 
 check(
   "2. Promotions LO -> EN updates without refresh",
-  hook.includes("handleLocaleChange") &&
+  appLocale.includes("handleLocaleChange") &&
     analyticsClient.includes("usePromotionsLocale") &&
     calendarClient.includes("usePromotionsLocale") &&
     mapPage.includes('"use client"') &&
@@ -109,10 +111,10 @@ check(
 
 check(
   "3. Sidebar and main content use same current locale",
-  shell.includes("LOCALE_CHANGE_EVENT") &&
-    shell.includes("readClientLocale") &&
-    hook.includes("readClientLocale(localeProp)") &&
-    hook.includes("LOCALE_CHANGE_EVENT") &&
+  shell.includes("useAppLocale") &&
+    appLocale.includes("readClientLocale") &&
+    appLocale.includes("LOCALE_CHANGE_EVENT") &&
+    hook.includes("useAppLocale as usePromotionsLocale") &&
     promotionsPage.includes("locale={locale}"),
 );
 

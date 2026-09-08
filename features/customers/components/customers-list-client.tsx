@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Cake, CreditCard, Download, Eye, Gem, Gift, Plus, Search, Star, Tags, TrendingUp, Upload, Users, WalletCards } from "lucide-react";
 import type { Customer, CustomerPayment, CustomerPurchase, CustomerStatus } from "@/features/customers/types";
@@ -10,7 +10,7 @@ import { calculateAvailablePoints, formatLak } from "@/features/customers/format
 import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
   customerSegmentLabel,
   customerStatusLabel,
@@ -81,22 +81,9 @@ export function CustomersListClient({
   const [segment, setSegment] = useState<Segment>("all");
   const [message, setMessage] = useState<string | null>(null);
   const [modal, setModal] = useState<CustomerModal>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const t = (key: string) => tCustomers(key, locale);
   const canManageCredit = canUseStoreAction(storeRoles, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   const customerInsights = useMemo(() => {
     return customers.map((customer) => {

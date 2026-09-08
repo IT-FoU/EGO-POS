@@ -23,21 +23,25 @@ export default async function CustomerReportPage() {
     <div className="flex flex-col gap-6">
       <ReportHeader
         description={tReports("customerReports", locale)}
+        descriptionKey="customerReports"
         locale={locale}
         title={tReports("customerReport", locale)}
+        titleKey="customerReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Users} label={tReports("totalCustomers", locale)} value={formatNumber(customers.length)} />
-        <MetricCard icon={TrendingUp} label={tReports("topCustomer", locale)} value={topCustomers[0]?.fullName ?? tReports("na", locale)} />
-        <MetricCard icon={Gift} label={tReports("loyaltyPoints", locale)} value={formatNumber(totalPoints)} />
-        <MetricCard icon={WalletCards} label={tReports("customerSpending", locale)} value={`${formatLak(totalSpending)} LAK`} />
+        <MetricCard icon={Users} label={tReports("totalCustomers", locale)} labelKey="totalCustomers" value={formatNumber(customers.length)} />
+        <MetricCard icon={TrendingUp} label={tReports("topCustomer", locale)} labelKey="topCustomer" value={topCustomers[0]?.fullName ?? tReports("na", locale)} />
+        <MetricCard icon={Gift} label={tReports("loyaltyPoints", locale)} labelKey="loyaltyPoints" value={formatNumber(totalPoints)} />
+        <MetricCard icon={WalletCards} label={tReports("customerSpending", locale)} labelKey="customerSpending" value={`${formatLak(totalSpending)} LAK`} />
       </section>
       <BarChart
         rows={topCustomers.map((customer) => ({ label: customer.fullName, spending: customer.totalPurchasesLak }))}
         title={tReports("customerSpending", locale)}
+        titleKey="customerSpending"
         valueKey="spending"
       />
       <DataTable
+        columnKeys={["customers", "membership", "customerSpending", "earnedPoints", "redeemedPoints", "availablePoints"]}
         columns={[
           tReports("customers", locale),
           tReports("membership", locale),

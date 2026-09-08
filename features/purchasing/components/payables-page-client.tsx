@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleDollarSign, Search } from "lucide-react";
@@ -9,7 +9,7 @@ import { formatMoney } from "@/features/purchasing/format";
 import { PayableStatusBadge } from "@/features/purchasing/components/purchasing-status";
 import { createSupplierPaymentAction } from "@/features/purchasing/actions";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { localizePurchasingError, tPurchasing } from "@/lib/i18n/purchasing-copy";
 
 export function PayablesPageClient({
@@ -26,21 +26,8 @@ export function PayablesPageClient({
   const [query, setQuery] = useState("");
   const [paidDrafts, setPaidDrafts] = useState<Record<string, number>>({});
   const [message, setMessage] = useState<string | null>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const t = (key: string) => tPurchasing(key, locale);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   const filteredPayables = useMemo(() => {
     const normalized = query.toLowerCase();

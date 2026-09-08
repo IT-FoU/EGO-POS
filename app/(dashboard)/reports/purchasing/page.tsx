@@ -29,28 +29,33 @@ export default async function PurchasingReportPage() {
     <div className="flex flex-col gap-6">
       <ReportHeader
         description={tReports("purchasingReports", locale)}
+        descriptionKey="purchasingReports"
         locale={locale}
         title={tReports("purchasingReport", locale)}
+        titleKey="purchasingReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Truck} label={tReports("suppliers", locale)} value={formatNumber(suppliers.length)} />
-        <MetricCard icon={ReceiptText} label={tReports("purchaseOrders", locale)} value={formatNumber(totalOrders)} />
-        <MetricCard icon={CircleDollarSign} label={tReports("purchaseValue", locale)} value={`${formatLak(totalPurchases)} LAK`} />
-        <MetricCard icon={CreditCard} label={tReports("outstandingPayables", locale)} value={`${formatLak(outstandingPayables)} LAK`} />
+        <MetricCard icon={Truck} label={tReports("suppliers", locale)} labelKey="suppliers" value={formatNumber(suppliers.length)} />
+        <MetricCard icon={ReceiptText} label={tReports("purchaseOrders", locale)} labelKey="purchaseOrders" value={formatNumber(totalOrders)} />
+        <MetricCard icon={CircleDollarSign} label={tReports("purchaseValue", locale)} labelKey="purchaseValue" value={`${formatLak(totalPurchases)} LAK`} />
+        <MetricCard icon={CreditCard} label={tReports("outstandingPayables", locale)} labelKey="outstandingPayables" value={`${formatLak(outstandingPayables)} LAK`} />
       </section>
       <section className="grid gap-6 xl:grid-cols-2">
         <BarChart
           rows={purchasesBySupplier.map((row) => ({ label: row.supplierName, value: row.totalLak }))}
           title={tReports("purchasesBySupplier", locale)}
+          titleKey="purchasesBySupplier"
           valueKey="value"
         />
         <BarChart
           rows={purchaseTrend.map((point) => ({ label: localizeReportLabel(point.label, locale), value: point.purchaseValueLak }))}
           title={tReports("purchaseTrends", locale)}
+          titleKey="purchaseTrends"
           valueKey="value"
         />
       </section>
       <DataTable
+        columnKeys={["supplier", "orders", "purchaseValue", "outstandingPayables"]}
         columns={[
           tReports("supplier", locale),
           tReports("orders", locale),

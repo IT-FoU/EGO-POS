@@ -10,7 +10,7 @@ import type { Supplier } from "@/features/suppliers/types";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { fillInventoryCopy, inventoryPaymentLabel, localizeInventoryError, tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 function formatLak(value: number) {
     return `${Math.round(value).toLocaleString("en-US")} LAK`;
@@ -39,7 +39,7 @@ export function QuickStockInForm({ items, suppliers, warehouses, locale: localeP
     warehouses: Warehouse[];
     locale?: SupportedLocale;
 }) {
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
     const [barcodeQuery, setBarcodeQuery] = useState("");
     const [query, setQuery] = useState("");
@@ -61,21 +61,6 @@ export function QuickStockInForm({ items, suppliers, warehouses, locale: localeP
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     const [isPending, startTransition] = useTransition();
-    useEffect(() => {
-        if (localeProp) {
-            setLocale(localeProp);
-        }
-    }, [localeProp]);
-    useEffect(() => {
-        function handleLocaleChange(event: Event) {
-            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-            if (isSupportedLocale(detail?.locale)) {
-                setLocale(detail.locale);
-            }
-        }
-        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
     useEffect(() => {
         setStockInNo((current) => current || generateClientStockInNo());
         const nextBarcodeQuery = readBarcodeQueryParam();

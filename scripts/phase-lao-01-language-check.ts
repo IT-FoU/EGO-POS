@@ -58,9 +58,13 @@ const cssSource = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8"
 check(
   "12. Lao locale uses Noto Sans Lao",
   layoutSource.includes("Noto_Sans_Lao") &&
-    layoutSource.includes('locale === "lo"') &&
+    layoutSource.includes("notoSansLao.className") &&
+    layoutSource.includes("notoSansLao.variable") &&
+    !layoutSource.includes('locale === "lo"') &&
     cssSource.includes('html[data-locale="lo"]') &&
     cssSource.includes("Noto Sans Lao") &&
+    !cssSource.includes("Lao UI") &&
+    !cssSource.includes("Phetsarath") &&
     !cssSource.includes('html[data-locale="th"]'),
 );
 check("13. English font rule is preserved", cssSource.includes('html[data-locale="en"]'));

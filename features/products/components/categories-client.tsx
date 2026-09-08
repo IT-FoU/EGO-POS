@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Archive, ArrowLeft, Edit3, FolderTree, Plus, Save, Search, Trash2, X } from "lucide-react";
@@ -10,7 +10,7 @@ import { deleteCategoryAction, upsertCategoryAction } from "@/features/products/
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { localizeCategoryError, productStatusLabel, tProducts } from "@/lib/i18n/products-copy";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 type CategoryFormState = {
   id?: string;
@@ -50,30 +50,13 @@ export function CategoriesClient({
   locale?: SupportedLocale;
 }) {
   const router = useRouter();
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const t = (key: string) => tProducts(key, locale);
   const [isPending, startTransition] = useTransition();
   const [categories, setCategories] = useState(initialCategories);
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<CategoryFormState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (localeProp) {
-      setLocale(localeProp);
-    }
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) {
-        setLocale(detail.locale);
-      }
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   const filteredCategories = useMemo(() => {
     const normalized = query.trim().toLowerCase();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Barcode, ClipboardCheck, PackagePlus, Save, SlidersHorizontal } from "lucide-react";
@@ -14,7 +14,7 @@ import {
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { localizeInventoryError, tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 type Mode = "stock-in" | "adjustment" | "count";
 
@@ -26,7 +26,7 @@ export function InventoryActionForm({ items, mode, warehouses, locale: localePro
 }) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+    const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
     const modeConfig: Record<Mode, {
         title: string;
@@ -79,23 +79,6 @@ export function InventoryActionForm({ items, mode, warehouses, locale: localePro
     const selectedUnit = receivingUnits.find((unit) => unit.id === selectedUnitId) ?? receivingUnits.find((unit) => unit.isBaseUnit) ?? receivingUnits[0];
     const baseQuantityPreview = quantity * (selectedUnit?.conversionQty ?? 1);
     const variance = selectedItem ? quantity - selectedItem.quantity : 0;
-
-    useEffect(() => {
-        if (localeProp) {
-            setLocale(localeProp);
-        }
-    }, [localeProp]);
-
-    useEffect(() => {
-        function handleLocaleChange(event: Event) {
-            const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-            if (isSupportedLocale(detail?.locale)) {
-                setLocale(detail.locale);
-            }
-        }
-        window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-        return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    }, []);
 
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();

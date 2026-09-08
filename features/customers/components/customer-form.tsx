@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, UserPlus } from "lucide-react";
@@ -8,7 +8,7 @@ import type { MembershipLevel } from "@/features/customers/types";
 import { calculatePointsForSpend, formatLak } from "@/features/customers/format";
 import { createCustomerAction } from "@/features/customers/actions";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { localizeCustomerError, localizedMembershipLabel, tCustomers } from "@/lib/i18n/customers-copy";
 
 export function CustomerForm({
@@ -23,23 +23,10 @@ export function CustomerForm({
   const [creditLimitLak, setCreditLimitLak] = useState(0);
   const [openingBalanceLak, setOpeningBalanceLak] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const remainingCredit = Math.max(creditLimitLak - openingBalanceLak, 0);
   const openingPoints = useMemo(() => calculatePointsForSpend(openingBalanceLak), [openingBalanceLak]);
   const t = (key: string) => tCustomers(key, locale);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

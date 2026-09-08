@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Mail, Phone, Search, Truck } from "lucide-react";
 import type { PurchaseOrder, Supplier, SupplierPayable } from "@/features/purchasing/types";
 import { formatMoney } from "@/features/purchasing/format";
 import { PurchaseStatusBadge, SupplierStatusBadge } from "@/features/purchasing/components/purchasing-status";
 import type { SupportedLocale } from "@/lib/constants";
-import { isSupportedLocale, LOCALE_CHANGE_EVENT, readClientLocale } from "@/lib/i18n/locale";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { tPurchasing } from "@/lib/i18n/purchasing-copy";
 
 export function SuppliersPageClient({
@@ -22,21 +22,8 @@ export function SuppliersPageClient({
 }) {
   const [query, setQuery] = useState("");
   const [selectedSupplierId, setSelectedSupplierId] = useState(suppliers[0]?.id ?? "");
-  const [locale, setLocale] = useState<SupportedLocale>(localeProp ?? readClientLocale());
+  const locale = useAppLocale(localeProp);
   const t = (key: string) => tPurchasing(key, locale);
-
-  useEffect(() => {
-    if (localeProp) setLocale(localeProp);
-  }, [localeProp]);
-
-  useEffect(() => {
-    function handleLocaleChange(event: Event) {
-      const detail = (event as CustomEvent<{ locale?: SupportedLocale }>).detail;
-      if (isSupportedLocale(detail?.locale)) setLocale(detail.locale);
-    }
-    window.addEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-    return () => window.removeEventListener(LOCALE_CHANGE_EVENT, handleLocaleChange);
-  }, []);
 
   const filteredSuppliers = useMemo(() => {
     const normalized = query.toLowerCase();
