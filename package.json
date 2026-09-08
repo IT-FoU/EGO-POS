@@ -60,7 +60,8 @@
     "test:lao-08-promotions-repair": "tsx scripts/phase-lao-08-promotions-repair-check.ts",
     "test:lao-08-reports-repair": "tsx scripts/phase-lao-08-reports-repair-check.ts",
     "test:lao-08-settings-repair": "tsx scripts/phase-lao-08-settings-repair-check.ts",
-    "test:lao-09-foundation": "tsx scripts/phase-lao-09-localization-foundation-check.ts"
+    "test:lao-09-foundation": "tsx scripts/phase-lao-09-localization-foundation-check.ts",
+    "test:ui-01-dashboard-drawer": "tsx scripts/phase-ui-01-dashboard-drawer-geometry-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

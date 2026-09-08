@@ -447,7 +447,7 @@ function DetailDrawer({
   if (!content) return null;
 
   return (
-    <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-[var(--dashboard-sidebar-width,5rem)]">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72">
       <section className="flex h-full w-full max-w-none flex-col overflow-x-hidden border-l border-border bg-card shadow-2xl">
       <header className="sticky top-0 z-20 border-b border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
