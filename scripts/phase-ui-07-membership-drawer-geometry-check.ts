@@ -32,16 +32,17 @@ const customersList = read("features/customers/components/customers-list-client.
 const drawerStart = client.indexOf("function WideDrawer(");
 check("0. WideDrawer exists", drawerStart >= 0);
 const drawerFn = client.slice(drawerStart);
-const nextFn = drawerFn.indexOf("\nfunction FormSection(");
-const wideDrawerFn = nextFn >= 0 ? drawerFn.slice(0, nextFn) : drawerFn;
+const contentFnStart = drawerFn.indexOf("\nfunction DrawerContent(");
+const wideDrawerFn = contentFnStart >= 0 ? drawerFn.slice(0, contentFnStart) : drawerFn;
 
 const overlay =
   '"fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"';
 const panel =
   '"flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-background shadow-2xl"';
+const drawerContentClass = '"grid w-full min-w-0 gap-5"';
 
 check(
-  "1. WideDrawer outer frame uses lg:left-72",
+  "1. outer drawer remains lg:left-72",
   wideDrawerFn.includes(overlay) &&
     wideDrawerFn.includes("lg:left-72") &&
     !wideDrawerFn.includes("md:left-72") &&
@@ -50,73 +51,86 @@ check(
 );
 
 check(
-  "2. visible LARGE drawer panel uses full available width",
+  "2. outer shell remains w-full max-w-none",
   wideDrawerFn.includes(panel) &&
     wideDrawerFn.includes("h-full") &&
     wideDrawerFn.includes("w-full") &&
     wideDrawerFn.includes("max-w-none") &&
-    !wideDrawerFn.includes("flex justify-end") &&
-    !wideDrawerFn.includes("justify-end"),
+    !wideDrawerFn.includes("flex justify-end overflow-x-hidden"),
 );
 
 check(
-  "3. no max-w-5xl remains on the Membership large drawer shell",
+  "3. no max-w-5xl returns to the outer shell",
   !wideDrawerFn.includes("max-w-5xl") &&
     !wideDrawerFn.includes("max-w-4xl") &&
     !wideDrawerFn.includes("max-w-3xl") &&
-    !wideDrawerFn.includes("max-w-2xl") &&
-    !wideDrawerFn.includes("max-w-xl") &&
-    count(client, "max-w-5xl") === 0,
+    count(client, "max-w-5xl") === 0 &&
+    count(client, "max-w-4xl") === 0,
 );
 
 check(
-  "4. Create Level uses the full-width WideDrawer",
-  client.includes('drawer?.type === "create" || drawer?.type === "edit"') &&
-    client.includes("<WideDrawer title={drawer.type === \"create\" ? copy(\"createLevel\") : copy(\"editLevel\")}") &&
-    client.includes("onClick={openCreateDrawer}") &&
-    client.includes('setDrawer({ type: "create" })'),
-);
-
-check(
-  "5. Edit Level uses the full-width WideDrawer",
-  client.includes("function openEditDrawer(") &&
-    client.includes('setDrawer({ type: "edit", level })') &&
-    client.includes("onClick={() => openEditDrawer(level)}") &&
-    client.includes("<LevelForm form={form} isPending={isPending} onCancel={() => setDrawer(null)} onSave={saveLevel} onUpdate={update} />"),
-);
-
-check(
-  "6. View Level uses the full-width WideDrawer",
-  client.includes('drawer?.type === "view"') &&
-    client.includes("<WideDrawer title={drawer.level.name}") &&
-    client.includes("<LevelDetails level={drawer.level} onEdit={() => openEditDrawer(drawer.level)} />") &&
-    client.includes('setDrawer({ type: "view", level })'),
-);
-
-check(
-  "7. Filters uses the SAME full-width WideDrawer geometry",
-  client.includes('drawer?.type === "filters"') &&
-    client.includes("<WideDrawer title={copy(\"filters\")}") &&
-    client.includes('onClick={() => setDrawer({ type: "filters" })}') &&
+  "4. Create/Edit/View/Filters use one shared inner layout system",
+  client.includes("function DrawerContent(") &&
+    client.includes(drawerContentClass) &&
+    count(client, "<DrawerContent") === 3 &&
     count(client, "<WideDrawer") === 3 &&
-    count(client, "function WideDrawer(") === 1,
+    count(client, "function WideDrawer(") === 1 &&
+    wideDrawerFn.includes("px-6 py-4 lg:px-8") &&
+    wideDrawerFn.includes("px-6 py-5 lg:px-8") &&
+    wideDrawerFn.includes("footer ? (") &&
+    client.includes('drawer?.type === "create" || drawer?.type === "edit"') &&
+    client.includes('drawer?.type === "view"') &&
+    client.includes('drawer?.type === "filters"'),
 );
 
 check(
-  "8. no large Membership surface has a different width",
-  count(wideDrawerFn, overlay) === 1 &&
-    count(wideDrawerFn, panel) === 1 &&
-    !client.includes("fixed bottom-0 right-0 top-0") &&
-    !client.includes("max-w-5xl"),
+  "5. Create/Edit use balanced desktop form layout",
+  client.includes("<LevelForm form={form} onSave={saveLevel} onUpdate={update} />") &&
+    client.includes('id="membership-level-form"') &&
+    client.includes("md:grid-cols-2 lg:gap-6") &&
+    client.includes("copy(\"levelInformation\")") &&
+    client.includes("copy(\"membershipRules\")") &&
+    !client.includes("mx-auto grid w-full max-w-4xl") &&
+    client.includes('form="membership-level-form"'),
 );
 
 check(
-  "9. Sidebar remains outside the overlay",
-  wideDrawerFn.includes("lg:left-72") &&
-    wideDrawerFn.includes("inset-y-0") &&
-    wideDrawerFn.includes("right-0") &&
-    !wideDrawerFn.includes("inset-0") &&
-    !wideDrawerFn.includes("fixed bottom-0 right-0 top-0"),
+  "6. View uses the same content width/alignment",
+  client.includes("<LevelDetails level={drawer.level} />") &&
+    client.includes("function LevelDetails(") &&
+    client.includes("sm:grid-cols-2 xl:grid-cols-3") &&
+    client.includes("copy(\"posDiscountNote\")") &&
+    !client.includes("mx-auto grid w-full max-w-4xl"),
+);
+
+check(
+  "7. Filters uses the same content padding/alignment",
+  client.includes("<WideDrawer") &&
+    client.includes('title={copy("filters")}') &&
+    client.includes("<FormSection compact title={copy(\"status\")}>") &&
+    client.includes("copy(\"clearFilters\")") &&
+    !client.includes("mx-auto grid w-full max-w-3xl") &&
+    client.includes("<DrawerContent>"),
+);
+
+check(
+  "8. no horizontal overflow introduced",
+  wideDrawerFn.includes("overflow-x-hidden") &&
+    wideDrawerFn.includes("min-w-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto") === false &&
+    wideDrawerFn.includes("overflow-x-hidden overflow-y-auto") &&
+    client.includes('className="grid w-full min-w-0 gap-5"') &&
+    client.includes("min-w-0 rounded-lg border border-border bg-card") &&
+    client.includes("grid min-w-0 gap-4"),
+);
+
+check(
+  "9. mobile/tablet can collapse to single-column",
+  client.includes("md:grid-cols-2 lg:gap-6") &&
+    client.includes("sm:grid-cols-2 xl:grid-cols-3") &&
+    client.includes('compact ? "grid min-w-0 gap-4"') &&
+    client.includes("flex-wrap gap-2") &&
+    !wideDrawerFn.includes("grid-cols-4") &&
+    !client.includes("md:grid-cols-2 lg:grid-cols-4"),
 );
 
 check(

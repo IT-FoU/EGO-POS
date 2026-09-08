@@ -329,21 +329,57 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
       </section>
 
       {drawer?.type === "create" || drawer?.type === "edit" ? (
-        <WideDrawer title={drawer.type === "create" ? copy("createLevel") : copy("editLevel")} onClose={() => setDrawer(null)}>
-          <LevelForm form={form} isPending={isPending} onCancel={() => setDrawer(null)} onSave={saveLevel} onUpdate={update} />
+        <WideDrawer
+          title={drawer.type === "create" ? copy("createLevel") : copy("editLevel")}
+          onClose={() => setDrawer(null)}
+          footer={
+            <>
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setDrawer(null)}>
+                {copy("cancel")}
+              </button>
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                disabled={isPending || !form.name.trim()}
+                form="membership-level-form"
+                type="submit"
+              >
+                <Save aria-hidden="true" className="size-4" />
+                {isPending ? copy("saving") : form.id ? copy("saveLevel") : copy("createLevel")}
+              </button>
+            </>
+          }
+        >
+          <LevelForm form={form} onSave={saveLevel} onUpdate={update} />
         </WideDrawer>
       ) : null}
 
       {drawer?.type === "view" ? (
-        <WideDrawer title={drawer.level.name} onClose={() => setDrawer(null)}>
-          <LevelDetails level={drawer.level} onEdit={() => openEditDrawer(drawer.level)} />
+        <WideDrawer
+          title={drawer.level.name}
+          onClose={() => setDrawer(null)}
+          footer={
+            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => openEditDrawer(drawer.level)}>
+              <Edit3 aria-hidden="true" className="size-4" />
+              {copy("editLevel")}
+            </button>
+          }
+        >
+          <LevelDetails level={drawer.level} />
         </WideDrawer>
       ) : null}
 
       {drawer?.type === "filters" ? (
-        <WideDrawer title={copy("filters")} onClose={() => setDrawer(null)}>
-          <div className="mx-auto grid w-full max-w-3xl gap-4">
-            <FormSection title={copy("status")}>
+        <WideDrawer
+          title={copy("filters")}
+          onClose={() => setDrawer(null)}
+          footer={
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={clearFilters}>
+              {copy("clearFilters")}
+            </button>
+          }
+        >
+          <DrawerContent>
+            <FormSection compact title={copy("status")}>
               <SegmentedControl
                 value={statusFilter}
                 onChange={setStatusFilter}
@@ -354,12 +390,7 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
                 ]}
               />
             </FormSection>
-            <div className="flex justify-end">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={clearFilters}>
-                {copy("clearFilters")}
-              </button>
-            </div>
-          </div>
+          </DrawerContent>
         </WideDrawer>
       ) : null}
     </div>
@@ -368,21 +399,17 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
 
 function LevelForm({
   form,
-  isPending,
-  onCancel,
   onSave,
   onUpdate,
 }: {
   form: FormState;
-  isPending: boolean;
-  onCancel: () => void;
   onSave: (event: React.FormEvent<HTMLFormElement>) => void;
   onUpdate: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 }) {
   const copy = useCopy();
   return (
-    <form className="flex min-h-full flex-col" onSubmit={onSave}>
-      <div className="mx-auto grid w-full max-w-4xl flex-1 gap-5 pb-28">
+    <form className="min-w-0" id="membership-level-form" onSubmit={onSave}>
+      <DrawerContent>
         <FormSection title={copy("levelInformation")}>
           <Field label={copy("levelName")}>
             <input className="field-input" required value={form.name} onChange={(event) => onUpdate("name", event.target.value)} />
@@ -404,28 +431,18 @@ function LevelForm({
           </Field>
         </FormSection>
 
-        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground lg:p-5">
           {copy("futureRulesNote")}
         </div>
-      </div>
-
-      <footer className="sticky bottom-0 -mx-5 flex justify-end gap-2 border-t border-border bg-background/95 px-5 py-4 backdrop-blur">
-        <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onCancel}>
-          {copy("cancel")}
-        </button>
-        <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending || !form.name.trim()} type="submit">
-          <Save aria-hidden="true" className="size-4" />
-          {isPending ? copy("saving") : form.id ? copy("saveLevel") : copy("createLevel")}
-        </button>
-      </footer>
+      </DrawerContent>
     </form>
   );
 }
 
-function LevelDetails({ level, onEdit }: { level: MembershipLevelRecord; onEdit: () => void }) {
+function LevelDetails({ level }: { level: MembershipLevelRecord }) {
   const copy = useCopy();
   return (
-    <div className="mx-auto grid w-full max-w-4xl gap-5">
+    <DrawerContent>
       <InfoGrid
         rows={[
           [copy("levelName"), level.name],
@@ -436,16 +453,10 @@ function LevelDetails({ level, onEdit }: { level: MembershipLevelRecord; onEdit:
           [copy("status"), level.isActive ? copy("active") : copy("inactive")],
         ]}
       />
-      <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+      <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground lg:p-5">
         {copy("posDiscountNote")}
       </div>
-      <div className="flex justify-end">
-        <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onEdit}>
-          <Edit3 aria-hidden="true" className="size-4" />
-          {copy("editLevel")}
-        </button>
-      </div>
-    </div>
+    </DrawerContent>
   );
 }
 
@@ -506,43 +517,72 @@ function MenuButton({
   );
 }
 
-function WideDrawer({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+function WideDrawer({
+  children,
+  footer,
+  onClose,
+  title,
+}: {
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  onClose: () => void;
+  title: string;
+}) {
   const copy = useCopy();
   return (
     <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72">
       <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-background shadow-2xl">
-        <header className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+        <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-4 lg:px-8">
           <div className="min-w-0">
             <button className="mb-1 text-xs font-semibold text-muted-foreground transition hover:text-primary" type="button" onClick={onClose}>
               {copy("backToMembership")}
             </button>
             <h2 className="truncate text-lg font-semibold">{title}</h2>
           </div>
-          <button className="grid size-9 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose}>
+          <button className="grid size-9 shrink-0 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose}>
             <X aria-hidden="true" className="size-4" />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 lg:px-8">{children}</div>
+        {footer ? (
+          <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-background px-6 py-4 lg:px-8">
+            {footer}
+          </footer>
+        ) : null}
       </section>
     </div>
   );
 }
 
-function FormSection({ children, description, title }: { children: React.ReactNode; description?: string; title: string }) {
+function DrawerContent({ children }: { children: React.ReactNode }) {
+  return <div className="grid w-full min-w-0 gap-5">{children}</div>;
+}
+
+function FormSection({
+  children,
+  compact = false,
+  description,
+  title,
+}: {
+  children: React.ReactNode;
+  compact?: boolean;
+  description?: string;
+  title: string;
+}) {
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
+    <section className="min-w-0 rounded-lg border border-border bg-card p-5 lg:p-6">
       <div className="mb-4">
         <h3 className="text-sm font-semibold">{title}</h3>
         {description ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p> : null}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">{children}</div>
+      <div className={compact ? "grid min-w-0 gap-4" : "grid min-w-0 gap-4 md:grid-cols-2 lg:gap-6"}>{children}</div>
     </section>
   );
 }
 
 function Field({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <label className="grid gap-2 text-sm font-medium">
+    <label className="grid min-w-0 gap-2 text-sm font-medium">
       <span>{label}</span>
       {children}
     </label>
@@ -593,9 +633,9 @@ function SegmentedControl<T extends string>({
 
 function InfoGrid({ rows }: { rows: Array<[string, string]> }) {
   return (
-    <dl className="grid gap-3 md:grid-cols-2">
+    <dl className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {rows.map(([label, value]) => (
-        <div className="rounded-lg border border-border bg-card p-4" key={label}>
+        <div className="min-w-0 rounded-lg border border-border bg-card p-4 lg:p-5" key={label}>
           <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
           <dd className="mt-1 break-words text-sm font-semibold">{value}</dd>
         </div>
