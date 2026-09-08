@@ -22,6 +22,7 @@ function count(source: string, needle: string): number {
 const activity = read("features/store-activity/components/store-activity-logs-client.tsx");
 const settingsForm = read("features/settings/components/settings-form.tsx");
 const staff = read("features/settings/components/staff-control-section.tsx");
+const largeDrawer = read("features/settings/components/settings-large-drawer.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
 const settingsActions = read("features/settings/actions.ts");
 const settingsRepo = read("features/settings/prisma-repository.ts");
@@ -51,111 +52,123 @@ check("0. ActivityDetailDrawer exists", drawerStart >= 0 && gridStart > drawerSt
 const drawerFn = activity.slice(drawerStart, gridStart);
 
 check(
-  "1. LARGE Settings frame uses lg:left-72",
-  drawerFn.includes(overlay) &&
-    drawerFn.includes("lg:left-72") &&
-    !drawerFn.includes("md:left-72") &&
-    !drawerFn.includes("xl:left-") &&
-    !drawerFn.includes("lg:left-[var(") &&
+  "1. Add Bank uses lg:left-72",
+  settingsForm.includes("<SettingsLargeDrawer") &&
+    settingsForm.includes('title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)}') &&
+    largeDrawer.includes(overlay) &&
+    largeDrawer.includes("lg:left-72") &&
     shell.includes('className="fixed inset-y-0 left-0 hidden w-72'),
 );
 
 check(
-  "2. visible shell uses w-full max-w-none",
-  drawerFn.includes(panel) &&
-    drawerFn.includes("h-full") &&
-    drawerFn.includes("w-full") &&
-    drawerFn.includes("max-w-none") &&
-    drawerFn.includes("px-6 py-5 lg:px-8"),
+  "2. Edit Bank uses the same large drawer",
+  settingsForm.includes('tSettings("editBank"') &&
+    settingsForm.includes("editingBankId") &&
+    count(settingsForm, "<SettingsLargeDrawer") >= 2 &&
+    !settingsForm.includes("function SettingsLargeDrawer("),
 );
 
 check(
-  "3. old calc width geometry removed from LARGE shell",
-  !drawerFn.includes("max-w-[calc(100vw-4rem)]") &&
-    !drawerFn.includes("xl:max-w-[calc(100vw-17rem)]") &&
-    !activity.includes("max-w-[calc(") &&
-    count(drawerFn, "max-w-") === 1,
+  "3. Add QR Account uses lg:left-72",
+  settingsForm.includes('title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)}') &&
+    largeDrawer.includes("lg:left-72"),
 );
 
 check(
-  "4. Activity Detail Sidebar overlap removed",
-  drawerFn.includes("lg:left-72") &&
-    drawerFn.includes("inset-y-0") &&
-    drawerFn.includes("right-0") &&
-    !drawerFn.includes("justify-end") &&
-    !drawerFn.includes("pointer-events-none") &&
-    !drawerFn.includes("inset-0"),
+  "4. Edit QR Account uses the same large drawer",
+  settingsForm.includes('tSettings("editQrAccount"') &&
+    settingsForm.includes("editingAccountId") &&
+    settingsForm.includes("saveQrAccount"),
 );
 
 check(
-  "5. Activity Detail uses full available width",
-  drawerFn.includes("max-w-none") &&
-    !drawerFn.includes("max-w-[") &&
-    activity.includes('setSelected(log)') &&
-    activity.includes("<ActivityDetailDrawer"),
+  "5. Add Staff uses lg:left-72",
+  staff.includes("<SettingsLargeDrawer") &&
+    staff.includes('title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)}') &&
+    largeDrawer.includes("lg:left-72"),
 );
 
 check(
-  "6. other identified LARGE Settings surfaces follow same standard",
-  count(activity, "lg:left-72") === 1 &&
-    count(settingsForm, "lg:left-72") === 0 &&
-    count(staff, "lg:left-72") === 0 &&
-    count(activity, "function ActivityDetailDrawer(") === 1,
+  "6. Edit Staff uses the same large drawer",
+  staff.includes('tSettings("editStaff"') &&
+    staff.includes("editingStaffId") &&
+    staff.includes("saveStaff") &&
+    !staff.includes("function SettingsDialog("),
 );
 
 check(
-  "7. normal Settings tabs remain unchanged",
-  settingsPage.includes("<SettingsForm") &&
-    settingsForm.includes('tSettings("companyProfile"') &&
-    settingsForm.includes('tSettings("receiptSettings"') &&
-    settingsForm.includes('tSettings("customerDisplay"') &&
-    settingsForm.includes("QrPaymentBankManagementSection") &&
-    settingsForm.includes("<StaffControlSection") &&
-    settingsForm.includes("<StoreActivityLogsClient") &&
-    settingsForm.includes('tSettings("storeActivityLogs"'),
+  "7. all visible shells use h-full w-full max-w-none",
+  largeDrawer.includes(panel) &&
+    largeDrawer.includes("h-full") &&
+    largeDrawer.includes("w-full") &&
+    largeDrawer.includes("max-w-none") &&
+    largeDrawer.includes("px-6 py-5 lg:px-8") &&
+    drawerFn.includes(overlay) &&
+    drawerFn.includes(panel) &&
+    count(largeDrawer, "max-w-none") === 1,
 );
 
 check(
-  "8. small Settings modals remain unchanged",
-  settingsForm.includes(smallOverlay) &&
-    settingsForm.includes("max-w-2xl") &&
-    settingsForm.includes('tSettings("addBank"') &&
-    settingsForm.includes('tSettings("addQrAccount"') &&
-    settingsForm.includes('tSettings("qrPreview"') &&
-    settingsForm.includes('tSettings("deleteBankTitle"') &&
-    settingsForm.includes('tSettings("deleteQrAccountTitle"') &&
-    staff.includes(smallOverlay) &&
-    staff.includes("max-w-2xl") &&
-    staff.includes("function SettingsDialog(") &&
-    !staff.includes("lg:left-72"),
+  "8. no centered max-w-2xl remains for these three form families",
+  !settingsForm.slice(settingsForm.indexOf("{bankModalOpen"), settingsForm.indexOf("{bankToDelete")).includes("max-w-2xl") &&
+    !settingsForm.slice(settingsForm.indexOf("{accountModalOpen"), settingsForm.indexOf("{bankToDelete")).includes("SettingsDialog") &&
+    !staff.includes("max-w-2xl") &&
+    !staff.includes("place-items-center") &&
+    settingsForm.includes("<SettingsLargeDrawer") &&
+    staff.includes("<SettingsLargeDrawer"),
 );
 
 check(
-  "9. Customer Display behavior unchanged",
-  settingsForm.includes("persistCustomerDisplaySettings") &&
-    settingsForm.includes("resetCustomerDisplayAppearanceSettings") &&
-    settingsForm.includes("resetAllCustomerDisplaySettings") &&
-    settingsForm.includes("writeCustomerDisplaySettingsToStorage") &&
+  "9. Delete Bank remains small centered modal",
+  settingsForm.includes('title={tSettings("deleteBankTitle"') &&
+    settingsForm.includes("function SettingsDialog(") &&
+    settingsForm.includes(smallOverlay) &&
+    settingsForm.includes("max-w-2xl"),
+);
+
+check(
+  "10. Delete QR remains small centered modal",
+  settingsForm.includes('title={tSettings("deleteQrAccountTitle"') &&
+    settingsForm.includes("function SettingsDialog(") &&
+    settingsForm.includes(smallOverlay),
+);
+
+check(
+  "11. QR Preview remains small centered modal",
+  settingsForm.includes('title={tSettings("qrPreview"') &&
+    settingsForm.includes("{previewAccount ? (<SettingsDialog") &&
+    settingsForm.includes("max-w-2xl"),
+);
+
+check(
+  "12. Customer Display confirms remain unchanged",
+  settingsForm.includes('tSettings("removeLogoConfirm"') &&
+    settingsForm.includes('tSettings("resetThisPageConfirm"') &&
+    settingsForm.includes('tSettings("resetAllCustomerDisplayConfirm"') &&
+    settingsForm.includes("window.confirm") &&
+    settingsForm.includes("persistCustomerDisplaySettings") &&
     displaySettings.includes("export function resetAllCustomerDisplaySettings") &&
     displayClient.includes("fixed inset-0 h-[100dvh] w-screen overflow-hidden"),
 );
 
 check(
-  "10. Settings business logic unchanged",
+  "13. Settings business logic unchanged",
   settingsActions.includes("export") &&
     settingsRepo.includes("getPrismaSettings") &&
     staff.includes("saveStaffMemberAction") &&
     staff.includes("saveRolePermissionsAction") &&
     staff.includes("saveApprovalRuleAction") &&
+    settingsForm.includes("saveQrPaymentBankAction") &&
+    settingsForm.includes("saveQrPaymentAccountAction") &&
     activity.includes("/api/store/activity-logs") &&
-    activity.includes("log.actorName") &&
-    activity.includes("log.beforeValue"),
+    settingsPage.includes("<SettingsForm"),
 );
 
 check(
-  "11. Settings localization unchanged",
+  "14. localization unchanged",
   settingsCopy.includes("SETTINGS_COPY") &&
-    activity.includes("tSettings") &&
+    settingsForm.includes("tSettings") &&
+    staff.includes("tSettings") &&
     activity.includes("localizeActivityStatus") &&
     !activity.includes("กำไร") &&
     dashboardDrawer.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"') &&

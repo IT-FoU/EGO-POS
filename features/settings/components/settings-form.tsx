@@ -36,6 +36,7 @@ import {
 import { publishCustomerDisplayQrCatalog } from "@/features/pos/customer-display-qr";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
+import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
 import {
   readReceiptPrintModePreference,
@@ -856,8 +857,8 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
           </div>))}
       </div>
 
-      {bankModalOpen ? (<SettingsDialog locale={locale} title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)}>
-          <div className="grid gap-3 md:grid-cols-2">
+      {bankModalOpen ? (<SettingsLargeDrawer closeLabel={tSettings("closeModal", locale)} title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)} footer={<DialogActions locale={locale} onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel={tSettings("saveBank", locale)}/>}>
+          <div className="grid gap-4 md:grid-cols-2">
             <Field label={tSettings("bankName", locale)}>
               <input className="field-input" value={bankDraft.bankName} onChange={(event) => setBankDraft((current) => ({ ...current, bankName: event.target.value }))}/>
             </Field>
@@ -870,7 +871,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             <Toggle label={tSettings("active", locale)} checked={bankDraft.isActive} onChange={(value) => setBankDraft((current) => ({ ...current, isActive: value }))}/>
             <div className="md:col-span-2">
               <Field label={tSettings("bankLogo", locale)}>
-                <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="block w-full rounded-md border border-border bg-card px-3 py-3 text-sm" type="file" onChange={(event) => {
+                <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="block w-full rounded-md border border-border bg-background px-3 py-3 text-sm" type="file" onChange={(event) => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
                   if (!file) return;
@@ -879,11 +880,10 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
               </Field>
             </div>
           </div>
-          <DialogActions locale={locale} onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel={tSettings("saveBank", locale)}/>
-        </SettingsDialog>) : null}
+        </SettingsLargeDrawer>) : null}
 
-      {accountModalOpen ? (<SettingsDialog locale={locale} title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)}>
-          <div className="grid gap-3 md:grid-cols-2">
+      {accountModalOpen ? (<SettingsLargeDrawer closeLabel={tSettings("closeModal", locale)} title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)} footer={<DialogActions locale={locale} onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel={tSettings("saveQrAccount", locale)}/>}>
+          <div className="grid gap-4 lg:grid-cols-2">
             <Field label={tSettings("bank", locale)}>
               <select className="field-input" value={accountDraft.bankId} onChange={(event) => setAccountDraft((current) => ({ ...current, bankId: event.target.value }))}>
                 <option value="">{tSettings("selectBank", locale)}</option>
@@ -909,16 +909,16 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
             <Toggle label={tSettings("printQrOnReceipt", locale)} checked={accountDraft.printOnReceipt} onChange={(value) => setAccountDraft((current) => ({ ...current, printOnReceipt: value }))}/>
             <Toggle label={tSettings("showQrOnCustomerDisplay", locale)} checked={accountDraft.showOnCustomerDisplay} onChange={(value) => setAccountDraft((current) => ({ ...current, showOnCustomerDisplay: value }))}/>
             <Toggle label={tSettings("active", locale)} checked={accountDraft.isActive} onChange={(value) => setAccountDraft((current) => ({ ...current, isActive: value }))}/>
-            <div className="md:col-span-2">
+            <div className="lg:col-span-2">
               <Field label={tSettings("qrImage", locale)}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                  <div className="grid size-28 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background" data-cd-qr-preview="bounded">
+                <div className="flex flex-col gap-4 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-start">
+                  <div className="grid size-40 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-card" data-cd-qr-preview="bounded">
                     {previewStagedImage(qrImageStage) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img alt={tSettings("qrPreview", locale)} className="h-full w-full object-contain" src={previewStagedImage(qrImageStage) ?? ""}/>
                     ) : <QrCode className="size-10 text-muted-foreground" aria-hidden="true"/>}
                   </div>
-                  <div className="grid gap-2">
+                  <div className="grid min-w-0 flex-1 gap-2">
                     <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={qrImageInputRef} type="file" onChange={(event) => void chooseQrImage(event)}/>
                     <div className="flex flex-wrap gap-2">
                       {/* Source markers: ui.confirm.qr ui.replace.qr ui.remove.qr */}
@@ -936,8 +936,7 @@ function QrPaymentBankManagementSection({ branches, initialAccounts, initialBank
               </Field>
             </div>
           </div>
-          <DialogActions locale={locale} onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel={tSettings("saveQrAccount", locale)}/>
-        </SettingsDialog>) : null}
+        </SettingsLargeDrawer>) : null}
 
       {bankToDelete ? (<SettingsDialog locale={locale} title={tSettings("deleteBankTitle", locale)} onClose={() => setBankToDelete(null)}>
           <p className="text-sm text-muted-foreground">{tSettings("deleteBankConfirm", locale)}</p>
@@ -1003,7 +1002,7 @@ function DialogActions({ locale, onCancel, onSave, saveLabel }: {
     onSave: () => void;
     saveLabel: string;
 }) {
-    return (<div className="mt-5 flex justify-end gap-2">
+    return (<div className="flex justify-end gap-2">
       <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onCancel}>{tSettings("cancel", locale)}</button>
       <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onSave}>
         <CheckCircle2 className="size-4" aria-hidden="true"/>

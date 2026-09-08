@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, KeyRound, Plus, ShieldCheck, X, type LucideIcon } from "lucide-react";
+import { CheckCircle2, KeyRound, Plus, ShieldCheck, type LucideIcon } from "lucide-react";
 import {
   decideApprovalAction,
   deactivateStaffMemberAction,
@@ -21,6 +21,7 @@ import {
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import type { SupportedLocale } from "@/lib/constants";
 import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, localizeTerminalOption, tSettings } from "@/lib/i18n/settings-copy";
+import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
 
 const TERMINAL_OPTIONS = ["POS-01", "POS-02", "POS-03", "Back Office"];
 
@@ -424,8 +425,21 @@ export function StaffControlSection({
       </div>
 
       {staffModalOpen ? (
-        <SettingsDialog locale={locale} title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)} onClose={() => setStaffModalOpen(false)}>
-          <div className="grid gap-3 md:grid-cols-2">
+        <SettingsLargeDrawer
+          closeLabel={tSettings("closeModal", locale)}
+          title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)}
+          onClose={() => setStaffModalOpen(false)}
+          footer={(
+            <>
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStaffModalOpen(false)}>{tSettings("cancel", locale)}</button>
+              <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" disabled={isPending} type="button" onClick={saveStaff}>
+                <CheckCircle2 className="size-4" aria-hidden="true" />
+                {editingStaffId ? tSettings("saveStaff", locale) : tSettings("addStaff", locale)}
+              </button>
+            </>
+          )}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
             <Field label={tSettings("fullName", locale)}><input className="field-input" value={staffDraft.fullName} onChange={(event) => setStaffDraft((current) => ({ ...current, fullName: event.target.value }))} /></Field>
             <Field label={tSettings("username", locale)}><input className="field-input" value={staffDraft.username} onChange={(event) => setStaffDraft((current) => ({ ...current, username: event.target.value }))} /></Field>
             <Field label={tSettings("role", locale)}>
@@ -449,19 +463,14 @@ export function StaffControlSection({
                 <option value="inactive">{tSettings("inactive", locale)}</option>
               </select>
             </Field>
-            <label className="flex items-center gap-2 text-sm md:col-span-2"><input checked={staffDraft.allowPosAccess} className="size-4 accent-primary" type="checkbox" onChange={(event) => setStaffDraft((current) => ({ ...current, allowPosAccess: event.target.checked }))} />{tSettings("allowPos", locale)}</label>
-            <label className="flex items-center gap-2 text-sm md:col-span-2"><input checked={staffDraft.allowBackOfficeAccess} className="size-4 accent-primary" type="checkbox" onChange={(event) => setStaffDraft((current) => ({ ...current, allowBackOfficeAccess: event.target.checked }))} />{tSettings("allowBackOffice", locale)}</label>
             <Field label={editingStaffId ? tSettings("newPasswordOptional", locale) : tSettings("password", locale)}><input className="field-input" type="password" value={staffDraft.password} onChange={(event) => setStaffDraft((current) => ({ ...current, password: event.target.value }))} /></Field>
             <Field label={tSettings("confirmPassword", locale)}><input className="field-input" type="password" value={staffDraft.confirmPassword} onChange={(event) => setStaffDraft((current) => ({ ...current, confirmPassword: event.target.value }))} /></Field>
+            <div className="grid gap-3 rounded-lg border border-border bg-background p-4 md:col-span-2 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-sm"><input checked={staffDraft.allowPosAccess} className="size-4 accent-primary" type="checkbox" onChange={(event) => setStaffDraft((current) => ({ ...current, allowPosAccess: event.target.checked }))} />{tSettings("allowPos", locale)}</label>
+              <label className="flex items-center gap-2 text-sm"><input checked={staffDraft.allowBackOfficeAccess} className="size-4 accent-primary" type="checkbox" onChange={(event) => setStaffDraft((current) => ({ ...current, allowBackOfficeAccess: event.target.checked }))} />{tSettings("allowBackOffice", locale)}</label>
+            </div>
           </div>
-          <div className="mt-5 flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStaffModalOpen(false)}>{tSettings("cancel", locale)}</button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" disabled={isPending} type="button" onClick={saveStaff}>
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              {editingStaffId ? tSettings("saveStaff", locale) : tSettings("addStaff", locale)}
-            </button>
-          </div>
-        </SettingsDialog>
+        </SettingsLargeDrawer>
       ) : null}
     </section>
   );
@@ -473,18 +482,4 @@ function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }
 
 function Field({ children, label }: { children: React.ReactNode; label: string }) {
   return <label className="grid gap-2 text-sm"><span className="font-medium">{label}</span>{children}</label>;
-}
-
-function SettingsDialog({ children, locale, onClose, title }: { children: React.ReactNode; locale?: SupportedLocale; onClose: () => void; title: string }) {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={onClose} aria-label={tSettings("closeModal", locale)}><X className="size-4" aria-hidden="true" /></button>
-        </div>
-        <div className="mt-4">{children}</div>
-      </div>
-    </div>
-  );
 }
