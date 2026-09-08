@@ -382,10 +382,15 @@ function CustomerPopup({
     : modal.type === "import"
       ? t("importCustomers")
       : t("exportCustomers");
+  const isInsightDrawer = modal.type === "customers";
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="max-h-[86vh] w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    <div className={isInsightDrawer
+      ? "fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72"
+      : "fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"}>
+      <div className={isInsightDrawer
+        ? "flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl"
+        : "max-h-[86vh] w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-card shadow-2xl"}>
         <div className="flex items-center justify-between gap-4 border-b border-border p-5">
           <div>
             <h2 className="text-xl font-semibold">{title}</h2>
@@ -430,7 +435,7 @@ function CustomerPopup({
         ) : null}
 
         {modal.type === "customers" ? (
-          <div className="max-h-[62vh] overflow-y-auto p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {customers.length === 0 ? (
               <div className="rounded-md border border-border bg-background p-6 text-center text-sm text-muted-foreground">{t("noCustomersForCard")}</div>
             ) : (

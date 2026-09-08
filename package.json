@@ -63,7 +63,8 @@
     "test:lao-09-foundation": "tsx scripts/phase-lao-09-localization-foundation-check.ts",
     "test:ui-01-dashboard-drawer": "tsx scripts/phase-ui-01-dashboard-drawer-geometry-check.ts",
     "test:ui-02-pos-drawer": "tsx scripts/phase-ui-02-pos-drawer-geometry-check.ts",
-    "test:ui-03-products-drawer": "tsx scripts/phase-ui-03-products-drawer-geometry-check.ts"
+    "test:ui-03-products-drawer": "tsx scripts/phase-ui-03-products-drawer-geometry-check.ts",
+    "test:ui-06-customers-drawer": "tsx scripts/phase-ui-06-customers-drawer-geometry-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",
