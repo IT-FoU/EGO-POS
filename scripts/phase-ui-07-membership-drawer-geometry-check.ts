@@ -15,9 +15,14 @@ function check(label: string, ok: boolean, extra = ""): void {
   console.log(`PASS: ${label}`);
 }
 
+function count(source: string, needle: string): number {
+  return source.split(needle).length - 1;
+}
+
 const client = read("features/membership-levels/components/membership-levels-client.tsx");
 const page = read("app/(dashboard)/membership-levels/page.tsx");
 const actions = read("features/membership-levels/actions.ts");
+const suppliersList = read("features/suppliers/components/suppliers-list-client.tsx");
 const shell = read("components/layout/dashboard-shell.tsx");
 const dashboardDrawer = read("features/dashboard/components/dashboard-interactions-client.tsx");
 const posFrame = read("features/pos/components/pos-workspace-modal.tsx");
@@ -27,32 +32,45 @@ const customersList = read("features/customers/components/customers-list-client.
 const drawerStart = client.indexOf("function WideDrawer(");
 check("0. WideDrawer exists", drawerStart >= 0);
 const drawerFn = client.slice(drawerStart);
+const nextFn = drawerFn.indexOf("\nfunction FormSection(");
+const wideDrawerFn = nextFn >= 0 ? drawerFn.slice(0, nextFn) : drawerFn;
 
 const overlay =
-  '"fixed inset-y-0 left-0 right-0 z-50 flex justify-end overflow-x-hidden bg-black/45 lg:left-72"';
+  '"fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"';
 const panel =
-  '"flex h-full w-full max-w-5xl flex-col border-l border-border bg-background shadow-2xl"';
+  '"flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-background shadow-2xl"';
 
 check(
-  "1. WideDrawer uses the desktop Sidebar boundary",
-  drawerFn.includes(overlay) &&
-    drawerFn.includes("lg:left-72") &&
-    !drawerFn.includes("md:left-72") &&
-    !drawerFn.includes("lg:left-[var(") &&
+  "1. WideDrawer outer frame uses lg:left-72",
+  wideDrawerFn.includes(overlay) &&
+    wideDrawerFn.includes("lg:left-72") &&
+    !wideDrawerFn.includes("md:left-72") &&
+    !wideDrawerFn.includes("lg:left-[var(") &&
     shell.includes('className="fixed inset-y-0 left-0 hidden w-72'),
 );
 
 check(
-  "2. full-viewport scrim no longer covers Sidebar on desktop",
-  drawerFn.includes(overlay) &&
-    drawerFn.includes(panel) &&
-    !drawerFn.includes("fixed bottom-0 right-0 top-0") &&
-    !drawerFn.includes("flex w-full justify-end bg-black/45") &&
-    !drawerFn.includes("inset-0"),
+  "2. visible LARGE drawer panel uses full available width",
+  wideDrawerFn.includes(panel) &&
+    wideDrawerFn.includes("h-full") &&
+    wideDrawerFn.includes("w-full") &&
+    wideDrawerFn.includes("max-w-none") &&
+    !wideDrawerFn.includes("flex justify-end") &&
+    !wideDrawerFn.includes("justify-end"),
 );
 
 check(
-  "3. Create Level uses the repaired WideDrawer frame",
+  "3. no max-w-5xl remains on the Membership large drawer shell",
+  !wideDrawerFn.includes("max-w-5xl") &&
+    !wideDrawerFn.includes("max-w-4xl") &&
+    !wideDrawerFn.includes("max-w-3xl") &&
+    !wideDrawerFn.includes("max-w-2xl") &&
+    !wideDrawerFn.includes("max-w-xl") &&
+    count(client, "max-w-5xl") === 0,
+);
+
+check(
+  "4. Create Level uses the full-width WideDrawer",
   client.includes('drawer?.type === "create" || drawer?.type === "edit"') &&
     client.includes("<WideDrawer title={drawer.type === \"create\" ? copy(\"createLevel\") : copy(\"editLevel\")}") &&
     client.includes("onClick={openCreateDrawer}") &&
@@ -60,7 +78,7 @@ check(
 );
 
 check(
-  "4. Edit Level uses the repaired WideDrawer frame",
+  "5. Edit Level uses the full-width WideDrawer",
   client.includes("function openEditDrawer(") &&
     client.includes('setDrawer({ type: "edit", level })') &&
     client.includes("onClick={() => openEditDrawer(level)}") &&
@@ -68,7 +86,7 @@ check(
 );
 
 check(
-  "5. View Level uses the repaired WideDrawer frame",
+  "6. View Level uses the full-width WideDrawer",
   client.includes('drawer?.type === "view"') &&
     client.includes("<WideDrawer title={drawer.level.name}") &&
     client.includes("<LevelDetails level={drawer.level} onEdit={() => openEditDrawer(drawer.level)} />") &&
@@ -76,16 +94,33 @@ check(
 );
 
 check(
-  "6. Filters uses the repaired WideDrawer frame",
+  "7. Filters uses the SAME full-width WideDrawer geometry",
   client.includes('drawer?.type === "filters"') &&
     client.includes("<WideDrawer title={copy(\"filters\")}") &&
     client.includes('onClick={() => setDrawer({ type: "filters" })}') &&
-    client.includes("setStatusFilter") &&
-    client.includes("clearFilters"),
+    count(client, "<WideDrawer") === 3 &&
+    count(client, "function WideDrawer(") === 1,
 );
 
 check(
-  "7. Membership business logic remains unchanged",
+  "8. no large Membership surface has a different width",
+  count(wideDrawerFn, overlay) === 1 &&
+    count(wideDrawerFn, panel) === 1 &&
+    !client.includes("fixed bottom-0 right-0 top-0") &&
+    !client.includes("max-w-5xl"),
+);
+
+check(
+  "9. Sidebar remains outside the overlay",
+  wideDrawerFn.includes("lg:left-72") &&
+    wideDrawerFn.includes("inset-y-0") &&
+    wideDrawerFn.includes("right-0") &&
+    !wideDrawerFn.includes("inset-0") &&
+    !wideDrawerFn.includes("fixed bottom-0 right-0 top-0"),
+);
+
+check(
+  "10. Membership business logic remains unchanged",
   client.includes("createMembershipLevelAction") &&
     client.includes("updateMembershipLevelAction") &&
     client.includes("archiveMembershipLevelAction") &&
@@ -97,6 +132,7 @@ check(
     client.includes("window.confirm(copy(\"deleteConfirm\"))") &&
     page.includes("getMembershipLevels") &&
     actions.includes("createMembershipLevelAction") &&
+    suppliersList.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/60 lg:left-72"') &&
     dashboardDrawer.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"') &&
     posFrame.includes('className="fixed inset-y-0 left-0 right-0 z-[60] overflow-x-hidden bg-black/70 lg:left-72"') &&
     productList.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"') &&
