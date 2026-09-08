@@ -123,12 +123,14 @@ check(
 );
 
 check(
-  "9. small centered Products dialogs remain unchanged",
-  listClient.includes('return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">') &&
-    listClient.includes('className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-border bg-card p-5 shadow-2xl"') &&
-    categoriesClient.includes('className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"') &&
-    productForm.includes('return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">') &&
-    productForm.includes('return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">'),
+  "9. Products large drawers are not converted to centered small overlays",
+  frameFn.includes(overlayClass) &&
+    !frameFn.includes("fixed inset-0") &&
+    productForm.includes("function ProductPreviewDrawer(") &&
+    productForm.includes(approvedFormOverlay) &&
+    productForm.includes("function BarcodeAliasDrawer(") &&
+    listClient.includes("<ProductDrawerFrame description={getProductToolDescription(drawerKey)}") &&
+    listClient.includes("<ProductDrawerFrame description={content.description}"),
 );
 
 check(

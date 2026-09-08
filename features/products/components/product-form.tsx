@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, } from "@/features/products/actions";
+import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 const QUICK_UNIT_NAMES = [
     "Piece",
     "Pack",
@@ -1298,51 +1299,32 @@ function CategoryCrudDialog({ categories, onClose, onDelete, onSave, state, }: {
         setName(category?.nameLo || category?.nameEn || "");
     }, [category?.id, category?.nameEn, category?.nameLo]);
     const title = state.mode === "add" ? t("addCategory") : state.mode === "edit" ? t("editCategory") : t("deleteCategory");
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <section className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("close")}>
-            <X aria-hidden="true" className="size-4"/>
-          </button>
-        </div>
-        {state.mode === "delete" ? (<>
-            <p className="mt-4 text-sm text-muted-foreground">{t("deleteCategoryConfirm")}</p>
-            <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{category?.nameEn || category?.nameLo || t("selectedCategory")}</p>
-            <div className="mt-5 flex justify-end gap-2">
+    const isDelete = state.mode === "delete";
+    return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isDelete} footer={isDelete ? (<div className="flex justify-end gap-2">
               <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
               <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => state.categoryId && onDelete(state.categoryId)}>{t("delete")}</button>
-            </div>
-          </>) : (<>
-            <Field label={state.mode === "add" ? t("categoryName") : t("currentCategoryName")}>
-              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus/>
-            </Field>
-            <div className="mt-5 flex justify-end gap-2">
+            </div>) : (<div className="flex justify-end gap-2">
               <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
               <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onSave({ id: state.mode === "edit" ? state.categoryId : undefined, nameLo: name })}>{t("save")}</button>
-            </div>
-          </>)}
-      </section>
-    </div>);
+            </div>)} onClose={onClose} size="sm" title={title}>
+        {isDelete ? (<>
+            <p className="text-sm text-muted-foreground">{t("deleteCategoryConfirm")}</p>
+            <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{category?.nameEn || category?.nameLo || t("selectedCategory")}</p>
+          </>) : (<Field label={state.mode === "add" ? t("categoryName") : t("currentCategoryName")}>
+              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus/>
+            </Field>)}
+      </ProductSmallModal>);
 }
 function ImagePreviewDialog({ image, onClose }: {
     image: ProductFormImage;
     onClose: () => void;
 }) {
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-      <section className="w-full max-w-4xl rounded-lg border border-border bg-card p-4 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold">{image.label}</h2>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("closeImagePreview")}>
-            <X aria-hidden="true" className="size-4"/>
-          </button>
-        </div>
-        <div className="grid max-h-[75vh] place-items-center overflow-auto rounded-md bg-background p-3">
+    return (<ProductSmallModal closeAriaLabel={t("closeImagePreview")} closeOnBackdrop={true} closeOnEscape={true} onClose={onClose} size="xl" title={image.label}>
+        <div className="grid place-items-center overflow-hidden rounded-md bg-background p-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img alt={image.label} className="max-h-[70vh] max-w-full object-contain" src={image.url}/>
+          <img alt={image.label} className="max-h-[60vh] max-w-full object-contain" src={image.url}/>
         </div>
-      </section>
-    </div>);
+      </ProductSmallModal>);
 }
 function CategoryField({ categories, defaultValue, onAction, }: {
     categories: Category[];

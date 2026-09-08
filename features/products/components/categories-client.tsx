@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeft, Edit3, FolderTree, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Archive, ArrowLeft, Edit3, FolderTree, Plus, Save, Search, Trash2 } from "lucide-react";
 import type { Category } from "@/features/products/types";
 import { StatusBadge } from "@/features/products/components/status-badge";
+import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { deleteCategoryAction, upsertCategoryAction } from "@/features/products/actions";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { localizeCategoryError, productStatusLabel, tProducts } from "@/lib/i18n/products-copy";
@@ -281,6 +282,7 @@ function CategoryModal({
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   const t = (key: string) => tProducts(key, locale);
+  const formId = useId();
 
   function optionLabel(category: Category) {
     const primary = localizedProductName(category, locale);
@@ -289,82 +291,23 @@ function CategoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <form className="w-full max-w-xl rounded-lg border border-border bg-card p-5 shadow-2xl" onSubmit={onSubmit}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">{form.id ? t("editCategory") : t("createCategory")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("categoriesFormHint")}</p>
-          </div>
+    <ProductSmallModal
+      closeAriaLabel={t("closeCategoryForm")}
+      closeOnBackdrop={false}
+      closeOnEscape={true}
+      description={t("categoriesFormHint")}
+      footer={
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button
-            aria-label={t("closeCategoryForm")}
-            className="grid size-9 place-items-center rounded-md border border-border"
-            title={t("close")}
-            type="button"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" />
-          </button>
-        </div>
-        <div className="mt-5 grid gap-4">
-          <Field label={t("categoryNameLao")}>
-            <input
-              className="field-input"
-              value={form.nameLo}
-              onChange={(event) => onChange({ ...form, nameLo: event.target.value })}
-              required
-            />
-          </Field>
-          <Field label={t("categoryNameEnglish")}>
-            <input
-              className="field-input"
-              value={form.nameEn}
-              onChange={(event) => onChange({ ...form, nameEn: event.target.value })}
-              required
-            />
-          </Field>
-          <Field label={t("parentCategory")}>
-            <select
-              className="field-input"
-              value={form.parentId}
-              onChange={(event) => onChange({ ...form, parentId: event.target.value })}
-            >
-              <option value="">{t("rootCategory")}</option>
-              {categories
-                .filter((category) => category.id !== form.id)
-                .map((category) => (
-                  <option value={category.id} key={category.id}>
-                    {optionLabel(category)}
-                  </option>
-                ))}
-            </select>
-          </Field>
-          <Field label={t("status")}>
-            <select
-              className="field-input"
-              value={form.status}
-              onChange={(event) =>
-                onChange({
-                  ...form,
-                  status: event.target.value as CategoryFormState["status"],
-                })
-              }
-            >
-              <option value="active">{productStatusLabel("active", locale)}</option>
-              <option value="inactive">{productStatusLabel("inactive", locale)}</option>
-            </select>
-          </Field>
-        </div>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button
-            className="h-11 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary"
+            className="h-10 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary"
             type="button"
             onClick={onClose}
           >
             {t("cancel")}
           </button>
           <button
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            form={formId}
             type="submit"
             disabled={isPending}
           >
@@ -372,8 +315,61 @@ function CategoryModal({
             {isPending ? t("saving") : t("saveCategory")}
           </button>
         </div>
+      }
+      onClose={onClose}
+      size="md"
+      title={form.id ? t("editCategory") : t("createCategory")}
+    >
+      <form className="grid gap-4" id={formId} onSubmit={onSubmit}>
+        <Field label={t("categoryNameLao")}>
+          <input
+            className="field-input"
+            value={form.nameLo}
+            onChange={(event) => onChange({ ...form, nameLo: event.target.value })}
+            required
+          />
+        </Field>
+        <Field label={t("categoryNameEnglish")}>
+          <input
+            className="field-input"
+            value={form.nameEn}
+            onChange={(event) => onChange({ ...form, nameEn: event.target.value })}
+            required
+          />
+        </Field>
+        <Field label={t("parentCategory")}>
+          <select
+            className="field-input"
+            value={form.parentId}
+            onChange={(event) => onChange({ ...form, parentId: event.target.value })}
+          >
+            <option value="">{t("rootCategory")}</option>
+            {categories
+              .filter((category) => category.id !== form.id)
+              .map((category) => (
+                <option value={category.id} key={category.id}>
+                  {optionLabel(category)}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label={t("status")}>
+          <select
+            className="field-input"
+            value={form.status}
+            onChange={(event) =>
+              onChange({
+                ...form,
+                status: event.target.value as CategoryFormState["status"],
+              })
+            }
+          >
+            <option value="active">{productStatusLabel("active", locale)}</option>
+            <option value="inactive">{productStatusLabel("inactive", locale)}</option>
+          </select>
+        </Field>
       </form>
-    </div>
+    </ProductSmallModal>
   );
 }
 

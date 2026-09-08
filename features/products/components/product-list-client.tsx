@@ -19,6 +19,7 @@ import type { Category, Product, ProductStatus } from "@/features/products/types
 import type { ProductListPage, ProductInsightFilter } from "@/features/products/list-query";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
 import { StatusBadge } from "@/features/products/components/status-badge";
+import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { formatLak } from "@/features/products/format";
 import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
 import { cn } from "@/lib/utils";
@@ -1146,10 +1147,10 @@ function ImagePreviewModal({ onClose, product }: {
     onClose: () => void;
     product: Product;
 }) {
-    return (<Modal title={t("productImage")} onClose={onClose}>
+    return (<ProductSmallModal closeAriaLabel={t("closeModal")} closeOnBackdrop={true} closeOnEscape={true} onClose={onClose} size="xl" title={t("productImage")}>
       <div className="grid gap-4">
-        <div className="grid min-h-72 place-items-center rounded-lg border border-border bg-background p-4">
-          {isRenderableImage(product.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[420px] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[420px] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
+        <div className="grid min-h-72 place-items-center overflow-hidden rounded-lg border border-border bg-background p-4">
+          {isRenderableImage(product.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
               <ImageIcon className="mx-auto size-14" aria-hidden="true"/>
               <div className="text-sm font-semibold">{t("noProductImage")}</div>
             </div>)}
@@ -1159,24 +1160,7 @@ function ImagePreviewModal({ onClose, product }: {
           <p className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || t("noBarcode")} / {product.sku || t("noSku")}</p>
         </div>
       </div>
-    </Modal>);
-}
-function Modal({ children, onClose, title }: {
-    children: React.ReactNode;
-    onClose: () => void;
-    title: string;
-}) {
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <section className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold">{title}</h2>
-          <button className="grid size-9 place-items-center rounded-md border border-border transition hover:border-primary" type="button" onClick={onClose} aria-label={t("closeModal")}>
-            <X className="size-4" aria-hidden="true"/>
-          </button>
-        </div>
-        {children}
-      </section>
-    </div>);
+    </ProductSmallModal>);
 }
 function getProductStock(product: Product) {
     return Math.max(0, Math.round(product.currentStock ?? 0));
