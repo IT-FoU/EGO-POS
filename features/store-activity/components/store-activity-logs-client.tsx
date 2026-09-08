@@ -305,9 +305,9 @@ function Badge({ tone, value }: { tone: "danger" | "info" | "success"; value: st
 
 function ActivityDetailDrawer({ c, locale, log, onClose }: { c: ReturnType<typeof activityCopy>; locale: SupportedLocale; log: StoreActivityLogRecord; onClose: () => void }) {
   return (
-    <div className="pointer-events-none fixed inset-y-0 right-0 z-[60] flex w-full justify-end">
-      <aside className="pointer-events-auto flex h-full w-full max-w-[calc(100vw-4rem)] flex-col border-l border-border bg-background shadow-2xl xl:max-w-[calc(100vw-17rem)]">
-        <header className="flex items-start justify-between gap-4 border-b border-border bg-card p-5">
+    <div className="fixed inset-y-0 left-0 right-0 z-[60] overflow-x-hidden bg-black/60 lg:left-72">
+      <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4 lg:px-8">
           <div className="min-w-0">
             <button className="mb-2 text-sm font-semibold text-primary" type="button" onClick={onClose}>{c.back}</button>
             <h2 className="truncate text-xl font-semibold">{c.activityDetail}</h2>
@@ -316,7 +316,7 @@ function ActivityDetailDrawer({ c, locale, log, onClose }: { c: ReturnType<typeo
             <X className="size-4" aria-hidden="true" />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 lg:px-8">
           <div className="grid gap-4">
             <DetailGrid rows={[
               [c.createdAt, formatDate(log.createdAt)],
@@ -345,14 +345,14 @@ function ActivityDetailDrawer({ c, locale, log, onClose }: { c: ReturnType<typeo
             <DetailPanel title={c.metadata}>{detailValue(log.metadata)}</DetailPanel>
           </div>
         </div>
-      </aside>
+      </section>
     </div>
   );
 }
 
 function DetailGrid({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-2 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map(([label, value]) => (
         <div className="min-w-0 rounded-md border border-border bg-background p-3" key={label}>
           <div className="text-xs font-semibold uppercase text-muted-foreground">{label}</div>
