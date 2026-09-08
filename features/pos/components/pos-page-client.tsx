@@ -10,6 +10,7 @@ import type { LucideIcon } from "lucide-react";
 import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosPromotion, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
+import { PosSmallModal } from "@/features/pos/components/pos-small-modal";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/components/return-exchange-void-modal";
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
@@ -2457,18 +2458,8 @@ function UnitSelectorModal({ onClose, onSelect, product, }: {
     product: PosProduct;
 }) {
     const units = resolvePosSaleUnits(product);
-    return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-      <section className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">{t("ui.select.sale.unit")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{localizedProductName(product)}</p>
-          </div>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("ui.close.unit.selector")}>
-            <X className="size-4" aria-hidden="true"/>
-          </button>
-        </div>
-        <div className="mt-5 grid gap-2">
+    return (<PosSmallModal closeAriaLabel={t("ui.close.unit.selector")} description={localizedProductName(product)} onClose={onClose} size="md" title={t("ui.select.sale.unit")}>
+        <div className="grid gap-2">
           {units.map((unit) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left transition hover:border-primary" key={unit.id} type="button" onClick={() => onSelect(unit)}>
               <span>
                 <span className="block font-semibold">{unit.unitName}</span>
@@ -2479,8 +2470,7 @@ function UnitSelectorModal({ onClose, onSelect, product, }: {
               <span className="text-right font-semibold text-primary">{formatLak(unit.sellingPriceLak)} LAK</span>
             </button>))}
         </div>
-      </section>
-    </div>);
+      </PosSmallModal>);
 }
 function ActionButton({ icon: Icon, label, onClick }: {
     icon: LucideIcon;
@@ -2507,15 +2497,10 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardA
 }) {
     const paid = cashAmount + qrAmount + cardAmount + transferAmount;
     const valid = paid >= totalAmount;
-    return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">{t("ui.mixed.payment")}</h2>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("ui.close")}>
-            <X aria-hidden="true"/>
-          </button>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+    return (<PosSmallModal footer={<button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
+          {t("ui.apply.mixed.payment")}
+        </button>} onClose={onClose} size="md" title={t("ui.mixed.payment")}>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("ui.cash.amount")}>
             <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
           </Field>
@@ -2532,11 +2517,7 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardA
         <div className={cn("mt-4 rounded-md border p-3 text-sm font-semibold", valid ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning")}>
           {fillPosCopy(t("ui.paid.total"), { paid: formatLak(paid), total: formatLak(totalAmount) })}
         </div>
-        <button className="mt-4 h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
-          {t("ui.apply.mixed.payment")}
-        </button>
-      </div>
-    </div>);
+      </PosSmallModal>);
 }
 function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, receipt }: {
     onClose: () => void;
@@ -2546,18 +2527,8 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
     printMode: ReceiptPrintMode;
     receipt: ReceiptSnapshot;
 }) {
-    return (<div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-2xl" data-print-mode={printMode}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">{t("ui.payment.completed")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("ui.do.you.want.to.print.receipt")}</p>
-          </div>
-          <button className="grid size-9 place-items-center rounded-md border border-border" type="button" onClick={onClose} aria-label={t("ui.close")}>
-            <X className="size-4" aria-hidden="true"/>
-          </button>
-        </div>
-        <dl className="mt-4 grid gap-2 rounded-md border border-border bg-background p-3 text-sm">
+    return (<PosSmallModal dataPrintMode={printMode} description={t("ui.do.you.want.to.print.receipt")} onClose={onClose} size="sm" title={t("ui.payment.completed")}>
+        <dl className="grid gap-2 rounded-md border border-border bg-background p-3 text-sm">
           <InfoLine label={t("ui.bill.number")} value={receipt.saleNo}/>
           <InfoLine label={t("ui.total")} value={`${formatLak(receipt.totalAmount)} LAK`}/>
           <InfoLine label={t("ui.payment.method")} value={receipt.paymentMode.toUpperCase()}/>
@@ -2575,8 +2546,7 @@ function SaleCompletedModal({ onClose, onNewSale, onPrint, onView, printMode, re
             {t("ui.save.and.new.sale")}
           </button>
         </div>
-      </div>
-    </div>);
+      </PosSmallModal>);
 }
 function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, onSubmit, pin, reason, sale }: {
     action: "refund" | "void";

@@ -85,12 +85,12 @@ check(
 );
 
 check(
-  "9. small modal surfaces remain unchanged",
-  posClient.includes('return (<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">') &&
-    posClient.includes('return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">') &&
-    posClient.includes('return (<div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">') &&
-    posClient.includes('className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-2xl"') &&
-    posClient.includes('className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-2xl"'),
+  "9. approved large POS drawers are not converted to centered small overlays",
+  frame.includes(overlayClass) &&
+    !frame.includes("fixed inset-0") &&
+    posClient.includes("return <PosWorkspaceModal onClose={onClose} title={title}>{children}</PosWorkspaceModal>;") &&
+    posClient.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>') &&
+    posClient.includes('<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title={t("ui.receipt.preview")}>'),
 );
 
 check(
