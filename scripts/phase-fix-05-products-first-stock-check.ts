@@ -228,11 +228,18 @@ async function main() {
   };
 
   await isolated("1. Create normal product", async (tx) => {
-    const { tenant } = await createIsolatedTenant(tx, "create");
+    const { tenant, warehouseAId } = await createIsolatedTenant(tx, "create");
     const created = await writePrismaProductCreate(tx, productInput, tenant);
     assert(created.sku === "UAT-SKU-001", "SKU not persisted");
     assert(created.barcode === "0012345678901", "Leading-zero barcode corrupted");
     assertClose(created.currentStock, 0, "Create must not write stock");
+    const seededBalance = await tx.inventoryBalance.findUnique({
+      where: { warehouseId_productId: { productId: created.id, warehouseId: warehouseAId } },
+    });
+    assert(seededBalance, "Create must seed a warehouse balance row");
+    assertClose(seededBalance.quantity, 0, "Create without qty must keep seeded balance at 0");
+    const movements = await tx.stockMovement.findMany({ where: { productId: created.id } });
+    assert(movements.length === 0, "Create without qty must not write an opening movement");
     JSON.parse(JSON.stringify(created));
     const listed = await getPrismaProducts(tenant, tx);
     assert(listed.some((row) => row.id === created.id), "Created product missing from list");
@@ -504,6 +511,35 @@ async function main() {
       },
     });
     assert(sellable, "Product not resolvable by POS sell lookup after first stock");
+  });
+
+  await isolated("19. Create with opening stock", async (tx) => {
+    const { tenant, warehouseAId } = await createIsolatedTenant(tx, "open-stock");
+    const created = await writePrismaProductCreate(
+      tx,
+      {
+        ...productInput,
+        initialStock: {
+          lotNumber: "LOT-OPEN-1",
+          quantity: 10,
+          unitName: "Piece",
+        },
+      },
+      tenant,
+    );
+    assertClose(created.currentStock, 10, "Create with qty must post opening stock");
+    const balance = await tx.inventoryBalance.findUnique({
+      where: { warehouseId_productId: { productId: created.id, warehouseId: warehouseAId } },
+    });
+    assertClose(balance?.quantity, 10, "Opening stock balance");
+    const movements = await tx.stockMovement.findMany({
+      where: { productId: created.id },
+      orderBy: { createdAt: "asc" },
+    });
+    assert(movements.length === 1, "Opening stock must write exactly one movement");
+    assertClose(movements[0].beforeQty, 0, "Opening movement before qty");
+    assertClose(movements[0].afterQty, 10, "Opening movement after qty");
+    assertClose(movements[0].quantity, 10, "Opening movement quantity");
   });
 
   const after = await goboxCounts(prisma);

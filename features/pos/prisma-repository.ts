@@ -128,7 +128,6 @@ export async function listSellablePosProducts(tenant: TenantContext, client: any
     where: {
       companyId: scope.companyId,
       isActive: true,
-      balances: { some: { warehouseId: { in: sellWarehouseIds } } },
     },
   });
   return products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId));
@@ -170,7 +169,6 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           where: {
             companyId: scope.companyId,
             isActive: true,
-            balances: { some: { warehouseId: { in: sellWarehouseIds } } },
           },
         }),
         db.companySetting.findUnique({

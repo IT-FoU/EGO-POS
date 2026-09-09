@@ -31,7 +31,13 @@ import {
 } from "@/features/pos/pos-cart";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
-import { completeSaleAction } from "@/features/pos/actions";
+import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
+import {
+  applyPosCatalogueRefresh,
+  isPosCatalogueStorageEvent,
+  POS_CATALOGUE_CHANNEL,
+  shouldSkipPosCatalogueRefresh,
+} from "@/features/pos/pos-catalogue-refresh";
 import { receiptSnapshotFromPersistedSale } from "@/features/pos/checkout-receipt";
 import {
   cashInRequest,
@@ -327,6 +333,67 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             window.removeEventListener("storage", refreshOnFocus);
         };
     }, [heldBillsLoaded, recentSalesLoaded, receiptSettings.receiptPrintMode]);
+    useEffect(() => {
+        if (demoMode) return;
+        let cancelled = false;
+        let lastRequestedAt = 0;
+        async function refreshCatalogue() {
+            if (shouldSkipPosCatalogueRefresh({
+                checkoutInFlight: checkoutInFlightRef.current,
+                demoMode,
+                online: typeof navigator === "undefined" || navigator.onLine !== false,
+            })) {
+                return;
+            }
+            const now = Date.now();
+            if (now - lastRequestedAt < 750) return;
+            lastRequestedAt = now;
+            const result = await loadPosCatalogueAction();
+            if (cancelled || !result.ok || !Array.isArray(result.data)) return;
+            if (checkoutInFlightRef.current) return;
+            const next = applyPosCatalogueRefresh({
+                cart: null,
+                nextProducts: result.data as PosProduct[],
+            });
+            setVisibleProducts(next.products);
+        }
+        function onFocus() {
+            void refreshCatalogue();
+        }
+        function onVisibility() {
+            if (document.visibilityState === "visible") {
+                void refreshCatalogue();
+            }
+        }
+        function onStorage(event: StorageEvent) {
+            if (isPosCatalogueStorageEvent(event)) {
+                void refreshCatalogue();
+            }
+        }
+        function onChannel(event: MessageEvent) {
+            if (event.data?.type === "invalidate") {
+                void refreshCatalogue();
+            }
+        }
+        window.addEventListener("focus", onFocus);
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("storage", onStorage);
+        let channel: BroadcastChannel | null = null;
+        try {
+            channel = new BroadcastChannel(POS_CATALOGUE_CHANNEL);
+            channel.addEventListener("message", onChannel);
+        } catch {
+            channel = null;
+        }
+        return () => {
+            cancelled = true;
+            window.removeEventListener("focus", onFocus);
+            document.removeEventListener("visibilitychange", onVisibility);
+            window.removeEventListener("storage", onStorage);
+            channel?.removeEventListener("message", onChannel);
+            channel?.close();
+        };
+    }, [demoMode]);
     useEffect(() => {
         const updateClock = () => {
             const now = new Date();

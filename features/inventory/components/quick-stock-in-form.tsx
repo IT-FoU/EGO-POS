@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, Camera, CheckCircle2, FileDown, Printer, Search } from "lucide-react";
 import { stockInAction } from "@/features/inventory/actions";
+import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { InventoryImage } from "@/features/inventory/components/inventory-image";
 import type { InventoryItem, Warehouse } from "@/features/inventory/types";
 import type { Supplier } from "@/features/suppliers/types";
@@ -203,6 +204,7 @@ export function QuickStockInForm({ items, suppliers, warehouses, locale: localeP
                 return;
             }
             setMessage(fillInventoryCopy(t("quickStockInSaved"), { no: stockInNo }));
+            signalPosCatalogueInvalidation();
             setIsConfirming(false);
             setQuantity("");
             setNote("");

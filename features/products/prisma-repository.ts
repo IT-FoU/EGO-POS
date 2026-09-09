@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
+import { writeStockIn } from "@/features/inventory/prisma-repository";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
@@ -135,6 +136,16 @@ export async function findPrismaProductByBarcode(barcode: string, tenant: Tenant
   };
 }
 
+export type ProductInitialStockInput = {
+  expiryDate?: string;
+  lotNumber?: string;
+  note?: string;
+  quantity?: number;
+  supplierName?: string;
+  unitCostLak?: number;
+  unitName?: string;
+};
+
 export type ProductWriteInput = {
   barcode?: string;
   brandId?: string;
@@ -142,6 +153,7 @@ export type ProductWriteInput = {
   costPriceLak?: number;
   description?: string;
   imageUrl?: string;
+  initialStock?: ProductInitialStockInput;
   minStock?: number;
   nameEn?: string;
   nameLo: string;
@@ -269,10 +281,61 @@ function assertPositive(value: unknown, label: string) {
   }
 }
 
+async function seedDefaultWarehouseBalance(
+  tx: any,
+  productId: string,
+  tenant: TenantContext,
+  warehouseId: string,
+) {
+  await tx.inventoryBalance.upsert({
+    create: {
+      companyId: tenant.companyId,
+      productId,
+      quantity: 0,
+      warehouseId,
+    },
+    update: {},
+    where: { warehouseId_productId: { productId, warehouseId } },
+  });
+}
+
+function resolveCreatedReceiveUnitId(
+  units: Array<Record<string, any>>,
+  initialStock?: ProductInitialStockInput,
+) {
+  const requestedName = optionalString(initialStock?.unitName);
+  if (requestedName) {
+    const named = units.find((unit) => String(unit.unitName) === requestedName);
+    if (named?.id) return String(named.id);
+  }
+  return String(
+    units.find((unit) => unit.isPurchaseUnit)?.id ??
+      units.find((unit) => unit.isBaseUnit)?.id ??
+      units[0]?.id ??
+      "",
+  );
+}
+
+async function loadCreatedProduct(tx: any, productId: string) {
+  return tx.product.findFirstOrThrow({
+    include: {
+      balances: true,
+      brand: true,
+      category: true,
+      inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
+      supplier: true,
+      units: { orderBy: { sortOrder: "asc" } },
+    },
+    where: { id: productId },
+  });
+}
+
 function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
   assertNonNegative(input.costPriceLak, "Cost price");
   assertNonNegative(input.sellingPriceLak, "Selling price");
   assertNonNegative(input.minStock, "Minimum stock");
+  assertNonNegative(input.initialStock?.quantity, "Opening stock quantity");
+  assertNonNegative(input.initialStock?.unitCostLak, "Opening stock cost");
 
   for (const [index, unit] of (input.units ?? []).entries()) {
     assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
@@ -427,6 +490,11 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
     sellingPriceLak: input.sellingPriceLak,
   });
 
+  const warehouseId = scope.warehouseId;
+  if (!warehouseId) {
+    throw new Error("A warehouse is required to list the product on POS.");
+  }
+
   const createdProduct = await tx.product.create({
     data: {
       barcode: optionalString(input.barcode),
@@ -454,7 +522,29 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
     include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
   });
 
-  return mapPrismaProduct(createdProduct);
+  await seedDefaultWarehouseBalance(tx, createdProduct.id, tenant, warehouseId);
+
+  const openingQuantity = numberValue(input.initialStock?.quantity);
+  if (openingQuantity > 0) {
+    const unitId = resolveCreatedReceiveUnitId(createdProduct.units, input.initialStock);
+    await writeStockIn(
+      tx,
+      {
+        expiryDate: optionalString(input.initialStock?.expiryDate) ?? null,
+        lotNumber: optionalString(input.initialStock?.lotNumber) ?? null,
+        note: optionalString(input.initialStock?.note) ?? "Opening stock from product create",
+        productId: createdProduct.id,
+        quantity: openingQuantity,
+        supplierName: optionalString(input.initialStock?.supplierName) ?? null,
+        unitCostLak: input.initialStock?.unitCostLak,
+        unitId: unitId || null,
+        warehouseId,
+      },
+      tenant,
+    );
+  }
+
+  return mapPrismaProduct(await loadCreatedProduct(tx, createdProduct.id));
 }
 
 export async function createPrismaProduct(input: ProductWriteInput, tenant: TenantContext) {

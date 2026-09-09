@@ -15,6 +15,7 @@ import {
   type AddPosCartResult,
 } from "../features/pos/pos-cart";
 import { listSellablePosProducts } from "../features/pos/prisma-repository";
+import { writeStockIn } from "../features/inventory/prisma-repository";
 import type { PosCartItem, PosProduct, PosProductUnit } from "../features/pos/types";
 import {
   findPrismaProductByBarcode,
@@ -519,7 +520,13 @@ async function main() {
     await setBalance(tx, tenant, both.id, warehouseBId, 50);
 
     const catalogueA = await listSellablePosProducts({ ...tenant, warehouseId: warehouseAId }, tx);
-    assert(!catalogueA.some((item) => item.id === onlyB.id), "WH-B-only product appeared on WH-A POS");
+    const onlyBOnA = catalogueA.find((item) => item.id === onlyB.id);
+    assert(onlyBOnA, "WH-B-only product should still appear on WH-A POS at qty 0");
+    assertClose(onlyBOnA.stockQty, 0, "WH-A must not use WH-B quantity");
+    const catalogueB = await listSellablePosProducts({ ...tenant, warehouseId: warehouseBId }, tx);
+    const onlyBOnB = catalogueB.find((item) => item.id === onlyB.id);
+    assert(onlyBOnB, "WH-B-only product missing from WH-B POS");
+    assertClose(onlyBOnB.stockQty, 15, "WH-B POS must use WH-B quantity");
     const split = catalogueA.find((item) => item.id === both.id);
     assert(split, "WH-A stocked product missing from WH-A POS");
     assertClose(split.stockQty, 3, "POS stock used the wrong warehouse quantity");
@@ -580,6 +587,98 @@ async function main() {
     const nameEnter = scanOnce(cart, catalogue, "EGO FIX06 Product Alpha");
     assert(!nameEnter.found, "Product-name Enter must not be treated as barcode");
     assert(nameEnter.cart[0].quantity === 1, "Name Enter must not add a second qty");
+  });
+
+  await isolated("25. Create without qty appears on POS at zero", async (tx) => {
+    const { tenant } = await createIsolatedTenant(tx, "zero-create");
+    const created = await writePrismaProductCreate(
+      tx,
+      pieceInput({
+        barcode: "0091919191919",
+        nameEn: "EGO FIX06 Create Zero",
+        sellingPriceLak: 2500,
+        sku: "E6-SKU-CREATE-ZERO",
+      }),
+      tenant,
+    );
+    const catalogue = await listSellablePosProducts(tenant, tx);
+    const product = catalogue.find((item) => item.id === created.id);
+    assert(product, "Created product missing from POS without extra stock row");
+    assertClose(product.stockQty, 0, "Create without qty must list on POS at 0");
+    const result = addPosCartLine([], toLine(product, product.units?.[0]));
+    assert(!result.added && result.reason === "out_of_stock", "Zero-stock create must not enter cart");
+    assert(result.cart.length === 0, "Zero-stock create leaked a cart line");
+  });
+
+  await isolated("26. Create with opening qty is sellable", async (tx) => {
+    const { tenant } = await createIsolatedTenant(tx, "qty-create");
+    const created = await writePrismaProductCreate(
+      tx,
+      {
+        ...pieceInput({
+          barcode: "0092929292929",
+          nameEn: "EGO FIX06 Create Qty",
+          sellingPriceLak: 2500,
+          sku: "E6-SKU-CREATE-QTY",
+        }),
+        initialStock: {
+          quantity: 10,
+          unitName: "Piece",
+        },
+      },
+      tenant,
+    );
+    const catalogue = await listSellablePosProducts(tenant, tx);
+    const product = catalogue.find((item) => item.id === created.id);
+    assert(product, "Create-with-qty product missing from POS");
+    assertClose(product.stockQty, 10, "Create with qty must post sellable stock");
+    const result = addPosCartLine([], toLine(product, product.units?.[0]));
+    assert(result.added && result.cart.length === 1, "Create-with-qty product must enter cart");
+    assert(result.cart[0].quantity === 1, "Sellable create must add qty 1");
+  });
+
+  await isolated("27. Quick Stock In is additive on POS", async (tx) => {
+    const { tenant, warehouseAId } = await createIsolatedTenant(tx, "qsi");
+    const created = await writePrismaProductCreate(
+      tx,
+      {
+        ...pieceInput({
+          barcode: "0093939393939",
+          nameEn: "EGO FIX06 QSI Additive",
+          sellingPriceLak: 2500,
+          sku: "E6-SKU-QSI",
+        }),
+        initialStock: {
+          quantity: 10,
+          unitName: "Piece",
+        },
+      },
+      tenant,
+    );
+    const piece = created.units.find((unit) => unit.isBaseUnit) ?? created.units[0];
+    await writeStockIn(
+      tx,
+      {
+        productId: created.id,
+        quantity: 5,
+        stockInNo: "SI-E6-ADD",
+        unitId: piece.id,
+        warehouseId: warehouseAId,
+      },
+      tenant,
+    );
+    const catalogue = await listSellablePosProducts(tenant, tx);
+    const product = catalogue.find((item) => item.id === created.id);
+    assert(product, "QSI product missing from POS");
+    assertClose(product.stockQty, 15, "QSI must add 5 to opening 10");
+    const movements = await tx.stockMovement.findMany({
+      where: { productId: created.id },
+      orderBy: { createdAt: "asc" },
+    });
+    assert(movements.length === 2, "Opening plus QSI must be two movements");
+    assertClose(movements[1].quantity, 5, "QSI movement quantity");
+    assertClose(movements[1].beforeQty, 10, "QSI before qty");
+    assertClose(movements[1].afterQty, 15, "QSI after qty");
   });
 
   const after = await goboxCounts(prisma);

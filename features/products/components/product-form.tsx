@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, } from "@/features/products/actions";
+import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 const QUICK_UNIT_NAMES = [
     "Piece",
@@ -45,7 +46,6 @@ type InitialStockPreviewValue = {
     note: string;
 };
 type BarcodeAliasState = Record<string, string[]>;
-type PostSaveReceiveAction = "products" | "quick_stock_in";
 type DuplicateBarcodeMatch = {
     matchedBarcode: string;
     matchedUnitId?: string;
@@ -145,7 +145,6 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         costLak: 0,
         note: "",
     });
-    const [postSaveReceiveAction, setPostSaveReceiveAction] = useState<PostSaveReceiveAction>("quick_stock_in");
     const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
     const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? [
         {
@@ -401,6 +400,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 unitName: unit.unitName.trim(),
             };
         });
+        const openingQuantity = Math.max(Number(initialStockPreview.quantityReceived) || 0, 0);
+        const receiveUnit = sourceUnits.find((unit) => unit.id === initialStockPreview.receiveUnitId)
+            ?? sourceUnits.find((unit) => unit.isPurchaseUnit)
+            ?? baseUnit;
         const payload = {
             barcode: derivedBarcode,
             brandId: undefined,
@@ -408,6 +411,15 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
             imageUrl: selectedImageId,
+            initialStock: mode === "create" && openingQuantity > 0 ? {
+                expiryDate: initialStockPreview.expiryDate || undefined,
+                lotNumber: initialStockPreview.lotNumber.trim() || undefined,
+                note: initialStockPreview.note.trim() || undefined,
+                quantity: openingQuantity,
+                supplierName: initialStockPreview.supplier.trim() || undefined,
+                unitCostLak: initialStockPreview.costLak || costPriceLak,
+                unitName: receiveUnit?.unitName.trim() || undefined,
+            } : undefined,
             minStock: Number(formData.get("minStock") ?? 0),
             nameEn: String(formData.get("productName") ?? "").trim(),
             nameLo: String(formData.get("productName") ?? "").trim(),
@@ -428,11 +440,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     return;
                 }
                 setMessage(t("productSaved"));
+                signalPosCatalogueInvalidation();
                 router.refresh();
-                if (initialStockPreview.addOpeningStock && postSaveReceiveAction === "quick_stock_in" && derivedBarcode) {
-                    router.push(`/inventory/quick-stock-in?barcode=${encodeURIComponent(derivedBarcode)}`);
-                    return;
-                }
                 router.push("/products");
             });
             return;
@@ -665,7 +674,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     setAliasDrawerUnitId(unitId);
                 }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
-              <InitialStockPreview onChange={setInitialStockPreview} onPostSaveReceiveActionChange={setPostSaveReceiveAction} postSaveReceiveAction={postSaveReceiveAction} showPostSaveReceiveOption={isCreate} units={units} value={initialStockPreview}/>
+              <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -756,7 +765,6 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 setAliasDrawerUnitId(unitId);
             }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <InitialStockPreview onChange={setInitialStockPreview} onPostSaveReceiveActionChange={setPostSaveReceiveAction} postSaveReceiveAction={postSaveReceiveAction} showPostSaveReceiveOption={isCreate} units={units} value={initialStockPreview}/>
           <ProductImagesSection barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setSelectedImageId} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
@@ -978,7 +986,7 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
             </PreviewSection>
 
             <PreviewSection title={t("initialStockLot")}>
-              <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
+              <div className="rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
                 {t("initialStockPreviewOnly")}
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1036,11 +1044,8 @@ function ReadinessRow({ label, ok }: { label: string; ok: boolean }) {
     </div>);
 }
 
-function InitialStockPreview({ onChange, onPostSaveReceiveActionChange, postSaveReceiveAction, showPostSaveReceiveOption, units, value }: {
+function InitialStockPreview({ onChange, units, value }: {
     onChange: (nextValue: InitialStockPreviewValue) => void;
-    onPostSaveReceiveActionChange: (nextValue: PostSaveReceiveAction) => void;
-    postSaveReceiveAction: PostSaveReceiveAction;
-    showPostSaveReceiveOption: boolean;
     units: ProductUnit[];
     value: InitialStockPreviewValue;
 }) {
@@ -1052,13 +1057,10 @@ function InitialStockPreview({ onChange, onPostSaveReceiveActionChange, postSave
     function update(patch: Partial<InitialStockPreviewValue>) {
         onChange({ ...value, ...patch });
     }
-    return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-dashed border-warning/50 bg-warning/5 p-5">
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">{t("initialStockLot")}</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("initialStockPreviewHint")}</p>
-        </div>
-        <span className="rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-semibold text-warning">{t("previewOnly")}</span>
+    return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
+      <div>
+        <h2 className="text-lg font-semibold">{t("initialStockLot")}</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("initialStockPreviewHint")}</p>
       </div>
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <label className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-background px-3 text-sm font-semibold">
@@ -1094,28 +1096,8 @@ function InitialStockPreview({ onChange, onPostSaveReceiveActionChange, postSave
             <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={value.note} onChange={(event) => update({ note: event.target.value })} placeholder={t("previewNotePlaceholder")}/>
           </Field>
         </div>
-        {showPostSaveReceiveOption && value.addOpeningStock ? (<div className="md:col-span-3 rounded-md border border-primary/25 bg-primary/5 p-4">
-            <div className="text-sm font-semibold">{t("afterSavingProduct")}</div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("afterSavingProductHint")}</p>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm font-semibold">
-                <input className="mt-1" type="radio" name="postSaveReceiveAction" checked={postSaveReceiveAction === "products"} onChange={() => onPostSaveReceiveActionChange("products")}/>
-                <span>
-                  {t("stayOnProducts")}
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">{t("stayOnProductsHint")}</span>
-                </span>
-              </label>
-              <label className="flex items-start gap-3 rounded-md border border-primary/30 bg-primary/10 p-3 text-sm font-semibold">
-                <input className="mt-1" type="radio" name="postSaveReceiveAction" checked={postSaveReceiveAction === "quick_stock_in"} onChange={() => onPostSaveReceiveActionChange("quick_stock_in")}/>
-                <span>
-                  {t("goQuickStockIn")}
-                  <span className="mt-1 block text-xs font-normal text-muted-foreground">{t("goQuickStockInHint")}</span>
-                </span>
-              </label>
-            </div>
-          </div>) : null}
       </div>
-      <p className="mt-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-warning">
+      <p className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
         {t("previewStockLater")}
       </p>
     </section>);
