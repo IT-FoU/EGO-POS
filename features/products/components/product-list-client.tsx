@@ -10,7 +10,6 @@ import { localizedProductName } from "@/features/pos/product-display-name";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
-const t = tProducts;
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,7 +23,9 @@ import { formatLak } from "@/features/products/format";
 import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
 import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
-function getImportFields() {
+type ProductsTranslate = (key: string) => string;
+
+function getImportFields(t: ProductsTranslate) {
     return [
         t("productName"),
         t("barcode"),
@@ -56,15 +57,20 @@ type ProductShellDrawerContent = {
     title: string;
 };
 const pageSizeOptions = [25, 50, 100, 200] as const;
-export function ProductListClient({ products: initialProducts, categories: initialCategories, listPage: initialListPage, locale: localeProp, }: {
+
+function useProductsT() {
+    const locale = useAppLocale();
+    const t = (key: string) => tProducts(key, locale);
+    return { locale, t };
+}
+
+export function ProductListClient({ products: initialProducts, categories: initialCategories, listPage: initialListPage }: {
     products: Product[];
     categories: Category[];
     listPage?: ProductListPage;
-    locale?: SupportedLocale;
 }) {
     const router = useRouter();
-    const locale = useAppLocale(localeProp);
-    const t = (key: string) => tProducts(key, locale);
+    const { locale, t } = useProductsT();
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
     const [listPage, setListPage] = useState<ProductListPage | undefined>(initialListPage);
@@ -266,7 +272,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
             </select>
             <select className="h-11 rounded-md border border-border bg-background px-3 text-sm capitalize outline-none transition focus:border-primary" value={status} onChange={(event) => { setStatus(event.target.value as ProductStatus | "all"); setPage(1); }} aria-label={t("filterByStatus")}>
               {statusOptions.map((option) => (<option value={option} key={option}>
-                  {productStatusLabel(option)}
+                  {productStatusLabel(option, locale)}
                 </option>))}
             </select>
           </div>
@@ -370,7 +376,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
                     <td className="px-3 py-3 text-right">{formatLak(product.costPriceLak)}</td>
                     <td className="px-3 py-3 text-right font-semibold">{formatLak(product.sellingPriceLak)}</td>
                     <td className="px-3 py-3"><ExpiryBadge status={expiryStatus}/></td>
-                    <td className="px-3 py-3"><StatusBadge status={product.status}/></td>
+                    <td className="px-3 py-3"><StatusBadge locale={locale} status={product.status}/></td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" href={`/products/${product.id}/edit`}>
@@ -422,6 +428,7 @@ function ProductsVisualShell({ onOpenDrawer, stats }: {
     onOpenDrawer: (drawerKey: ProductShellDrawerKey) => void;
     stats: ProductShellStats;
 }) {
+    const { t } = useProductsT();
     const topics = [
         { description: t("productListHint"), drawerKey: "product_list" as ProductShellDrawerKey, icon: Boxes, label: t("productList") },
         { description: t("categoriesHint"), drawerKey: "categories" as ProductShellDrawerKey, icon: Tags, label: t("categories") },
@@ -474,6 +481,7 @@ function ProductsVisualShell({ onOpenDrawer, stats }: {
 }
 
 function ProductShellMetric({ icon: Icon, label, onClick, value }: { icon: typeof Boxes; label: string; onClick: () => void; value: number }) {
+    const { t } = useProductsT();
     return (
       <button className="rounded-lg border border-border bg-background p-3 text-left transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40" type="button" onClick={onClick}>
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -487,6 +495,7 @@ function ProductShellMetric({ icon: Icon, label, onClick, value }: { icon: typeo
 }
 
 function ProductShellTopic({ description, icon: Icon, label, onClick }: { description: string; icon: typeof Boxes; label: string; onClick: () => void }) {
+    const { t } = useProductsT();
     return (
       <button className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40" type="button" onClick={onClick}>
         <div className="flex min-w-0 items-center gap-3">
@@ -514,6 +523,7 @@ function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, 
     selectedProducts: Product[];
     stats: ProductShellStats;
 }) {
+    const { t } = useProductsT();
     useEffect(() => {
         if (!drawerKey)
             return;
@@ -529,12 +539,12 @@ function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, 
         return null;
     if (isProductToolDrawer(drawerKey)) {
         return (
-          <ProductDrawerFrame description={getProductToolDescription(drawerKey)} label={t("productsTool")} title={getProductToolTitle(drawerKey)} onClose={onClose}>
+          <ProductDrawerFrame description={getProductToolDescription(drawerKey, t)} label={t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
             <ProductToolDrawerBody categories={categories} drawerKey={drawerKey} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={stats} onClose={onClose}/>
           </ProductDrawerFrame>
         );
     }
-    const content = getProductShellDrawerContent(drawerKey, stats);
+    const content = getProductShellDrawerContent(drawerKey, stats, t);
     return (
       <ProductDrawerFrame description={content.description} label={t("productDetail")} title={content.title} onClose={onClose}>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -585,6 +595,7 @@ function ProductDrawerFrame({ children, description, label, onClose, title }: {
     onClose: () => void;
     title: string;
 }) {
+    const { t } = useProductsT();
     return (
       <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72">
         <section className="flex h-full w-full max-w-none flex-col overflow-x-hidden border-l border-border bg-card shadow-2xl">
@@ -651,6 +662,7 @@ function ProductToolDrawerBody({ categories, drawerKey, filteredProducts, onClos
 }
 
 function ImportProductsDrawer({ onClose }: { onClose: () => void }) {
+    const { t } = useProductsT();
     return (
       <div className="grid gap-5">
         <ProductToolNotice text={t("importNotice")}/>
@@ -676,7 +688,7 @@ function ImportProductsDrawer({ onClose }: { onClose: () => void }) {
         <section className="rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("sampleColumns")}</h3>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {getImportFields().slice(0, 8).map((field) => <span className="rounded-md border border-border bg-card px-3 py-2 text-sm" key={field}>{field}</span>)}
+            {getImportFields(t).slice(0, 8).map((field) => <span className="rounded-md border border-border bg-card px-3 py-2 text-sm" key={field}>{field}</span>)}
           </div>
         </section>
         <ProductToolFooter onClose={onClose} actions={[{ label: t("upload"), reason: t("notConnectedYet") }, { label: t("import"), reason: t("disabled") }]}/>
@@ -690,6 +702,7 @@ function ExportProductsDrawer({ onClose, products, selectedCount, stats }: {
     selectedCount: number;
     stats: ProductShellStats;
 }) {
+    const { t } = useProductsT();
     const [selectedIds, setSelectedIds] = useState<string[]>(products.slice(0, 8).map((product) => product.id));
     const previewProducts = products.slice(0, 12);
     const fields = [t("productName"), t("barcode"), t("sku"), t("category"), t("sellingPrice"), t("costPrice"), t("stock"), t("status"), t("imageStatus")];
@@ -723,8 +736,9 @@ function ExportProductsDrawer({ onClose, products, selectedCount, stats }: {
 }
 
 function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void; products: Product[]; stats: ProductShellStats }) {
+    const { t, locale } = useProductsT();
     const [filter, setFilter] = useState("all");
-    const audit = getBarcodeAudit(products);
+    const audit = getBarcodeAudit(products, locale);
     const missingSku = products.filter((product) => !product.sku);
     const issueLabels: Record<string, string> = {
         "Missing barcode": t("missingBarcode"),
@@ -736,7 +750,7 @@ function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void;
         ...audit.missing.map((item) => ({ issue: "Missing barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: "-" })),
         ...audit.duplicates.map((item) => ({ issue: "Duplicate barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: item.barcode })),
         ...audit.invalid.map((item) => ({ issue: "Invalid barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: item.barcode ?? "-" })),
-        ...missingSku.map((product) => ({ issue: "Missing SKU", productName: localizedProductName(product), unitName: t("product"), value: product.barcode || "-" })),
+        ...missingSku.map((product) => ({ issue: "Missing SKU", productName: localizedProductName(product, locale), unitName: t("product"), value: product.barcode || "-" })),
     ].filter((row) => filter === "all" || row.issue.toLowerCase().replaceAll(" ", "_") === filter);
     return (
       <div className="grid gap-5">
@@ -786,6 +800,7 @@ function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void;
 }
 
 function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
+    const { t, locale } = useProductsT();
     const [quantity, setQuantity] = useState("1");
     const [labelSize, setLabelSize] = useState("40x30mm");
     const [paper, setPaper] = useState("A4");
@@ -798,7 +813,7 @@ function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; produc
         <section className="rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("barcodeLabelPreview")}</h3>
           <div className="mt-4 max-w-sm rounded-md border border-border bg-card p-4 text-center">
-            <div className="truncate text-sm font-semibold">{previewProduct ? localizedProductName(previewProduct) : t("productName")}</div>
+            <div className="truncate text-sm font-semibold">{previewProduct ? localizedProductName(previewProduct, locale) : t("productName")}</div>
             <div className="mt-2 rounded bg-background p-3 font-mono text-xs tracking-[0.2em]">{previewProduct?.barcode || previewProduct?.sku || "BARCODE"}</div>
             <div className="mt-2 text-sm font-semibold">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : t("price")}</div>
           </div>
@@ -809,6 +824,7 @@ function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; produc
 }
 
 function PrintShelfLabelDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
+    const { t, locale } = useProductsT();
     const [paper, setPaper] = useState("A4");
     const previewProduct = products[0];
     const toggles = [t("productName"), t("price"), t("unit"), t("barcodeOptional"), t("promoTagOptional")];
@@ -823,7 +839,7 @@ function PrintShelfLabelDrawer({ onClose, products }: { onClose: () => void; pro
         <section className="rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("shelfLabelPreview")}</h3>
           <div className="mt-4 max-w-sm rounded-md border border-border bg-card p-4">
-            <div className="truncate text-lg font-semibold">{previewProduct ? localizedProductName(previewProduct) : t("productName")}</div>
+            <div className="truncate text-lg font-semibold">{previewProduct ? localizedProductName(previewProduct, locale) : t("productName")}</div>
             <div className="mt-2 text-2xl font-black text-primary">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : t("price")}</div>
             <div className="mt-2 text-xs text-muted-foreground">{previewProduct?.units[0]?.unitName ?? t("unit")} | {previewProduct?.barcode || t("barcodeOptional")}</div>
           </div>
@@ -840,7 +856,7 @@ function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, product
     products: Product[];
     selectedProducts: Product[];
 }) {
-    const locale = useAppLocale();
+    const { locale, t } = useProductsT();
     const [target, setTarget] = useState<"all" | "category" | "selected">("all");
     const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
     const [adjustmentMode, setAdjustmentMode] = useState<"increase_percent" | "decrease_percent" | "increase_amount" | "decrease_amount">("increase_percent");
@@ -858,7 +874,7 @@ function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, product
         adjustmentValue: parseMoney(adjustmentValue),
         fields,
         roundingLak,
-    }).slice(0, 20) : [];
+    }, locale).slice(0, 20) : [];
     return (
       <div className="grid gap-5">
         <ProductToolNotice text={t("bulkPreviewNotice")}/>
@@ -912,6 +928,7 @@ function ProductToolNotice({ text }: { text: string }) {
 }
 
 function ProductToolFooter({ actions, onClose }: { actions: Array<{ label: string; reason: string }>; onClose: () => void }) {
+    const { t } = useProductsT();
     return (
       <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
         <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
@@ -929,6 +946,7 @@ function ProductPreviewTable({ onToggle, products, selectedIds }: {
     products: Product[];
     selectedIds: string[];
 }) {
+    const { t, locale } = useProductsT();
     return (
       <div className="mt-3 max-h-80 overflow-auto rounded-md border border-border">
         <table className="w-full min-w-[720px] text-left text-xs">
@@ -938,11 +956,11 @@ function ProductPreviewTable({ onToggle, products, selectedIds }: {
           <tbody>
             {products.map((product) => (
               <tr className="border-t border-border" key={product.id}>
-                <td className="p-2"><input type="checkbox" checked={selectedIds.includes(product.id)} onChange={() => onToggle(product.id)} aria-label={fillProductsCopy(t("selectProductPreview"), { name: localizedProductName(product) })}/></td>
-                <td className="p-2 font-semibold">{localizedProductName(product)}</td>
+                <td className="p-2"><input type="checkbox" checked={selectedIds.includes(product.id)} onChange={() => onToggle(product.id)} aria-label={fillProductsCopy(t("selectProductPreview"), { name: localizedProductName(product, locale) })}/></td>
+                <td className="p-2 font-semibold">{localizedProductName(product, locale)}</td>
                 <td className="p-2 font-mono">{product.barcode || "-"}</td>
                 <td className="p-2 font-mono">{product.sku || "-"}</td>
-                <td className="p-2">{productStatusLabel(product.status)}</td>
+                <td className="p-2">{productStatusLabel(product.status, locale)}</td>
               </tr>
             ))}
           </tbody>
@@ -958,6 +976,7 @@ function ProductOptionPanel({ onSelect, options, selected, title }: {
     selected?: string;
     title: string;
 }) {
+    const { t } = useProductsT();
     return (
       <section className="rounded-lg border border-border bg-background p-4">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
@@ -982,6 +1001,7 @@ function PrintLayoutControls({ labelOptions, labelValue, onLabelChange, onPaperC
     paperValue: string;
     quantity: string;
 }) {
+    const { t } = useProductsT();
     return (
       <section className="grid gap-4 rounded-lg border border-border bg-background p-4 lg:grid-cols-3">
         <label className="grid gap-1 text-sm font-semibold">{t("quantityPerProduct")}<input className="field-input" inputMode="numeric" value={quantity} onChange={(event) => onQuantityChange(event.target.value.replace(/[^\d]/g, ""))}/></label>
@@ -992,6 +1012,7 @@ function PrintLayoutControls({ labelOptions, labelValue, onLabelChange, onPaperC
 }
 
 function ProductSelectionPreview({ products }: { products: Product[] }) {
+    const { t, locale } = useProductsT();
     return (
       <section className="rounded-lg border border-border bg-background p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1001,7 +1022,7 @@ function ProductSelectionPreview({ products }: { products: Product[] }) {
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {products.slice(0, 6).map((product) => (
             <div className="rounded-md border border-border bg-card p-3 text-sm" key={product.id}>
-              <div className="truncate font-semibold">{localizedProductName(product)}</div>
+              <div className="truncate font-semibold">{localizedProductName(product, locale)}</div>
               <div className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || product.sku || t("noCode")}</div>
             </div>
           ))}
@@ -1015,7 +1036,7 @@ function isProductToolDrawer(drawerKey: ProductShellDrawerKey) {
     return drawerKey.startsWith("tool_");
 }
 
-function getProductToolTitle(drawerKey: ProductShellDrawerKey) {
+function getProductToolTitle(drawerKey: ProductShellDrawerKey, t: ProductsTranslate) {
     const titles: Record<string, string> = {
         tool_audit: t("barcodeSkuAudit"),
         tool_bulk_price: t("bulkPriceUpdate"),
@@ -1027,7 +1048,7 @@ function getProductToolTitle(drawerKey: ProductShellDrawerKey) {
     return titles[drawerKey] ?? t("productsTool");
 }
 
-function getProductToolDescription(drawerKey: ProductShellDrawerKey) {
+function getProductToolDescription(drawerKey: ProductShellDrawerKey, t: ProductsTranslate) {
     const descriptions: Record<string, string> = {
         tool_audit: t("barcodeSkuAuditDesc"),
         tool_bulk_price: t("bulkPriceUpdateDesc"),
@@ -1048,6 +1069,7 @@ function SummaryCard({ active, color, count, expanded = false, icon: Icon, label
     onExpand: () => void;
     onViewAll: () => void;
 }) {
+    const { t } = useProductsT();
     const styles = {
         blue: "border-blue-500/40 text-blue-400 bg-blue-500/10",
         orange: "border-orange-500/40 text-orange-400 bg-orange-500/10",
@@ -1080,6 +1102,7 @@ function InsightPanel({ emptyText, filter, onSelectProduct, products, }: {
     onSelectProduct: (product: Product) => void;
     products: Product[];
 }) {
+    const { t, locale } = useProductsT();
     const title = filter === "all"
         ? t("allProducts")
         : filter === "out_of_stock"
@@ -1096,8 +1119,8 @@ function InsightPanel({ emptyText, filter, onSelectProduct, products, }: {
       </div>
       {products.length === 0 ? (<div className="mt-4 rounded-md border border-dashed border-border bg-background p-5 text-center text-sm text-muted-foreground">{emptyText}</div>) : (<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {products.slice(0, 9).map((product) => (<button className="rounded-md border border-border bg-background p-3 text-left transition hover:border-primary" key={product.id} type="button" onClick={() => onSelectProduct(product)}>
-              <div className="truncate font-semibold">{localizedProductName(product)}</div>
-              <div className="mt-2 text-xs text-muted-foreground">{getInsightDetail(product, filter)}</div>
+              <div className="truncate font-semibold">{localizedProductName(product, locale)}</div>
+              <div className="mt-2 text-xs text-muted-foreground">{getInsightDetail(product, filter, t)}</div>
             </button>))}
         </div>)}
     </section>);
@@ -1105,12 +1128,13 @@ function InsightPanel({ emptyText, filter, onSelectProduct, products, }: {
 function ProductThumbnail({ product }: {
     product: Product;
 }) {
+    const { locale } = useProductsT();
     if (isRenderableImage(product.imageUrl)) {
-        return <img alt={localizedProductName(product)} className="size-full object-cover" src={product.imageUrl}/>;
+        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" src={product.imageUrl}/>;
     }
     const defaultUnitImage = product.units.find((unit) => unit.isDefaultSaleUnit && isRenderableImage(unit.imageUrl))?.imageUrl;
     if (isRenderableImage(defaultUnitImage)) {
-        return <img alt={localizedProductName(product)} className="size-full object-cover" src={defaultUnitImage}/>;
+        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" src={defaultUnitImage}/>;
     }
     return <ProductImagePlaceholder />;
 }
@@ -1129,6 +1153,7 @@ function StockBadge({ label, minStock, stock }: {
 function ExpiryBadge({ status }: {
     status: ExpiryStatus;
 }) {
+    const { t } = useProductsT();
     const labels: Record<ExpiryStatus, string> = {
         expired: t("expiredStatus"),
         near_expiry: t("nearExpiry"),
@@ -1147,16 +1172,17 @@ function ImagePreviewModal({ onClose, product }: {
     onClose: () => void;
     product: Product;
 }) {
+    const { t, locale } = useProductsT();
     return (<ProductSmallModal closeAriaLabel={t("closeModal")} closeOnBackdrop={true} closeOnEscape={true} onClose={onClose} size="xl" title={t("productImage")}>
       <div className="grid gap-4">
         <div className="grid min-h-72 place-items-center overflow-hidden rounded-lg border border-border bg-background p-4">
-          {isRenderableImage(product.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={localizedProductName(product)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
+          {isRenderableImage(product.imageUrl) ? (<img alt={localizedProductName(product, locale)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={localizedProductName(product, locale)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
               <ImageIcon className="mx-auto size-14" aria-hidden="true"/>
               <div className="text-sm font-semibold">{t("noProductImage")}</div>
             </div>)}
         </div>
         <div>
-          <h3 className="text-lg font-semibold">{localizedProductName(product)}</h3>
+          <h3 className="text-lg font-semibold">{localizedProductName(product, locale)}</h3>
           <p className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || t("noBarcode")} / {product.sku || t("noSku")}</p>
         </div>
       </div>
@@ -1243,7 +1269,7 @@ function getProductShellStats(products: Product[], categories: Category[]) {
         withImages: products.length - missingImages,
     };
 }
-function getProductShellDrawerContent(drawerKey: ProductShellDrawerKey, stats: ProductShellStats): ProductShellDrawerContent {
+function getProductShellDrawerContent(drawerKey: ProductShellDrawerKey, stats: ProductShellStats, t: ProductsTranslate): ProductShellDrawerContent {
     const readOnlyAction = { label: t("openFilteredList"), reason: t("readOnly") };
     const productWorkflowActions = [
         { label: t("addProduct"), reason: t("requiresWorkflow") },
@@ -1479,7 +1505,7 @@ function getInsightProducts(products: Product[]): Record<SummaryInsight, Product
         out_of_stock: products.filter((product) => getProductStock(product) === 0),
     };
 }
-function getInsightDetail(product: Product, filter: SummaryInsight) {
+function getInsightDetail(product: Product, filter: SummaryInsight, t: ProductsTranslate) {
     if (filter === "near_expiry")
         return getExpiryStatus(product) === "near_expiry" ? t("expiryStatusNear") : t("expiryStatusNormal");
     if (filter === "dead_stock")
@@ -1540,7 +1566,7 @@ function buildBulkPricePreview(products: Product[], config: {
         studentPrice?: boolean;
     };
     roundingLak: number;
-}) {
+}, locale?: SupportedLocale) {
     return products.flatMap((product) => {
         const units = product.units.length > 0 ? product.units : [{
                 costPriceLak: product.costPriceLak,
@@ -1560,14 +1586,14 @@ function buildBulkPricePreview(products: Product[], config: {
                 oldSelling,
                 oldStudent,
                 productId: product.id,
-                productName: localizedProductName(product),
+                productName: localizedProductName(product, locale),
                 unitId: unit.id,
                 unitName: unit.unitName,
             };
         });
     });
 }
-function getBarcodeAudit(products: Product[]) {
+function getBarcodeAudit(products: Product[], locale?: SupportedLocale) {
     const barcodeMap = new Map<string, Array<{
         productName: string;
         unitName?: string;
@@ -1586,7 +1612,7 @@ function getBarcodeAudit(products: Product[]) {
         barcode?: string;
     }> = [];
     for (const product of products) {
-        const productName = localizedProductName(product);
+        const productName = localizedProductName(product, locale);
         const entries = [
             { barcode: product.barcode, productName },
             ...product.units.map((unit) => ({ barcode: unit.barcode, productName, unitName: unit.unitName })),

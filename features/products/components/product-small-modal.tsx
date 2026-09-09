@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
 import { tProducts } from "@/lib/i18n/products-copy";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { cn } from "@/lib/utils";
 
 type ProductSmallModalSize = "sm" | "md" | "xl";
@@ -31,6 +32,7 @@ export function ProductSmallModal({
   size,
   title,
 }: ProductSmallModalProps) {
+  const locale = useAppLocale();
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLElement>(null);
@@ -83,7 +85,7 @@ export function ProductSmallModal({
             className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground"
             type="button"
             onClick={onClose}
-            aria-label={closeAriaLabel ?? tProducts("close")}
+            aria-label={closeAriaLabel ?? tProducts("close", locale)}
           >
             <X className="size-4" aria-hidden="true" />
           </button>

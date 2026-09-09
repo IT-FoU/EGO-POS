@@ -113,7 +113,11 @@ check(
     categoriesClient.includes('from "@/lib/i18n/products-copy"') &&
     categoriesPage.includes("getServerLocale") &&
     listClient.includes('from "@/lib/i18n/products-copy"') &&
-    productsPage.includes("getProductsCopy") &&
+    productsPage.includes("ProductsPageHeader") &&
+    productsPage.includes("products-page-header") &&
+    listClient.includes("function useProductsT()") &&
+    !productsPage.includes("getProductsCopy") &&
+    !productsPage.includes("getServerLocale") &&
     statusBadge.includes("productStatusLabel") &&
     !listClient.includes('"en" | "th"') &&
     !productForm.includes('"en" | "th"') &&

@@ -1,5 +1,8 @@
+"use client";
+
 import type { ProductStatus } from "@/features/products/types";
 import { productStatusLabel } from "@/lib/i18n/products-copy";
+import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<ProductStatus | "active" | "inactive", string> = {
@@ -10,12 +13,13 @@ const statusStyles: Record<ProductStatus | "active" | "inactive", string> = {
 };
 
 export function StatusBadge({
-  locale,
+  locale: localeProp,
   status,
 }: {
   locale?: string | null;
   status: ProductStatus | "active" | "inactive";
 }) {
+  const locale = useAppLocale(localeProp);
   return (
     <span
       className={cn(

@@ -62,6 +62,7 @@
     "test:lao-08-settings-repair": "tsx scripts/phase-lao-08-settings-repair-check.ts",
     "test:lao-09-foundation": "tsx scripts/phase-lao-09-localization-foundation-check.ts",
     "test:lao-10-dashboard-alerts": "tsx scripts/phase-lao-10-dashboard-alerts-locale-check.ts",
+    "test:lao-10-products-live-locale": "tsx scripts/phase-lao-10-products-live-locale-check.ts",
     "test:ui-01-dashboard-drawer": "tsx scripts/phase-ui-01-dashboard-drawer-geometry-check.ts",
     "test:ui-02-pos-drawer": "tsx scripts/phase-ui-02-pos-drawer-geometry-check.ts",
     "test:ui-03-products-drawer": "tsx scripts/phase-ui-03-products-drawer-geometry-check.ts",

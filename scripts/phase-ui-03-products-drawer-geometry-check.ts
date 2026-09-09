@@ -80,7 +80,7 @@ const drawerKeys = [
 check(
   "4. all ProductDrawerFrame surfaces inherit the repaired geometry",
   listClient.includes('type ProductShellDrawerKey = "total" | "active" | "missing_images" | "missing_barcode" | "product_health" | "product_list" | "categories" | "barcode_sku" | "images" | "labels" | "tool_import" | "tool_export" | "tool_audit" | "tool_print_barcode" | "tool_print_shelf" | "tool_bulk_price"') &&
-    listClient.includes("<ProductDrawerFrame description={getProductToolDescription(drawerKey)}") &&
+    listClient.includes("<ProductDrawerFrame description={getProductToolDescription(drawerKey, t)}") &&
     listClient.includes("<ProductDrawerFrame description={content.description}") &&
     drawerKeys.every((key) => listClient.includes(`"${key}"`)) &&
     (listClient.match(/<ProductDrawerFrame /g) ?? []).length === 2 &&
@@ -129,7 +129,7 @@ check(
     productForm.includes("function ProductPreviewDrawer(") &&
     productForm.includes(approvedFormOverlay) &&
     productForm.includes("function BarcodeAliasDrawer(") &&
-    listClient.includes("<ProductDrawerFrame description={getProductToolDescription(drawerKey)}") &&
+    listClient.includes("<ProductDrawerFrame description={getProductToolDescription(drawerKey, t)}") &&
     listClient.includes("<ProductDrawerFrame description={content.description}"),
 );
 
