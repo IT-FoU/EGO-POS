@@ -626,11 +626,11 @@ function formatRangeLabel(range: DashboardRangeKey, copy: DashboardCopy) {
 
 export function DashboardAlertsClient({
   alerts,
-  copy,
 }: {
   alerts: DashboardAlert[];
-  copy: DashboardCopy;
 }) {
+  const locale = useAppLocale();
+  const copy = getDashboardCopy(locale);
   const [open, setOpen] = useState(false);
   const localized = localizeDashboardAlerts(alerts, copy);
   const content = open
@@ -654,7 +654,9 @@ export function DashboardAlertsClient({
   );
 }
 
-export function DashboardAlertsFallback({ copy }: { copy: DashboardCopy }) {
+export function DashboardAlertsFallback() {
+  const locale = useAppLocale();
+  const copy = getDashboardCopy(locale);
   return (
     <article className="min-w-0 rounded-lg border border-border bg-card p-5">
       <h2 className="text-xl font-semibold">{copy.importantAlerts}</h2>
