@@ -1,6 +1,6 @@
 import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
-import { mapPrismaPosCustomer, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
-import { mapPaymentModeToSalePayments } from "@/features/pos/dto-mapper";
+import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
+import { mapPaymentModeToSalePayments, mapPrismaPosCustomer, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
 import { getPrismaPosQrBanks } from "@/features/qr-payments/prisma-repository";
 import type { PaymentMode } from "@/features/pos/types";
 import { prisma } from "@/lib/db/prisma";
@@ -128,10 +128,9 @@ export async function listSellablePosProducts(tenant: TenantContext, client: any
     where: {
       companyId: scope.companyId,
       isActive: true,
-      balances: { some: { warehouseId: { in: sellWarehouseIds } } },
     },
   });
-  return products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId));
+  return attachPosProductImageDelivery(products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId)));
 }
 
 function posLoadTimingEnabled() {
@@ -170,7 +169,6 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           where: {
             companyId: scope.companyId,
             isActive: true,
-            balances: { some: { warehouseId: { in: sellWarehouseIds } } },
           },
         }),
         db.companySetting.findUnique({
@@ -260,7 +258,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       id: String(level.id),
       name: String(level.name),
     })),
-    products: products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId)),
+    products: await attachPosProductImageDelivery(products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId))),
     promotionBanners: promotions
       .map((promotion: Record<string, unknown>) => String(promotion.promotionName || promotion.description || ""))
       .filter(Boolean),

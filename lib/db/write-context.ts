@@ -1,6 +1,7 @@
 import type { Session } from "next-auth";
 import { prisma } from "@/lib/db/prisma";
 import { isDemoMode } from "@/lib/demo-mode";
+import { sanitizeAuditData } from "@/lib/audit/sanitize-audit-data";
 
 export type TenantContext = {
   companyId: string;
@@ -70,8 +71,8 @@ export async function withTenantTransaction<T>({
           action,
           companyId: tenant.companyId,
           module,
-          newData: newData === undefined ? undefined : JSON.parse(JSON.stringify(newData)),
-          oldData: oldData === undefined ? undefined : JSON.parse(JSON.stringify(oldData)),
+          newData: newData === undefined ? undefined : sanitizeAuditData(JSON.parse(JSON.stringify(newData))),
+          oldData: oldData === undefined ? undefined : sanitizeAuditData(JSON.parse(JSON.stringify(oldData))),
           userId: tenant.userId,
         },
       });

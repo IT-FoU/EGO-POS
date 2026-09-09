@@ -1,16 +1,24 @@
 import { prisma } from "@/lib/db/prisma";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
+import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
+import { cleanupHardDeletedProductImages } from "@/features/products/product-image-service";
+import { writeStockIn } from "@/features/inventory/prisma-repository";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
+import { assertProductImagePathScope, isProductStoragePath, persistableProductImageUrl, rejectEmbeddedProductImage } from "@/lib/storage/product-image-ref";
 
 export { productListInclude };
 
 const db = prisma as any;
 
 export async function getPrismaProductListPage(tenant: TenantContext, input: ProductListQuery = {}, client: any = db) {
-  return loadPrismaProductListPage(tenant, input, client);
+  const page = await loadPrismaProductListPage(tenant, input, client);
+  return {
+    ...page,
+    products: await attachProductImageDelivery(page.products),
+  };
 }
 
 function productInventoryScopeWhere(scope: BranchScope) {
@@ -64,7 +72,7 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
     },
   });
 
-  return product ? mapPrismaProduct(product) : null;
+  return product ? (await attachProductImageDelivery([mapPrismaProduct(product)]))[0] : null;
 }
 
 export async function getPrismaCategories(tenant: TenantContext) {
@@ -135,13 +143,24 @@ export async function findPrismaProductByBarcode(barcode: string, tenant: Tenant
   };
 }
 
+export type ProductInitialStockInput = {
+  expiryDate?: string;
+  lotNumber?: string;
+  note?: string;
+  quantity?: number;
+  supplierName?: string;
+  unitCostLak?: number;
+  unitName?: string;
+};
+
 export type ProductWriteInput = {
   barcode?: string;
   brandId?: string;
   categoryId?: string;
   costPriceLak?: number;
   description?: string;
-  imageUrl?: string;
+  imageUrl?: string | null;
+  initialStock?: ProductInitialStockInput;
   minStock?: number;
   nameEn?: string;
   nameLo: string;
@@ -197,11 +216,20 @@ export type BulkPriceUpdateInput = {
   target: "all" | "category" | "selected";
 };
 
+function unitImageRef(value: unknown, expected?: { companyId: string; productId: string }) {
+  rejectEmbeddedProductImage(value, "Unit image");
+  const parsed = optionalString(value);
+  if (!parsed) return undefined;
+  if (!isProductStoragePath(parsed)) return undefined;
+  if (!expected) return undefined;
+  return assertProductImagePathScope(parsed, expected);
+}
+
 function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fallback: {
   barcode?: string;
   costPriceLak?: number;
   sellingPriceLak?: number;
-}) {
+}, expected?: { companyId: string; productId: string }) {
   const units = (input ?? [])
     .filter((unit) => stringValue(unit.unitName).length > 0)
     .map((unit) => ({
@@ -210,7 +238,7 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
       conversionQty: Math.max(numberValue(unit.conversionQty, 1), 1),
       costPriceLak: unit.costPriceLak === undefined ? undefined : numberValue(unit.costPriceLak),
       id: optionalString(unit.id),
-      imageUrl: optionalString(unit.imageUrl),
+      imageUrl: unitImageRef(unit.imageUrl, expected),
       allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
       isBaseUnit: Boolean(unit.isBaseUnit),
       isDefaultSaleUnit: Boolean(unit.isDefaultSaleUnit),
@@ -269,12 +297,65 @@ function assertPositive(value: unknown, label: string) {
   }
 }
 
+async function seedDefaultWarehouseBalance(
+  tx: any,
+  productId: string,
+  tenant: TenantContext,
+  warehouseId: string,
+) {
+  await tx.inventoryBalance.upsert({
+    create: {
+      companyId: tenant.companyId,
+      productId,
+      quantity: 0,
+      warehouseId,
+    },
+    update: {},
+    where: { warehouseId_productId: { productId, warehouseId } },
+  });
+}
+
+function resolveCreatedReceiveUnitId(
+  units: Array<Record<string, any>>,
+  initialStock?: ProductInitialStockInput,
+) {
+  const requestedName = optionalString(initialStock?.unitName);
+  if (requestedName) {
+    const named = units.find((unit) => String(unit.unitName) === requestedName);
+    if (named?.id) return String(named.id);
+  }
+  return String(
+    units.find((unit) => unit.isPurchaseUnit)?.id ??
+      units.find((unit) => unit.isBaseUnit)?.id ??
+      units[0]?.id ??
+      "",
+  );
+}
+
+async function loadCreatedProduct(tx: any, productId: string) {
+  return tx.product.findFirstOrThrow({
+    include: {
+      balances: true,
+      brand: true,
+      category: true,
+      inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
+      supplier: true,
+      units: { orderBy: { sortOrder: "asc" } },
+    },
+    where: { id: productId },
+  });
+}
+
 function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
   assertNonNegative(input.costPriceLak, "Cost price");
   assertNonNegative(input.sellingPriceLak, "Selling price");
   assertNonNegative(input.minStock, "Minimum stock");
+  assertNonNegative(input.initialStock?.quantity, "Opening stock quantity");
+  assertNonNegative(input.initialStock?.unitCostLak, "Opening stock cost");
+  rejectEmbeddedProductImage(input.imageUrl, "Product image");
 
   for (const [index, unit] of (input.units ?? []).entries()) {
+    rejectEmbeddedProductImage(unit.imageUrl, `Unit ${index + 1} image`);
     assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
     assertNonNegative(unit.addAmountLak, `Unit ${index + 1} add amount`);
     assertNonNegative(unit.costPriceLak, `Unit ${index + 1} cost price`);
@@ -427,6 +508,11 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
     sellingPriceLak: input.sellingPriceLak,
   });
 
+  const warehouseId = scope.warehouseId;
+  if (!warehouseId) {
+    throw new Error("A warehouse is required to list the product on POS.");
+  }
+
   const createdProduct = await tx.product.create({
     data: {
       barcode: optionalString(input.barcode),
@@ -436,7 +522,7 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
       companyId: tenant.companyId,
       costPriceLak: numberValue(input.costPriceLak),
       description: optionalString(input.description),
-      imageUrl: optionalString(input.imageUrl),
+      imageUrl: undefined,
       minStock: numberValue(input.minStock),
       nameEn: optionalString(input.nameEn),
       nameLo: stringValue(input.nameLo),
@@ -454,7 +540,29 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
     include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
   });
 
-  return mapPrismaProduct(createdProduct);
+  await seedDefaultWarehouseBalance(tx, createdProduct.id, tenant, warehouseId);
+
+  const openingQuantity = numberValue(input.initialStock?.quantity);
+  if (openingQuantity > 0) {
+    const unitId = resolveCreatedReceiveUnitId(createdProduct.units, input.initialStock);
+    await writeStockIn(
+      tx,
+      {
+        expiryDate: optionalString(input.initialStock?.expiryDate) ?? null,
+        lotNumber: optionalString(input.initialStock?.lotNumber) ?? null,
+        note: optionalString(input.initialStock?.note) ?? "Opening stock from product create",
+        productId: createdProduct.id,
+        quantity: openingQuantity,
+        supplierName: optionalString(input.initialStock?.supplierName) ?? null,
+        unitCostLak: input.initialStock?.unitCostLak,
+        unitId: unitId || null,
+        warehouseId,
+      },
+      tenant,
+    );
+  }
+
+  return mapPrismaProduct(await loadCreatedProduct(tx, createdProduct.id));
 }
 
 export async function createPrismaProduct(input: ProductWriteInput, tenant: TenantContext) {
@@ -484,7 +592,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           categoryId: input.categoryId === undefined ? undefined : optionalString(input.categoryId),
           costPriceLak: input.costPriceLak === undefined ? undefined : numberValue(input.costPriceLak),
           description: input.description === undefined ? undefined : optionalString(input.description),
-          imageUrl: input.imageUrl === undefined ? undefined : optionalString(input.imageUrl),
+          imageUrl: input.imageUrl === undefined ? undefined : persistableProductImageUrl(input.imageUrl, { companyId: tenant.companyId, productId: existing.id }),
           minStock: input.minStock === undefined ? undefined : numberValue(input.minStock),
           nameEn: input.nameEn === undefined ? undefined : optionalString(input.nameEn),
           nameLo: input.nameLo === undefined ? undefined : stringValue(input.nameLo),
@@ -504,7 +612,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           barcode: input.barcode ?? existing.barcode,
           costPriceLak: input.costPriceLak ?? Number(existing.costPriceLak),
           sellingPriceLak: input.sellingPriceLak ?? Number(existing.sellingPriceLak),
-        });
+        }, { companyId: tenant.companyId, productId: existing.id });
         const existingUnits = await tx.productUnit.findMany({
           include: {
             _count: {
@@ -685,7 +793,11 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
       });
 
-      return mapPrismaProduct(duplicatedProduct);
+      if (scope.warehouseId) {
+        await seedDefaultWarehouseBalance(tx, duplicatedProduct.id, tenant, scope.warehouseId);
+      }
+
+      return mapPrismaProduct(await loadCreatedProduct(tx, duplicatedProduct.id));
     },
   });
 }
@@ -831,7 +943,8 @@ export async function archivePrismaProduct(productId: string, tenant: TenantCont
 }
 
 export async function deletePrismaProduct(productId: string, tenant: TenantContext) {
-  return withTenantTransaction({
+  let hardDeletedImages: { imageUrl?: string | null; units?: Array<{ imageUrl?: string | null }> } | null = null;
+  const result = await withTenantTransaction({
     action: "delete",
     module: "products",
     oldData: { productId },
@@ -851,6 +964,7 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
               saleItems: true,
             },
           },
+          units: { select: { imageUrl: true } },
         },
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
@@ -868,11 +982,16 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
         return mapPrismaProduct(archivedProduct);
       }
 
+      hardDeletedImages = { imageUrl: existing.imageUrl, units: existing.units };
       const deletedProduct = await tx.product.delete({ where: { id: existing.id } });
 
       return mapPrismaProduct(deletedProduct);
     },
   });
+  if (hardDeletedImages) {
+    await cleanupHardDeletedProductImages(hardDeletedImages);
+  }
+  return result;
 }
 
 export async function upsertPrismaCategory(input: {

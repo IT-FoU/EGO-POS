@@ -1,4 +1,5 @@
 import type { PosCartItem, PosProduct, PosProductUnit } from "@/features/pos/types";
+import { isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 
 export function maxSellQty(stockQty: number, conversionQty = 1) {
   const conversion = conversionQty > 0 ? conversionQty : 1;
@@ -89,7 +90,7 @@ export function productWithSaleUnit(product: PosProduct, unit: PosProductUnit): 
     costPriceLak: unit.costPriceLak,
     priceLak: unit.sellingPriceLak,
     unitId: unit.id,
-    unitImageUrl: unit.imageUrl || product.unitImageUrl,
+    unitImageUrl: isRenderableImageUrl(unit.imageUrl) ? unit.imageUrl : product.unitImageUrl,
     unitName: unit.unitName,
   };
 }
