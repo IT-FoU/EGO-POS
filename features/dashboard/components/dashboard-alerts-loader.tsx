@@ -4,15 +4,12 @@ import {
   type DashboardDateRange,
   type ShiftSummary,
 } from "@/features/dashboard/dashboard-service";
-import type { DashboardCopy } from "@/lib/i18n/dashboard-copy";
 
 export async function DashboardAlertsLoader({
-  copy,
   dateRange,
   salesTodayLak,
   shiftSummaries,
 }: {
-  copy: DashboardCopy;
   dateRange: DashboardDateRange;
   salesTodayLak: number;
   shiftSummaries: ShiftSummary[];
@@ -21,5 +18,5 @@ export async function DashboardAlertsLoader({
     salesTodayLak,
     shiftSummaries,
   });
-  return <DashboardAlertsClient alerts={secondary.alerts} copy={copy} />;
+  return <DashboardAlertsClient alerts={secondary.alerts} />;
 }
