@@ -1,9 +1,11 @@
+import { cookies } from "next/headers";
 import { DashboardAlertsClient } from "@/features/dashboard/components/dashboard-interactions-client";
 import {
   getMiniMartDashboardSecondarySnapshot,
   type DashboardDateRange,
   type ShiftSummary,
 } from "@/features/dashboard/dashboard-service";
+import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 export async function DashboardAlertsLoader({
   dateRange,
@@ -18,5 +20,7 @@ export async function DashboardAlertsLoader({
     salesTodayLak,
     shiftSummaries,
   });
-  return <DashboardAlertsClient alerts={secondary.alerts} />;
+  const cookieStore = await cookies();
+  const initialLocale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  return <DashboardAlertsClient alerts={secondary.alerts} initialLocale={initialLocale} />;
 }

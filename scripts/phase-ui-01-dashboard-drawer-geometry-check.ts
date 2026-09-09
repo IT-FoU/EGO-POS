@@ -77,7 +77,7 @@ check(
 
 check(
   "9. Alerts use the same repaired drawer",
-  client.includes('onAction={() => setDetail("alerts")}') &&
+  client.includes("function ImportantAlertsCard(") &&
     client.includes("export function DashboardAlertsClient") &&
     client.includes("<DetailDrawer content={content}") &&
     (client.match(/<DetailDrawer /g) ?? []).length === 2,

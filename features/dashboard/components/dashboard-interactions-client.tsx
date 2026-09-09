@@ -18,9 +18,13 @@ import {
 import { DashboardDateRangeControls } from "@/features/dashboard/components/dashboard-date-range-controls";
 import type { DashboardAlert, DashboardRangeKey, DashboardSnapshot } from "@/features/dashboard/dashboard-service";
 import { formatBusinessDateLabel, formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
-import { localizeDashboardAlerts } from "@/features/dashboard/localize-dashboard-alerts";
+import {
+  buildImportantAlertsView,
+  formatDashboardAlertSeverity,
+  localizeDashboardAlerts,
+} from "@/features/dashboard/localize-dashboard-alerts";
 import { getDashboardCopy, type DashboardCopy } from "@/lib/i18n/dashboard-copy";
-import { useAppLocale } from "@/lib/i18n/use-app-locale";
+import { AppLocaleProvider, useAppLocale } from "@/lib/i18n/use-app-locale";
 
 type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "top_products";
 
@@ -216,11 +220,7 @@ export function DashboardInteractionsClient({
         <Panel actionLabel={copy.viewMore} onAction={() => setDetail("top_products")} title={copy.bestSellers}>
           <BestSellersList copy={copy} products={snapshot.topProducts.slice(0, 10)} />
         </Panel>
-        {alertsSlot ?? (
-          <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("alerts")} title={copy.importantAlerts}>
-            <AlertsList alerts={snapshot.alerts} copy={copy} />
-          </Panel>
-        )}
+        {alertsSlot ?? <ImportantAlertsCard alerts={snapshot.alerts} />}
       </section>
 
       <DetailDrawer content={activeDetail} copy={copy} onClose={() => setDetail(null)} />
@@ -331,29 +331,6 @@ function BestSellersList({ copy, products }: { copy: DashboardCopy; products: Da
           <span className="min-w-0 truncate font-semibold" title={product.name}>{product.name}</span>
           <span className="text-sm text-muted-foreground sm:text-right">{formatNumber(product.quantity)} {copy.unitsSold}</span>
           <span className="font-semibold sm:text-right" title={copy.productRevenueHelper}>{formatMoney(product.totalLak)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AlertsList({ alerts, copy }: { alerts: DashboardAlert[]; copy: DashboardCopy }) {
-  const localized = localizeDashboardAlerts(alerts, copy);
-  if (localized.length === 0) {
-    return <EmptyState compact icon={AlertTriangle} title={copy.noImportantAlerts} description={copy.emptyAlerts} />;
-  }
-
-  return (
-    <div className="grid gap-3">
-      {localized.slice(0, 5).map((alert) => (
-        <div className="rounded-md border border-border bg-background p-3" key={`${alert.type}-${alert.title}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{alert.type}</span>
-            <span className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold">{alert.severity}</span>
-            {alert.value ? <span className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold">{alert.value}</span> : null}
-          </div>
-          <div className="mt-2 font-semibold">{alert.title}</div>
-          <p className="mt-1 text-sm leading-5 text-muted-foreground">{alert.message}</p>
         </div>
       ))}
     </div>
@@ -597,7 +574,7 @@ function buildDetailPanel({
     table: localizeDashboardAlerts(snapshot.alerts, copy).map((alert) => ({
       label: alert.title,
       meta: alert.message,
-      value: alert.value ?? alert.severity,
+      value: alert.value ?? formatDashboardAlertSeverity(alert.severity, copy),
     })),
     title: copy.importantAlerts,
   };
@@ -624,37 +601,62 @@ function formatRangeLabel(range: DashboardRangeKey, copy: DashboardCopy) {
   return copy.today;
 }
 
-export function DashboardAlertsClient({
-  alerts,
-}: {
-  alerts: DashboardAlert[];
-}) {
+function ImportantAlertsCard({ alerts }: { alerts: DashboardAlert[] }) {
   const locale = useAppLocale();
-  const copy = getDashboardCopy(locale);
+  const view = buildImportantAlertsView(alerts, locale);
   const [open, setOpen] = useState(false);
-  const localized = localizeDashboardAlerts(alerts, copy);
   const content = open
     ? {
-        table: localized.map((alert) => ({
+        table: view.items.map((alert) => ({
           label: alert.title,
           meta: alert.message,
-          value: alert.value ?? alert.severity,
+          value: alert.value ?? alert.severityLabel,
         })),
-        title: copy.importantAlerts,
+        title: view.title,
       }
     : null;
 
   return (
     <>
-      <Panel actionLabel={copy.viewDetails} onAction={() => setOpen(true)} title={copy.importantAlerts}>
-        <AlertsList alerts={alerts} copy={copy} />
+      <Panel actionLabel={view.viewDetails} onAction={() => setOpen(true)} title={view.title}>
+        {view.items.length === 0 ? (
+          <EmptyState compact icon={AlertTriangle} title={view.emptyTitle} description={view.emptyDescription} />
+        ) : (
+          <div className="grid gap-3">
+            {view.items.slice(0, 5).map((alert) => (
+              <div className="rounded-md border border-border bg-background p-3" key={`${alert.type}-${alert.title}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{alert.type}</span>
+                  <span className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold">{alert.severityLabel}</span>
+                  {alert.value ? <span className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold">{alert.value}</span> : null}
+                </div>
+                <div className="mt-2 font-semibold">{alert.title}</div>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">{alert.message}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
-      <DetailDrawer content={content} copy={copy} onClose={() => setOpen(false)} />
+      <DetailDrawer content={content} copy={view.copy} onClose={() => setOpen(false)} />
     </>
   );
 }
 
-export function DashboardAlertsFallback() {
+export function DashboardAlertsClient({
+  alerts,
+  initialLocale,
+}: {
+  alerts: DashboardAlert[];
+  initialLocale?: string | null;
+}) {
+  return (
+    <AppLocaleProvider initialLocale={initialLocale}>
+      <ImportantAlertsCard alerts={alerts} />
+    </AppLocaleProvider>
+  );
+}
+
+function ImportantAlertsFallbackCard() {
   const locale = useAppLocale();
   const copy = getDashboardCopy(locale);
   return (
@@ -665,5 +667,13 @@ export function DashboardAlertsFallback() {
         <div className="h-20 rounded-md border border-border bg-background" />
       </div>
     </article>
+  );
+}
+
+export function DashboardAlertsFallback({ initialLocale }: { initialLocale?: string | null } = {}) {
+  return (
+    <AppLocaleProvider initialLocale={initialLocale}>
+      <ImportantAlertsFallbackCard />
+    </AppLocaleProvider>
   );
 }

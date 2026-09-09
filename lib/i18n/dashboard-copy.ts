@@ -1,5 +1,6 @@
 const en = {
   actualSalesCurrency: "Actual sales currency",
+  alertBelowAverage: "{percent}% below average",
   alertCashDifferenceMessage: "Cash count does not match expected amount",
   alertCustomerCreditMessage: "{amount} LAK customer credit outstanding.",
   alertDeadStockMessage: "Products not sold for more than 30 days",
@@ -133,10 +134,12 @@ const en = {
   viewDetails: "View Details",
   viewMore: "View More",
   voidedBills: "Voided bills",
+  warning: "Warning",
 };
 
 const lo: typeof en = {
   actualSalesCurrency: "ສະກຸນເງິນ ທີ່ຮັບຈິງ",
+  alertBelowAverage: "{percent}% ຕ່ຳກວ່າສະເລ່ຍ",
   alertCashDifferenceMessage: "ເງິນສົດ ທີ່ນັບໄດ້ ບໍ່ກົງກັບ ຍອດຄວນມີ",
   alertCustomerCreditMessage: "ເຄຣດິດລູກຄ້າ ຄ້າງ {amount} LAK",
   alertDeadStockMessage: "ສິນຄ້າ ບໍ່ຂາຍເກີນ 30 ວັນ",
@@ -270,6 +273,7 @@ const lo: typeof en = {
   viewDetails: "ລາຍລະອຽດ",
   viewMore: "ເພີ່ມ",
   voidedBills: "ບິນຍົກເລີກ",
+  warning: "ເຕືອນ",
 };
 
 const dashboardCopy = { en, lo };

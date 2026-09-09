@@ -77,7 +77,7 @@ export default async function DashboardPage({
   return (
     <DashboardInteractionsClient
       alertsSlot={
-        <Suspense fallback={<DashboardAlertsFallback />}>
+        <Suspense fallback={<DashboardAlertsFallback initialLocale={locale} />}>
           <DashboardAlertsLoader
             dateRange={dateRange}
             salesTodayLak={snapshot.cards.salesTodayLak}
