@@ -173,6 +173,17 @@ check("product-form no longer persists via FileReader.readAsDataURL", () => {
   assert(form.includes("uploadProductImageAction"), "upload action must be used");
 });
 
+check("repeated product images use native lazy loading", () => {
+  const posImage = readFileSync("features/pos/components/pos-product-image.tsx", "utf8");
+  const list = readFileSync("features/products/components/product-list-client.tsx", "utf8");
+  const form = readFileSync("features/products/components/product-form.tsx", "utf8");
+  assert(posImage.includes('loading="lazy"') && posImage.includes('decoding="async"'), "POS cards lazy+async");
+  assert(list.includes('function ProductThumbnail') && list.includes('loading="lazy"') && list.includes('decoding="async"'), "admin list thumbs lazy+async");
+  assert(form.includes('loading="lazy"') && form.includes('decoding="async"'), "form gallery thumbs lazy+async");
+  assert(posImage.includes("isRenderableImageUrl"), "POS fallback path unchanged");
+  assert(list.includes("ProductImagePlaceholder"), "list placeholder fallback unchanged");
+});
+
 check("service-role key is not a NEXT_PUBLIC env", () => {
   const envExample = readFileSync(".env.example", "utf8");
   const actions = readFileSync("features/products/actions.ts", "utf8");

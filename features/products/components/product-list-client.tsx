@@ -1132,7 +1132,7 @@ function ProductThumbnail({ product }: {
     const { locale } = useProductsT();
     const thumbUrl = preferredProductThumbUrl(product);
     if (thumbUrl) {
-        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" src={thumbUrl}/>;
+        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" decoding="async" loading="lazy" src={thumbUrl}/>;
     }
     return <ProductImagePlaceholder />;
 }

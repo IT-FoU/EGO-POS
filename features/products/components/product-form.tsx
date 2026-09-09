@@ -1529,7 +1529,7 @@ function ProductImagesSection({ barcode, onPreview, onRemove, onSearchMessage, o
                     <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
                       <button className="size-full" type="button" onClick={() => setPreviewImage(image)}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img alt={image.label} className="size-full object-cover" src={image.url}/>
+                        <img alt={image.label} className="size-full object-cover" decoding="async" loading="lazy" src={image.url}/>
                       </button>
                     </div>
                     <div className="mt-2 truncate text-sm font-semibold">{image.label}</div>

@@ -34,7 +34,7 @@ export function PosProductImage({
     return (
       <div className={cn("h-24 overflow-hidden rounded-md border border-border bg-background", className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt={label} className={cn("size-full object-cover", imageClassName)} src={imageUrl} />
+        <img alt={label} className={cn("size-full object-cover", imageClassName)} decoding="async" loading="lazy" src={imageUrl} />
       </div>
     );
   }
