@@ -1,4 +1,5 @@
 import type { PaymentMode, PosCustomer, PosProduct } from "@/features/pos/types";
+import { compactProductImageKey } from "@/lib/storage/product-image-ref";
 
 type Row = Record<string, any>;
 
@@ -79,8 +80,8 @@ export function mapPrismaPosProduct(product: Row, warehouseId?: string): PosProd
     categoryId: product.categoryId ?? product.category?.id ?? undefined,
     categoryName: product.category?.nameEn ?? product.category?.nameLo ?? "",
     id: product.id,
-    imageKey: product.imageUrl ?? "generic",
-    unitImageUrl: defaultSaleUnit?.imageUrl ?? undefined,
+    imageKey: compactProductImageKey(product.imageUrl),
+    unitImageUrl: defaultSaleUnit?.imageUrl || product.imageUrl || undefined,
     nameEn: product.nameEn ?? "",
     nameLo: product.nameLo,
     priceLak: toNumber(defaultSaleUnit?.sellingPriceLak ?? product.sellingPriceLak),

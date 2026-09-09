@@ -16,10 +16,17 @@ import {
   type ProductWriteInput,
   type BulkPriceUpdateInput,
 } from "@/features/products/prisma-repository";
+import { clearProductImages, uploadAndAttachProductImages } from "@/features/products/product-image-service";
+import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
 
 async function tenant(permission: WritePermissionKey) {
   return requireWritePermission(permission);
+}
+
+function asUploadFile(value: FormDataEntryValue | null) {
+  if (value instanceof Blob && value.size > 0) return value;
+  return null;
 }
 
 export async function loadProductListAction(query: ProductListQuery = {}) {
@@ -45,6 +52,34 @@ export async function createProductAction(input: ProductWriteInput) {
 
 export async function updateProductAction(productId: string, input: Partial<ProductWriteInput>) {
   try { return writeSuccess(await updatePrismaProduct(productId, input, await tenant(WRITE_PERMISSIONS.productsUpdate))); } catch (error) { return writeFailure(error); }
+}
+
+export async function uploadProductImageAction(productId: string, formData: FormData) {
+  try {
+    const main = asUploadFile(formData.get("main"));
+    const thumb = asUploadFile(formData.get("thumb"));
+    if (!main || !thumb) {
+      throw new ProductImageValidationError("Image upload is empty.");
+    }
+    const assignToUnitId = String(formData.get("assignToUnitId") ?? "").trim() || undefined;
+    return writeSuccess(await uploadAndAttachProductImages(productId, {
+      assignToUnitId,
+      main,
+      mainType: main.type,
+      thumb,
+      thumbType: thumb.type,
+    }, await tenant(WRITE_PERMISSIONS.productsUpdate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function clearProductImageAction(productId: string) {
+  try {
+    return writeSuccess(await clearProductImages(productId, await tenant(WRITE_PERMISSIONS.productsUpdate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function archiveProductAction(productId: string) {

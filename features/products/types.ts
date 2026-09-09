@@ -15,6 +15,8 @@ export type ProductUnit = {
   addAmountLak?: number;
   roundingLak?: number;
   imageUrl?: string;
+  imageDisplayUrl?: string;
+  imageThumbUrl?: string;
   sellingPriceLak: number;
   isBaseUnit: boolean;
   isDefaultSaleUnit?: boolean;
@@ -33,6 +35,8 @@ export type Product = {
   }>;
   id: string;
   imageUrl?: string;
+  imageDisplayUrl?: string;
+  imageThumbUrl?: string;
   productCode?: string;
   barcode: string;
   sku: string;

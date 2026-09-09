@@ -16,8 +16,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
-import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, } from "@/features/products/actions";
+import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
+import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
+import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
@@ -30,6 +32,10 @@ type ProductFormImage = {
     id: string;
     label: string;
     url: string;
+    assignedUnitId?: string;
+    pendingMain?: File;
+    pendingThumb?: File;
+    storagePath?: string;
 };
 type CategoryDialogState = {
     mode: "add" | "edit" | "delete";
@@ -142,18 +148,31 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     const [sku, setSku] = useState(product?.sku ?? "");
     const [productCode, setProductCode] = useState(product?.productCode ?? "");
     const [productName, setProductName] = useState(product?.nameEn || product?.nameLo || "");
-    const [selectedImageId, setSelectedImageId] = useState<string | undefined>(product?.imageUrl);
+    const [selectedImageId, setSelectedImageId] = useState<string | undefined>(product?.imageUrl || product?.imageDisplayUrl ? "product-main-image" : undefined);
     const [productImages, setProductImages] = useState<ProductFormImage[]>(() => {
         const initialImages: ProductFormImage[] = [];
-        if (product?.imageUrl) {
-            initialImages.push({ id: "product-main-image", label: t("mainProductImage"), url: product.imageUrl });
+        if (product?.imageUrl || product?.imageDisplayUrl || product?.imageThumbUrl) {
+            initialImages.push({
+                id: "product-main-image",
+                label: t("mainProductImage"),
+                storagePath: isProductStoragePath(product.imageUrl) ? product.imageUrl : undefined,
+                url: product.imageDisplayUrl || product.imageThumbUrl || (isRenderableImageUrl(product.imageUrl) ? product.imageUrl : "") || "",
+            });
         }
         for (const unit of product?.units ?? []) {
-            if (unit.imageUrl && !initialImages.some((image) => image.url === unit.imageUrl)) {
-                initialImages.push({ id: `unit-image-${unit.id}`, label: fillProductsCopy(t("unitImageLabel"), { unit: displayProductUnitName(unit.unitName) }), url: unit.imageUrl });
+            const unitPath = isProductStoragePath(unit.imageUrl) ? unit.imageUrl : undefined;
+            const unitUrl = unit.imageDisplayUrl || unit.imageThumbUrl || (isRenderableImageUrl(unit.imageUrl) ? unit.imageUrl : "");
+            if ((unitPath || unitUrl) && !initialImages.some((image) => image.storagePath === unitPath && unitPath || image.url === unitUrl)) {
+                initialImages.push({
+                    assignedUnitId: unit.id,
+                    id: `unit-image-${unit.id}`,
+                    label: fillProductsCopy(t("unitImageLabel"), { unit: displayProductUnitName(unit.unitName) }),
+                    storagePath: unitPath,
+                    url: unitUrl || "",
+                });
             }
         }
-        return initialImages;
+        return initialImages.filter((image) => image.url || image.storagePath);
     });
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
@@ -302,26 +321,38 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     function selectUploadedImage(file: File | undefined) {
         if (!file)
             return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const url = String(reader.result ?? "");
-            const image = {
-                id: `uploaded-${Date.now()}`,
-                label: file.name,
-                url,
-            };
-            setProductImages((current) => [...current, image]);
-            setSelectedImageId(url);
-            setMessage(fillProductsCopy(t("uploadedForPreview"), { name: file.name }));
-        };
-        reader.readAsDataURL(file);
+        void (async () => {
+            try {
+                const optimized = await optimizeProductImageFile(file);
+                const previewUrl = URL.createObjectURL(optimized.thumb);
+                const image: ProductFormImage = {
+                    id: `uploaded-${Date.now()}`,
+                    label: file.name,
+                    pendingMain: optimized.main,
+                    pendingThumb: optimized.thumb,
+                    url: previewUrl,
+                };
+                setProductImages((current) => [...current, image]);
+                setSelectedImageId(image.id);
+                setMessage(fillProductsCopy(t("uploadedForPreview"), { name: file.name }));
+            }
+            catch (error) {
+                setMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")));
+            }
+        })();
     }
-    function removeProductImage(imageUrl: string) {
-        setProductImages((current) => current.filter((image) => image.url !== imageUrl));
-        if (selectedImageId === imageUrl) {
+    function removeProductImage(imageId: string) {
+        setProductImages((current) => {
+            const removed = current.find((image) => image.id === imageId);
+            if (removed?.url.startsWith("blob:")) {
+                URL.revokeObjectURL(removed.url);
+            }
+            return current.filter((image) => image.id !== imageId);
+        });
+        if (selectedImageId === imageId) {
             setSelectedImageId(undefined);
         }
-        setUnits((current) => current.map((unit) => unit.imageUrl === imageUrl ? { ...unit, imageUrl: undefined } : unit));
+        setUnits((current) => current.map((unit) => unit.imageUrl === imageId ? { ...unit, imageUrl: undefined } : unit));
     }
     function addBarcodeAlias(unitId: string) {
         const nextAlias = aliasInput.trim();
@@ -401,7 +432,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 conversionQty,
                 costPriceLak: parseMoney(unit.costPriceLak) || undefined,
                 id: unit.id.startsWith("unit-") ? undefined : unit.id,
-                imageUrl: unit.imageUrl || undefined,
+                imageUrl: isProductStoragePath(unit.imageUrl) ? unit.imageUrl : productImages.find((image) => image.id === unit.imageUrl)?.storagePath,
+
                 isBaseUnit,
                 isDefaultSaleUnit: unit.isDefaultSaleUnit,
                 isPurchaseUnit: unit.isPurchaseUnit || isBaseUnit,
@@ -424,7 +456,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             categoryId: String(formData.get("categoryId") ?? "").trim() || undefined,
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
-            imageUrl: selectedImageId,
+            imageUrl: productImages.find((image) => image.id === selectedImageId)?.storagePath,
             initialStock: mode === "create" && openingQuantity > 0 ? {
                 expiryDate: initialStockPreview.expiryDate || undefined,
                 lotNumber: initialStockPreview.lotNumber.trim() || undefined,
@@ -446,6 +478,37 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             tags,
             units: productUnits,
         };
+        const selectedImage = productImages.find((image) => image.id === selectedImageId);
+        async function persistSavedProduct(savedProduct: { id: string; units?: Array<{ id: string; unitName: string }> }) {
+            if (selectedImage?.pendingMain && selectedImage.pendingThumb) {
+                const imageData = new FormData();
+                imageData.set("main", selectedImage.pendingMain);
+                imageData.set("thumb", selectedImage.pendingThumb);
+                const assignedLocalUnitId = selectedImage.assignedUnitId ?? units.find((unit) => unit.imageUrl === selectedImage.id || unit.imageUrl === selectedImage.storagePath)?.id;
+                const assignedUnitName = units.find((unit) => unit.id === assignedLocalUnitId)?.unitName?.trim();
+                const persistedUnit = assignedUnitName
+                    ? savedProduct.units?.find((unit) => unit.unitName === assignedUnitName)
+                    : undefined;
+                if (persistedUnit?.id) {
+                    imageData.set("assignToUnitId", persistedUnit.id);
+                }
+                const uploaded = await uploadProductImageAction(savedProduct.id, imageData);
+                if (!uploaded.ok) {
+                    setMessage(localizeProductError(uploaded.error ?? t("imageUploadFailed")));
+                    router.refresh();
+                    router.push(`/products/${savedProduct.id}/edit`);
+                    return false;
+                }
+            }
+            else if (mode === "edit" && !selectedImage && product?.imageUrl) {
+                const cleared = await clearProductImageAction(savedProduct.id);
+                if (!cleared.ok) {
+                    setMessage(localizeProductError(cleared.error ?? t("imageUploadFailed")));
+                    return false;
+                }
+            }
+            return true;
+        }
         if (mode === "create") {
             startTransition(async () => {
                 const result = await createProductAction(payload);
@@ -453,6 +516,9 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     setMessage(localizeProductError(result.error ?? "Product save failed."));
                     return;
                 }
+                const saved = result.data as { id: string; units?: Array<{ id: string; unitName: string }> };
+                const uploaded = await persistSavedProduct(saved);
+                if (!uploaded) return;
                 setMessage(t("productSaved"));
                 signalPosCatalogueInvalidation();
                 router.refresh();
@@ -467,6 +533,9 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     setMessage(localizeProductError(result.error ?? "Product save failed."));
                     return;
                 }
+                const saved = (result.data as { id: string; units?: Array<{ id: string; unitName: string }> } | undefined) ?? product;
+                const uploaded = await persistSavedProduct({ id: saved.id, units: saved.units ?? product.units });
+                if (!uploaded) return;
                 setMessage(t("productSaved"));
                 router.refresh();
                 router.push("/products");
@@ -908,7 +977,7 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
     const baseUnit = snapshot.units.find((unit) => unit.isBaseUnit) ?? snapshot.units[0];
     const receiveUnit = snapshot.units.find((unit) => unit.id === snapshot.initialStock.receiveUnitId) ?? snapshot.units.find((unit) => unit.isPurchaseUnit) ?? baseUnit;
     const convertedBaseQuantity = Math.max(Number(snapshot.initialStock.quantityReceived) || 0, 0) * Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
-    const selectedImage = snapshot.images.find((image) => image.url === snapshot.selectedImageId) ?? snapshot.images[0];
+    const selectedImage = snapshot.images.find((image) => image.id === snapshot.selectedImageId) ?? snapshot.images[0];
     const readiness = [
         { label: t("productName"), ok: snapshot.basic.productName.trim().length > 0 },
         { label: t("productCode"), ok: snapshot.basic.productCode.trim().length > 0 },
@@ -1224,7 +1293,7 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
               <td className="px-3 py-3">
                 <select className="field-input h-10 min-w-44" value={unit.imageUrl ?? ""} onChange={(event) => updateUnit(unit.id, { imageUrl: event.target.value || undefined })}>
                   <option value="">{t("notAssigned")}</option>
-                  {productImages.map((image) => (<option key={image.id} value={image.url}>{image.label}</option>))}
+                  {productImages.map((image) => (<option key={image.id} value={image.storagePath ?? image.id}>{image.label}</option>))}
                 </select>
               </td>
               <td className="px-3 py-3">
@@ -1404,7 +1473,7 @@ function ProductImagesSection({ barcode, onPreview, onRemove, onSearchMessage, o
     const [searched, setSearched] = useState(false);
     const [previewImage, setPreviewImage] = useState<ProductFormImage | null>(null);
     const searchKeyword = barcode.trim() || productName.trim();
-    const selectedImage = productImages.find((image) => image.url === selectedImageId);
+    const selectedImage = productImages.find((image) => image.id === selectedImageId);
     function searchImages() {
         setSearched(true);
         if (!searchKeyword) {
@@ -1455,7 +1524,7 @@ function ProductImagesSection({ barcode, onPreview, onRemove, onSearchMessage, o
           </div>
           {productImages.length === 0 ? (<div className="mt-4 grid min-h-36 place-items-center rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{t("noProductImagesYet")}</div>) : (<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {productImages.map((image) => {
-                const assignedUnit = units.find((unit) => unit.imageUrl === image.url);
+                const assignedUnit = units.find((unit) => unit.imageUrl === image.id || unit.imageUrl === image.storagePath);
                 return (<div className="rounded-lg border border-border bg-card p-3" key={image.id}>
                     <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
                       <button className="size-full" type="button" onClick={() => setPreviewImage(image)}>
@@ -1468,13 +1537,14 @@ function ProductImagesSection({ barcode, onPreview, onRemove, onSearchMessage, o
                       {t("assignToUnit")}
                       <select className="field-input h-9 text-xs" value={assignedUnit?.id ?? ""} onChange={(event) => {
                         const nextUnitId = event.target.value;
+                        const imageRef = image.storagePath ?? image.id;
                         for (const unit of units) {
-                            if (unit.imageUrl === image.url && unit.id !== nextUnitId) {
+                            if ((unit.imageUrl === image.id || unit.imageUrl === image.storagePath) && unit.id !== nextUnitId) {
                                 updateUnit(unit.id, { imageUrl: undefined });
                             }
                         }
                         if (nextUnitId) {
-                            updateUnit(nextUnitId, { imageUrl: image.url });
+                            updateUnit(nextUnitId, { imageUrl: imageRef });
                         }
                     }}>
                         <option value="">{t("notAssigned")}</option>
@@ -1482,12 +1552,12 @@ function ProductImagesSection({ barcode, onPreview, onRemove, onSearchMessage, o
                       </select>
                     </label>
                     <button className="mt-2 h-9 w-full rounded-md border border-border text-xs font-semibold transition hover:border-primary" type="button" onClick={() => {
-                        onSetMainImage(image.url);
+                        onSetMainImage(image.id);
                         onSearchMessage(fillProductsCopy(t("setMainImageMessage"), { name: image.label }));
                     }}>
                       {t("setAsMainImage")}
                     </button>
-                    <button className="mt-2 h-9 w-full rounded-md border border-danger text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => removeProductImage(image.url)}>
+                    <button className="mt-2 h-9 w-full rounded-md border border-danger text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => removeProductImage(image.id)}>
                       {t("removeImage")}
                     </button>
                   </div>);
@@ -1570,5 +1640,5 @@ function Field({ children, label, }: {
     </label>);
 }
 function isRenderableImage(imageUrl?: string) {
-    return Boolean(imageUrl && (/^(https?:|data:image|blob:|\/)/.test(imageUrl)));
+    return isRenderableImageUrl(imageUrl);
 }

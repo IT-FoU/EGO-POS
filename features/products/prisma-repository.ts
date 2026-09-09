@@ -4,16 +4,23 @@ import { getPrismaProductListPage as loadPrismaProductListPage, productListInclu
 import { writeStockIn } from "@/features/inventory/prisma-repository";
 import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
+import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
+import { cleanupHardDeletedProductImages } from "@/features/products/product-image-service";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
+import { assertProductImagePathScope, isProductStoragePath, persistableProductImageUrl, rejectEmbeddedProductImage } from "@/lib/storage/product-image-ref";
 
 export { productListInclude };
 
 const db = prisma as any;
 
 export async function getPrismaProductListPage(tenant: TenantContext, input: ProductListQuery = {}, client: any = db) {
-  return loadPrismaProductListPage(tenant, input, client);
+  const page = await loadPrismaProductListPage(tenant, input, client);
+  return {
+    ...page,
+    products: await attachProductImageDelivery(page.products),
+  };
 }
 
 function productInventoryScopeWhere(scope: BranchScope) {
@@ -67,7 +74,7 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
     },
   });
 
-  return product ? mapPrismaProduct(product) : null;
+  return product ? (await attachProductImageDelivery([mapPrismaProduct(product)]))[0] : null;
 }
 
 export async function getPrismaCategories(tenant: TenantContext) {
@@ -154,7 +161,7 @@ export type ProductWriteInput = {
   categoryId?: string;
   costPriceLak?: number;
   description?: string;
-  imageUrl?: string;
+  imageUrl?: string | null;
   initialStock?: ProductInitialStockInput;
   minStock?: number;
   nameEn?: string;
@@ -211,11 +218,20 @@ export type BulkPriceUpdateInput = {
   target: "all" | "category" | "selected";
 };
 
+function unitImageRef(value: unknown, expected?: { companyId: string; productId: string }) {
+  rejectEmbeddedProductImage(value, "Unit image");
+  const parsed = optionalString(value);
+  if (!parsed) return undefined;
+  if (!isProductStoragePath(parsed)) return undefined;
+  if (!expected) return undefined;
+  return assertProductImagePathScope(parsed, expected);
+}
+
 function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fallback: {
   barcode?: string;
   costPriceLak?: number;
   sellingPriceLak?: number;
-}) {
+}, expected?: { companyId: string; productId: string }) {
   const units = (input ?? [])
     .filter((unit) => stringValue(unit.unitName).length > 0)
     .map((unit) => ({
@@ -224,7 +240,7 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
       conversionQty: Math.max(numberValue(unit.conversionQty, 1), 1),
       costPriceLak: unit.costPriceLak === undefined ? undefined : toLakInteger(unit.costPriceLak),
       id: optionalString(unit.id),
-      imageUrl: optionalString(unit.imageUrl),
+      imageUrl: unitImageRef(unit.imageUrl, expected),
       allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
       isBaseUnit: Boolean(unit.isBaseUnit),
       isDefaultSaleUnit: Boolean(unit.isDefaultSaleUnit),
@@ -361,8 +377,10 @@ function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
   assertNonNegative(input.initialStock?.unitCostLak, "Opening stock cost");
   assertSafePricingValue(input.costPriceLak, "Cost price");
   assertSafePricingValue(input.sellingPriceLak, "Selling price");
+  rejectEmbeddedProductImage(input.imageUrl, "Product image");
 
   for (const [index, unit] of (input.units ?? []).entries()) {
+    rejectEmbeddedProductImage(unit.imageUrl, `Unit ${index + 1} image`);
     assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
     assertSafePricingValue(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
     assertNonNegative(unit.addAmountLak, `Unit ${index + 1} add amount`);
@@ -533,7 +551,7 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
       companyId: tenant.companyId,
       costPriceLak: numberValue(input.costPriceLak),
       description: optionalString(input.description),
-      imageUrl: optionalString(input.imageUrl),
+      imageUrl: undefined,
       minStock: numberValue(input.minStock),
       nameEn: optionalString(input.nameEn),
       nameLo: stringValue(input.nameLo),
@@ -605,7 +623,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           categoryId: input.categoryId === undefined ? undefined : optionalString(input.categoryId),
           costPriceLak: input.costPriceLak === undefined ? undefined : numberValue(input.costPriceLak),
           description: input.description === undefined ? undefined : optionalString(input.description),
-          imageUrl: input.imageUrl === undefined ? undefined : optionalString(input.imageUrl),
+          imageUrl: input.imageUrl === undefined ? undefined : persistableProductImageUrl(input.imageUrl, { companyId: tenant.companyId, productId: existing.id }),
           minStock: input.minStock === undefined ? undefined : numberValue(input.minStock),
           nameEn: input.nameEn === undefined ? undefined : optionalString(input.nameEn),
           nameLo: input.nameLo === undefined ? undefined : stringValue(input.nameLo),
@@ -625,7 +643,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           barcode: input.barcode ?? existing.barcode,
           costPriceLak: input.costPriceLak ?? Number(existing.costPriceLak),
           sellingPriceLak: input.sellingPriceLak ?? Number(existing.sellingPriceLak),
-        });
+        }, { companyId: tenant.companyId, productId: existing.id });
         const existingUnits = await tx.productUnit.findMany({
           include: {
             _count: {
@@ -807,7 +825,11 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
       });
 
-      return mapPrismaProduct(duplicatedProduct);
+      if (scope.warehouseId) {
+        await seedDefaultWarehouseBalance(tx, duplicatedProduct.id, tenant, scope.warehouseId);
+      }
+
+      return mapPrismaProduct(await loadCreatedProduct(tx, duplicatedProduct.id));
     },
   });
 }
@@ -953,7 +975,8 @@ export async function archivePrismaProduct(productId: string, tenant: TenantCont
 }
 
 export async function deletePrismaProduct(productId: string, tenant: TenantContext) {
-  return withTenantTransaction({
+  let hardDeletedImages: { imageUrl?: string | null; units?: Array<{ imageUrl?: string | null }> } | null = null;
+  const result = await withTenantTransaction({
     action: "delete",
     module: "products",
     oldData: { productId },
@@ -973,6 +996,7 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
               saleItems: true,
             },
           },
+          units: { select: { imageUrl: true } },
         },
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
@@ -990,11 +1014,16 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
         return mapPrismaProduct(archivedProduct);
       }
 
+      hardDeletedImages = { imageUrl: existing.imageUrl, units: existing.units };
       const deletedProduct = await tx.product.delete({ where: { id: existing.id } });
 
       return mapPrismaProduct(deletedProduct);
     },
   });
+  if (hardDeletedImages) {
+    await cleanupHardDeletedProductImages(hardDeletedImages);
+  }
+  return result;
 }
 
 export async function upsertPrismaCategory(input: {

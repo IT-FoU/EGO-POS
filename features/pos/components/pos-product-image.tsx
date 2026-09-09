@@ -1,3 +1,4 @@
+import { isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { cn } from "@/lib/utils";
 
 const imageStyles: Record<string, string> = {
@@ -52,5 +53,5 @@ export function PosProductImage({
 }
 
 function isRenderableImage(imageUrl?: string) {
-  return Boolean(imageUrl && (/^(https?:|data:image|blob:|\/)/.test(imageUrl)));
+  return isRenderableImageUrl(imageUrl);
 }

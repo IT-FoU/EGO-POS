@@ -7,6 +7,7 @@ import {
   tProducts,
 } from "@/lib/i18n/products-copy";
 import { localizedProductName } from "@/features/pos/product-display-name";
+import { preferredProductDisplayUrl, preferredProductThumbUrl, productHasImageRef } from "@/lib/storage/product-image-ref";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
@@ -1129,12 +1130,9 @@ function ProductThumbnail({ product }: {
     product: Product;
 }) {
     const { locale } = useProductsT();
-    if (isRenderableImage(product.imageUrl)) {
-        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" src={product.imageUrl}/>;
-    }
-    const defaultUnitImage = product.units.find((unit) => unit.isDefaultSaleUnit && isRenderableImage(unit.imageUrl))?.imageUrl;
-    if (isRenderableImage(defaultUnitImage)) {
-        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" src={defaultUnitImage}/>;
+    const thumbUrl = preferredProductThumbUrl(product);
+    if (thumbUrl) {
+        return <img alt={localizedProductName(product, locale)} className="size-full object-cover" src={thumbUrl}/>;
     }
     return <ProductImagePlaceholder />;
 }
@@ -1176,7 +1174,7 @@ function ImagePreviewModal({ onClose, product }: {
     return (<ProductSmallModal closeAriaLabel={t("closeModal")} closeOnBackdrop={true} closeOnEscape={true} onClose={onClose} size="xl" title={t("productImage")}>
       <div className="grid gap-4">
         <div className="grid min-h-72 place-items-center overflow-hidden rounded-lg border border-border bg-background p-4">
-          {isRenderableImage(product.imageUrl) ? (<img alt={localizedProductName(product, locale)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.imageUrl}/>) : isRenderableImage(product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl) ? (<img alt={localizedProductName(product, locale)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={product.units.find((unit) => unit.isDefaultSaleUnit)?.imageUrl}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
+          {preferredProductDisplayUrl(product) ? (<img alt={localizedProductName(product, locale)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={preferredProductDisplayUrl(product)}/>) : preferredProductThumbUrl(product) ? (<img alt={localizedProductName(product, locale)} className="max-h-[60vh] max-w-full rounded-md object-contain" src={preferredProductThumbUrl(product)}/>) : (<div className="grid gap-3 text-center text-muted-foreground">
               <ImageIcon className="mx-auto size-14" aria-hidden="true"/>
               <div className="text-sm font-semibold">{t("noProductImage")}</div>
             </div>)}
@@ -1238,7 +1236,7 @@ function getProductInsights(products: Product[]) {
 function getProductShellStats(products: Product[], categories: Category[]) {
     const barcodeAudit = getBarcodeAudit(products);
     const missingBarcode = products.filter((product) => !product.barcode && product.units.every((unit) => !unit.barcode)).length;
-    const missingImages = products.filter((product) => !isRenderableImage(product.imageUrl) && product.units.every((unit) => !isRenderableImage(unit.imageUrl))).length;
+    const missingImages = products.filter((product) => !productHasImageRef(product)).length;
     const missingCost = products.filter((product) => Number(product.costPriceLak ?? 0) <= 0 && product.units.every((unit) => Number(unit.costPriceLak ?? 0) <= 0)).length;
     const lowMargin = products.filter((product) => Number(product.sellingPriceLak ?? 0) > 0 && Number(product.sellingPriceLak ?? 0) <= Number(product.costPriceLak ?? 0)).length;
     const inactiveProducts = products.filter((product) => product.status !== "active").length;
@@ -1525,7 +1523,7 @@ function matchesInsightFilter(product: Product, filter: InsightFilter) {
     if (filter === "missing_barcode")
         return !product.barcode && product.units.every((unit) => !unit.barcode);
     if (filter === "no_image")
-        return !isRenderableImage(product.imageUrl) && product.units.every((unit) => !isRenderableImage(unit.imageUrl));
+        return !productHasImageRef(product);
     return true;
 }
 function isDeadStock(product: Product) {
@@ -1634,5 +1632,5 @@ function getBarcodeAudit(products: Product[], locale?: SupportedLocale) {
     return { duplicates, invalid, missing };
 }
 function isRenderableImage(imageUrl?: string) {
-    return Boolean(imageUrl && (/^(https?:|data:image|blob:|\/)/.test(imageUrl)));
+    return Boolean(imageUrl && (/^(https?:|data:image|blob:)/.test(imageUrl)));
 }

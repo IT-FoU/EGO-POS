@@ -22,7 +22,12 @@ const nextConfig: NextConfig = {
         : "false",
   },
   reactStrictMode: true,
-  serverExternalPackages: ["@prisma/client", ".prisma/client", "pg", "pg-cloudflare"],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "6mb",
+    },
+  },
+  serverExternalPackages: ["@prisma/client", ".prisma/client", "pg", "pg-cloudflare", "@supabase/supabase-js"],
 };
 
 export default nextConfig;
