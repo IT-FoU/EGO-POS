@@ -3,7 +3,7 @@ import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-map
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
 import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
-import { applyPersistedHierarchyCosts } from "@/features/products/unit-hierarchy";
+import { applyPersistedHierarchyCosts, unitRole } from "@/features/products/unit-hierarchy";
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
 import { cleanupHardDeletedProductImages } from "@/features/products/product-image-service";
@@ -284,7 +284,7 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
     const { hierarchyQty: _hierarchyQty, ...persisted } = unit as typeof unit & { hierarchyQty?: number };
     return {
       ...persisted,
-      conversionQty: baseIndex >= 0 ? index === baseIndex ? 1 : unit.conversionQty : index === 0 ? 1 : unit.conversionQty,
+      conversionQty: unitRole(unit.unitName) === "piece" ? 1 : unit.conversionQty,
       isBaseUnit: baseIndex >= 0 ? index === baseIndex : index === 0,
       isDefaultSaleUnit: defaultSaleIndex >= 0 ? index === defaultSaleIndex : (baseIndex >= 0 ? index === baseIndex : index === 0),
       isPurchaseUnit: unit.isPurchaseUnit || (baseIndex >= 0 ? index === baseIndex : index === 0),

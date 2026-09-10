@@ -1,4 +1,4 @@
-import { applyPersistedHierarchyCosts, hydrateHierarchyQty, isHierarchyQtyLocked, parsePositiveQty } from "../features/products/unit-hierarchy";
+import { applyHierarchyConversions, applyPersistedHierarchyCosts, hydrateHierarchyQty, isHierarchyQtyLocked, parsePositiveQty } from "../features/products/unit-hierarchy";
 import { applyUnitPricingPatch, sellingPriceFromCost } from "../features/products/unit-pricing";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -23,7 +23,7 @@ function unit(id: string, unitName: string, conversionQty: number, extra: Record
   return {
     addAmountLak: 0,
     conversionQty,
-    costPriceLak: 0,
+    costPriceLak: extra.costPriceLak as number | undefined ?? 0,
     hierarchyQty: extra.hierarchyQty as number | undefined,
     id,
     markupPercent: 0,
@@ -36,171 +36,152 @@ function unit(id: string, unitName: string, conversionQty: number, extra: Record
   };
 }
 
-const piece = () => unit("piece", "Piece", 1, { isBaseUnit: true });
-const pack = (qty = 6) => unit("pack", "Pack", qty, { hierarchyQty: qty });
-const box = (conversionQty = 72, hierarchyQty = 12) => unit("box", "Box", conversionQty, { hierarchyQty });
+const piece = () => unit("piece", "Piece", 1, { isBaseUnit: true, costPriceLak: 5000 });
+const pack = (qty = 6, cost = 28000) => unit("pack", "Pack", qty, { hierarchyQty: qty, costPriceLak: cost });
+const box = (conversionQty = 60, hierarchyQty = 10, cost = 250000) => unit("box", "Box", conversionQty, { hierarchyQty, costPriceLak: cost });
+const trio = () => [piece(), pack(6, 28000), box(60, 10, 250000)];
 
-function trio() {
-  return [piece(), pack(6), box(72, 12)];
-}
-
-check("A. Piece only", () => {
+check("A. Piece Cost is manual", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
-    shareStock: true,
-    units: [piece()],
-  });
-  assert(next.length === 1 && next[0].conversionQty === 1 && next[0].costPriceLak === 5000, JSON.stringify(next[0]));
-});
-
-check("B. Piece + Pack", () => {
-  const next = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
-    shareStock: true,
-    units: [piece(), pack(6)],
-  });
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 30000, "pack cost");
-  assert(next.find((row) => row.id === "pack")?.conversionQty === 6, "pack base qty");
-});
-
-check("C. Piece + Pack + Box", () => {
-  const next = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
+    patch: { costPriceLak: 7000 },
     shareStock: true,
     units: trio(),
   });
-  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece");
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 30000, "pack 5000*6");
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 360000, "box 30000*12");
-  assert(next.find((row) => row.id === "box")?.conversionQty === 72, "box base qty 6*12");
+  assert(next.find((row) => row.id === "piece")?.costPriceLak === 7000, "piece cost");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack not derived");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box not derived");
 });
 
-check("D. Pack only", () => {
+check("B. Pack Cost is manual", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "pack",
-    patch: { costPriceLak: 30000 },
+    patch: { costPriceLak: 28000 },
     shareStock: true,
-    units: [pack(6)],
+    units: trio(),
   });
-  assert(next[0].conversionQty === 1, "pack is base qty 1");
-  assert(next[0].costPriceLak === 30000, "direct pack cost");
-  assert(next[0].isBaseUnit === true, "pack is base");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost");
+  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece unchanged");
 });
 
-check("E. Box only", () => {
+check("C. Box Cost is manual", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "box",
     patch: { costPriceLak: 360000 },
     shareStock: true,
-    units: [box(72, 12)],
-  });
-  assert(next[0].conversionQty === 1, "box is base qty 1");
-  assert(next[0].costPriceLak === 360000, "direct box cost");
-  assert(next[0].isBaseUnit === true, "box is base");
-});
-
-check("F. Pack quantity change recalculates Pack cost", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
-    shareStock: true,
     units: trio(),
   });
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 360000, "box cost");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack unchanged");
+});
+
+check("D. Pack conversion does not modify Pack Cost", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "pack",
     patch: { hierarchyQty: 10 },
     shareStock: true,
-    units: start,
-  });
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 50000, "pack 5000*10");
-  assert(next.find((row) => row.id === "pack")?.conversionQty === 10, "pack base qty");
-});
-
-check("G. Pack quantity change recalculates Box cost", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
-    shareStock: true,
     units: trio(),
   });
+  assert(next.find((row) => row.id === "pack")?.conversionQty === 10, "pack base 10");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost frozen");
+});
+
+check("E. Pack conversion does not modify Box Cost", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "pack",
     patch: { hierarchyQty: 10 },
     shareStock: true,
-    units: start,
-  });
-  assert(next.find((row) => row.id === "box")?.hierarchyQty === 12, "packs per box kept");
-  assert(next.find((row) => row.id === "box")?.conversionQty === 120, "box base 10*12");
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 600000, "box 50000*12");
-  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece unchanged");
-});
-
-check("H. Box quantity change recalculates Box cost only", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
-    shareStock: true,
     units: trio(),
   });
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost frozen");
+  assert(next.find((row) => row.id === "box")?.conversionQty === 100, "box stock 10*10");
+  assert(next.find((row) => row.id === "box")?.hierarchyQty === 10, "packs per box kept");
+});
+
+check("F. Box conversion does not modify Box Cost", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "box",
-    patch: { hierarchyQty: 8 },
-    shareStock: true,
-    units: start,
-  });
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 30000, "pack unchanged");
-  assert(next.find((row) => row.id === "pack")?.conversionQty === 6, "pack qty unchanged");
-  assert(next.find((row) => row.id === "box")?.conversionQty === 48, "box base 6*8");
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 240000, "box 30000*8");
-});
-
-check("I. Disabled Pack is excluded", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
+    patch: { hierarchyQty: 12 },
     shareStock: true,
     units: trio(),
   });
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost frozen");
+  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece cost frozen");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost frozen");
+  assert(next.find((row) => row.id === "box")?.conversionQty === 72, "box stock 6*12");
+});
+
+check("K. Piece pricing uses Piece Cost", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "piece",
+    patch: { pricingMode: "cost_plus_percent", markupPercent: 0, roundingLak: 0, costPriceLak: 5000 },
+    shareStock: true,
+    units: [{ ...piece(), pricingMode: "cost_plus_percent" }],
+  });
+  assert(next[0].sellingPriceLak === 5000, "piece selling");
+  assert(sellingPriceFromCost({ costPriceLak: 5000, pricingMode: "cost_plus_percent", markupPercent: 0 }) === 5000, "formula");
+});
+
+check("L. Pack pricing uses Pack Cost", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "pack",
-    patch: { status: "inactive" },
+    patch: { pricingMode: "cost_plus_percent", markupPercent: 0, costPriceLak: 28000 },
     shareStock: true,
-    units: start,
+    units: [piece(), { ...pack(6, 28000), pricingMode: "cost_plus_percent" }],
   });
-  assert(next.find((row) => row.id === "pack")?.status === "inactive", "pack inactive");
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 30000, "inactive pack cost not recalculated");
-  assert(next.find((row) => row.id === "box")?.conversionQty === 72, "box keeps piece base qty");
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 360000, "box still 5000*72");
+  assert(next.find((row) => row.id === "pack")?.sellingPriceLak === 28000, "pack selling from 28000");
+  assert(next.find((row) => row.id === "piece")?.sellingPriceLak === 0, "piece selling not used");
 });
 
-check("J. Disabled Box is excluded", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000 },
-    shareStock: true,
-    units: trio(),
-  });
+check("M. Box pricing uses Box Cost", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "box",
-    patch: { status: "inactive" },
+    patch: { pricingMode: "cost_plus_percent", markupPercent: 0, costPriceLak: 250000 },
     shareStock: true,
-    units: start,
+    units: [...trio().slice(0, 2), { ...box(60, 10, 250000), pricingMode: "cost_plus_percent" }],
   });
-  const afterPack = applyUnitPricingPatch({
-    editedUnitId: "pack",
-    patch: { hierarchyQty: 10 },
-    shareStock: true,
-    units: next,
-  });
-  assert(afterPack.find((row) => row.id === "box")?.status === "inactive", "box inactive");
-  assert(afterPack.find((row) => row.id === "box")?.costPriceLak === 360000, "inactive box cost frozen");
-  assert(afterPack.find((row) => row.id === "pack")?.costPriceLak === 50000, "pack still recalculates");
+  assert(next.find((row) => row.id === "box")?.sellingPriceLak === 250000, "box selling from 250000");
 });
 
-check("K. Piece quantity stays locked at 1", () => {
+check("N. Piece + Pack stock conversion", () => {
+  const next = applyHierarchyConversions([piece(), pack(6, 28000)]);
+  assert(next.find((row) => row.id === "piece")?.conversionQty === 1, "piece base");
+  assert(next.find((row) => row.id === "pack")?.conversionQty === 6, "pack base 6");
+});
+
+check("O. Piece + Pack + Box stock conversion", () => {
+  const next = applyHierarchyConversions(trio());
+  assert(next.find((row) => row.id === "pack")?.conversionQty === 6, "pack 6");
+  assert(next.find((row) => row.id === "box")?.hierarchyQty === 10, "10 packs");
+  assert(next.find((row) => row.id === "box")?.conversionQty === 60, "box base 60");
+});
+
+check("P. Piece + Box without Pack", () => {
+  const next = applyHierarchyConversions([
+    piece(),
+    unit("box", "Box", 60, { hierarchyQty: 60, costPriceLak: 250000 }),
+  ]);
+  assert(next.find((row) => row.id === "box")?.conversionQty === 60, "box pieces 60");
+  assert(next.find((row) => row.id === "box")?.hierarchyQty === 60, "display 60 pieces");
+});
+
+check("U. Existing product load does not recalculate manual costs", () => {
+  const stored = hydrateHierarchyQty([
+    unit("piece", "Piece", 1, { costPriceLak: 8000, isBaseUnit: true }),
+    unit("pack", "Pack", 6, { costPriceLak: 28000 }),
+    unit("box", "Box", 60, { costPriceLak: 250000 }),
+  ]);
+  assert(stored.find((row) => row.id === "pack")?.hierarchyQty === 6, "pack pieces");
+  assert(stored.find((row) => row.id === "box")?.hierarchyQty === 10, "packs per box 60/6");
+  assert(stored.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost kept");
+  assert(stored.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost kept");
+  const persisted = applyPersistedHierarchyCosts(stored);
+  assert(persisted.find((row) => row.id === "pack")?.costPriceLak === 28000, "save path does not derive pack cost");
+  assert(persisted.find((row) => row.id === "box")?.costPriceLak === 250000, "save path does not derive box cost");
+  assert(persisted.find((row) => row.id === "box")?.conversionQty === 60, "box base kept");
+});
+
+check("Piece quantity stays locked at 1", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "piece",
     patch: { hierarchyQty: 9, conversionQty: 9 },
@@ -211,43 +192,7 @@ check("K. Piece quantity stays locked at 1", () => {
   assert(isHierarchyQtyLocked(next.find((row) => row.id === "piece")!, next), "locked");
 });
 
-check("L. Markup does not mutate cost", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000, pricingMode: "cost_plus_percent", markupPercent: 10 },
-    shareStock: true,
-    units: trio().map((row) => ({ ...row, pricingMode: "cost_plus_percent" as const, markupPercent: 10 })),
-  });
-  const next = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { markupPercent: 50 },
-    shareStock: true,
-    units: start,
-  });
-  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece cost");
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 30000, "pack cost");
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 360000, "box cost");
-});
-
-check("M. Rounding does not mutate cost", () => {
-  const start = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { costPriceLak: 5000, pricingMode: "cost_plus_percent", roundingLak: 500, markupPercent: 0 },
-    shareStock: true,
-    units: [{ ...piece(), pricingMode: "cost_plus_percent", markupPercent: 0, roundingLak: 0 }],
-  });
-  const next = applyUnitPricingPatch({
-    editedUnitId: "piece",
-    patch: { roundingLak: 1000 },
-    shareStock: true,
-    units: start,
-  });
-  assert(next[0].costPriceLak === 5000, "cost unchanged");
-  assert(next[0].sellingPriceLak === 5000, "sell rounded from cost");
-  assert(sellingPriceFromCost({ costPriceLak: 5000, markupPercent: 0, pricingMode: "cost_plus_percent", roundingLak: 1000 }) === 5000, "formula");
-});
-
-check("N. No NaN / Infinity / negative invalid conversion", () => {
+check("Invalid conversion is rejected", () => {
   const start = trio();
   for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -3, 0]) {
     const next = applyUnitPricingPatch({
@@ -257,27 +202,15 @@ check("N. No NaN / Infinity / negative invalid conversion", () => {
       units: start,
     });
     assert(next.find((row) => row.id === "pack")?.conversionQty === 6, `kept previous for ${String(value)}`);
-    assert(next.every((row) => Number.isFinite(Number(row.conversionQty)) && Number(row.conversionQty) > 0), "finite qty");
-    assert(next.every((row) => Number.isFinite(Number(row.costPriceLak ?? 0))), "finite cost");
+    assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "cost kept");
   }
   assert(parsePositiveQty(-1) === null && parsePositiveQty(Number.NaN) === null, "parser");
 });
 
-check("O. Existing product load/edit remains compatible", () => {
-  const stored = hydrateHierarchyQty([
-    unit("piece", "Piece", 1, { costPriceLak: 8000, isBaseUnit: true }),
-    unit("pack", "Pack", 12, { costPriceLak: 96000 }),
-    unit("box", "Box", 24, { costPriceLak: 192000 }),
-  ]);
-  assert(stored.find((row) => row.id === "pack")?.hierarchyQty === 12, "pack pieces hydrated");
-  assert(stored.find((row) => row.id === "box")?.hierarchyQty === 2, "packs per box 24/12");
-  assert(stored.find((row) => row.id === "pack")?.costPriceLak === 96000, "stored pack cost kept until edit");
-  assert(stored.find((row) => row.id === "box")?.costPriceLak === 192000, "stored box cost kept until edit");
-  const persisted = applyPersistedHierarchyCosts(stored);
-  assert(persisted.find((row) => row.id === "pack")?.conversionQty === 12, "pack conversion kept");
-  assert(persisted.find((row) => row.id === "box")?.conversionQty === 24, "box conversion kept");
-  assert(persisted.find((row) => row.id === "pack")?.costPriceLak === 96000, "pack 8000*12");
-  assert(persisted.find((row) => row.id === "box")?.costPriceLak === 192000, "box 96000*2");
+check("Box-only conversion is editable base pieces", () => {
+  const next = applyHierarchyConversions([unit("box", "Box", 60, { hierarchyQty: 60, costPriceLak: 250000 })]);
+  assert(next[0].conversionQty === 60, "box base pieces");
+  assert(!isHierarchyQtyLocked(next[0], next), "box-only qty not locked");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

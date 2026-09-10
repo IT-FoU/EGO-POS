@@ -1,14 +1,13 @@
 import type { UnitPricingMode } from "@/features/products/types";
 import {
-  applyHierarchyConversionsAndCosts,
-  isHierarchyCostDerived,
+  applyHierarchyConversions,
   isHierarchyQtyLocked,
   isUnitEnabled,
   parsePositiveQty,
   unitRole,
   type HierarchyUnit,
 } from "@/features/products/unit-hierarchy";
-import { conversionMillis, deriveSharedUnitCost, toLakInteger } from "@/features/products/unit-pricing-math";
+import { conversionMillis, toLakInteger } from "@/features/products/unit-pricing-math";
 
 export { conversionMillis, deriveSharedUnitCost, toLakInteger } from "@/features/products/unit-pricing-math";
 
@@ -25,23 +24,6 @@ export type SharedStockUnit = HierarchyUnit & {
   roundingLak?: number;
   sellingPriceLak: number;
 };
-
-export function syncSharedStockCosts<T extends SharedStockUnit>(units: T[], editedUnitId: string, nextCostLak: number): T[] {
-  const edited = units.find((unit) => unit.id === editedUnitId);
-  if (!edited) return units;
-  const editedConversion = Number(edited.conversionQty);
-  if (conversionMillis(editedConversion) <= 0n) return units;
-  const editedCost = toLakInteger(nextCostLak);
-  return units.map((unit) => {
-    if (unit.id === editedUnitId) {
-      return { ...unit, costPriceLak: editedCost };
-    }
-    return {
-      ...unit,
-      costPriceLak: deriveSharedUnitCost(editedCost, editedConversion, Number(unit.conversionQty)),
-    };
-  });
-}
 
 export function markupMillis(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -128,9 +110,6 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
     delete patch.hierarchyQty;
     delete patch.conversionQty;
   }
-  if (input.shareStock && isHierarchyCostDerived(current, input.units)) {
-    delete patch.costPriceLak;
-  }
 
   if (patch.conversionQty !== undefined && patch.hierarchyQty === undefined) {
     const role = unitRole(current.unitName);
@@ -157,8 +136,21 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
       }
     }
   }
-  const hierarchied = applyHierarchyConversionsAndCosts(nextUnits, input.shareStock);
-  return applyAutomaticSellingPrices(hierarchied);
+  const hierarchied = applyHierarchyConversions(nextUnits);
+  const pricingChanged = [
+    "addAmountLak",
+    "costPriceLak",
+    "markupPercent",
+    "pricingMode",
+    "roundingLak",
+  ].some((key) => patch[key as keyof T] !== undefined);
+  if (!pricingChanged) return hierarchied;
+  return hierarchied.map((unit) => {
+    if (unit.id !== input.editedUnitId || !isUnitEnabled(unit)) return unit;
+    const nextPrice = sellingPriceFromCost(unit);
+    if (nextPrice === undefined) return unit;
+    return { ...unit, sellingPriceLak: nextPrice };
+  });
 }
 
 export function applyRoundingToAllUnits<T extends SharedStockUnit>(units: T[], roundingLak: number): T[] {
