@@ -84,6 +84,25 @@ npx tsx scripts/phase-fix-15-production-safety.ts
 
 Do not add a general `ALLOW_PRODUCTION_WRITES` flag.
 
+## LOCAL PRODUCT IMAGE SEARCH
+
+Server-only. Never use `NEXT_PUBLIC_`.
+
+```
+BRAVE_SEARCH_API_KEY=
+```
+
+Set it in `.env.local` or `.dev.vars` for local development. Production Worker `egopos` reads the same secret from Worker bindings.
+
+Google CSE variables are not required:
+
+```
+GOOGLE_CSE_API_KEY
+GOOGLE_CSE_CX
+```
+
+Do not commit the API key.
+
 ## NEVER
 
 - `localhost` → Production database

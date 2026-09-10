@@ -17,12 +17,12 @@ import {
   type BulkPriceUpdateInput,
 } from "@/features/products/prisma-repository";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { searchGoogleCseImages } from "@/features/products/google-cse-image-search";
+import { searchBraveImages } from "@/features/products/brave-image-search";
 import {
-  GOOGLE_CSE_API_KEY_ENV,
-  GOOGLE_CSE_CX_ENV,
+  BRAVE_SEARCH_API_KEY_ENV,
   IMAGE_SEARCH_PROVIDER,
-  readGoogleCseConfig,
+  readBraveSearchApiKey,
+  redactImageSearchSecrets,
   resolveImageSearchQuery,
   type ImageSearchSource,
 } from "@/features/products/product-image-search";
@@ -41,10 +41,9 @@ function readWorkerBinding(name: string) {
   }
 }
 
-function googleCseConfigFromRuntime() {
-  return readGoogleCseConfig({
-    [GOOGLE_CSE_API_KEY_ENV]: readWorkerBinding(GOOGLE_CSE_API_KEY_ENV) ?? process.env[GOOGLE_CSE_API_KEY_ENV],
-    [GOOGLE_CSE_CX_ENV]: readWorkerBinding(GOOGLE_CSE_CX_ENV) ?? process.env[GOOGLE_CSE_CX_ENV],
+function braveSearchApiKeyFromRuntime() {
+  return readBraveSearchApiKey({
+    [BRAVE_SEARCH_API_KEY_ENV]: readWorkerBinding(BRAVE_SEARCH_API_KEY_ENV) ?? process.env[BRAVE_SEARCH_API_KEY_ENV],
   });
 }
 
@@ -115,8 +114,8 @@ export async function searchProductImagesAction(input: {
     if (!resolved.ok) {
       throw new Error(resolved.reason === "empty-name" ? "Product name is required" : "Barcode is required");
     }
-    const config = googleCseConfigFromRuntime();
-    if (!config) {
+    const apiKey = braveSearchApiKeyFromRuntime();
+    if (!apiKey) {
       return writeSuccess({
         configured: false,
         provider: IMAGE_SEARCH_PROVIDER,
@@ -125,7 +124,7 @@ export async function searchProductImagesAction(input: {
         source: resolved.source,
       });
     }
-    const results = await searchGoogleCseImages(resolved.query, config);
+    const results = await searchBraveImages(resolved.query, apiKey);
     return writeSuccess({
       configured: true,
       provider: IMAGE_SEARCH_PROVIDER,
@@ -134,7 +133,8 @@ export async function searchProductImagesAction(input: {
       source: resolved.source,
     });
   } catch (error) {
-    return writeFailure(error);
+    const message = redactImageSearchSecrets(error instanceof Error ? error.message : "Image search failed.");
+    return writeFailure(new Error(message));
   }
 }
 

@@ -1,7 +1,7 @@
-export const GOOGLE_CSE_API_KEY_ENV = "GOOGLE_CSE_API_KEY";
-export const GOOGLE_CSE_CX_ENV = "GOOGLE_CSE_CX";
-export const GOOGLE_CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1";
-export const IMAGE_SEARCH_PROVIDER = "google_programmable_search";
+export const BRAVE_SEARCH_API_KEY_ENV = "BRAVE_SEARCH_API_KEY";
+export const BRAVE_IMAGES_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/images/search";
+export const IMAGE_SEARCH_PROVIDER = "brave_search";
+export const BRAVE_IMAGE_SEARCH_COUNT = 10;
 
 export type ImageSearchSource = "name" | "barcode";
 
@@ -10,16 +10,13 @@ export type ImageSearchQueryResult =
   | { ok: false; reason: "empty-name" | "empty-barcode"; source: ImageSearchSource };
 
 export type ProductImageSearchHit = {
+  height?: number;
   id: string;
   importUrl: string;
   sourcePageUrl?: string;
   thumbnailUrl: string;
   title: string;
-};
-
-export type GoogleCseConfig = {
-  apiKey: string;
-  cx: string;
+  width?: number;
 };
 
 function trimValue(value: unknown) {
@@ -40,33 +37,52 @@ export function resolveImageSearchQuery(
   return { ok: true, query, source };
 }
 
-export function readGoogleCseConfig(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): GoogleCseConfig | null {
-  const apiKey = trimValue(env[GOOGLE_CSE_API_KEY_ENV]);
-  const cx = trimValue(env[GOOGLE_CSE_CX_ENV]);
-  if (!apiKey || !cx) return null;
-  return { apiKey, cx };
+export function readBraveSearchApiKey(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env) {
+  const apiKey = trimValue(env[BRAVE_SEARCH_API_KEY_ENV]);
+  return apiKey.length > 0 ? apiKey : null;
 }
 
-export function mapGoogleCseImageItems(items: unknown): ProductImageSearchHit[] {
-  if (!Array.isArray(items)) return [];
-  const results: ProductImageSearchHit[] = [];
-  for (const [index, item] of items.entries()) {
+function httpsUrl(value: unknown) {
+  const url = trimValue(value);
+  return url.startsWith("https://") ? url : "";
+}
+
+function dimension(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
+}
+
+export function mapBraveImageResults(payload: unknown): ProductImageSearchHit[] {
+  if (!payload || typeof payload !== "object") return [];
+  const results = (payload as { results?: unknown }).results;
+  if (!Array.isArray(results)) return [];
+  const hits: ProductImageSearchHit[] = [];
+  for (const [index, item] of results.entries()) {
     if (!item || typeof item !== "object") continue;
     const record = item as {
-      image?: { contextLink?: string; thumbnailLink?: string };
-      link?: string;
-      title?: string;
+      properties?: { height?: unknown; url?: unknown; width?: unknown };
+      thumbnail?: { src?: unknown };
+      title?: unknown;
+      url?: unknown;
     };
-    const importUrl = trimValue(record.link);
-    const thumbnailUrl = trimValue(record.image?.thumbnailLink) || importUrl;
-    if (!importUrl.startsWith("https://") || !thumbnailUrl.startsWith("https://")) continue;
-    results.push({
+    const importUrl = httpsUrl(record.properties?.url) || httpsUrl(record.thumbnail?.src);
+    const thumbnailUrl = httpsUrl(record.thumbnail?.src) || importUrl;
+    if (!importUrl || !thumbnailUrl) continue;
+    hits.push({
+      height: dimension(record.properties?.height),
       id: `${index}:${importUrl}`,
       importUrl,
-      sourcePageUrl: trimValue(record.image?.contextLink) || undefined,
+      sourcePageUrl: httpsUrl(record.url) || undefined,
       thumbnailUrl,
       title: trimValue(record.title) || "Image",
+      width: dimension(record.properties?.width),
     });
   }
-  return results;
+  return hits;
+}
+
+export function redactImageSearchSecrets(message: string) {
+  return message
+    .replace(/X-Subscription-Token:\s*\S+/gi, "X-Subscription-Token: [redacted]")
+    .replace(/BRAVE_SEARCH_API_KEY[=:]\s*\S+/gi, "BRAVE_SEARCH_API_KEY=[redacted]");
 }

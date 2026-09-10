@@ -2,10 +2,19 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { searchGoogleCseImages } from "../features/products/google-cse-image-search";
 import {
-  mapGoogleCseImageItems,
-  readGoogleCseConfig,
+  ImageSearchConfigurationError,
+  ImageSearchRequestError,
+  searchBraveImages,
+} from "../features/products/brave-image-search";
+import {
+  BRAVE_IMAGES_SEARCH_ENDPOINT,
+  BRAVE_IMAGE_SEARCH_COUNT,
+  BRAVE_SEARCH_API_KEY_ENV,
+  IMAGE_SEARCH_PROVIDER,
+  mapBraveImageResults,
+  readBraveSearchApiKey,
+  redactImageSearchSecrets,
   resolveImageSearchQuery,
 } from "../features/products/product-image-search";
 import { writePrismaProductCreate } from "../features/products/prisma-repository";
@@ -17,7 +26,7 @@ import {
   replaceInheritedProductImage,
   unitImageSelectValue,
 } from "../features/products/unit-image-assignment";
-import { getProductsCopy } from "../lib/i18n/products-copy";
+import { getProductsCopy, localizeProductError } from "../lib/i18n/products-copy";
 import type { TenantContext } from "../lib/db/write-context";
 import { loadProjectEnvFiles, resolveScriptDatabaseUrl } from "../lib/db/script-database";
 import { persistableProductImageUrl } from "../lib/storage/product-image-ref";
@@ -91,6 +100,7 @@ async function checkAsync(name: string, run: () => Promise<void>) {
 
 const productName = "Coca Cola Original 330ml";
 const barcode = "8851959132011";
+const testApiKey = "BSAK_TEST_SECRET_VALUE_DO_NOT_USE";
 const image = { id: "img-main", storagePath: "products/co/p1/v1/main.webp" };
 const units = [
   { id: "piece", isBaseUnit: true, unitName: "Piece" },
@@ -98,42 +108,194 @@ const units = [
   { id: "box", isBaseUnit: false, unitName: "Box" },
 ];
 
-check("A. Search by Product Name uses exact current form value", () => {
-  const resolved = resolveImageSearchQuery("name", { barcode, productName });
-  assert(resolved.ok && resolved.query === productName, JSON.stringify(resolved));
-});
+const braveHit = {
+  title: "Cola bottle",
+  url: "https://example.com/cola",
+  thumbnail: { src: "https://imgs.search.brave.com/cola-thumb.jpg" },
+  properties: {
+    url: "https://cdn.example.com/cola.jpg",
+    width: 800,
+    height: 600,
+  },
+};
 
-check("B. Search by Barcode uses exact current form value", () => {
-  const resolved = resolveImageSearchQuery("barcode", { barcode, productName });
-  assert(resolved.ok && resolved.query === barcode, JSON.stringify(resolved));
-});
+function readClientFiles() {
+  return [
+    readFileSync("features/products/components/product-form.tsx", "utf8"),
+    readFileSync("features/products/components/product-list-client.tsx", "utf8"),
+  ].join("\n");
+}
 
-check("C. Empty Product Name cannot search by name", () => {
+check("empty Product Name cannot search by name", () => {
   const resolved = resolveImageSearchQuery("name", { barcode, productName: "  " });
   assert(!resolved.ok && resolved.reason === "empty-name", JSON.stringify(resolved));
 });
 
-check("D. Empty Barcode cannot search by barcode", () => {
+check("empty Barcode cannot search by barcode", () => {
   const resolved = resolveImageSearchQuery("barcode", { barcode: "", productName });
   assert(!resolved.ok && resolved.reason === "empty-barcode", JSON.stringify(resolved));
 });
 
-check("E. Remote URL cannot be persisted as product image", () => {
+check("A. Product name search sends the exact current form query", () => {
+  const resolved = resolveImageSearchQuery("name", { barcode, productName });
+  assert(resolved.ok && resolved.query === productName, JSON.stringify(resolved));
+});
+
+check("B. Barcode search sends the exact current form query", () => {
+  const resolved = resolveImageSearchQuery("barcode", { barcode, productName });
+  assert(resolved.ok && resolved.query === barcode, JSON.stringify(resolved));
+});
+
+check("C. BRAVE_SEARCH_API_KEY is required", () => {
+  assert(readBraveSearchApiKey({}) === null, "empty env must be unconfigured");
+  assert(readBraveSearchApiKey({ [BRAVE_SEARCH_API_KEY_ENV]: "   " }) === null, "blank key must be unconfigured");
+  assert(readBraveSearchApiKey({ [BRAVE_SEARCH_API_KEY_ENV]: testApiKey }) === testApiKey, "present key is read");
+  assert(IMAGE_SEARCH_PROVIDER === "brave_search", IMAGE_SEARCH_PROVIDER);
+});
+
+check("D. Brave response maps to the internal image result format", () => {
+  const hits = mapBraveImageResults({ type: "images", results: [braveHit] });
+  assert(hits.length === 1, JSON.stringify(hits));
+  assert(hits[0]?.importUrl === "https://cdn.example.com/cola.jpg", hits[0]?.importUrl ?? "");
+  assert(hits[0]?.thumbnailUrl === "https://imgs.search.brave.com/cola-thumb.jpg", hits[0]?.thumbnailUrl ?? "");
+  assert(hits[0]?.title === "Cola bottle", hits[0]?.title ?? "");
+  assert(hits[0]?.sourcePageUrl === "https://example.com/cola", hits[0]?.sourcePageUrl ?? "");
+  assert(hits[0]?.width === 800 && hits[0]?.height === 600, JSON.stringify(hits[0]));
+});
+
+check("E. Zero image results are handled", () => {
+  const empty = mapBraveImageResults({ type: "images", results: [] });
+  assert(empty.length === 0, JSON.stringify(empty));
+  const missing = mapBraveImageResults({ type: "images" });
+  assert(missing.length === 0, JSON.stringify(missing));
+});
+
+check("H. Malformed Brave JSON maps to no hits", () => {
+  assert(mapBraveImageResults(null).length === 0, "null");
+  assert(mapBraveImageResults("nope").length === 0, "string");
+  assert(mapBraveImageResults({ results: [{ title: "x" }] }).length === 0, "missing https urls");
+});
+
+check("I. API key never appears in client code or mapped results", () => {
+  const client = readClientFiles();
+  assert(!client.includes(BRAVE_SEARCH_API_KEY_ENV), "client must not reference the secret name");
+  assert(!client.includes("X-Subscription-Token"), "client must not send Brave auth");
+  assert(!client.includes("GOOGLE_CSE"), "client must not mention Google CSE");
+  assert(!client.toLowerCase().includes("google cse"), client.slice(0, 40));
+  const hits = mapBraveImageResults({ results: [braveHit] });
+  assert(!JSON.stringify(hits).includes(testApiKey), "mapped results must not include the key");
+  const redacted = redactImageSearchSecrets(`X-Subscription-Token: ${testApiKey} BRAVE_SEARCH_API_KEY=${testApiKey}`);
+  assert(!redacted.includes(testApiKey), redacted);
+});
+
+check("J. Selected Brave image still uses Storage import, not remote URL persistence", () => {
   let threw = false;
   try {
     persistableProductImageUrl("https://cdn.example.com/cola.jpg", { companyId: "co", productId: "p1" });
   } catch {
     threw = true;
   }
-  assert(threw, "remote URL must be rejected");
-  const mapped = mapGoogleCseImageItems([
-    { title: "Cola", link: "https://cdn.example.com/cola.jpg", image: { thumbnailLink: "https://cdn.example.com/cola-thumb.jpg" } },
-  ]);
-  assert(mapped[0]?.importUrl === "https://cdn.example.com/cola.jpg", "search hit keeps import URL only for import");
-  assert(readGoogleCseConfig({}) === null, "missing provider config is detected");
+  assert(threw, "remote URL must be rejected as product image");
+  const form = readFileSync("features/products/components/product-form.tsx", "utf8");
+  assert(form.includes("importRemoteProductImageAction"), "search select must import remotely first");
+  assert(form.includes("hit.importUrl"), "import uses the search hit URL as input only");
+  assert(form.includes("optimizeProductImageFile"), "imported bytes still optimize to webp");
+  const actions = readFileSync("features/products/actions.ts", "utf8");
+  assert(actions.includes("searchBraveImages"), "server action uses Brave");
+  assert(!actions.includes("GOOGLE_CSE"), "Google CSE runtime removed");
+  assert(!existsSync("features/products/google-cse-image-search.ts"), "old Google provider file retired");
 });
 
-check("F. Unsafe/private-network image URL rejected", () => {
+check("K. Apply to all units assigns unassigned units", () => {
+  const next = applyProductImageAssignment({
+    image,
+    mode: "all",
+    origins: { piece: "none", pack: "none", box: "none" },
+    units,
+  });
+  assert(next.units.every((unit) => unit.imageUrl === image.storagePath), JSON.stringify(next.units));
+  assert(next.origins.piece === "inherited" && next.origins.pack === "inherited" && next.origins.box === "inherited", JSON.stringify(next.origins));
+});
+
+check("L. Apply to base unit only assigns the base unit", () => {
+  const next = applyProductImageAssignment({
+    image,
+    mode: "base",
+    origins: { piece: "none", pack: "none", box: "none" },
+    units,
+  });
+  assert(next.units.find((unit) => unit.id === "piece")?.imageUrl === image.storagePath, "base assigned");
+  assert(!next.units.find((unit) => unit.id === "pack")?.imageUrl, "pack stays empty");
+  assert(!next.units.find((unit) => unit.id === "box")?.imageUrl, "box stays empty");
+});
+
+check("M. Custom unit images remain protected", () => {
+  const next = applyProductImageAssignment({
+    image,
+    mode: "all",
+    origins: { piece: "none", pack: "custom", box: "none" },
+    units: units.map((unit) => unit.id === "pack" ? { ...unit, imageUrl: "products/co/p1/pack/main.webp" } : unit),
+  });
+  assert(next.units.find((unit) => unit.id === "pack")?.imageUrl === "products/co/p1/pack/main.webp", "pack custom kept");
+  assert(next.units.find((unit) => unit.id === "box")?.imageUrl === image.storagePath, "box inherited");
+  const replaced = replaceInheritedProductImage({
+    image: { id: "img-2", storagePath: "products/co/p1/v2/main.webp" },
+    origins: { piece: "inherited", pack: "none", box: "custom" },
+    units: [
+      { id: "piece", isBaseUnit: true, imageUrl: image.storagePath },
+      { id: "pack", imageUrl: undefined },
+      { id: "box", imageUrl: "products/co/p1/box/main.webp" },
+    ],
+  });
+  assert(replaced.units.find((unit) => unit.id === "piece")?.imageUrl === "products/co/p1/v2/main.webp", "inherited piece updates");
+  assert(replaced.units.find((unit) => unit.id === "box")?.imageUrl === "products/co/p1/box/main.webp", "custom box kept");
+});
+
+check("Inherited unit image updates when Product Main Image changes", () => {
+  const replaced = replaceInheritedProductImage({
+    image: { id: "img-2", storagePath: "products/co/p1/v2/main.webp" },
+    origins: { piece: "inherited", pack: "inherited", box: "inherited" },
+    units: units.map((unit) => ({ ...unit, imageUrl: image.storagePath })),
+  });
+  assert(replaced.units.every((unit) => unit.imageUrl === "products/co/p1/v2/main.webp"), JSON.stringify(replaced.units));
+});
+
+check("New unit under Apply to all inherits Product Image", () => {
+  const assigned = assignImageToNewUnit({
+    image,
+    mode: "all",
+    origins: {},
+    unit: { id: "carton", isBaseUnit: false },
+  });
+  assert(assigned.origin === "inherited" && assigned.unit.imageUrl === image.storagePath, JSON.stringify(assigned));
+});
+
+check("New unit under base-only remains unassigned", () => {
+  const assigned = assignImageToNewUnit({
+    image,
+    mode: "base",
+    origins: {},
+    unit: { id: "carton", isBaseUnit: false },
+  });
+  assert(assigned.origin === "none" && !assigned.unit.imageUrl, JSON.stringify(assigned));
+});
+
+check("Unit Image binding after successful assignment", () => {
+  const next = applyProductImageAssignment({
+    image,
+    mode: "all",
+    origins: { piece: "none", pack: "none", box: "none" },
+    units,
+  });
+  assert(unitImageSelectValue(next.units[0]!, [image]) === image.storagePath, "select value bound");
+  assert(inferUnitImageOrigin(next.units[0]!, image) === "inherited", "origin inherited");
+  const form = readFileSync("features/products/components/product-form.tsx", "utf8");
+  assert(form.includes("applyImageToAllUnits") && form.includes("applyImageToBaseUnitOnly"), "assignment options exist");
+  assert(form.includes("searchByProductName") && form.includes("searchByBarcode"), "search source chooser exists");
+  assert(!form.includes("FileReader.readAsDataURL"), "no FileReader persist");
+});
+
+check("Unsafe/private-network image URL rejected", () => {
   const blocked = [
     "http://example.com/a.jpg",
     "https://127.0.0.1/a.jpg",
@@ -153,98 +315,6 @@ check("F. Unsafe/private-network image URL rejected", () => {
   }
 });
 
-check("G. Apply to all units assigns unassigned units", () => {
-  const next = applyProductImageAssignment({
-    image,
-    mode: "all",
-    origins: { piece: "none", pack: "none", box: "none" },
-    units,
-  });
-  assert(next.units.every((unit) => unit.imageUrl === image.storagePath), JSON.stringify(next.units));
-  assert(next.origins.piece === "inherited" && next.origins.pack === "inherited" && next.origins.box === "inherited", JSON.stringify(next.origins));
-});
-
-check("H. Apply to base unit only assigns the base unit", () => {
-  const next = applyProductImageAssignment({
-    image,
-    mode: "base",
-    origins: { piece: "none", pack: "none", box: "none" },
-    units,
-  });
-  assert(next.units.find((unit) => unit.id === "piece")?.imageUrl === image.storagePath, "base assigned");
-  assert(!next.units.find((unit) => unit.id === "pack")?.imageUrl, "pack stays empty");
-  assert(!next.units.find((unit) => unit.id === "box")?.imageUrl, "box stays empty");
-});
-
-check("I. Custom Pack image is not overwritten by apply to all", () => {
-  const next = applyProductImageAssignment({
-    image,
-    mode: "all",
-    origins: { piece: "none", pack: "custom", box: "none" },
-    units: units.map((unit) => unit.id === "pack" ? { ...unit, imageUrl: "products/co/p1/pack/main.webp" } : unit),
-  });
-  assert(next.units.find((unit) => unit.id === "pack")?.imageUrl === "products/co/p1/pack/main.webp", "pack custom kept");
-  assert(next.units.find((unit) => unit.id === "box")?.imageUrl === image.storagePath, "box inherited");
-});
-
-check("J. Custom Box image is not overwritten when Product Main Image changes", () => {
-  const replaced = replaceInheritedProductImage({
-    image: { id: "img-2", storagePath: "products/co/p1/v2/main.webp" },
-    origins: { piece: "inherited", pack: "none", box: "custom" },
-    units: [
-      { id: "piece", isBaseUnit: true, imageUrl: image.storagePath },
-      { id: "pack", imageUrl: undefined },
-      { id: "box", imageUrl: "products/co/p1/box/main.webp" },
-    ],
-  });
-  assert(replaced.units.find((unit) => unit.id === "piece")?.imageUrl === "products/co/p1/v2/main.webp", "inherited piece updates");
-  assert(replaced.units.find((unit) => unit.id === "box")?.imageUrl === "products/co/p1/box/main.webp", "custom box kept");
-});
-
-check("K. Inherited unit image updates when Product Main Image changes", () => {
-  const replaced = replaceInheritedProductImage({
-    image: { id: "img-2", storagePath: "products/co/p1/v2/main.webp" },
-    origins: { piece: "inherited", pack: "inherited", box: "inherited" },
-    units: units.map((unit) => ({ ...unit, imageUrl: image.storagePath })),
-  });
-  assert(replaced.units.every((unit) => unit.imageUrl === "products/co/p1/v2/main.webp"), JSON.stringify(replaced.units));
-});
-
-check("L. New unit under Apply to all inherits Product Image", () => {
-  const assigned = assignImageToNewUnit({
-    image,
-    mode: "all",
-    origins: {},
-    unit: { id: "carton", isBaseUnit: false },
-  });
-  assert(assigned.origin === "inherited" && assigned.unit.imageUrl === image.storagePath, JSON.stringify(assigned));
-});
-
-check("M. New unit under base-only remains unassigned", () => {
-  const assigned = assignImageToNewUnit({
-    image,
-    mode: "base",
-    origins: {},
-    unit: { id: "carton", isBaseUnit: false },
-  });
-  assert(assigned.origin === "none" && !assigned.unit.imageUrl, JSON.stringify(assigned));
-});
-
-check("N. Unit Image no longer shows Not assigned after successful assignment", () => {
-  const next = applyProductImageAssignment({
-    image,
-    mode: "all",
-    origins: { piece: "none", pack: "none", box: "none" },
-    units,
-  });
-  assert(unitImageSelectValue(next.units[0]!, [image]) === image.storagePath, "select value bound");
-  assert(inferUnitImageOrigin(next.units[0]!, image) === "inherited", "origin inherited");
-  const form = readFileSync("features/products/components/product-form.tsx", "utf8");
-  assert(form.includes("applyImageToAllUnits") && form.includes("applyImageToBaseUnitOnly"), "assignment options exist");
-  assert(form.includes("searchByProductName") && form.includes("searchByBarcode"), "search source chooser exists");
-  assert(!form.includes("FileReader.readAsDataURL"), "no FileReader persist");
-});
-
 check("I18N EN/LO assignment and search copy", () => {
   const en = getProductsCopy("en");
   const lo = getProductsCopy("lo");
@@ -253,24 +323,106 @@ check("I18N EN/LO assignment and search copy", () => {
   assert(en.applyImageToAllUnits === "Apply to all units", en.applyImageToAllUnits);
   assert(en.applyImageToBaseUnitOnly === "Apply to base unit only", en.applyImageToBaseUnitOnly);
   assert(en.inheritedFromProductImage === "Inherited from Product Image", en.inheritedFromProductImage);
+  assert(!en.imageSearchHint.toLowerCase().includes("google"), en.imageSearchHint);
+  assert(localizeProductError("Image search is not authorized.") === en.imageSearchUnauthorized, "401/403 copy");
+  assert(localizeProductError("Image search is temporarily limited. Try again later.") === en.imageSearchRateLimited, "429 copy");
   assert(lo.searchImages.length > 0 && lo.searchImages !== en.searchImages, lo.searchImages);
   assert(lo.applyImageToBaseUnitOnly.length > 0 && lo.applyImageToBaseUnitOnly !== en.applyImageToBaseUnitOnly, lo.applyImageToBaseUnitOnly);
+  assert(lo.imageSearchUnauthorized.length > 0 && lo.imageSearchUnauthorized !== en.imageSearchUnauthorized, lo.imageSearchUnauthorized);
 });
 
-await checkAsync("Google CSE maps HTTPS image hits and uses the exact query", async () => {
-  const hits = await searchGoogleCseImages(productName, { apiKey: "test-key", cx: "test-cx" }, async (input) => {
+await checkAsync("A2. Brave name search request uses exact query and strict safe search", async () => {
+  const hits = await searchBraveImages(productName, testApiKey, async (input, init) => {
     const url = new URL(String(input));
-    assert(url.searchParams.get("searchType") === "image", url.toString());
+    assert(url.origin + url.pathname === BRAVE_IMAGES_SEARCH_ENDPOINT, url.toString());
     assert(url.searchParams.get("q") === productName, url.searchParams.get("q") ?? url.toString());
-    return new Response(JSON.stringify({
-      items: [{
-        title: "Cola bottle",
-        link: "https://cdn.example.com/cola.jpg",
-        image: { thumbnailLink: "https://cdn.example.com/cola-thumb.jpg", contextLink: "https://example.com/cola" },
-      }],
-    }), { status: 200 });
+    assert(url.searchParams.get("count") === String(BRAVE_IMAGE_SEARCH_COUNT), url.searchParams.get("count") ?? "");
+    assert(url.searchParams.get("safesearch") === "strict", url.searchParams.get("safesearch") ?? "");
+    assert(!url.toString().includes(testApiKey), "key must not be in the URL");
+    const headers = new Headers(init?.headers);
+    assert(headers.get("X-Subscription-Token") === testApiKey, "token header required for provider call");
+    return new Response(JSON.stringify({ type: "images", results: [braveHit] }), { status: 200 });
   });
   assert(hits.length === 1 && hits[0]?.importUrl === "https://cdn.example.com/cola.jpg", JSON.stringify(hits));
+  assert(!JSON.stringify(hits).includes(testApiKey), "result payload must not include the key");
+});
+
+await checkAsync("B2. Brave barcode search request uses exact barcode query", async () => {
+  const hits = await searchBraveImages(barcode, testApiKey, async (input) => {
+    const url = new URL(String(input));
+    assert(url.searchParams.get("q") === barcode, url.searchParams.get("q") ?? url.toString());
+    return new Response(JSON.stringify({ type: "images", results: [braveHit] }), { status: 200 });
+  });
+  assert(hits.length === 1, JSON.stringify(hits));
+});
+
+await checkAsync("C2. Missing Brave API key throws a configuration error", async () => {
+  try {
+    await searchBraveImages(productName, "  ");
+    throw new Error("expected configuration error");
+  } catch (error) {
+    assert(error instanceof ImageSearchConfigurationError, String(error));
+    assert(!String(error).includes(testApiKey), String(error));
+  }
+});
+
+await checkAsync("E2. Brave zero-result payload returns an empty list", async () => {
+  const hits = await searchBraveImages(productName, testApiKey, async () => {
+    return new Response(JSON.stringify({ type: "images", results: [] }), { status: 200 });
+  });
+  assert(hits.length === 0, JSON.stringify(hits));
+});
+
+await checkAsync("F. 401/403 are handled without leaking the key", async () => {
+  for (const status of [401, 403]) {
+    try {
+      await searchBraveImages(productName, testApiKey, async () => new Response("denied", { status }));
+      throw new Error(`expected ${status}`);
+    } catch (error) {
+      assert(error instanceof ImageSearchRequestError, String(error));
+      assert(error.message === "Image search is not authorized.", error.message);
+      assert(!error.message.includes(testApiKey), error.message);
+    }
+  }
+});
+
+await checkAsync("G. Rate limit is handled", async () => {
+  try {
+    await searchBraveImages(productName, testApiKey, async () => new Response("slow down", { status: 429 }));
+    throw new Error("expected 429");
+  } catch (error) {
+    assert(error instanceof ImageSearchRequestError, String(error));
+    assert(error.message === "Image search is temporarily limited. Try again later.", error.message);
+  }
+});
+
+await checkAsync("H2. Malformed Brave body is handled", async () => {
+  try {
+    await searchBraveImages(productName, testApiKey, async () => new Response("{not-json", { status: 200 }));
+    throw new Error("expected malformed");
+  } catch (error) {
+    assert(error instanceof ImageSearchRequestError, String(error));
+    assert(error.message === "Image search failed.", error.message);
+  }
+});
+
+await checkAsync("Brave 5xx and timeout are handled", async () => {
+  try {
+    await searchBraveImages(productName, testApiKey, async () => new Response("down", { status: 503 }));
+    throw new Error("expected 503");
+  } catch (error) {
+    assert(error instanceof ImageSearchRequestError, String(error));
+    assert(error.message === "Image search is temporarily unavailable.", error.message);
+  }
+  try {
+    await searchBraveImages(productName, testApiKey, async () => {
+      throw new Error("Aborted");
+    });
+    throw new Error("expected timeout");
+  } catch (error) {
+    assert(error instanceof ImageSearchRequestError, String(error));
+    assert(error.message === "Image search is temporarily unavailable.", error.message);
+  }
 });
 
 await checkAsync("F2. Redirect to private metadata IP is rejected", async () => {
