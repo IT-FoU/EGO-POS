@@ -54,6 +54,7 @@ async function writeProductImageChange<T>(options: {
 
 export type ProductImageUploadInput = {
   assignToUnitId?: string;
+  assignToUnitIds?: string[];
   main: Blob | File | Uint8Array;
   mainType?: string;
   thumb: Blob | File | Uint8Array;
@@ -90,14 +91,17 @@ export async function uploadAndAttachProductImages(
     kind: "thumb",
   });
 
-  const assignToUnitId = input.assignToUnitId && existing.units.some((unit: { id: string }) => unit.id === input.assignToUnitId)
-    ? input.assignToUnitId
-    : undefined;
+  const existingUnitIds = new Set(existing.units.map((unit: { id: string }) => unit.id));
+  const assignToUnitIds = [...new Set([
+    ...(input.assignToUnitId ? [input.assignToUnitId] : []),
+    ...(input.assignToUnitIds ?? []),
+  ])].filter((unitId) => existingUnitIds.has(unitId));
   const previousPaths = collectImageStoragePaths({
     imageUrl: existing.imageUrl,
-    units: assignToUnitId
-      ? existing.units.filter((unit: { id: string }) => unit.id === assignToUnitId)
-      : existing.units,
+    units: existing.units.filter((unit: { id: string; imageUrl?: string | null }) => {
+      if (assignToUnitIds.includes(unit.id)) return true;
+      return Boolean(existing.imageUrl && unit.imageUrl === existing.imageUrl);
+    }),
   });
   const previousProductPaths = collectImageStoragePaths({ imageUrl: existing.imageUrl });
   const paths = buildProductImagePaths({
@@ -129,7 +133,7 @@ export async function uploadAndAttachProductImages(
     saved = await writeProductImageChange({
       action: "update_image",
       client,
-      newData: { imageUrl: paths.mainPath, productId: existing.id, thumbPath: paths.thumbPath, unitId: assignToUnitId },
+      newData: { imageUrl: paths.mainPath, productId: existing.id, thumbPath: paths.thumbPath, unitIds: assignToUnitIds },
       oldData: { imageUrl: existing.imageUrl, productId: existing.id },
       tenant,
       write: async (tx) => {
@@ -142,10 +146,10 @@ export async function uploadAndAttachProductImages(
           data: { imageUrl: paths.mainPath },
           where: { id: current.id },
         });
-        if (assignToUnitId) {
+        if (assignToUnitIds.length > 0) {
           await tx.productUnit.updateMany({
             data: { imageUrl: paths.mainPath },
-            where: { id: assignToUnitId, productId: current.id },
+            where: { id: { in: assignToUnitIds }, productId: current.id },
           });
         }
         if (previousProductPath && previousProductPath !== paths.mainPath) {

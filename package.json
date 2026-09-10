@@ -43,6 +43,7 @@
     "test:pos-cart-summary": "tsx scripts/phase-fix-14b-cart-summary-check.ts",
     "test:pos-hold-resume": "tsx scripts/phase-fix-15-hold-resume-check.ts",
     "test:product-image-storage": "tsx scripts/phase-fix-21-product-image-storage-check.ts",
+    "test:product-image-search": "tsx scripts/phase-fix-24-product-image-search-assignment-check.ts",
     "test:cash-in-out": "tsx scripts/phase-fix-16-cash-in-out-check.ts",
     "test:cash-out-overdraw": "tsx scripts/phase-fix-18-cash-out-overdraw-check.ts",
     "test:hydration": "tsx scripts/phase-fix-13-hydration-check.ts",
