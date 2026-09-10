@@ -8,6 +8,7 @@ export type ProductUnit = {
   id: string;
   unitName: string;
   conversionQty: number;
+  hierarchyQty?: number;
   barcode: string;
   costPriceLak?: number;
   pricingMode?: UnitPricingMode;

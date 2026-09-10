@@ -21,7 +21,8 @@ import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-ref
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
-import { applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
+import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
+import { applyHierarchyConversionsAndCosts, hydrateHierarchyQty, hierarchyQtyLabelKey, isHierarchyCostDerived, isHierarchyQtyLocked, isUnitEnabled } from "@/features/products/unit-hierarchy";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
@@ -126,14 +127,16 @@ function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, 
         }, defaults),
         applyDefaultsToNewUnit({
             ...emptyUnit,
-            conversionQty: 12,
+            conversionQty: 6,
+            hierarchyQty: 6,
             id: "unit-pack",
             sortOrder: 1,
             unitName: "Pack",
         }, defaults),
         applyDefaultsToNewUnit({
             ...emptyUnit,
-            conversionQty: 24,
+            conversionQty: 72,
+            hierarchyQty: 12,
             id: "unit-box",
             sortOrder: 2,
             unitName: "Box",
@@ -209,7 +212,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         note: "",
     });
     const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
-    const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode));
+    const [units, setUnits] = useState<ProductUnit[]>(() => hydrateHierarchyQty(product?.units ?? createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode)));
     const initialProductImage = product?.imageUrl || product?.imageDisplayUrl || product?.imageThumbUrl
         ? {
             id: "product-main-image",
@@ -517,7 +520,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             .map((tag) => tag.trim())
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
-        const sourceUnits = visibleUnits.length > 0 ? visibleUnits : [{
+        const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversionsAndCosts(hydrateHierarchyQty(visibleUnits), unitsShareStock));
+        const sourceUnits = preparedUnits.length > 0 ? preparedUnits : [{
                 ...emptyUnit,
                 barcode,
                 costPriceLak: product?.costPriceLak ?? 0,
@@ -1323,11 +1327,7 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
-    const [selectedUnitIds, setSelectedUnitIds] = useState<Record<string, boolean>>({});
     const [roundingForAll, setRoundingForAll] = useState(0);
-    function toggleSelected(unitId: string, checked: boolean) {
-        setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
-    }
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1344,7 +1344,7 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
       <table className="w-full min-w-[1840px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
           <tr>
-            <th className="px-3 py-3">{t("select")}</th>
+            <th className="px-3 py-3">{t("enableUnit")}</th>
             <th className="px-3 py-3">{t("unit")}</th>
             <th className="px-3 py-3">{t("qtyInBase")}</th>
             <th className="px-3 py-3">{t("barcode")}</th>
@@ -1364,15 +1364,21 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
           </tr>
         </thead>
         <tbody>
-          {units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
+          {units.map((unit) => {
+            const enabled = isUnitEnabled(unit);
+            const qtyLocked = isHierarchyQtyLocked(unit, units);
+            const costDerived = isHierarchyCostDerived(unit, units);
+            const qtyLabel = t(hierarchyQtyLabelKey(unit, units));
+            const qtyValue = qtyLocked ? 1 : (unit.hierarchyQty ?? unit.conversionQty);
+            return (<tr className="border-b border-border last:border-b-0" key={unit.id}>
               <td className="px-3 py-3">
-                <input aria-label={fillProductsCopy(t("selectProduct"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={Boolean(selectedUnitIds[unit.id])} onChange={(event) => toggleSelected(unit.id, event.target.checked)}/>
+                <input aria-label={fillProductsCopy(t("enableNamedUnit"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={enabled} onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
               </td>
               <td className="px-3 py-3">
                 <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                <input className="field-input h-10 min-w-24" type="number" min="1" value={unit.conversionQty} disabled={unit.isBaseUnit} onChange={(event) => updateUnit(unit.id, { conversionQty: Number(event.target.value) })}/>
+                <input aria-label={qtyLabel} className="field-input h-10 min-w-24" disabled={qtyLocked || !enabled} min="1" step="any" title={qtyLabel} type="number" value={qtyValue} onChange={(event) => updateUnit(unit.id, { hierarchyQty: Number(event.target.value) })}/>
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
@@ -1384,7 +1390,7 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 </div>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
+                <MoneyInput className="h-10 min-w-28" disabled={costDerived || !enabled} value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
               </td>
               <td className="px-3 py-3">
                 <select className="field-input h-10 min-w-40" value={unit.pricingMode ?? "manual"} onChange={(event) => updateUnit(unit.id, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
@@ -1426,7 +1432,7 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 </div>
               </td>
               <td className="px-3 py-3">
-                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, conversionQty: 1, isPurchaseUnit: true })} name="baseUnit"/>
+                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
               </td>
               <td className="px-3 py-3">
                 <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
@@ -1448,7 +1454,8 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                   <Trash2 aria-hidden="true"/>
                 </button>
               </td>
-            </tr>))}
+            </tr>);
+          })}
         </tbody>
       </table>
     </div>
