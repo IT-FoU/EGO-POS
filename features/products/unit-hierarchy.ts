@@ -193,3 +193,71 @@ export function applyHierarchyConversionsAndCosts<T extends HierarchyUnit>(units
 export function applyPersistedHierarchyCosts<T extends HierarchyUnit>(units: T[]): T[] {
   return applyHierarchyConversionsAndCosts(hydrateHierarchyQty(units), true);
 }
+
+export function hierarchyQtyValue<T extends HierarchyUnit>(unit: T, units: T[]) {
+  if (isHierarchyQtyLocked(unit, units)) return 1;
+  return parsePositiveQty(unit.hierarchyQty) ?? parsePositiveQty(unit.conversionQty) ?? 1;
+}
+
+export function hierarchyRelationText<T extends HierarchyUnit>(unit: T, units: T[]) {
+  const qty = hierarchyQtyValue(unit, units);
+  const role = unitRole(unit.unitName);
+  if (role === "piece") return "Piece = 1";
+  if (role === "pack" && enabledRole(units, "piece")) return `1 Pack = ${qty} Pieces`;
+  if (role === "pack") return "Pack = 1";
+  if (role === "box" && enabledRole(units, "pack")) return `1 Box = ${qty} Packs`;
+  if (role === "box" && enabledRole(units, "piece")) return `1 Box = ${qty} Pieces`;
+  if (role === "box") return "Box = 1";
+  return `Quantity = ${qty}`;
+}
+
+export function hierarchyQtyEditor<T extends HierarchyUnit>(unit: T, units: T[]): {
+  locked: boolean;
+  prefix: "1 Pack =" | "1 Box =" | "Quantity";
+  suffix: "Pieces" | "Packs" | "";
+  value: number;
+} {
+  const qty = hierarchyQtyValue(unit, units);
+  const role = unitRole(unit.unitName);
+  if (role === "piece") return { locked: true, prefix: "Quantity", suffix: "", value: 1 };
+  if (role === "pack" && enabledRole(units, "piece")) {
+    return { locked: false, prefix: "1 Pack =", suffix: "Pieces", value: qty };
+  }
+  if (role === "box" && enabledRole(units, "pack")) {
+    return { locked: false, prefix: "1 Box =", suffix: "Packs", value: qty };
+  }
+  if (role === "box" && enabledRole(units, "piece")) {
+    return { locked: false, prefix: "1 Box =", suffix: "Pieces", value: qty };
+  }
+  if (isHierarchyQtyLocked(unit, units)) {
+    return { locked: true, prefix: "Quantity", suffix: "", value: 1 };
+  }
+  return { locked: false, prefix: "Quantity", suffix: "", value: qty };
+}
+
+export function derivedCostBreakdown<T extends HierarchyUnit>(unit: T, units: T[]) {
+  if (!isHierarchyCostDerived(unit, units)) return null;
+  const role = unitRole(unit.unitName);
+  const qty = hierarchyQtyValue(unit, units);
+  if (role === "pack") {
+    const piece = enabledRole(units, "piece");
+    if (!piece) return null;
+    return {
+      left: toLakInteger(piece.costPriceLak),
+      qty,
+      result: toLakInteger(unit.costPriceLak),
+    };
+  }
+  if (role === "box") {
+    const pack = enabledRole(units, "pack");
+    const piece = enabledRole(units, "piece");
+    const source = pack ?? piece;
+    if (!source) return null;
+    return {
+      left: toLakInteger(source.costPriceLak),
+      qty,
+      result: toLakInteger(unit.costPriceLak),
+    };
+  }
+  return null;
+}
