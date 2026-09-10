@@ -281,6 +281,7 @@ model CompanySetting {
   currencyDisplay          String       @default("LAK") @map("currency_display")
   decimalPlaces            Int          @default(0) @map("decimal_places")
   roundingMethod           String       @default("nearest") @map("rounding_method")
+  unitPricingDefaults      Json?        @map("unit_pricing_defaults")
   loyaltyEnabled           Boolean      @default(true) @map("loyalty_enabled")
   loyaltySpendPerPointLak  Decimal      @default(10000) @map("loyalty_spend_per_point_lak") @db.Decimal(18, 2)
   loyaltyPointValueLak     Decimal      @default(1000) @map("loyalty_point_value_lak") @db.Decimal(18, 2)

@@ -8,7 +8,9 @@ import {
   getPrismaProductImages,
   getPrismaProductListPage,
   getPrismaProducts,
+  getPrismaUnitPricingDefaults,
 } from "@/features/products/prisma-repository";
+import type { UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 
 export async function getProducts(): Promise<Product[]> {
   return getPrismaProducts(tenantFromSession(await requireSession()));
@@ -24,6 +26,10 @@ export async function getProductById(productId: string): Promise<Product | null>
 
 export async function getCategories(): Promise<Category[]> {
   return getPrismaCategories(tenantFromSession(await requireSession()));
+}
+
+export async function getUnitPricingDefaults(): Promise<UnitPricingDefaultsMap> {
+  return getPrismaUnitPricingDefaults(tenantFromSession(await requireSession()));
 }
 
 export async function getMockProductImages(): Promise<MockProductImage[]> {

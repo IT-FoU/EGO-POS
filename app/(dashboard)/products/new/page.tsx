@@ -3,6 +3,7 @@ import { ProductForm } from "@/features/products/components/product-form";
 import {
   getCategories,
   getMockProductImages,
+  getUnitPricingDefaults,
 } from "@/features/products/product-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
@@ -18,9 +19,10 @@ export default async function CreateProductPage({
   const sourceFlow = Array.isArray(fromParam) ? fromParam[0] : fromParam;
   const cookieStore = await cookies();
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  const [categories, images] = await Promise.all([
+  const [categories, images, pricingDefaults] = await Promise.all([
     getCategories(),
     getMockProductImages(),
+    getUnitPricingDefaults(),
   ]);
 
   return (
@@ -30,6 +32,7 @@ export default async function CreateProductPage({
       images={images}
       initialBarcode={initialBarcode}
       locale={locale}
+      pricingDefaults={pricingDefaults}
       sourceFlow={sourceFlow}
     />
   );

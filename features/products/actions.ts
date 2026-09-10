@@ -10,6 +10,7 @@ import {
   deletePrismaProduct,
   duplicatePrismaProduct,
   getPrismaProductListPage,
+  getPrismaUnitPricingDefaults,
   updatePrismaProduct,
   upsertPrismaCategory,
   type ProductWriteInput,
@@ -25,6 +26,14 @@ export async function loadProductListAction(query: ProductListQuery = {}) {
   try {
     const tenant = await requireReadPermission(READ_PERMISSIONS.productsView);
     return writeSuccess(await getPrismaProductListPage(tenant, query));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function loadUnitPricingDefaultsAction() {
+  try {
+    return writeSuccess(await getPrismaUnitPricingDefaults(await requireReadPermission(READ_PERMISSIONS.productsView)));
   } catch (error) {
     return writeFailure(error);
   }

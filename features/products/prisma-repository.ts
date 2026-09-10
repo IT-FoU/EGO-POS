@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db/prisma";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
+import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
+import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
@@ -220,7 +222,7 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
       addAmountLak: unit.addAmountLak === undefined ? undefined : numberValue(unit.addAmountLak),
       barcode: optionalString(unit.barcode),
       conversionQty: Math.max(numberValue(unit.conversionQty, 1), 1),
-      costPriceLak: unit.costPriceLak === undefined ? undefined : numberValue(unit.costPriceLak),
+      costPriceLak: unit.costPriceLak === undefined ? undefined : toLakInteger(unit.costPriceLak),
       id: optionalString(unit.id),
       imageUrl: optionalString(unit.imageUrl),
       allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
@@ -242,7 +244,7 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
         barcode: optionalString(fallback.barcode),
         addAmountLak: undefined,
         conversionQty: 1,
-        costPriceLak: fallback.costPriceLak === undefined ? undefined : numberValue(fallback.costPriceLak),
+        costPriceLak: fallback.costPriceLak === undefined ? undefined : toLakInteger(fallback.costPriceLak),
         id: undefined,
         imageUrl: undefined,
         allowManualUnitSelect: true,
@@ -260,13 +262,13 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
   const baseIndex = source.findIndex((unit) => unit.isBaseUnit);
   const defaultSaleIndex = source.findIndex((unit) => unit.isDefaultSaleUnit);
 
-  return source.map((unit, index) => ({
+  return applyAutomaticSellingPrices(source.map((unit, index) => ({
     ...unit,
     conversionQty: baseIndex >= 0 ? index === baseIndex ? 1 : unit.conversionQty : index === 0 ? 1 : unit.conversionQty,
     isBaseUnit: baseIndex >= 0 ? index === baseIndex : index === 0,
     isDefaultSaleUnit: defaultSaleIndex >= 0 ? index === defaultSaleIndex : (baseIndex >= 0 ? index === baseIndex : index === 0),
     isPurchaseUnit: unit.isPurchaseUnit || (baseIndex >= 0 ? index === baseIndex : index === 0),
-  }));
+  })));
 }
 
 function assertNonNegative(value: unknown, label: string) {
@@ -279,6 +281,27 @@ function assertPositive(value: unknown, label: string) {
   if (numberValue(value) <= 0) {
     throw new Error(`${label} must be greater than zero.`);
   }
+}
+
+async function persistUnitPricingDefaults(tx: any, companyId: string, units: Array<{ markupPercent?: number; pricingMode?: string; roundingLak?: number; unitName: string }>) {
+  const settings = await tx.companySetting.findUnique({
+    select: { unitPricingDefaults: true },
+    where: { companyId },
+  });
+  const next = mergeUnitPricingDefaultsFromUnits(settings?.unitPricingDefaults, units);
+  await tx.companySetting.upsert({
+    create: { companyId, unitPricingDefaults: next },
+    update: { unitPricingDefaults: next },
+    where: { companyId },
+  });
+}
+
+export async function getPrismaUnitPricingDefaults(tenant: TenantContext, client: any = db): Promise<UnitPricingDefaultsMap> {
+  const settings = await client.companySetting.findUnique({
+    select: { unitPricingDefaults: true },
+    where: { companyId: tenant.companyId },
+  });
+  return parseUnitPricingDefaults(settings?.unitPricingDefaults);
 }
 
 async function seedDefaultWarehouseBalance(
@@ -336,14 +359,20 @@ function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
   assertNonNegative(input.minStock, "Minimum stock");
   assertNonNegative(input.initialStock?.quantity, "Opening stock quantity");
   assertNonNegative(input.initialStock?.unitCostLak, "Opening stock cost");
+  assertSafePricingValue(input.costPriceLak, "Cost price");
+  assertSafePricingValue(input.sellingPriceLak, "Selling price");
 
   for (const [index, unit] of (input.units ?? []).entries()) {
     assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
+    assertSafePricingValue(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
     assertNonNegative(unit.addAmountLak, `Unit ${index + 1} add amount`);
     assertNonNegative(unit.costPriceLak, `Unit ${index + 1} cost price`);
     assertNonNegative(unit.markupPercent, `Unit ${index + 1} markup percent`);
     assertNonNegative(unit.roundingLak, `Unit ${index + 1} rounding`);
     assertNonNegative(unit.sellingPriceLak, `Unit ${index + 1} selling price`);
+    assertSafePricingValue(unit.costPriceLak, `Unit ${index + 1} cost price`);
+    assertSafePricingValue(unit.markupPercent, `Unit ${index + 1} markup percent`);
+    assertSafePricingValue(unit.sellingPriceLak, `Unit ${index + 1} selling price`);
   }
 }
 
@@ -544,6 +573,8 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
     );
   }
 
+  await persistUnitPricingDefaults(tx, tenant.companyId, units);
+
   return mapPrismaProduct(await loadCreatedProduct(tx, createdProduct.id));
 }
 
@@ -672,6 +703,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
             await tx.productUnit.delete({ where: { id: unit.id } });
           }
         }
+        await persistUnitPricingDefaults(tx, tenant.companyId, units);
       }
 
       if (input.sellingPriceLak !== undefined && Number(existing.sellingPriceLak) !== numberValue(input.sellingPriceLak)) {

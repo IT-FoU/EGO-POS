@@ -19,6 +19,8 @@ import type { Category, MockProductImage, Product, ProductUnit, } from "@/featur
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
+import { applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
+import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 const QUICK_UNIT_NAMES = [
     "Piece",
     "Pack",
@@ -91,7 +93,35 @@ const emptyUnit: ProductUnit = {
     sortOrder: 0,
     status: "active",
 };
-export function ProductForm({ mode, product, categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, }: {
+function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, inventoryHandoffBarcode: string): ProductUnit[] {
+    return [
+        applyDefaultsToNewUnit({
+            ...emptyUnit,
+            barcode: inventoryHandoffBarcode,
+            id: "unit-base",
+            isBaseUnit: true,
+            isDefaultSaleUnit: true,
+            isPurchaseUnit: true,
+            sortOrder: 0,
+            unitName: "Piece",
+        }, defaults),
+        applyDefaultsToNewUnit({
+            ...emptyUnit,
+            conversionQty: 12,
+            id: "unit-pack",
+            sortOrder: 1,
+            unitName: "Pack",
+        }, defaults),
+        applyDefaultsToNewUnit({
+            ...emptyUnit,
+            conversionQty: 24,
+            id: "unit-box",
+            sortOrder: 2,
+            unitName: "Box",
+        }, defaults),
+    ];
+}
+export function ProductForm({ mode, product, categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, }: {
     mode: "create" | "edit";
     product?: Product;
     categories: Category[];
@@ -99,6 +129,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     initialBarcode?: string;
     sourceFlow?: string;
     locale?: SupportedLocale;
+    pricingDefaults?: UnitPricingDefaultsMap;
 }) {
     const locale = useAppLocale(localeProp);
     const t = (key: string) => tProducts(key, locale);
@@ -146,32 +177,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         note: "",
     });
     const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
-    const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? [
-        {
-            ...emptyUnit,
-            id: "unit-base",
-            unitName: "Piece",
-            barcode: inventoryHandoffBarcode,
-            isBaseUnit: true,
-            isDefaultSaleUnit: true,
-            isPurchaseUnit: true,
-            sortOrder: 0,
-        },
-        {
-            ...emptyUnit,
-            id: "unit-pack",
-            unitName: "Pack",
-            conversionQty: 12,
-            sortOrder: 1,
-        },
-        {
-            ...emptyUnit,
-            id: "unit-box",
-            unitName: "Box",
-            conversionQty: 24,
-            sortOrder: 2,
-        },
-    ]);
+    const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode));
     const [message, setMessage] = useState<string | null>(null);
     const isCreate = mode === "create";
     useEffect(() => {
@@ -204,16 +210,24 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             const nextBarcode = patch.barcode.trim();
             setDuplicateBarcodeMatch((current) => current?.unitId === unitId && current.matchedBarcode !== nextBarcode ? null : current);
         }
-        setUnits((current) => current.map((unit) => {
-            if (unit.id !== unitId) {
-                return {
-                    ...unit,
-                    ...(patch.isBaseUnit ? { isBaseUnit: false } : {}),
-                    ...(patch.isDefaultSaleUnit ? { isDefaultSaleUnit: false } : {}),
-                };
-            }
-            return { ...unit, ...patch };
+        setUnits((current) => applyUnitPricingPatch({
+            editedUnitId: unitId,
+            patch,
+            shareStock: unitsShareStock,
+            units: current.map((unit) => {
+                if (unit.id !== unitId) {
+                    return {
+                        ...unit,
+                        ...(patch.isBaseUnit ? { isBaseUnit: false } : {}),
+                        ...(patch.isDefaultSaleUnit ? { isDefaultSaleUnit: false } : {}),
+                    };
+                }
+                return unit;
+            }),
         }));
+    }
+    function applyRoundingToAll(roundingLak: number) {
+        setUnits((current) => applyRoundingToAllUnits(current, roundingLak));
     }
     async function checkDuplicateUnitBarcode(unitId: string, value: string) {
         const normalized = value.trim();
@@ -254,12 +268,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     function addNamedUnit(unitName: string) {
         setUnits((current) => [
             ...current,
-            {
+            applyDefaultsToNewUnit({
                 ...emptyUnit,
                 id: `unit-${Date.now()}-${current.length}`,
-                unitName,
                 sortOrder: current.length,
-            },
+                unitName,
+            }, pricingDefaults),
         ]);
     }
     function addCustomUnit() {
@@ -669,7 +683,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     </button>
                   </div>
                 </div>
-                <ProductUnitsTable barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
+                <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
                     setAliasInput("");
                     setAliasDrawerUnitId(unitId);
                 }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
@@ -760,7 +774,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
               </div>
             </div>
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("conversionWarning")}</p>
-            <ProductUnitsTable barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
+            <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
                 setAliasInput("");
                 setAliasDrawerUnitId(unitId);
             }} onCheckBarcode={checkDuplicateUnitBarcode} productImages={productImages} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
@@ -1110,7 +1124,8 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ barcodeAliases, onCheckBarcode, onOpenAlias, productImages, removeUnit, units, updateUnit, }: {
+function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onOpenAlias, productImages, removeUnit, units, updateUnit, }: {
+    applyRoundingToAll: (roundingLak: number) => void;
     barcodeAliases: BarcodeAliasState;
     onCheckBarcode?: (unitId: string, barcode: string) => void;
     onOpenAlias: (unitId: string) => void;
@@ -1120,11 +1135,22 @@ function ProductUnitsTable({ barcodeAliases, onCheckBarcode, onOpenAlias, produc
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
     const [selectedUnitIds, setSelectedUnitIds] = useState<Record<string, boolean>>({});
+    const [roundingForAll, setRoundingForAll] = useState(0);
     function toggleSelected(unitId: string, checked: boolean) {
         setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
     }
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
+    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+      <select className="field-input h-10 sm:max-w-56" value={roundingForAll} onChange={(event) => setRoundingForAll(Number(event.target.value))}>
+        <option value={0}>{t("noRounding")}</option>
+        <option value={500}>{t("roundUp500")}</option>
+        <option value={1000}>{t("roundUp1000")}</option>
+      </select>
+      <button className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => applyRoundingToAll(roundingForAll)}>
+        {t("applyRoundingToAllUnits")}
+      </button>
+    </div>
     <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
       <table className="w-full min-w-[1840px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">
@@ -1185,10 +1211,15 @@ function ProductUnitsTable({ barcodeAliases, onCheckBarcode, onOpenAlias, produc
                 <MoneyInput className="h-10 min-w-28" value={unit.addAmountLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { addAmountLak: value })}/>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-24" value={unit.roundingLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { roundingLak: value })}/>
+                <select className="field-input h-10 min-w-28" value={unit.roundingLak ?? 0} onChange={(event) => updateUnit(unit.id, { roundingLak: Number(event.target.value) })}>
+                  <option value={0}>{t("noRounding")}</option>
+                  <option value={500}>{t("roundUp500")}</option>
+                  <option value={1000}>{t("roundUp1000")}</option>
+                  {unit.roundingLak === 5000 ? <option value={5000}>{t("roundUp5000")}</option> : null}
+                </select>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
+                <MoneyInput className="h-10 min-w-28" disabled={(unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
               </td>
               <td className="px-3 py-3">
                 <select className="field-input h-10 min-w-44" value={unit.imageUrl ?? ""} onChange={(event) => updateUnit(unit.id, { imageUrl: event.target.value || undefined })}>
