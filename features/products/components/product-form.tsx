@@ -22,8 +22,8 @@ import { optimizeProductImageFile } from "@/features/products/product-image-opti
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
-import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isUnitEnabled, parsePositiveQty } from "@/features/products/unit-hierarchy";
-import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
+import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isHierarchyQtyLocked, isUnitEnabled, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
+import { onQtyInputBlur } from "@/features/products/unit-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
@@ -129,15 +129,13 @@ function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, 
         applyDefaultsToNewUnit({
             ...emptyUnit,
             conversionQty: 6,
-            hierarchyQty: 6,
             id: "unit-pack",
             sortOrder: 1,
             unitName: "Pack",
         }, defaults),
         applyDefaultsToNewUnit({
             ...emptyUnit,
-            conversionQty: 72,
-            hierarchyQty: 12,
+            conversionQty: 60,
             id: "unit-box",
             sortOrder: 2,
             unitName: "Box",
@@ -523,13 +521,13 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
         if (conversionInvalid || visibleUnits.some((unit) => {
-            if (!isUnitEnabled(unit)) return false;
-            return parsePositiveQty(unit.hierarchyQty ?? unit.conversionQty) === null;
+            if (!isUnitEnabled(unit) || isHierarchyQtyLocked(unit)) return false;
+            return parsePositiveIntQty(unit.conversionQty) === null;
         })) {
             setMessage(t("invalidUnitQuantity"));
             return;
         }
-        const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversions(hydrateHierarchyQty(visibleUnits)));
+        const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversions(visibleUnits));
         const sourceUnits = preparedUnits.length > 0 ? preparedUnits : [{
                 ...emptyUnit,
                 barcode,
@@ -548,7 +546,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         const sellingPriceLak = parseMoney(defaultSaleUnit?.sellingPriceLak ?? product?.sellingPriceLak ?? 0);
         const hasBaseUnit = visibleUnits.some((unit) => unit.isBaseUnit);
         const productUnits = sourceUnits.map((unit, index) => {
-            const conversionQty = parsePositiveQty(unit.conversionQty) ?? 1;
+            const conversionQty = isHierarchyQtyLocked(unit) ? 1 : (parsePositiveIntQty(unit.conversionQty) ?? 1);
             const isBaseUnit = hasBaseUnit ? unit.isBaseUnit : index === 0;
             const unitPrice = Number(unit.sellingPriceLak) || 0;
             return {
@@ -1324,7 +1322,7 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, unitImageOrigins, units, updateUnit, }: {
+function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onConversionInvalidChange: _onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, unitImageOrigins, units, updateUnit, }: {
     applyRoundingToAll: (roundingLak: number) => void;
     barcodeAliases: BarcodeAliasState;
     onCheckBarcode?: (unitId: string, barcode: string) => void;
@@ -1337,19 +1335,7 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
-    const [selectedUnitIds, setSelectedUnitIds] = useState<Record<string, boolean>>({});
     const [roundingForAll, setRoundingForAll] = useState(0);
-    const [invalidQtyIds, setInvalidQtyIds] = useState<Record<string, boolean>>({});
-    function toggleSelected(unitId: string, checked: boolean) {
-        setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
-    }
-    function setUnitQtyInvalid(unitId: string, invalid: boolean) {
-        setInvalidQtyIds((current) => {
-            const next = { ...current, [unitId]: invalid };
-            onConversionInvalidChange?.(Object.values(next).some(Boolean));
-            return next;
-        });
-    }
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1389,19 +1375,21 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
           {units.map((unit) => (
             <tr className="border-b border-border last:border-b-0" key={unit.id}>
               <td className="px-3 py-3">
-                <input aria-label={fillProductsCopy(t("selectProduct"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={Boolean(selectedUnitIds[unit.id])} onChange={(event) => toggleSelected(unit.id, event.target.checked)}/>
+                <input aria-label={fillProductsCopy(t("enableNamedUnit"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={isUnitEnabled(unit)} onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
               </td>
               <td className="px-3 py-3">
                 <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                <HierarchyQtyField
-                  ariaLabel={t("qtyInBase")}
-                  committed={parsePositiveQty(unit.conversionQty) ?? 1}
-                  unitId={unit.id}
-                  onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
-                  onEditingInvalid={(invalid) => setUnitQtyInvalid(unit.id, invalid)}
-                />
+                {isHierarchyQtyLocked(unit) ? (
+                  <input aria-label={t("qtyInBase")} className="field-input h-10 w-24" disabled readOnly value={1}/>
+                ) : (
+                  <HierarchyQtyField
+                    ariaLabel={t("qtyInBase")}
+                    committed={parsePositiveIntQty(unit.conversionQty) ?? 1}
+                    onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
+                  />
+                )}
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
@@ -1485,49 +1473,57 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     </>);
 }
 
-function HierarchyQtyField({ ariaLabel, committed, disabled, unitId, onCommit, onEditingInvalid, }: {
+function HierarchyQtyField({ ariaLabel, committed, disabled, onCommit, }: {
     ariaLabel: string;
     committed: number;
     disabled?: boolean;
-    unitId: string;
     onCommit: (qty: number) => void;
-    onEditingInvalid: (invalid: boolean) => void;
 }) {
-    const [resetKey, setResetKey] = useState(0);
+    const [draft, setDraft] = useState(String(committed));
     const [error, setError] = useState("");
+    const focusedRef = useRef(false);
+    useEffect(() => {
+        if (!focusedRef.current) {
+            setDraft(String(committed));
+        }
+    }, [committed]);
     return (
       <div className="flex flex-col">
         <input
-          key={`${unitId}-${committed}-${resetKey}`}
           aria-label={ariaLabel}
           autoComplete="off"
           className="field-input h-10 w-24"
-          defaultValue={String(committed)}
           disabled={disabled}
           inputMode="numeric"
           type="text"
-          onBlur={(event) => {
+          value={draft}
+          onBlur={() => {
+            focusedRef.current = false;
             const next = onQtyInputBlur({
               committed,
-              draft: event.target.value,
-              error: parsePositiveQty(event.target.value) === null,
+              draft,
+              error: parsePositiveIntQty(draft) === null,
             });
             if (next.error) {
               setError(t("invalidUnitQuantity"));
-              setResetKey((key) => key + 1);
-              onEditingInvalid(false);
+              setDraft(String(committed));
               return;
             }
             setError("");
-            onEditingInvalid(false);
+            setDraft(String(next.committed));
             if (next.committed !== committed) {
               onCommit(next.committed);
             }
           }}
           onChange={(event) => {
-            const next = onQtyInputChange({ committed, draft: event.target.value, error: false }, event.target.value);
-            setError(next.error ? t("invalidUnitQuantity") : "");
-            onEditingInvalid(next.error);
+            setDraft(event.target.value);
+            setError(parsePositiveIntQty(event.target.value) === null ? t("invalidUnitQuantity") : "");
+          }}
+          onFocus={(event) => {
+            focusedRef.current = true;
+            const input = event.currentTarget;
+            input.select();
+            requestAnimationFrame(() => input.select());
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {

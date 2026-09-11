@@ -1,12 +1,12 @@
 import type { UnitPricingMode } from "@/features/products/types";
 import {
   applyHierarchyConversions,
+  isHierarchyQtyLocked,
   isUnitEnabled,
-  parsePositiveQty,
-  unitRole,
+  parsePositiveIntQty,
   type HierarchyUnit,
 } from "@/features/products/unit-hierarchy";
-import { conversionMillis, toLakInteger } from "@/features/products/unit-pricing-math";
+import { toLakInteger } from "@/features/products/unit-pricing-math";
 
 export { conversionMillis, deriveSharedUnitCost, toLakInteger } from "@/features/products/unit-pricing-math";
 
@@ -99,39 +99,16 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
     }
   }
 
-  if (patch.hierarchyQty !== undefined && parsePositiveQty(patch.hierarchyQty) === null) {
-    return input.units;
-  }
-  if (patch.conversionQty !== undefined && conversionMillis(patch.conversionQty) <= 0n) {
-    return input.units;
-  }
-
-  if (patch.conversionQty !== undefined && patch.hierarchyQty === undefined) {
-    const role = unitRole(current.unitName);
-    const pack = input.units.find((unit) => unitRole(unit.unitName) === "pack" && isUnitEnabled(unit));
-    if (role === "box" && pack) {
-      const packQty = parsePositiveQty(pack.conversionQty) ?? 1;
-      patch.hierarchyQty = Number(patch.conversionQty) / packQty as T["hierarchyQty"];
-    } else {
-      patch.hierarchyQty = patch.conversionQty as T["hierarchyQty"];
+  if (patch.conversionQty !== undefined) {
+    if (isHierarchyQtyLocked(current)) {
+      delete patch.conversionQty;
+    } else if (parsePositiveIntQty(patch.conversionQty) === null) {
+      return input.units;
     }
   }
 
   const nextUnits = input.units.map((unit) => unit.id === input.editedUnitId ? { ...unit, ...patch } : unit);
-  const edited = nextUnits.find((unit) => unit.id === input.editedUnitId)!;
-  if (unitRole(current.unitName) === "pack" && (current.status ?? "active") !== (edited.status ?? "active")) {
-    const pack = nextUnits.find((unit) => unitRole(unit.unitName) === "pack");
-    const box = nextUnits.find((unit) => unitRole(unit.unitName) === "box");
-    if (pack && box) {
-      const packQty = parsePositiveQty(pack.conversionQty) ?? 1;
-      if (isUnitEnabled(pack)) {
-        box.hierarchyQty = (parsePositiveQty(box.conversionQty) ?? 1) / packQty;
-      } else {
-        box.hierarchyQty = parsePositiveQty(box.conversionQty) ?? 1;
-      }
-    }
-  }
-  const hierarchied = applyHierarchyConversions(nextUnits);
+  const normalized = applyHierarchyConversions(nextUnits);
   const pricingChanged = [
     "addAmountLak",
     "costPriceLak",
@@ -139,8 +116,8 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
     "pricingMode",
     "roundingLak",
   ].some((key) => patch[key as keyof T] !== undefined);
-  if (!pricingChanged) return hierarchied;
-  return hierarchied.map((unit) => {
+  if (!pricingChanged) return normalized;
+  return normalized.map((unit) => {
     if (unit.id !== input.editedUnitId || !isUnitEnabled(unit)) return unit;
     const nextPrice = sellingPriceFromCost(unit);
     if (nextPrice === undefined) return unit;

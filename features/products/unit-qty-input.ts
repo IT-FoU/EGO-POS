@@ -1,4 +1,4 @@
-import { parsePositiveQty } from "@/features/products/unit-hierarchy";
+import { parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 
 export type QtyInputState = {
   committed: number;
@@ -29,7 +29,7 @@ export function onQtyInputChange(state: QtyInputState, raw: string): QtyInputSta
   return {
     committed: state.committed,
     draft: raw,
-    error: parsePositiveQty(raw) === null,
+    error: parsePositiveIntQty(raw) === null,
   };
 }
 
@@ -37,7 +37,7 @@ export function onQtyInputBlur(state: QtyInputState): QtyInputState {
   if (state.draft === undefined) {
     return { ...state, error: false };
   }
-  const parsed = parsePositiveQty(state.draft);
+  const parsed = parsePositiveIntQty(state.draft);
   if (parsed === null) {
     return {
       committed: state.committed,
