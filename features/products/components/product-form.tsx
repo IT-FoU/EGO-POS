@@ -22,7 +22,8 @@ import { optimizeProductImageFile } from "@/features/products/product-image-opti
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
-import { applyConversionInput, applyHierarchyConversions, hierarchyQtyEditor, hierarchyRelationText, hydrateHierarchyQty, isUnitEnabled, parsePositiveQty, unitRole } from "@/features/products/unit-hierarchy";
+import { applyHierarchyConversions, hierarchyQtyEditor, hierarchyRelationText, hydrateHierarchyQty, isUnitEnabled, parsePositiveQty, unitRole } from "@/features/products/unit-hierarchy";
+import { onQtyInputBlur, onQtyInputChange, onQtyInputFocus, qtyInputDisplay, type QtyInputState } from "@/features/products/unit-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
@@ -1339,30 +1340,36 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     const [roundingForAll, setRoundingForAll] = useState(0);
     const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
     const [qtyError, setQtyError] = useState<Record<string, string>>({});
-    const [focusedQtyId, setFocusedQtyId] = useState<string | null>(null);
     const standardUnits = ["piece", "pack", "box"]
         .map((role) => units.find((unit) => unitRole(unit.unitName) === role))
         .filter((unit): unit is ProductUnit => Boolean(unit));
     const customUnits = units.filter((unit) => unitRole(unit.unitName) === "custom");
 
-    function reportValidity(nextError: Record<string, string>) {
-        onConversionInvalidChange?.(Object.values(nextError).some(Boolean));
+    function qtyStateFor(unit: ProductUnit): QtyInputState {
+        return {
+            committed: hierarchyQtyEditor(unit, units).value,
+            draft: Object.hasOwn(qtyDraft, unit.id) ? qtyDraft[unit.id] : undefined,
+            error: Boolean(qtyError[unit.id]),
+        };
     }
 
-    function onQtyChange(unit: ProductUnit, raw: string) {
-        const next = applyConversionInput({
-            committed: parsePositiveQty(unit.hierarchyQty) ?? parsePositiveQty(unit.conversionQty),
-            draft: raw,
-            error: false,
-        }, raw);
-        setQtyDraft((current) => ({ ...current, [unit.id]: next.draft }));
-        setQtyError((current) => {
-            const errors = { ...current, [unit.id]: next.error ? t("invalidUnitQuantity") : "" };
-            reportValidity(errors);
-            return errors;
+    function applyQtyState(unitId: string, next: QtyInputState, previousCommitted: number) {
+        setQtyDraft((current) => {
+            const copy = { ...current };
+            if (next.draft === undefined) {
+                delete copy[unitId];
+            }
+            else {
+                copy[unitId] = next.draft;
+            }
+            const errors = { ...qtyError, [unitId]: next.error ? t("invalidUnitQuantity") : "" };
+            const invalid = Object.entries(copy).some(([id, draft]) => draft !== undefined && Boolean(errors[id]));
+            onConversionInvalidChange?.(invalid);
+            return copy;
         });
-        if (!next.error && next.committed !== null) {
-            updateUnit(unit.id, { hierarchyQty: next.committed });
+        setQtyError((current) => ({ ...current, [unitId]: next.error ? t("invalidUnitQuantity") : "" }));
+        if (next.draft === undefined && !next.error && next.committed !== previousCommitted) {
+            updateUnit(unitId, { hierarchyQty: next.committed });
         }
     }
 
@@ -1382,7 +1389,8 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
       {standardUnits.map((unit) => {
         const enabled = isUnitEnabled(unit);
         const editor = hierarchyQtyEditor(unit, units);
-        const draft = focusedQtyId === unit.id ? (qtyDraft[unit.id] ?? String(editor.value)) : String(editor.value);
+        const qtyState = qtyStateFor(unit);
+        const draft = qtyInputDisplay(qtyState);
         const error = qtyError[unit.id];
         const prefix = editor.prefix === "1 Pack =" ? t("onePackEquals") : editor.prefix === "1 Box =" ? t("oneBoxEquals") : t("pieceQuantity");
         const suffix = editor.suffix === "Pieces" ? t("piecesWord") : editor.suffix === "Packs" ? t("packsWord") : "";
@@ -1408,19 +1416,11 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                         type="text"
                         value={draft}
                         onBlur={() => {
-                          setFocusedQtyId(null);
-                          if (!qtyError[unit.id]) {
-                            setQtyDraft((current) => {
-                              const next = { ...current };
-                              delete next[unit.id];
-                              return next;
-                            });
-                          }
+                          applyQtyState(unit.id, onQtyInputBlur(qtyState), qtyState.committed);
                         }}
-                        onChange={(event) => onQtyChange(unit, event.target.value)}
+                        onChange={(event) => applyQtyState(unit.id, onQtyInputChange(qtyState, event.target.value), qtyState.committed)}
                         onFocus={() => {
-                          setFocusedQtyId(unit.id);
-                          setQtyDraft((current) => ({ ...current, [unit.id]: current[unit.id] ?? String(editor.value) }));
+                          applyQtyState(unit.id, onQtyInputFocus(qtyState), qtyState.committed);
                         }}
                       />
                     )}
@@ -1495,12 +1495,18 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                       disabled={!enabled}
                       inputMode="numeric"
                       type="text"
-                      value={focusedQtyId === unit.id ? (qtyDraft[unit.id] ?? String(editor.value)) : String(editor.value)}
-                      onBlur={() => setFocusedQtyId(null)}
-                      onChange={(event) => onQtyChange(unit, event.target.value)}
+                      value={qtyInputDisplay(qtyStateFor(unit))}
+                      onBlur={() => {
+                        const qtyState = qtyStateFor(unit);
+                        applyQtyState(unit.id, onQtyInputBlur(qtyState), qtyState.committed);
+                      }}
+                      onChange={(event) => {
+                        const qtyState = qtyStateFor(unit);
+                        applyQtyState(unit.id, onQtyInputChange(qtyState, event.target.value), qtyState.committed);
+                      }}
                       onFocus={() => {
-                        setFocusedQtyId(unit.id);
-                        setQtyDraft((current) => ({ ...current, [unit.id]: current[unit.id] ?? String(editor.value) }));
+                        const qtyState = qtyStateFor(unit);
+                        applyQtyState(unit.id, onQtyInputFocus(qtyState), qtyState.committed);
                       }}
                     />
                   </td>

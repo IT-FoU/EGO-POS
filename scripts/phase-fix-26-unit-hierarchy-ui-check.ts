@@ -146,7 +146,7 @@ check("J. Input can be temporarily blank during editing", () => {
   assert(blank.draft === "" && blank.committed === 12 && blank.error === true, JSON.stringify(blank));
   const typed = applyConversionInput(blank, "6");
   assert(typed.draft === "6" && typed.committed === 6 && typed.error === false, JSON.stringify(typed));
-  assert(productForm.includes('type="text"') && productForm.includes("applyConversionInput"), "form still uses locked number input");
+  assert(productForm.includes('type="text"') && productForm.includes("onQtyInputChange"), "form still uses locked number input");
   assert(productForm.includes('inputMode="numeric"'), "numeric keypad missing");
   assert(!productForm.includes('type="number" value={draft}'), "controlled number input still present");
 });
