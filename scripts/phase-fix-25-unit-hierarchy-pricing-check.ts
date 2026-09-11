@@ -181,15 +181,21 @@ check("U. Existing product load does not recalculate manual costs", () => {
   assert(persisted.find((row) => row.id === "box")?.conversionQty === 60, "box base kept");
 });
 
-check("Piece quantity stays locked at 1", () => {
+check("Piece quantity 1 → 2 persists and is not forced back to 1", () => {
   const next = applyUnitPricingPatch({
     editedUnitId: "piece",
-    patch: { hierarchyQty: 9, conversionQty: 9 },
+    patch: { hierarchyQty: 2 },
     shareStock: true,
     units: trio(),
   });
-  assert(next.find((row) => row.id === "piece")?.conversionQty === 1, "piece qty");
-  assert(isHierarchyQtyLocked(next.find((row) => row.id === "piece")!, next), "locked");
+  assert(next.find((row) => row.id === "piece")?.conversionQty === 2, "piece qty");
+  assert(next.find((row) => row.id === "piece")?.hierarchyQty === 2, "piece display");
+  assert(!isHierarchyQtyLocked(next.find((row) => row.id === "piece")!, next), "piece unlocked");
+  assert(next.find((row) => row.id === "pack")?.conversionQty === 12, "pack stock follows piece");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost kept");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost kept");
+  const persisted = applyPersistedHierarchyCosts(next);
+  assert(persisted.find((row) => row.id === "piece")?.conversionQty === 2, "save path keeps piece 2");
 });
 
 check("Invalid conversion is rejected", () => {

@@ -60,7 +60,7 @@ export function hydrateHierarchyQty<T extends HierarchyUnit>(units: T[]): T[] {
     const conversion = parsePositiveQty(unit.conversionQty) ?? 1;
     const role = unitRole(unit.unitName);
     if (role === "piece") {
-      return { ...unit, conversionQty: 1, hierarchyQty: 1 };
+      return { ...unit, conversionQty: conversion, hierarchyQty: conversion };
     }
     if (role === "pack") {
       const pieceQty = piece && isUnitEnabled(piece) ? (parsePositiveQty(piece.conversionQty) ?? 1) : 1;
@@ -78,8 +78,8 @@ export function hydrateHierarchyQty<T extends HierarchyUnit>(units: T[]): T[] {
   });
 }
 
-export function isHierarchyQtyLocked<T extends HierarchyUnit>(unit: T, _units: T[]) {
-  return unitRole(unit.unitName) === "piece" && isUnitEnabled(unit);
+export function isHierarchyQtyLocked<T extends HierarchyUnit>(_unit: T, _units: T[]) {
+  return false;
 }
 
 export function isHierarchyCostDerived(_unit?: HierarchyUnit, _units?: HierarchyUnit[]) {
@@ -116,14 +116,17 @@ export function applyHierarchyConversions<T extends HierarchyUnit>(units: T[]): 
   const boxOn = Boolean(box && isUnitEnabled(box));
 
   if (piece && pieceOn) {
-    piece.hierarchyQty = 1;
-    piece.conversionQty = 1;
+    const qty = parsePositiveQty(piece.hierarchyQty) ?? parsePositiveQty(piece.conversionQty) ?? 1;
+    piece.hierarchyQty = qty;
+    piece.conversionQty = qty;
   }
 
   if (pack && packOn) {
     const piecesPerPack = parsePositiveQty(pack.hierarchyQty) ?? parsePositiveQty(pack.conversionQty) ?? 1;
     pack.hierarchyQty = piecesPerPack;
-    pack.conversionQty = piecesPerPack;
+    pack.conversionQty = pieceOn && piece
+      ? multiplyQty(Number(piece.conversionQty), piecesPerPack)
+      : piecesPerPack;
   }
 
   if (box && boxOn) {
@@ -135,6 +138,10 @@ export function applyHierarchyConversions<T extends HierarchyUnit>(units: T[]): 
       );
       box.hierarchyQty = packsPerBox;
       box.conversionQty = multiplyQty(Number(pack.conversionQty), packsPerBox);
+    } else if (pieceOn && piece) {
+      const piecesPerBox = parsePositiveQty(box.hierarchyQty) ?? parsePositiveQty(box.conversionQty) ?? 1;
+      box.hierarchyQty = piecesPerBox;
+      box.conversionQty = multiplyQty(Number(piece.conversionQty), piecesPerBox);
     } else {
       const piecesPerBox = parsePositiveQty(box.hierarchyQty) ?? parsePositiveQty(box.conversionQty) ?? 1;
       box.hierarchyQty = piecesPerBox;
@@ -176,15 +183,14 @@ export function replaceConversionValue(from: string, to: string) {
   }, ""), to);
 }
 
-export function hierarchyQtyValue<T extends HierarchyUnit>(unit: T, units: T[]) {
-  if (isHierarchyQtyLocked(unit, units)) return 1;
+export function hierarchyQtyValue<T extends HierarchyUnit>(unit: T, _units: T[]) {
   return parsePositiveQty(unit.hierarchyQty) ?? parsePositiveQty(unit.conversionQty) ?? 1;
 }
 
 export function hierarchyRelationText<T extends HierarchyUnit>(unit: T, units: T[]) {
   const qty = hierarchyQtyValue(unit, units);
   const role = unitRole(unit.unitName);
-  if (role === "piece") return "Piece = 1";
+  if (role === "piece") return `Piece = ${qty}`;
   if (role === "pack") return `1 Pack = ${qty} Pieces`;
   if (role === "box" && enabledRole(units, "pack")) return `1 Box = ${qty} Packs`;
   if (role === "box") return `1 Box = ${qty} Pieces`;
@@ -199,7 +205,7 @@ export function hierarchyQtyEditor<T extends HierarchyUnit>(unit: T, units: T[])
 } {
   const qty = hierarchyQtyValue(unit, units);
   const role = unitRole(unit.unitName);
-  if (role === "piece") return { locked: true, prefix: "Quantity", suffix: "", value: 1 };
+  if (role === "piece") return { locked: false, prefix: "Quantity", suffix: "", value: qty };
   if (role === "pack") return { locked: false, prefix: "1 Pack =", suffix: "Pieces", value: qty };
   if (role === "box" && enabledRole(units, "pack")) {
     return { locked: false, prefix: "1 Box =", suffix: "Packs", value: qty };

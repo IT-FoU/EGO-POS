@@ -61,7 +61,8 @@ const posRepo = readFileSync(join(root, "features/pos/prisma-repository.ts"), "u
 const en = getProductsCopy("en");
 
 check("A. Piece Cost is manual", () => {
-  assert(productForm.includes('Field label={t("costLak")}'), "cost field missing");
+  assert(productForm.includes('{t("qtyInBase")}'), "QTY IN BASE column missing");
+  assert(productForm.includes('{t("costLak")}'), "cost field missing");
   assert(!productForm.includes("disabled={costDerived}"), "pack/box cost still locked");
   const next = applyUnitPricingPatch({
     editedUnitId: "piece",
@@ -146,9 +147,18 @@ check("J. Input can be temporarily blank during editing", () => {
   assert(blank.draft === "" && blank.committed === 12 && blank.error === true, JSON.stringify(blank));
   const typed = applyConversionInput(blank, "6");
   assert(typed.draft === "6" && typed.committed === 6 && typed.error === false, JSON.stringify(typed));
+  assert(productForm.includes('{t("qtyInBase")}'), "QTY IN BASE column missing from rendered table");
+  assert(productForm.includes('{t("tableScrollHint")}'), "table scroll hint missing");
+  assert(productForm.includes("HierarchyQtyField"), "shared qty field missing");
+  assert(productForm.includes("defaultValue={String(committed)}"), "qty field must be uncontrolled while focused");
+  assert(productForm.includes("onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}"), "table must commit conversionQty, not hierarchyQty");
   assert(productForm.includes('type="text"') && productForm.includes("onQtyInputChange"), "form still uses locked number input");
   assert(productForm.includes('inputMode="numeric"'), "numeric keypad missing");
-  assert(!productForm.includes('type="number" value={draft}'), "controlled number input still present");
+  assert(!productForm.includes('type="number" min="1" value={unit.conversionQty}'), "controlled number qty still present");
+  assert(!productForm.includes("disabled={unit.isBaseUnit} onChange={(event) => updateUnit(unit.id, { conversionQty"), "base unit qty still disabled");
+  assert(!productForm.includes("conversionQty: 1, isPurchaseUnit: true"), "selecting base still forces qty 1");
+  assert(!productForm.includes("disabled readOnly value={1}"), "piece qty still locked in UI");
+  assert(!prismaRepo.includes("piece ? 1 : unit.conversionQty"), "prisma still forces piece conversionQty 1");
 });
 
 check("K. Piece pricing uses Piece Cost", () => {
@@ -165,7 +175,10 @@ check("M. Box pricing uses Box Cost", () => {
 
 check("N. Piece + Pack: 1 Pack = 6 Pieces, baseQty Pack = 6", () => {
   const next = applyHierarchyConversions([piece(), pack(6)]);
+  const pieceUnit = next.find((row) => row.id === "piece")!;
   const packUnit = next.find((row) => row.id === "pack")!;
+  assert(hierarchyRelationText(pieceUnit, next) === "Piece = 1", hierarchyRelationText(pieceUnit, next));
+  assert(hierarchyQtyEditor(pieceUnit, next).locked === false, "piece editor unlocked");
   assert(hierarchyRelationText(packUnit, next) === "1 Pack = 6 Pieces", hierarchyRelationText(packUnit, next));
   assert(packUnit.conversionQty === 6, "pack base");
 });
@@ -189,8 +202,9 @@ check("P. Piece + Box without Pack: 1 Box = 60 Pieces, baseQty Box = 60", () => 
   assert(boxUnit.conversionQty === 60, "box base");
 });
 
-check("Q. Sell 1 Piece deducts 1 base unit", () => {
+check("Q. Sell 1 Piece deducts conversionQty base units", () => {
   assert(requiredBaseQty(1, 1) === 1, "piece 1");
+  assert(requiredBaseQty(1, 2) === 2, "piece 2");
   assert(posRepo.includes("baseQuantity: quantity * conversionQty"), "POS sale missing conversion");
 });
 
@@ -230,7 +244,63 @@ check("W. Invalid conversion cannot be saved", () => {
   assert(prismaRepo.includes("assertPositive(unit.conversionQty"), "repository conversion guard missing");
   assert(parsePositiveQty(0) === null && parsePositiveQty("") === null, "parser");
   assert(en.invalidUnitQuantity.includes("greater than 0"), en.invalidUnitQuantity);
+  assert(en.equalsTotalPieces.includes("{qty}"), en.equalsTotalPieces);
   assert(productsCopyKeyParity(), "en/lo key parity");
+});
+
+check("X. Piece QTY IN BASE 1 → 2 via conversionQty", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "piece",
+    patch: { conversionQty: 2 },
+    shareStock: true,
+    units: trio(),
+  });
+  const pieceUnit = next.find((row) => row.id === "piece")!;
+  assert(pieceUnit.conversionQty === 2, "piece qty");
+  assert(hierarchyQtyEditor(pieceUnit, next).locked === false, "unlocked");
+  assert(requiredBaseQty(1, pieceUnit.conversionQty) === 2, "POS deducts 2");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost");
+});
+
+check("Y. Box with Pack 12: 2 Packs → 3 Packs, baseQty 36, costs unchanged", () => {
+  const start = [piece(), pack(12, 28000), box(24, 2, 250000)];
+  const next = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { hierarchyQty: 3 },
+    shareStock: true,
+    units: start,
+  });
+  assert(next.find((row) => row.id === "box")?.hierarchyQty === 3, "packs per box");
+  assert(next.find((row) => row.id === "box")?.conversionQty === 36, "box base 36");
+  assert(next.find((row) => row.id === "pack")?.conversionQty === 12, "pack base kept");
+  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece cost");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost");
+  assert(hierarchyRelationText(next.find((row) => row.id === "box")!, next) === "1 Box = 3 Packs", "relation");
+});
+
+check("Z. Box QTY IN BASE 24 → 6 via conversionQty", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { conversionQty: 6 },
+    shareStock: true,
+    units: [piece(), pack(12, 28000), box(24, 2, 250000)],
+  });
+  assert(next.find((row) => row.id === "box")?.conversionQty === 6, "box base 6");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost");
+});
+
+check("AA. Box QTY IN BASE 24 → 144 via conversionQty", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { conversionQty: 144 },
+    shareStock: true,
+    units: [piece(), pack(12, 28000), box(24, 2, 250000)],
+  });
+  assert(next.find((row) => row.id === "box")?.conversionQty === 144, "box base 144");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

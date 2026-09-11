@@ -1,7 +1,6 @@
 import type { UnitPricingMode } from "@/features/products/types";
 import {
   applyHierarchyConversions,
-  isHierarchyQtyLocked,
   isUnitEnabled,
   parsePositiveQty,
   unitRole,
@@ -105,10 +104,6 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
   }
   if (patch.conversionQty !== undefined && conversionMillis(patch.conversionQty) <= 0n) {
     return input.units;
-  }
-  if (isHierarchyQtyLocked(current, input.units)) {
-    delete patch.hierarchyQty;
-    delete patch.conversionQty;
   }
 
   if (patch.conversionQty !== undefined && patch.hierarchyQty === undefined) {

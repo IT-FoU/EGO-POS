@@ -22,8 +22,8 @@ import { optimizeProductImageFile } from "@/features/products/product-image-opti
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
-import { applyHierarchyConversions, hierarchyQtyEditor, hierarchyRelationText, hydrateHierarchyQty, isUnitEnabled, parsePositiveQty, unitRole } from "@/features/products/unit-hierarchy";
-import { onQtyInputBlur, onQtyInputChange, onQtyInputFocus, qtyInputDisplay, type QtyInputState } from "@/features/products/unit-qty-input";
+import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isUnitEnabled, parsePositiveQty } from "@/features/products/unit-hierarchy";
+import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
@@ -523,7 +523,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
         if (conversionInvalid || visibleUnits.some((unit) => {
-            if (!isUnitEnabled(unit) || unitRole(unit.unitName) === "piece") return false;
+            if (!isUnitEnabled(unit)) return false;
             return parsePositiveQty(unit.hierarchyQty ?? unit.conversionQty) === null;
         })) {
             setMessage(t("invalidUnitQuantity"));
@@ -1337,42 +1337,19 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
+    const [selectedUnitIds, setSelectedUnitIds] = useState<Record<string, boolean>>({});
     const [roundingForAll, setRoundingForAll] = useState(0);
-    const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
-    const [qtyError, setQtyError] = useState<Record<string, string>>({});
-    const standardUnits = ["piece", "pack", "box"]
-        .map((role) => units.find((unit) => unitRole(unit.unitName) === role))
-        .filter((unit): unit is ProductUnit => Boolean(unit));
-    const customUnits = units.filter((unit) => unitRole(unit.unitName) === "custom");
-
-    function qtyStateFor(unit: ProductUnit): QtyInputState {
-        return {
-            committed: hierarchyQtyEditor(unit, units).value,
-            draft: Object.hasOwn(qtyDraft, unit.id) ? qtyDraft[unit.id] : undefined,
-            error: Boolean(qtyError[unit.id]),
-        };
+    const [invalidQtyIds, setInvalidQtyIds] = useState<Record<string, boolean>>({});
+    function toggleSelected(unitId: string, checked: boolean) {
+        setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
     }
-
-    function applyQtyState(unitId: string, next: QtyInputState, previousCommitted: number) {
-        setQtyDraft((current) => {
-            const copy = { ...current };
-            if (next.draft === undefined) {
-                delete copy[unitId];
-            }
-            else {
-                copy[unitId] = next.draft;
-            }
-            const errors = { ...qtyError, [unitId]: next.error ? t("invalidUnitQuantity") : "" };
-            const invalid = Object.entries(copy).some(([id, draft]) => draft !== undefined && Boolean(errors[id]));
-            onConversionInvalidChange?.(invalid);
-            return copy;
+    function setUnitQtyInvalid(unitId: string, invalid: boolean) {
+        setInvalidQtyIds((current) => {
+            const next = { ...current, [unitId]: invalid };
+            onConversionInvalidChange?.(Object.values(next).some(Boolean));
+            return next;
         });
-        setQtyError((current) => ({ ...current, [unitId]: next.error ? t("invalidUnitQuantity") : "" }));
-        if (next.draft === undefined && !next.error && next.committed !== previousCommitted) {
-            updateUnit(unitId, { hierarchyQty: next.committed });
-        }
     }
-
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1385,204 +1362,185 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
         {t("applyRoundingToAllUnits")}
       </button>
     </div>
-    <div className="mt-4 grid gap-4">
-      {standardUnits.map((unit) => {
-        const enabled = isUnitEnabled(unit);
-        const editor = hierarchyQtyEditor(unit, units);
-        const qtyState = qtyStateFor(unit);
-        const draft = qtyInputDisplay(qtyState);
-        const error = qtyError[unit.id];
-        const prefix = editor.prefix === "1 Pack =" ? t("onePackEquals") : editor.prefix === "1 Box =" ? t("oneBoxEquals") : t("pieceQuantity");
-        const suffix = editor.suffix === "Pieces" ? t("piecesWord") : editor.suffix === "Packs" ? t("packsWord") : "";
-        return (
-          <section className={`rounded-lg border border-border bg-background p-4 ${enabled ? "" : "opacity-80"}`} key={unit.id} data-unit-role={unitRole(unit.unitName)}>
-            <label className="flex items-center gap-2 text-sm font-semibold">
-              <input aria-label={fillProductsCopy(t("enableNamedUnit"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} checked={enabled} type="checkbox" onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
-              {unit.unitName ? displayProductUnitName(unit.unitName) : t("unit")}
-            </label>
-            {!enabled ? (<p className="mt-2 text-sm text-muted-foreground">{t("unitDisabledHint")}</p>) : (
-              <div className="mt-4 grid gap-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                    <span>{prefix}</span>
-                    {editor.locked ? (
-                      <input aria-label={t("pieceQuantity")} className="field-input h-10 w-20" disabled readOnly value={1}/>
-                    ) : (
-                      <input
-                        aria-label={`${prefix} ${suffix}`.trim()}
-                        autoComplete="off"
-                        className="field-input h-10 w-24"
-                        inputMode="numeric"
-                        type="text"
-                        value={draft}
-                        onBlur={() => {
-                          applyQtyState(unit.id, onQtyInputBlur(qtyState), qtyState.committed);
-                        }}
-                        onChange={(event) => applyQtyState(unit.id, onQtyInputChange(qtyState, event.target.value), qtyState.committed)}
-                        onFocus={() => {
-                          applyQtyState(unit.id, onQtyInputFocus(qtyState), qtyState.committed);
-                        }}
-                      />
-                    )}
-                    {suffix ? <span>{suffix}</span> : null}
-                  </div>
-                  {error ? <p className="mt-1 text-xs font-semibold text-danger">{error}</p> : null}
+    <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
+      <table className="w-full min-w-[1840px] text-left text-sm">
+        <thead className="border-b border-border text-xs uppercase text-muted-foreground">
+          <tr>
+            <th className="px-3 py-3">{t("select")}</th>
+            <th className="px-3 py-3">{t("unit")}</th>
+            <th className="px-3 py-3">{t("qtyInBase")}</th>
+            <th className="px-3 py-3">{t("barcode")}</th>
+            <th className="px-3 py-3">{t("costLak")}</th>
+            <th className="px-3 py-3">{t("pricingMode")}</th>
+            <th className="px-3 py-3">{t("markupPercent")}</th>
+            <th className="px-3 py-3">{t("addAmountLak")}</th>
+            <th className="px-3 py-3">{t("rounding")}</th>
+            <th className="px-3 py-3">{t("priceLak")}</th>
+            <th className="px-3 py-3">{t("unitImage")}</th>
+            <th className="px-3 py-3">{t("base")}</th>
+            <th className="px-3 py-3">{t("defaultSale")}</th>
+            <th className="px-3 py-3">{t("defaultReceiving")}</th>
+            <th className="px-3 py-3">{t("manual")}</th>
+            <th className="px-3 py-3">{t("status")}</th>
+            <th className="px-3 py-3 text-right">{t("action")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {units.map((unit) => (
+            <tr className="border-b border-border last:border-b-0" key={unit.id}>
+              <td className="px-3 py-3">
+                <input aria-label={fillProductsCopy(t("selectProduct"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={Boolean(selectedUnitIds[unit.id])} onChange={(event) => toggleSelected(unit.id, event.target.checked)}/>
+              </td>
+              <td className="px-3 py-3">
+                <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <HierarchyQtyField
+                  ariaLabel={t("qtyInBase")}
+                  committed={parsePositiveQty(unit.conversionQty) ?? 1}
+                  unitId={unit.id}
+                  onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
+                  onEditingInvalid={(invalid) => setUnitQtyInvalid(unit.id, invalid)}
+                />
+              </td>
+              <td className="px-3 py-3">
+                <div className="flex min-w-56 items-center gap-2">
+                  <input className="field-input h-10 min-w-36 font-mono" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
+                  <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
+                    {t("plusAlias")}
+                  </button>
+                  {(barcodeAliases[unit.id]?.length ?? 0) > 0 ? (<span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{(barcodeAliases[unit.id]?.length ?? 0) === 1 ? t("aliasCountOne") : fillProductsCopy(t("aliasCountMany"), { count: barcodeAliases[unit.id]?.length ?? 0 })}</span>) : null}
                 </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <Field label={t("costLak")}>
-                    <MoneyInput className="h-10" value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
-                  </Field>
-                  <Field label={t("pricingMode")}>
-                    <select className="field-input h-10" value={unit.pricingMode ?? "manual"} onChange={(event) => updateUnit(unit.id, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
-                      <option value="manual">{t("manual")}</option>
-                      <option value="cost_plus_percent">{t("costPlusPercent")}</option>
-                      <option value="cost_plus_amount">{t("costPlusAmount")}</option>
-                    </select>
-                  </Field>
-                  <Field label={t("markupPercent")}>
-                    <MoneyInput className="h-10" value={unit.markupPercent ?? 0} onValueChange={(value) => updateUnit(unit.id, { markupPercent: value })}/>
-                  </Field>
-                  <Field label={t("addAmountLak")}>
-                    <MoneyInput className="h-10" value={unit.addAmountLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { addAmountLak: value })}/>
-                  </Field>
-                  <Field label={t("rounding")}>
-                    <select className="field-input h-10" value={unit.roundingLak ?? 0} onChange={(event) => updateUnit(unit.id, { roundingLak: Number(event.target.value) })}>
-                      <option value={0}>{t("noRounding")}</option>
-                      <option value={500}>{t("roundUp500")}</option>
-                      <option value={1000}>{t("roundUp1000")}</option>
-                      {unit.roundingLak === 5000 ? <option value={5000}>{t("roundUp5000")}</option> : null}
-                    </select>
-                  </Field>
-                  <Field label={t("sellingPrice")}>
-                    <MoneyInput className="h-10" disabled={(unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
-                  </Field>
+              </td>
+              <td className="px-3 py-3">
+                <MoneyInput className="h-10 min-w-28" value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <select className="field-input h-10 min-w-40" value={unit.pricingMode ?? "manual"} onChange={(event) => updateUnit(unit.id, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
+                  <option value="manual">{t("manual")}</option>
+                  <option value="cost_plus_percent">{t("costPlusPercent")}</option>
+                  <option value="cost_plus_amount">{t("costPlusAmount")}</option>
+                </select>
+              </td>
+              <td className="px-3 py-3">
+                <MoneyInput className="h-10 min-w-24" value={unit.markupPercent ?? 0} onValueChange={(value) => updateUnit(unit.id, { markupPercent: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <MoneyInput className="h-10 min-w-28" value={unit.addAmountLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { addAmountLak: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <select className="field-input h-10 min-w-28" value={unit.roundingLak ?? 0} onChange={(event) => updateUnit(unit.id, { roundingLak: Number(event.target.value) })}>
+                  <option value={0}>{t("noRounding")}</option>
+                  <option value={500}>{t("roundUp500")}</option>
+                  <option value={1000}>{t("roundUp1000")}</option>
+                  {unit.roundingLak === 5000 ? <option value={5000}>{t("roundUp5000")}</option> : null}
+                </select>
+              </td>
+              <td className="px-3 py-3">
+                <MoneyInput className="h-10 min-w-28" disabled={(unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
+              </td>
+              <td className="px-3 py-3">
+                <div className="grid min-w-44 gap-1">
+                <select className="field-input h-10" value={unitImageSelectValue(unit, productImages)} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
+                  <option value="">{t("notAssigned")}</option>
+                  {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
+                </select>
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {unitImageOrigins[unit.id] === "inherited"
+                    ? t("inheritedFromProductImage")
+                    : unitImageOrigins[unit.id] === "custom"
+                      ? t("customUnitImage")
+                      : t("notAssigned")}
+                </span>
                 </div>
-                <HierarchyUnitExtras barcodeAliases={barcodeAliases} onCheckBarcode={onCheckBarcode} onOpenAlias={onOpenAlias} onUnitImageChange={onUnitImageChange} productImages={productImages} removeUnit={removeUnit} unit={unit} unitImageOrigins={unitImageOrigins} updateUnit={updateUnit}/>
-              </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
-    {customUnits.length > 0 ? (
-      <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
-        <table className="w-full min-w-[1200px] text-left text-sm">
-          <thead className="border-b border-border text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-3">{t("enableUnit")}</th>
-              <th className="px-3 py-3">{t("unit")}</th>
-              <th className="px-3 py-3">{t("pieceQuantity")}</th>
-              <th className="px-3 py-3">{t("costLak")}</th>
-              <th className="px-3 py-3">{t("sellingPrice")}</th>
-              <th className="px-3 py-3 text-right">{t("action")}</th>
+              </td>
+              <td className="px-3 py-3">
+                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
+              </td>
+              <td className="px-3 py-3">
+                <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
+              </td>
+              <td className="px-3 py-3">
+                <input type="checkbox" checked={Boolean(unit.isPurchaseUnit)} onChange={(event) => updateUnit(unit.id, { isPurchaseUnit: event.target.checked })}/>
+              </td>
+              <td className="px-3 py-3">
+                <input type="checkbox" checked={unit.allowManualUnitSelect ?? true} onChange={(event) => updateUnit(unit.id, { allowManualUnitSelect: event.target.checked })}/>
+              </td>
+              <td className="px-3 py-3">
+                <select className="field-input h-10 min-w-28" value={unit.status ?? "active"} onChange={(event) => updateUnit(unit.id, { status: event.target.value as ProductUnit["status"] })}>
+                  <option value="active">{t("active")}</option>
+                  <option value="inactive">{t("inactive")}</option>
+                </select>
+              </td>
+              <td className="px-3 py-3 text-right">
+                <button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-danger transition hover:border-danger disabled:cursor-not-allowed disabled:opacity-40" type="button" onClick={() => removeUnit(unit.id)} disabled={unit.isBaseUnit} aria-label={t("removeUnit")}>
+                  <Trash2 aria-hidden="true"/>
+                </button>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {customUnits.map((unit) => {
-              const enabled = isUnitEnabled(unit);
-              const editor = hierarchyQtyEditor(unit, units);
-              return (
-                <tr className="border-b border-border last:border-b-0" key={unit.id}>
-                  <td className="px-3 py-3">
-                    <input checked={enabled} type="checkbox" onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
-                  </td>
-                  <td className="px-3 py-3">
-                    <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
-                  </td>
-                  <td className="px-3 py-3">
-                    <input
-                      className="field-input h-10 min-w-24"
-                      disabled={!enabled}
-                      inputMode="numeric"
-                      type="text"
-                      value={qtyInputDisplay(qtyStateFor(unit))}
-                      onBlur={() => {
-                        const qtyState = qtyStateFor(unit);
-                        applyQtyState(unit.id, onQtyInputBlur(qtyState), qtyState.committed);
-                      }}
-                      onChange={(event) => {
-                        const qtyState = qtyStateFor(unit);
-                        applyQtyState(unit.id, onQtyInputChange(qtyState, event.target.value), qtyState.committed);
-                      }}
-                      onFocus={() => {
-                        const qtyState = qtyStateFor(unit);
-                        applyQtyState(unit.id, onQtyInputFocus(qtyState), qtyState.committed);
-                      }}
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <MoneyInput className="h-10 min-w-28" disabled={!enabled} value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
-                  </td>
-                  <td className="px-3 py-3">
-                    <MoneyInput className="h-10 min-w-28" disabled={!enabled || (unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-danger" type="button" onClick={() => removeUnit(unit.id)} disabled={unit.isBaseUnit} aria-label={t("removeUnit")}>
-                      <Trash2 aria-hidden="true"/>
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    ) : null}
+          ))}
+        </tbody>
+      </table>
+    </div>
     </>);
 }
 
-function HierarchyUnitExtras({ barcodeAliases, onCheckBarcode, onOpenAlias, onUnitImageChange, productImages, removeUnit, unit, unitImageOrigins, updateUnit, }: {
-    barcodeAliases: BarcodeAliasState;
-    onCheckBarcode?: (unitId: string, barcode: string) => void;
-    onOpenAlias: (unitId: string) => void;
-    onUnitImageChange: (unitId: string, imageUrl: string | undefined) => void;
-    productImages: ProductFormImage[];
-    removeUnit: (unitId: string) => void;
-    unit: ProductUnit;
-    unitImageOrigins: Record<string, UnitImageOrigin>;
-    updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
+function HierarchyQtyField({ ariaLabel, committed, disabled, unitId, onCommit, onEditingInvalid, }: {
+    ariaLabel: string;
+    committed: number;
+    disabled?: boolean;
+    unitId: string;
+    onCommit: (qty: number) => void;
+    onEditingInvalid: (invalid: boolean) => void;
 }) {
+    const [resetKey, setResetKey] = useState(0);
+    const [error, setError] = useState("");
     return (
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field label={t("barcode")}>
-          <div className="flex min-w-0 items-center gap-2">
-            <input className="field-input h-10 min-w-0 flex-1 font-mono" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
-            <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => onOpenAlias(unit.id)}>
-              {t("plusAlias")}
-            </button>
-            {(barcodeAliases[unit.id]?.length ?? 0) > 0 ? (<span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{(barcodeAliases[unit.id]?.length ?? 0) === 1 ? t("aliasCountOne") : fillProductsCopy(t("aliasCountMany"), { count: barcodeAliases[unit.id]?.length ?? 0 })}</span>) : null}
-          </div>
-        </Field>
-        <Field label={t("unitImage")}>
-          <select className="field-input h-10" value={unitImageSelectValue(unit, productImages)} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
-            <option value="">{t("notAssigned")}</option>
-            {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
-          </select>
-        </Field>
-        <label className="flex items-center gap-2 text-sm font-semibold">
-          <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
-          {t("base")}
-        </label>
-        <label className="flex items-center gap-2 text-sm font-semibold">
-          <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
-          {t("defaultSale")}
-        </label>
-        <label className="flex items-center gap-2 text-sm font-semibold">
-          <input type="checkbox" checked={Boolean(unit.isPurchaseUnit)} onChange={(event) => updateUnit(unit.id, { isPurchaseUnit: event.target.checked })}/>
-          {t("defaultReceiving")}
-        </label>
-        <label className="flex items-center gap-2 text-sm font-semibold">
-          <input type="checkbox" checked={unit.allowManualUnitSelect ?? true} onChange={(event) => updateUnit(unit.id, { allowManualUnitSelect: event.target.checked })}/>
-          {t("manual")}
-        </label>
-        <div className="xl:col-span-4 flex justify-end">
-          <button className="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-danger disabled:opacity-40" type="button" onClick={() => removeUnit(unit.id)} disabled={unit.isBaseUnit} aria-label={t("removeUnit")}>
-            <Trash2 aria-hidden="true"/>
-          </button>
-        </div>
+      <div className="flex flex-col">
+        <input
+          key={`${unitId}-${committed}-${resetKey}`}
+          aria-label={ariaLabel}
+          autoComplete="off"
+          className="field-input h-10 w-24"
+          defaultValue={String(committed)}
+          disabled={disabled}
+          inputMode="numeric"
+          type="text"
+          onBlur={(event) => {
+            const next = onQtyInputBlur({
+              committed,
+              draft: event.target.value,
+              error: parsePositiveQty(event.target.value) === null,
+            });
+            if (next.error) {
+              setError(t("invalidUnitQuantity"));
+              setResetKey((key) => key + 1);
+              onEditingInvalid(false);
+              return;
+            }
+            setError("");
+            onEditingInvalid(false);
+            if (next.committed !== committed) {
+              onCommit(next.committed);
+            }
+          }}
+          onChange={(event) => {
+            const next = onQtyInputChange({ committed, draft: event.target.value, error: false }, event.target.value);
+            setError(next.error ? t("invalidUnitQuantity") : "");
+            onEditingInvalid(next.error);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        {error ? <p className="mt-1 text-xs font-semibold text-danger">{error}</p> : null}
       </div>
     );
 }
+
 function parseMoney(value: unknown) {
     if (typeof value === "number")
         return Number.isFinite(value) ? value : 0;
