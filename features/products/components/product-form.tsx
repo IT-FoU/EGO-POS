@@ -22,8 +22,8 @@ import { optimizeProductImageFile } from "@/features/products/product-image-opti
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
-import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isHierarchyQtyLocked, isUnitEnabled, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
-import { onQtyInputBlur } from "@/features/products/unit-qty-input";
+import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
+import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
@@ -520,11 +520,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             .map((tag) => tag.trim())
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
-        if (conversionInvalid || visibleUnits.some((unit) => {
-            if (!isUnitEnabled(unit) || isHierarchyQtyLocked(unit)) return false;
-            return parsePositiveIntQty(unit.conversionQty) === null;
-        })) {
-            setMessage(t("invalidUnitQuantity"));
+        if (conversionInvalid || visibleUnits.some(isActiveUnitQtyInvalid)) {
+            setMessage(t("qtyInBaseMustBePositive"));
             return;
         }
         const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversions(visibleUnits));
@@ -546,7 +543,9 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         const sellingPriceLak = parseMoney(defaultSaleUnit?.sellingPriceLak ?? product?.sellingPriceLak ?? 0);
         const hasBaseUnit = visibleUnits.some((unit) => unit.isBaseUnit);
         const productUnits = sourceUnits.map((unit, index) => {
-            const conversionQty = isHierarchyQtyLocked(unit) ? 1 : (parsePositiveIntQty(unit.conversionQty) ?? 1);
+            const conversionQty = isUnitEnabled(unit)
+                ? parsePositiveIntQty(unit.conversionQty) as number
+                : (parseIntegerQty(unit.conversionQty) ?? 0);
             const isBaseUnit = hasBaseUnit ? unit.isBaseUnit : index === 0;
             const unitPrice = Number(unit.sellingPriceLak) || 0;
             return {
@@ -1381,15 +1380,11 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                {isHierarchyQtyLocked(unit) ? (
-                  <input aria-label={t("qtyInBase")} className="field-input h-10 w-24" disabled readOnly value={1}/>
-                ) : (
-                  <HierarchyQtyField
-                    ariaLabel={t("qtyInBase")}
-                    committed={parsePositiveIntQty(unit.conversionQty) ?? 1}
-                    onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
-                  />
-                )}
+                <HierarchyQtyField
+                  ariaLabel={t("qtyInBase")}
+                  committed={Number.isFinite(unit.conversionQty) ? unit.conversionQty : null}
+                  onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
+                />
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
@@ -1475,18 +1470,32 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
 
 function HierarchyQtyField({ ariaLabel, committed, disabled, onCommit, }: {
     ariaLabel: string;
-    committed: number;
+    committed: number | null;
     disabled?: boolean;
     onCommit: (qty: number) => void;
 }) {
-    const [draft, setDraft] = useState(String(committed));
+    const [draft, setDraft] = useState(committed === null ? "" : String(committed));
     const [error, setError] = useState("");
     const focusedRef = useRef(false);
     useEffect(() => {
         if (!focusedRef.current) {
-            setDraft(String(committed));
+            setDraft(committed === null ? "" : String(committed));
         }
     }, [committed]);
+    function pushDraft(raw: string) {
+        const next = onQtyInputChange({
+            committed,
+            draft: raw,
+            error: false,
+        }, raw);
+        setDraft(next.draft ?? raw);
+        setError(next.error ? t("qtyInBaseMustBePositive") : "");
+        if (next.committed === null) {
+            onCommit(Number.NaN);
+            return;
+        }
+        onCommit(next.committed);
+    }
     return (
       <div className="flex flex-col">
         <input
@@ -1504,20 +1513,10 @@ function HierarchyQtyField({ ariaLabel, committed, disabled, onCommit, }: {
               draft,
               error: parsePositiveIntQty(draft) === null,
             });
-            if (next.error) {
-              setError(t("invalidUnitQuantity"));
-              setDraft(String(committed));
-              return;
-            }
-            setError("");
-            setDraft(String(next.committed));
-            if (next.committed !== committed) {
-              onCommit(next.committed);
-            }
+            setError(next.error ? t("qtyInBaseMustBePositive") : "");
           }}
           onChange={(event) => {
-            setDraft(event.target.value);
-            setError(parsePositiveIntQty(event.target.value) === null ? t("invalidUnitQuantity") : "");
+            pushDraft(event.target.value);
           }}
           onFocus={(event) => {
             focusedRef.current = true;

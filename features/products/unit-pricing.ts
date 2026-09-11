@@ -1,9 +1,7 @@
 import type { UnitPricingMode } from "@/features/products/types";
 import {
   applyHierarchyConversions,
-  isHierarchyQtyLocked,
   isUnitEnabled,
-  parsePositiveIntQty,
   type HierarchyUnit,
 } from "@/features/products/unit-hierarchy";
 import { toLakInteger } from "@/features/products/unit-pricing-math";
@@ -99,12 +97,8 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
     }
   }
 
-  if (patch.conversionQty !== undefined) {
-    if (isHierarchyQtyLocked(current)) {
-      delete patch.conversionQty;
-    } else if (parsePositiveIntQty(patch.conversionQty) === null) {
-      return input.units;
-    }
+  if (patch.conversionQty !== undefined && typeof patch.conversionQty !== "number") {
+    return input.units;
   }
 
   const nextUnits = input.units.map((unit) => unit.id === input.editedUnitId ? { ...unit, ...patch } : unit);

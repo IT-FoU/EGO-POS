@@ -238,7 +238,9 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
     .map((unit) => ({
       addAmountLak: unit.addAmountLak === undefined ? undefined : numberValue(unit.addAmountLak),
       barcode: optionalString(unit.barcode),
-      conversionQty: Math.max(numberValue(unit.conversionQty, 1), 1),
+      conversionQty: Number.isFinite(Number(unit.conversionQty))
+        ? Number(unit.conversionQty)
+        : unit.status === "inactive" ? 0 : Number.NaN,
       costPriceLak: unit.costPriceLak === undefined ? undefined : toLakInteger(unit.costPriceLak),
       id: optionalString(unit.id),
       imageUrl: unitImageRef(unit.imageUrl, expected),
@@ -386,7 +388,9 @@ function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
 
   for (const [index, unit] of (input.units ?? []).entries()) {
     rejectEmbeddedProductImage(unit.imageUrl, `Unit ${index + 1} image`);
-    assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
+    if (unit.status !== "inactive") {
+      assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
+    }
     assertSafePricingValue(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
     assertNonNegative(unit.addAmountLak, `Unit ${index + 1} add amount`);
     assertNonNegative(unit.costPriceLak, `Unit ${index + 1} cost price`);

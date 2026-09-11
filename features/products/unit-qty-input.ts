@@ -1,12 +1,12 @@
-import { parsePositiveIntQty } from "@/features/products/unit-hierarchy";
+import { parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 
 export type QtyInputState = {
-  committed: number;
+  committed: number | null;
   draft: string | undefined;
   error: boolean;
 };
 
-export function qtyInputFromCommitted(committed: number): QtyInputState {
+export function qtyInputFromCommitted(committed: number | null): QtyInputState {
   return {
     committed,
     draft: undefined,
@@ -15,19 +15,26 @@ export function qtyInputFromCommitted(committed: number): QtyInputState {
 }
 
 export function qtyInputDisplay(state: QtyInputState) {
-  return state.draft !== undefined ? state.draft : String(state.committed);
+  return state.draft !== undefined ? state.draft : (state.committed === null ? "" : String(state.committed));
 }
 
 export function onQtyInputFocus(state: QtyInputState): QtyInputState {
   return {
     ...state,
-    draft: state.draft !== undefined ? state.draft : String(state.committed),
+    draft: state.draft !== undefined ? state.draft : (state.committed === null ? "" : String(state.committed)),
   };
 }
 
 export function onQtyInputChange(state: QtyInputState, raw: string): QtyInputState {
+  if (raw.trim() === "") {
+    return { committed: null, draft: raw, error: true };
+  }
+  const parsed = parseIntegerQty(raw);
+  if (parsed === null) {
+    return { committed: null, draft: raw, error: true };
+  }
   return {
-    committed: state.committed,
+    committed: parsed,
     draft: raw,
     error: parsePositiveIntQty(raw) === null,
   };
@@ -35,20 +42,12 @@ export function onQtyInputChange(state: QtyInputState, raw: string): QtyInputSta
 
 export function onQtyInputBlur(state: QtyInputState): QtyInputState {
   if (state.draft === undefined) {
-    return { ...state, error: false };
-  }
-  const parsed = parsePositiveIntQty(state.draft);
-  if (parsed === null) {
-    return {
-      committed: state.committed,
-      draft: undefined,
-      error: true,
-    };
+    return { ...state, error: parsePositiveIntQty(state.committed) === null };
   }
   return {
-    committed: parsed,
-    draft: undefined,
-    error: false,
+    committed: state.committed,
+    draft: state.draft,
+    error: parsePositiveIntQty(state.draft) === null,
   };
 }
 
