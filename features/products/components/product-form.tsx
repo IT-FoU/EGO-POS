@@ -11,7 +11,7 @@ import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
 const t = tProducts;
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
@@ -25,6 +25,12 @@ import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingP
 import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
+import {
+    applyLastCreateUnitSetupToDefaults,
+    extractLastCreateUnitSetupFromUnits,
+    readLastCreateUnitSetup,
+    writeLastCreateUnitSetup,
+} from "@/features/products/last-create-unit-setup";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
     buildSkuFromProductName,
@@ -219,6 +225,18 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     });
     const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
     const [units, setUnits] = useState<ProductUnit[]>(() => hydrateHierarchyQty(product?.units ?? createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode)));
+    // Apply last successful Create unit setup on the client only (avoid SSR/localStorage hydration mismatch).
+    useLayoutEffect(() => {
+        if (mode !== "create") return;
+        const remembered = readLastCreateUnitSetup();
+        if (!remembered) return;
+        setUnits(hydrateHierarchyQty(applyLastCreateUnitSetupToDefaults(
+            createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode),
+            remembered,
+        )));
+    // Intentional mount-only restore for Create Product.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const initialProductImage = product?.imageUrl || product?.imageDisplayUrl || product?.imageThumbUrl
         ? {
             id: "product-main-image",
@@ -763,12 +781,15 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     focusDuplicateConflict(result.error ?? errorText);
                     return;
                 }
+                // Successful create only — failed/cancelled forms must not rewrite remembered unit setup.
+                writeLastCreateUnitSetup(extractLastCreateUnitSetupFromUnits(sourceUnits));
+                // Product exists even if image upload fails; POS must see it immediately.
+                signalPosCatalogueInvalidation();
                 const saved = result.data as { id: string; units?: Array<{ id: string; unitName: string }> };
                 const uploaded = await persistSavedProduct(saved);
                 if (!uploaded) return;
                 setSaveValidationIssues([]);
                 showFeedback(t("productSaved"), "success");
-                signalPosCatalogueInvalidation();
                 router.refresh();
                 router.push("/products");
             });
@@ -785,6 +806,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     focusDuplicateConflict(result.error ?? errorText);
                     return;
                 }
+                signalPosCatalogueInvalidation();
                 const saved = (result.data as { id: string; units?: Array<{ id: string; unitName: string }> } | undefined) ?? product;
                 const uploaded = await persistSavedProduct({ id: saved.id, units: saved.units ?? product.units });
                 if (!uploaded) return;
@@ -807,6 +829,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 return;
             }
             showFeedback(t("productDuplicated"), "success");
+            signalPosCatalogueInvalidation();
             router.refresh();
             router.push("/products");
         });
@@ -865,6 +888,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     ? t("productRemovedFromCatalogue")
                     : t("productDeletedSuccess")
             ), "success");
+            signalPosCatalogueInvalidation();
             router.refresh();
             router.push("/products");
         });

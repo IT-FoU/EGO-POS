@@ -22,6 +22,7 @@ import { StatusBadge } from "@/features/products/components/status-badge";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { formatLak } from "@/features/products/format";
 import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
+import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
 type ProductsTranslate = (key: string) => string;
@@ -210,6 +211,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
                 ? (result.data as { deleteMode?: string }).deleteMode
                 : undefined;
             setMessage(deleteMode === "soft" ? t("productRemovedFromCatalogue") : t("productDeleted"));
+            signalPosCatalogueInvalidation();
             router.refresh();
         });
     }
@@ -236,6 +238,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
                 ? t("productRemovedFromCatalogue")
                 : fillProductsCopy(t("productsDeleted"), { count: selectedProductIds.length }));
             setSelectedProductIds([]);
+            signalPosCatalogueInvalidation();
             router.refresh();
         });
     }

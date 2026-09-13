@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import { requireReadPermission, requireWritePermission, WRITE_PERMISSIONS, READ_PERMISSIONS, type WritePermissionKey } from "@/lib/auth/permissions";
 import {
@@ -30,6 +31,11 @@ import { bytesToBase64, importRemoteProductImageBytes } from "@/features/product
 import { clearProductImages, uploadAndAttachProductImages } from "@/features/products/product-image-service";
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
+
+function revalidateProductCataloguePaths() {
+  revalidatePath("/products");
+  revalidatePath("/pos");
+}
 
 function readWorkerBinding(name: string) {
   try {
@@ -74,11 +80,23 @@ export async function loadUnitPricingDefaultsAction() {
 }
 
 export async function createProductAction(input: ProductWriteInput) {
-  try { return writeSuccess(await createPrismaProduct(input, await tenant(WRITE_PERMISSIONS.productsCreate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await createPrismaProduct(input, await tenant(WRITE_PERMISSIONS.productsCreate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function updateProductAction(productId: string, input: Partial<ProductWriteInput>) {
-  try { return writeSuccess(await updatePrismaProduct(productId, input, await tenant(WRITE_PERMISSIONS.productsUpdate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await updatePrismaProduct(productId, input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function uploadProductImageAction(productId: string, formData: FormData) {
@@ -162,19 +180,43 @@ export async function clearProductImageAction(productId: string) {
 }
 
 export async function archiveProductAction(productId: string) {
-  try { return writeSuccess(await archivePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await archivePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function deleteProductAction(productId: string) {
-  try { return writeSuccess(await deletePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await deletePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function duplicateProductAction(productId: string) {
-  try { return writeSuccess(await duplicatePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsCreate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await duplicatePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsCreate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function bulkPriceUpdateAction(input: BulkPriceUpdateInput) {
-  try { return writeSuccess(await bulkUpdatePrismaProductPrices(input, await tenant(WRITE_PERMISSIONS.productsUpdate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await bulkUpdatePrismaProductPrices(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function upsertCategoryAction(input: { id?: string; nameEn?: string; nameLo: string; parentId?: string }) {
