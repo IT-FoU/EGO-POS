@@ -14,7 +14,7 @@ const t = tProducts;
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
+import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, searchProductImagesAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
@@ -253,6 +253,43 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         const el = formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`);
         el?.scrollIntoView({ behavior: "smooth", block: "center" });
         el?.focus();
+    }
+
+    function scrollSaveFeedbackIntoView() {
+        requestAnimationFrame(() => {
+            formRef.current
+                ?.querySelector<HTMLElement>('[data-testid="product-save-validation-summary"]')
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+    }
+
+    function focusFirstInvalidQtyField() {
+        const el = formRef.current?.querySelector<HTMLElement>('[data-field="qty-in-base"][data-invalid="true"]')
+            ?? formRef.current?.querySelector<HTMLElement>('[data-field="qty-in-base"]');
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.focus();
+    }
+
+    function focusDuplicateConflict(errorText: string) {
+        const normalized = errorText.toLowerCase();
+        if (normalized.includes("sku")) {
+            focusRequiredField("sku");
+            return;
+        }
+        if (normalized.includes("barcode")) {
+            const el = formRef.current?.querySelector<HTMLElement>('input[data-field="unit-barcode"]');
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            el?.focus();
+        }
+    }
+
+    function showSaveFailureNearButton(issues: string[], tone: "error" | "warning" = "error") {
+        setSaveValidationIssues(issues);
+        showFeedback(
+            `${t("unableToSaveProduct")}\n${t("pleaseCompleteRequired")}\n${issues.map((issue) => `• ${issue}`).join("\n")}`,
+            tone,
+        );
+        scrollSaveFeedbackIntoView();
     }
 
     function maybeAutofillSkuFromName(nameOverride?: string) {
@@ -549,6 +586,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         saveProductFromForm(event.currentTarget);
     }
     function handleSaveClick() {
+        if (isPending) return;
         if (formRef.current) {
             saveProductFromForm(formRef.current);
         }
@@ -580,11 +618,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         });
         if (gaps.length > 0) {
             const labels = gaps.map(labelForRequiredField);
-            setSaveValidationIssues(labels);
-            showFeedback(
-                `${t("unableToSaveProduct")}\n${t("pleaseCompleteRequired")}\n${labels.map((label) => `• ${label}`).join("\n")}`,
-                "error",
-            );
+            showSaveFailureNearButton(labels, "error");
             focusRequiredField(gaps[0]!);
             return;
         }
@@ -595,7 +629,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
         if (conversionInvalid || visibleUnits.some(isActiveUnitQtyInvalid)) {
-            showFeedback(t("qtyInBaseMustBePositive"), "warning");
+            showSaveFailureNearButton([t("qtyInBaseMustBePositive")], "error");
+            focusFirstInvalidQtyField();
             return;
         }
         const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversions(visibleUnits));
@@ -696,7 +731,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 }
                 const uploaded = await uploadProductImageAction(savedProduct.id, imageData);
                 if (!uploaded.ok) {
-                    showFeedback(localizeProductError(uploaded.error ?? t("imageUploadFailed")), "error");
+                    const imageError = localizeProductError(uploaded.error ?? t("imageUploadFailed"));
+                    setSaveValidationIssues([imageError]);
+                    showFeedback(imageError, "error");
+                    scrollSaveFeedbackIntoView();
                     router.refresh();
                     router.push(`/products/${savedProduct.id}/edit`);
                     return false;
@@ -705,7 +743,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             else if (mode === "edit" && !selectedImage && product?.imageUrl) {
                 const cleared = await clearProductImageAction(savedProduct.id);
                 if (!cleared.ok) {
-                    showFeedback(localizeProductError(cleared.error ?? t("imageUploadFailed")), "error");
+                    const imageError = localizeProductError(cleared.error ?? t("imageUploadFailed"));
+                    setSaveValidationIssues([imageError]);
+                    showFeedback(imageError, "error");
+                    scrollSaveFeedbackIntoView();
                     return false;
                 }
             }
@@ -715,12 +756,17 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             startTransition(async () => {
                 const result = await createProductAction(payload);
                 if (!result.ok) {
-                    showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
+                    const errorText = localizeProductError(result.error ?? "Product save failed.");
+                    setSaveValidationIssues([errorText]);
+                    showFeedback(errorText, "error");
+                    scrollSaveFeedbackIntoView();
+                    focusDuplicateConflict(result.error ?? errorText);
                     return;
                 }
                 const saved = result.data as { id: string; units?: Array<{ id: string; unitName: string }> };
                 const uploaded = await persistSavedProduct(saved);
                 if (!uploaded) return;
+                setSaveValidationIssues([]);
                 showFeedback(t("productSaved"), "success");
                 signalPosCatalogueInvalidation();
                 router.refresh();
@@ -732,12 +778,17 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             startTransition(async () => {
                 const result = await updateProductAction(product.id, payload);
                 if (!result.ok) {
-                    showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
+                    const errorText = localizeProductError(result.error ?? "Product save failed.");
+                    setSaveValidationIssues([errorText]);
+                    showFeedback(errorText, "error");
+                    scrollSaveFeedbackIntoView();
+                    focusDuplicateConflict(result.error ?? errorText);
                     return;
                 }
                 const saved = (result.data as { id: string; units?: Array<{ id: string; unitName: string }> } | undefined) ?? product;
                 const uploaded = await persistSavedProduct({ id: saved.id, units: saved.units ?? product.units });
                 if (!uploaded) return;
+                setSaveValidationIssues([]);
                 showFeedback(t("productSaved"), "success");
                 router.refresh();
                 router.push("/products");
@@ -973,7 +1024,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
-              <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
+              <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
             </>) : (<>
@@ -1063,7 +1114,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 setAliasDrawerUnitId(unitId);
             }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
+          <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
           {product ? <ProductHistorySection product={product}/> : null}
@@ -1318,9 +1369,9 @@ function ProductPreviewDrawer({ isPending, onClose, onSave, snapshot, }: {
           <button className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
             {t("closePreviewEdit")}
           </button>
-          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="button" disabled={isPending} onClick={onSave}>
-            <Save aria-hidden="true"/>
-            {t("saveProduct")}
+          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="button" disabled={isPending} onClick={onSave} data-testid="product-preview-save">
+            {isPending ? <Loader2 aria-hidden="true" className="size-4 animate-spin"/> : <Save aria-hidden="true"/>}
+            {isPending ? t("saving") : t("saveProduct")}
           </button>
         </div>
       </aside>
@@ -1471,12 +1522,13 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 <HierarchyQtyField
                   ariaLabel={t("qtyInBase")}
                   committed={Number.isFinite(unit.conversionQty) ? unit.conversionQty : null}
+                  invalid={isActiveUnitQtyInvalid(unit)}
                   onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
                 />
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
-                  <input className="field-input h-10 min-w-36 font-mono" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
+                  <input className="field-input h-10 min-w-36 font-mono" data-field="unit-barcode" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
                   <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
                     {t("plusAlias")}
                   </button>
@@ -1556,10 +1608,11 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     </>);
 }
 
-function HierarchyQtyField({ ariaLabel, committed, disabled, onCommit, }: {
+function HierarchyQtyField({ ariaLabel, committed, disabled, invalid, onCommit, }: {
     ariaLabel: string;
     committed: number | null;
     disabled?: boolean;
+    invalid?: boolean;
     onCommit: (qty: number) => void;
 }) {
     const [draft, setDraft] = useState(committed === null ? "" : String(committed));
@@ -1590,6 +1643,8 @@ function HierarchyQtyField({ ariaLabel, committed, disabled, onCommit, }: {
           aria-label={ariaLabel}
           autoComplete="off"
           className="field-input h-10 w-24"
+          data-field="qty-in-base"
+          data-invalid={invalid || error ? "true" : "false"}
           disabled={disabled}
           inputMode="numeric"
           type="text"
@@ -1755,9 +1810,10 @@ function CategoryField({ categories, defaultValue, onAction, }: {
       </div>
     </div>);
 }
-function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
+function ProductImagesSection({ assignmentMode, barcode, isPending = false, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
     assignmentMode: ProductImageAssignmentMode | null;
     barcode: string;
+    isPending?: boolean;
     onApplyAssignment: (mode: ProductImageAssignmentMode, image?: ProductFormImage) => void;
     onImportSearchResult: (hit: ProductImageSearchHit) => Promise<ProductFormImage>;
     onPreview: (form: HTMLFormElement | null) => void;
@@ -1961,12 +2017,12 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
             <Link className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" href="/products">
               {t("cancel")}
             </Link>
-            <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10" type="button" onClick={(event) => onPreview(event.currentTarget.form)}>
+            <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-50" type="button" disabled={isPending} onClick={(event) => onPreview(event.currentTarget.form)}>
               {t("previewProduct")}
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={onSave}>
-              <Save aria-hidden="true"/>
-              {t("save")}
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="button" disabled={isPending} onClick={onSave} data-testid="product-save-button" aria-busy={isPending}>
+              {isPending ? <Loader2 aria-hidden="true" className="size-4 animate-spin"/> : <Save aria-hidden="true"/>}
+              {isPending ? t("saving") : t("saveProduct")}
             </button>
           </div>
         </div>

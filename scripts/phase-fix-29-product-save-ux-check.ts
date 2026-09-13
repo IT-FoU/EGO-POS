@@ -97,6 +97,9 @@ check("J. Existing Edit Product SKU remains unchanged", () => {
 check("i18n: new keys present + EN/LO parity", () => {
   assert(en.unableToSaveProduct.includes("Unable to save"), "EN unable copy");
   assert(en.pleaseCompleteRequired.includes("Please complete"), "EN please complete");
+  assert(en.saving.toLowerCase().includes("saving"), "EN saving label");
+  assert(en.saveProduct.toLowerCase().includes("save"), "EN save product label");
+  assert(en.barcodeAlreadyExists.toLowerCase().includes("another product"), "EN duplicate barcode copy");
   assert(en.skuHint.toLowerCase().includes("empty") || en.skuHint.toLowerCase().includes("auto"), "sku hint still implies always generated");
   assert(productsCopyKeyParity(), "EN/LO key parity broken");
 });
@@ -104,6 +107,23 @@ check("i18n: new keys present + EN/LO parity", () => {
 check("source: single SKU algorithm", () => {
   assert(productForm.includes('from "@/features/products/product-sku"'), "shared module unused");
   assert(!/replace\(\/\[\^A-Z0-9\]\+\/g/.test(productForm), "duplicate SKU regex still in form");
+});
+
+check("K. Save button shows Saving state and blocks double submit", () => {
+  assert(productForm.includes('data-testid="product-save-button"'), "save button test id missing");
+  assert(productForm.includes('t("saving")'), "saving label missing");
+  assert(productForm.includes("aria-busy={isPending}"), "aria-busy missing");
+  assert(productForm.includes("disabled={isPending}"), "pending disable missing");
+  assert(productForm.includes("if (isPending) return;"), "double-submit guard missing");
+  assert(productForm.includes("Loader2"), "spinner missing");
+  assert(productForm.includes('t("saveProduct")'), "idle Save Product label missing");
+});
+
+check("L. Qty and server failures surface near Save", () => {
+  assert(productForm.includes("showSaveFailureNearButton"), "near-save helper missing");
+  assert(productForm.includes("focusFirstInvalidQtyField"), "qty focus missing");
+  assert(productForm.includes("focusDuplicateConflict"), "duplicate focus missing");
+  assert(productForm.includes("scrollSaveFeedbackIntoView"), "scroll-to-summary missing");
 });
 
 const failed = results.filter((item) => item.status === "FAIL");
