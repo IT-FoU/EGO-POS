@@ -161,6 +161,7 @@ async function loadLowStockIds(scope: BranchScope, client: any) {
       GROUP BY product_id
     ) stock ON stock.product_id = p.id
     WHERE p.company_id = ${scope.companyId}
+      AND p.status <> 'deleted'
       AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
       AND (
         ${scope.isOwner}
@@ -273,6 +274,7 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
       LIMIT 1
     ) lot ON true
     WHERE p.company_id = ${scope.companyId}
+      AND p.status <> 'deleted'
       AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
       AND (
         ${scope.isOwner}

@@ -29,6 +29,7 @@
     "test:unit-hierarchy-ui": "tsx scripts/phase-fix-26-unit-hierarchy-ui-check.ts",
     "test:unit-pricing-v2": "tsx scripts/phase-fix-28-unit-pricing-v2-check.ts",
     "test:product-save-ux": "tsx scripts/phase-fix-29-product-save-ux-check.ts",
+    "test:product-enter-delete": "tsx scripts/phase-fix-30-product-enter-delete-check.ts",
     "test:pos-discovery": "tsx scripts/phase-fix-06-pos-discovery-cart-check.ts",
     "test:pos-catalogue-refresh": "tsx scripts/phase-fix-22-pos-catalogue-refresh-check.ts",
     "test:pos-checkout": "tsx scripts/phase-fix-07-pos-checkout-check.ts",

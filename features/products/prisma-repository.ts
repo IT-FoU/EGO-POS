@@ -7,6 +7,7 @@ import { applyPersistedHierarchyCosts } from "@/features/products/unit-hierarchy
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
 import { cleanupHardDeletedProductImages } from "@/features/products/product-image-service";
+import { resolveProductDeleteMode, sumHistoricalProductRefs } from "@/features/products/product-delete";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
@@ -983,7 +984,12 @@ export async function archivePrismaProduct(productId: string, tenant: TenantCont
   });
 }
 
-export async function deletePrismaProduct(productId: string, tenant: TenantContext) {
+export type ProductDeleteResult = {
+  deleteMode: "hard" | "soft";
+  product: ReturnType<typeof mapPrismaProduct>;
+};
+
+export async function deletePrismaProduct(productId: string, tenant: TenantContext): Promise<ProductDeleteResult> {
   let hardDeletedImages: { imageUrl?: string | null; units?: Array<{ imageUrl?: string | null }> } | null = null;
   const result = await withTenantTransaction({
     action: "delete",
@@ -997,7 +1003,6 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
           _count: {
             select: {
               adjustments: true,
-              balances: true,
               goodsReceiptItems: true,
               inventoryLots: true,
               movements: true,
@@ -1005,28 +1010,34 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
               saleItems: true,
             },
           },
+          balances: { select: { id: true, quantity: true } },
           units: { select: { imageUrl: true } },
         },
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
-      const referenceCount = Object.values(existing._count as Record<string, number>).reduce(
-        (total, count) => total + count,
-        0,
-      );
+      const historicalReferenceCount = sumHistoricalProductRefs(existing._count as Record<string, number>);
+      const deleteMode = resolveProductDeleteMode({
+        balances: existing.balances,
+        historicalReferenceCount,
+      });
 
-      if (referenceCount > 0) {
+      if (deleteMode === "soft") {
         const archivedProduct = await tx.product.update({
           data: { isActive: false, status: "deleted" },
           where: { id: existing.id },
         });
 
-        return mapPrismaProduct(archivedProduct);
+        return { deleteMode, product: mapPrismaProduct(archivedProduct) } satisfies ProductDeleteResult;
+      }
+
+      if (existing.balances.length > 0) {
+        await tx.inventoryBalance.deleteMany({ where: { productId: existing.id } });
       }
 
       hardDeletedImages = { imageUrl: existing.imageUrl, units: existing.units };
       const deletedProduct = await tx.product.delete({ where: { id: existing.id } });
 
-      return mapPrismaProduct(deletedProduct);
+      return { deleteMode, product: mapPrismaProduct(deletedProduct) } satisfies ProductDeleteResult;
     },
   });
   if (hardDeletedImages) {

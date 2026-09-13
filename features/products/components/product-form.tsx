@@ -546,7 +546,25 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     }
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        const formData = new FormData(event.currentTarget);
+        saveProductFromForm(event.currentTarget);
+    }
+    function handleSaveClick() {
+        if (formRef.current) {
+            saveProductFromForm(formRef.current);
+        }
+    }
+    function handleFormKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
+        if (event.key !== "Enter") return;
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        const tag = target.tagName;
+        if (tag === "TEXTAREA") return;
+        if (tag === "BUTTON" && (target as HTMLButtonElement).type === "submit") return;
+        // Barcode scanners and ordinary inputs must never implicit-submit the product form.
+        event.preventDefault();
+    }
+    function saveProductFromForm(form: HTMLFormElement) {
+        const formData = new FormData(form);
         const nameValue = String(formData.get("productName") ?? productName).trim();
         const resolvedSku = ensureSkuWhenEmpty(nameValue, sku);
         if (resolvedSku && resolvedSku !== sku) {
@@ -790,7 +808,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
                 return;
             }
-            showFeedback(action === "archive" ? t("productArchived") : t("productDeletedSuccess"), "success");
+            showFeedback(action === "archive" ? t("productArchived") : (
+                result.data && typeof result.data === "object" && "deleteMode" in result.data
+                    && (result.data as { deleteMode?: string }).deleteMode === "soft"
+                    ? t("productRemovedFromCatalogue")
+                    : t("productDeletedSuccess")
+            ), "success");
             router.refresh();
             router.push("/products");
         });
@@ -804,7 +827,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         : messageTone === "warning"
             ? "rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning whitespace-pre-line"
             : "rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger whitespace-pre-line";
-    return (<form ref={formRef} className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit} noValidate>
+    return (<form ref={formRef} className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate>
       <div className="sticky top-2 z-20 -mx-1 flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-background/95 px-2 py-2 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/products">
@@ -839,7 +862,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           </div>} onClose={() => setStatusConfirm(null)} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
           <p className="rounded-md border border-border bg-background p-3 text-sm font-semibold">{productName || product.nameEn || product.nameLo}</p>
         </ProductSmallModal>) : null}
-      {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} snapshot={previewSnapshot}/>) : null}
+      {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} onSave={() => {
+            setPreviewSnapshot(null);
+            handleSaveClick();
+        }} snapshot={previewSnapshot}/>) : null}
       {aliasDrawerUnitId ? (<BarcodeAliasDrawer aliasInput={aliasInput} aliases={barcodeAliases[aliasDrawerUnitId] ?? []} onAddAlias={() => addBarcodeAlias(aliasDrawerUnitId)} onAliasInputChange={setAliasInput} onClose={() => setAliasDrawerUnitId(null)} onRemoveAlias={(aliasIndex) => removeBarcodeAlias(aliasDrawerUnitId, aliasIndex)} onUpdateMainBarcode={(barcodeValue) => updateUnit(aliasDrawerUnitId, { barcode: barcodeValue })} unit={units.find((unit) => unit.id === aliasDrawerUnitId)}/>) : null}
       <input type="hidden" name="status" value={product?.status ?? "active"}/>
       <input type="hidden" name="minStock" value={product?.minStock ?? 0}/>
@@ -949,7 +975,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
             </>) : (<>
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <h2 className="text-lg font-semibold">{t("basicProductInformation")}</h2>
@@ -1039,7 +1065,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           </section>
           <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
           {product ? <ProductHistorySection product={product}/> : null}
           </>)}
         </div>
@@ -1158,9 +1184,10 @@ function BarcodeAliasDrawer({ aliasInput, aliases, onAddAlias, onAliasInputChang
     </div>);
 }
 
-function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
+function ProductPreviewDrawer({ isPending, onClose, onSave, snapshot, }: {
     isPending: boolean;
     onClose: () => void;
+    onSave: () => void;
     snapshot: ProductPreviewSnapshot;
 }) {
     const baseUnit = snapshot.units.find((unit) => unit.isBaseUnit) ?? snapshot.units[0];
@@ -1291,7 +1318,7 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
           <button className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
             {t("closePreviewEdit")}
           </button>
-          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="submit" disabled={isPending}>
+          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="button" disabled={isPending} onClick={onSave}>
             <Save aria-hidden="true"/>
             {t("saveProduct")}
           </button>
@@ -1728,13 +1755,14 @@ function CategoryField({ categories, defaultValue, onAction, }: {
       </div>
     </div>);
 }
-function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
+function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
     assignmentMode: ProductImageAssignmentMode | null;
     barcode: string;
     onApplyAssignment: (mode: ProductImageAssignmentMode, image?: ProductFormImage) => void;
     onImportSearchResult: (hit: ProductImageSearchHit) => Promise<ProductFormImage>;
     onPreview: (form: HTMLFormElement | null) => void;
     onRemove: () => void;
+    onSave: () => void;
     onSearchMessage: (message: string, tone: "success" | "error" | "warning") => void;
     onSetMainImage: (imageUrl: string) => void;
     onUpload: (file: File | undefined) => void;
@@ -1936,7 +1964,7 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
             <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10" type="button" onClick={(event) => onPreview(event.currentTarget.form)}>
               {t("previewProduct")}
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="submit">
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={onSave}>
               <Save aria-hidden="true"/>
               {t("save")}
             </button>

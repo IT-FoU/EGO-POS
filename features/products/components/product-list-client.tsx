@@ -77,7 +77,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
     const [listPage, setListPage] = useState<ProductListPage | undefined>(initialListPage);
     const [query, setQuery] = useState("");
     const [categoryId, setCategoryId] = useState("all");
-    const [status, setStatus] = useState<ProductStatus | "all">("all");
+    const [status, setStatus] = useState<ProductStatus | "all">("active");
     const [insightFilter, setInsightFilter] = useState<InsightFilter>("all");
     const [expandedInsight, setExpandedInsight] = useState<SummaryInsight | null>(null);
     const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(
@@ -206,7 +206,10 @@ export function ProductListClient({ products: initialProducts, categories: initi
             }
             setProducts((current) => current.filter((product) => product.id !== productId));
             setSelectedProductIds((current) => current.filter((id) => id !== productId));
-            setMessage(t("productDeleted"));
+            const deleteMode = result.data && typeof result.data === "object" && "deleteMode" in result.data
+                ? (result.data as { deleteMode?: string }).deleteMode
+                : undefined;
+            setMessage(deleteMode === "soft" ? t("productRemovedFromCatalogue") : t("productDeleted"));
             router.refresh();
         });
     }
@@ -216,15 +219,22 @@ export function ProductListClient({ products: initialProducts, categories: initi
             return;
         }
         startTransition(async () => {
+            let softCount = 0;
             for (const productId of selectedProductIds) {
                 const result = await deleteProductAction(productId);
                 if (!result.ok) {
                     setMessage(localizeProductError(result.error ?? "Bulk delete failed."));
                     return;
                 }
+                if (result.data && typeof result.data === "object" && "deleteMode" in result.data
+                    && (result.data as { deleteMode?: string }).deleteMode === "soft") {
+                    softCount += 1;
+                }
             }
             setProducts((current) => current.filter((product) => !selectedProductIds.includes(product.id)));
-            setMessage(fillProductsCopy(t("productsDeleted"), { count: selectedProductIds.length }));
+            setMessage(softCount > 0
+                ? t("productRemovedFromCatalogue")
+                : fillProductsCopy(t("productsDeleted"), { count: selectedProductIds.length }));
             setSelectedProductIds([]);
             router.refresh();
         });
