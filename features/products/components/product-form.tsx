@@ -27,6 +27,12 @@ import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-i
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
+    buildSkuFromProductName,
+    collectProductRequiredGaps,
+    ensureSkuWhenEmpty,
+    type ProductRequiredFieldKey,
+} from "@/features/products/product-sku";
+import {
     applyProductImageAssignment,
     assignImageToNewUnit,
     inferAssignmentMode,
@@ -226,7 +232,36 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     const imageAssignmentModeRef = useRef(imageAssignmentMode);
     imageAssignmentModeRef.current = imageAssignmentMode;
     const [message, setMessage] = useState<string | null>(null);
+    const [messageTone, setMessageTone] = useState<"success" | "error" | "warning">("success");
+    const [saveValidationIssues, setSaveValidationIssues] = useState<string[]>([]);
+    const formRef = useRef<HTMLFormElement | null>(null);
     const isCreate = mode === "create";
+
+    function showFeedback(nextMessage: string, tone: "success" | "error" | "warning") {
+        setMessageTone(tone);
+        setMessage(nextMessage);
+    }
+
+    function labelForRequiredField(field: ProductRequiredFieldKey) {
+        if (field === "productName") return t("productName");
+        if (field === "sku") return t("sku");
+        return t("category");
+    }
+
+    function focusRequiredField(field: ProductRequiredFieldKey) {
+        const name = field === "category" ? "categoryId" : field;
+        const el = formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.focus();
+    }
+
+    function maybeAutofillSkuFromName() {
+        const next = ensureSkuWhenEmpty(productName, sku);
+        if (next && next !== sku) {
+            setSku(next);
+        }
+        return next;
+    }
     useEffect(() => {
         setLocalCategories(categories);
     }, [categories]);
@@ -362,10 +397,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         });
     }
     function generateSku() {
-        const baseName = productName.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
-        const prefix = (baseName || "SKU").slice(0, 12);
-        const timestamp = Date.now().toString().slice(-4);
-        setSku(`${prefix}-${timestamp}`);
+        setSku(buildSkuFromProductName(productName));
     }
     function generateProductCode() {
         const timestamp = Date.now().toString().slice(-4);
@@ -424,10 +456,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     url: previewUrl,
                 };
                 adoptProductImage(image);
-                setMessage(fillProductsCopy(t("uploadedForPreview"), { name: file.name }));
+                showFeedback(fillProductsCopy(t("uploadedForPreview"), { name: file.name }), "success");
             }
             catch (error) {
-                setMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")));
+                showFeedback(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")), "error");
             }
         })();
     }
@@ -515,13 +547,37 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
+        const nameValue = String(formData.get("productName") ?? productName).trim();
+        const resolvedSku = ensureSkuWhenEmpty(nameValue, sku);
+        if (resolvedSku && resolvedSku !== sku) {
+            setSku(resolvedSku);
+        }
+        const categoryId = String(formData.get("categoryId") ?? "").trim();
+        const requireCategory = localCategories.length > 0;
+        const gaps = collectProductRequiredGaps({
+            categoryId,
+            productName: nameValue,
+            requireCategory,
+            sku: resolvedSku,
+        });
+        if (gaps.length > 0) {
+            const labels = gaps.map(labelForRequiredField);
+            setSaveValidationIssues(labels);
+            showFeedback(
+                `${t("unableToSaveProduct")}\n${t("pleaseCompleteRequired")}\n${labels.map((label) => `• ${label}`).join("\n")}`,
+                "error",
+            );
+            focusRequiredField(gaps[0]!);
+            return;
+        }
+        setSaveValidationIssues([]);
         const tags = String(formData.get("tags") ?? "")
             .split(",")
             .map((tag) => tag.trim())
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
         if (conversionInvalid || visibleUnits.some(isActiveUnitQtyInvalid)) {
-            setMessage(t("qtyInBaseMustBePositive"));
+            showFeedback(t("qtyInBaseMustBePositive"), "warning");
             return;
         }
         const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversions(visibleUnits));
@@ -576,7 +632,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         const payload = {
             barcode: derivedBarcode,
             brandId: undefined,
-            categoryId: String(formData.get("categoryId") ?? "").trim() || undefined,
+            categoryId: categoryId || undefined,
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
             imageUrl: productImages.find((image) => image.id === selectedImageId)?.storagePath,
@@ -590,11 +646,11 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 unitName: receiveUnit?.unitName.trim() || undefined,
             } : undefined,
             minStock: Number(formData.get("minStock") ?? 0),
-            nameEn: String(formData.get("productName") ?? "").trim(),
-            nameLo: String(formData.get("productName") ?? "").trim(),
+            nameEn: nameValue,
+            nameLo: nameValue,
             productCode,
             sellingPriceLak,
-            sku,
+            sku: resolvedSku,
             status: String(formData.get("status") ?? "active"),
             stockDisplayMode: String(formData.get("stockDisplayMode") ?? "base_unit_only") as "base_unit_only" | "breakdown",
             supplierId: undefined,
@@ -622,7 +678,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 }
                 const uploaded = await uploadProductImageAction(savedProduct.id, imageData);
                 if (!uploaded.ok) {
-                    setMessage(localizeProductError(uploaded.error ?? t("imageUploadFailed")));
+                    showFeedback(localizeProductError(uploaded.error ?? t("imageUploadFailed")), "error");
                     router.refresh();
                     router.push(`/products/${savedProduct.id}/edit`);
                     return false;
@@ -631,7 +687,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             else if (mode === "edit" && !selectedImage && product?.imageUrl) {
                 const cleared = await clearProductImageAction(savedProduct.id);
                 if (!cleared.ok) {
-                    setMessage(localizeProductError(cleared.error ?? t("imageUploadFailed")));
+                    showFeedback(localizeProductError(cleared.error ?? t("imageUploadFailed")), "error");
                     return false;
                 }
             }
@@ -641,13 +697,13 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             startTransition(async () => {
                 const result = await createProductAction(payload);
                 if (!result.ok) {
-                    setMessage(localizeProductError(result.error ?? "Product save failed."));
+                    showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
                     return;
                 }
                 const saved = result.data as { id: string; units?: Array<{ id: string; unitName: string }> };
                 const uploaded = await persistSavedProduct(saved);
                 if (!uploaded) return;
-                setMessage(t("productSaved"));
+                showFeedback(t("productSaved"), "success");
                 signalPosCatalogueInvalidation();
                 router.refresh();
                 router.push("/products");
@@ -658,19 +714,19 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             startTransition(async () => {
                 const result = await updateProductAction(product.id, payload);
                 if (!result.ok) {
-                    setMessage(localizeProductError(result.error ?? "Product save failed."));
+                    showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
                     return;
                 }
                 const saved = (result.data as { id: string; units?: Array<{ id: string; unitName: string }> } | undefined) ?? product;
                 const uploaded = await persistSavedProduct({ id: saved.id, units: saved.units ?? product.units });
                 if (!uploaded) return;
-                setMessage(t("productSaved"));
+                showFeedback(t("productSaved"), "success");
                 router.refresh();
                 router.push("/products");
             });
             return;
         }
-        setMessage(t("productSaveFailed"));
+        showFeedback(t("productSaveFailed"), "error");
     }
     function duplicateProduct() {
         if (!product)
@@ -678,10 +734,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         startTransition(async () => {
             const result = await duplicateProductAction(product.id);
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Duplicate product failed."));
+                showFeedback(localizeProductError(result.error ?? "Duplicate product failed."), "error");
                 return;
             }
-            setMessage(t("productDuplicated"));
+            showFeedback(t("productDuplicated"), "success");
             router.refresh();
             router.push("/products");
         });
@@ -692,7 +748,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     }) {
         const nextName = input.nameLo.trim();
         if (!nextName) {
-            setMessage(t("categorySaveFailed"));
+            showFeedback(t("categorySaveFailed"), "error");
             return;
         }
         startTransition(async () => {
@@ -702,10 +758,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 nameLo: nextName,
             });
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Category save failed."));
+                showFeedback(localizeProductError(result.error ?? "Category save failed."), "error");
                 return;
             }
-            setMessage(t("categorySaved"));
+            showFeedback(t("categorySaved"), "success");
             setCategoryDialog(null);
             router.refresh();
         });
@@ -714,11 +770,11 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         startTransition(async () => {
             const result = await deleteCategoryAction(categoryId);
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Cannot delete category because products still use it."));
+                showFeedback(localizeProductError(result.error ?? "Cannot delete category because products still use it."), "error");
                 return;
             }
             setLocalCategories((current) => current.filter((category) => category.id !== categoryId));
-            setMessage(t("categoryDeleted"));
+            showFeedback(t("categoryDeleted"), "success");
             setCategoryDialog(null);
             router.refresh();
         });
@@ -731,10 +787,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 ? await archiveProductAction(product.id)
                 : await deleteProductAction(product.id);
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Product save failed."));
+                showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
                 return;
             }
-            setMessage(action === "archive" ? t("productArchived") : t("productDeletedSuccess"));
+            showFeedback(action === "archive" ? t("productArchived") : t("productDeletedSuccess"), "success");
             router.refresh();
             router.push("/products");
         });
@@ -743,7 +799,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         units.find((unit) => unit.isBaseUnit)?.barcode ||
         units.find((unit) => unit.barcode.trim().length > 0)?.barcode ||
         barcode).trim();
-    return (<form className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit}>
+    const feedbackClassName = messageTone === "success"
+        ? "rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success whitespace-pre-line"
+        : messageTone === "warning"
+            ? "rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning whitespace-pre-line"
+            : "rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger whitespace-pre-line";
+    return (<form ref={formRef} className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit} noValidate>
       <div className="sticky top-2 z-20 -mx-1 flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-background/95 px-2 py-2 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/products">
@@ -768,7 +829,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           </div>) : null}
       </div>
 
-      {message ? (<div className="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
+      {message ? (<div className={feedbackClassName} role={messageTone === "success" ? "status" : "alert"}>
           {message}
         </div>) : null}
       {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
@@ -793,7 +854,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 <div className="mt-4 grid gap-3 lg:grid-cols-6">
                   <div className="lg:col-span-6">
                     <Field label={t("productName")}>
-                      <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} placeholder={t("productNamePlaceholder")} required/>
+                      <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={maybeAutofillSkuFromName} placeholder={t("productNamePlaceholder")} required/>
                     </Field>
                   </div>
 
@@ -888,14 +949,14 @@ export function ProductForm({ mode, product, categories, images: _images, initia
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
             </>) : (<>
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <h2 className="text-lg font-semibold">{t("basicProductInformation")}</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
               <Field label={t("productName")}>
-                <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} required/>
+                <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={maybeAutofillSkuFromName} required/>
               </Field>
               </div>
               <Field label={t("productCode")}>
@@ -978,7 +1039,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           </section>
           <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
           {product ? <ProductHistorySection product={product}/> : null}
           </>)}
         </div>
@@ -1667,19 +1728,20 @@ function CategoryField({ categories, defaultValue, onAction, }: {
       </div>
     </div>);
 }
-function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, selectedImageId, units, }: {
+function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
     assignmentMode: ProductImageAssignmentMode | null;
     barcode: string;
     onApplyAssignment: (mode: ProductImageAssignmentMode, image?: ProductFormImage) => void;
     onImportSearchResult: (hit: ProductImageSearchHit) => Promise<ProductFormImage>;
     onPreview: (form: HTMLFormElement | null) => void;
     onRemove: () => void;
-    onSearchMessage: (message: string) => void;
+    onSearchMessage: (message: string, tone: "success" | "error" | "warning") => void;
     onSetMainImage: (imageUrl: string) => void;
     onUpload: (file: File | undefined) => void;
     productImages: ProductFormImage[];
     productName: string;
     removeProductImage: (imageUrl: string) => void;
+    saveValidationIssues?: string[];
     selectedImageId?: string;
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
@@ -1697,11 +1759,11 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
 
     async function runSearch(source: "name" | "barcode") {
         if (source === "name" && !nameReady) {
-            onSearchMessage(t("productNameRequiredForImageSearch"));
+            onSearchMessage(t("productNameRequiredForImageSearch"), "error");
             return;
         }
         if (source === "barcode" && !barcodeReady) {
-            onSearchMessage(t("barcodeRequiredForImageSearch"));
+            onSearchMessage(t("barcodeRequiredForImageSearch"), "error");
             return;
         }
         setSearching(true);
@@ -1713,7 +1775,7 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
                 source,
             });
             if (!result.ok || !result.data) {
-                onSearchMessage(localizeProductError(result.error ?? t("imageSearchNotConfigured")));
+                onSearchMessage(localizeProductError(result.error ?? t("imageSearchNotConfigured")), "error");
                 setResults([]);
                 return;
             }
@@ -1721,14 +1783,14 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
             setLastQuery(result.data.query);
             setResults(result.data.results);
             if (!result.data.configured) {
-                onSearchMessage(t("imageSearchNotConfigured"));
+                onSearchMessage(t("imageSearchNotConfigured"), "warning");
                 return;
             }
             if (result.data.results.length === 0) {
-                onSearchMessage(t("noImageSearchResults"));
+                onSearchMessage(t("noImageSearchResults"), "warning");
             }
         } catch (error) {
-            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageSearchNotConfigured")));
+            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageSearchNotConfigured")), "error");
             setResults([]);
         } finally {
             setSearching(false);
@@ -1739,9 +1801,9 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
         setImporting(true);
         try {
             const image = await onImportSearchResult(hit);
-            onSearchMessage(fillProductsCopy(t("uploadedForPreview"), { name: image.label }));
+            onSearchMessage(fillProductsCopy(t("uploadedForPreview"), { name: image.label }), "success");
         } catch (error) {
-            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")));
+            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")), "error");
         } finally {
             setImporting(false);
         }
@@ -1846,7 +1908,7 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
                     </p>
                     <button className="mt-2 h-9 w-full rounded-md border border-border text-xs font-semibold transition hover:border-primary" type="button" onClick={() => {
                         onSetMainImage(image.id);
-                        onSearchMessage(fillProductsCopy(t("setMainImageMessage"), { name: image.label }));
+                        onSearchMessage(fillProductsCopy(t("setMainImageMessage"), { name: image.label }), "success");
                     }}>
                       {t("setAsMainImage")}
                     </button>
@@ -1856,6 +1918,17 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
                   </div>);
             })}
             </div>)}
+          {saveValidationIssues.length > 0 ? (
+            <div className="mt-4 rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert" data-testid="product-save-validation-summary">
+              <p className="font-semibold">{t("unableToSaveProduct")}</p>
+              <p className="mt-1">{t("pleaseCompleteRequired")}</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {saveValidationIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <Link className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" href="/products">
               {t("cancel")}
