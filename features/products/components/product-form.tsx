@@ -255,12 +255,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         el?.focus();
     }
 
-    function maybeAutofillSkuFromName() {
-        const next = ensureSkuWhenEmpty(productName, sku);
-        if (next && next !== sku) {
-            setSku(next);
-        }
-        return next;
+    function maybeAutofillSkuFromName(nameOverride?: string) {
+        const nameValue = (nameOverride ?? productName).trim();
+        setSku((current) => {
+            const next = ensureSkuWhenEmpty(nameValue, current);
+            return next || current;
+        });
     }
     useEffect(() => {
         setLocalCategories(categories);
@@ -854,7 +854,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 <div className="mt-4 grid gap-3 lg:grid-cols-6">
                   <div className="lg:col-span-6">
                     <Field label={t("productName")}>
-                      <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={maybeAutofillSkuFromName} placeholder={t("productNamePlaceholder")} required/>
+                      <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={(event) => maybeAutofillSkuFromName(event.currentTarget.value)} placeholder={t("productNamePlaceholder")} required/>
                     </Field>
                   </div>
 
@@ -956,7 +956,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
               <Field label={t("productName")}>
-                <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={maybeAutofillSkuFromName} required/>
+                <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={(event) => maybeAutofillSkuFromName(event.currentTarget.value)} required/>
               </Field>
               </div>
               <Field label={t("productCode")}>

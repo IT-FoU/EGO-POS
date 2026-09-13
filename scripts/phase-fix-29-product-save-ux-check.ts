@@ -90,7 +90,7 @@ check("I. Valid product with image save path intact", () => {
 check("J. Existing Edit Product SKU remains unchanged", () => {
   assert(productSku.includes("if (trimmedSku) return trimmedSku"), "empty-only guard missing");
   assert(productForm.includes("ensureSkuWhenEmpty"), "ensure helper unused");
-  assert(productForm.includes("onBlur={maybeAutofillSkuFromName}"), "blur autofill missing");
+  assert(productForm.includes("onBlur={(event) => maybeAutofillSkuFromName(event.currentTarget.value)}"), "blur autofill missing");
   assert(productForm.includes("buildSkuFromProductName(productName)"), "button uses shared builder");
 });
 
