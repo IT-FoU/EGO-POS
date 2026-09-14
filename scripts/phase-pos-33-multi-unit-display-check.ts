@@ -162,13 +162,20 @@ check("18-20. stock conversion availability", () => {
   assert(planned.maxSellableQty === 2, "sellable packs");
 });
 
-check("client wiring + receipt unit label", () => {
+check("client wiring + More menu Unit Display control", () => {
   assert(client.includes("projectPosCatalogueCards"), "catalogue projection");
   assert(client.includes("unitDisplayMode"), "display mode state");
   assert(client.includes("unitDisplayMode === \"separate\""), "separate click path");
   assert(client.includes("ui.barcode.conflict"), "conflict message");
   assert(client.includes("item.unitName ? ` — ${item.unitName}`"), "receipt unit");
   assert(cart.includes("expandPosSellableUnitCards"), "expand helper");
+  assert(client.includes('label={t("ui.unit.display")}'), "More menu Unit Display");
+  assert(client.includes('data-testid="pos-unit-display-mode"'), "mode picker");
+  assert(client.includes('setPosUnitDisplayMode("separate")'), "select separate");
+  assert(client.includes('setPosUnitDisplayMode("combined")'), "select combined");
+  assert(client.includes("ui.unit.cards.separate.hint"), "separate hint");
+  assert(client.includes("ui.unit.cards.combined.hint"), "combined hint");
+  assert(!client.includes("toggleUnitDisplayMode"), "header toggle removed");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

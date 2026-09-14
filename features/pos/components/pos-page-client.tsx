@@ -205,6 +205,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [unitDisplayMode, setUnitDisplayMode] = useState<PosUnitDisplayMode>(DEFAULT_POS_UNIT_DISPLAY_MODE);
     const [favoritesOpen, setFavoritesOpen] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    const [unitDisplayOpen, setUnitDisplayOpen] = useState(false);
     const [cashShiftCountOpen, setCashShiftCountOpen] = useState(false);
     const [cashInOutOpen, setCashInOutOpen] = useState(false);
     const [cashInOutBusy, setCashInOutBusy] = useState(false);
@@ -743,12 +744,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return next;
         });
     }
-    function toggleUnitDisplayMode() {
-        setUnitDisplayMode((current) => {
-            const next: PosUnitDisplayMode = current === "separate" ? "combined" : "separate";
-            writePosUnitDisplayMode(next);
-            return next;
-        });
+    function setPosUnitDisplayMode(mode: PosUnitDisplayMode) {
+        setUnitDisplayMode(mode);
+        writePosUnitDisplayMode(mode);
     }
     function searchMembership() {
         const rawQuery = membershipQuery.trim();
@@ -1731,7 +1729,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       <section className={cn("min-w-0 gap-4", productGridVisible ? "grid xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : "flex flex-col")}>
         <main className={cn("min-w-0", productGridVisible && cartCollapsed ? "contents" : "flex flex-col gap-3")}>
           <Panel className={cn("overflow-hidden p-3 shadow-sm", productGridVisible && cartCollapsed && "xl:col-start-1 xl:row-start-1")}>
-            <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto]">
+            <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <label className="relative">
                 <Barcode className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary" aria-hidden="true"/>
                 <input autoFocus className="h-[60px] w-full rounded-xl border border-primary/35 bg-background pl-12 pr-4 text-lg font-bold shadow-inner outline-none transition placeholder:text-sm placeholder:font-medium focus:border-primary focus:ring-4 focus:ring-primary/10" placeholder={t("ui.search.or.scan.barcode.sku.product.name")} value={productQuery} onChange={(event) => setProductQuery(event.target.value)} onKeyDown={(event) => {
@@ -1743,9 +1741,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               </label>
               <button className="h-[60px] rounded-xl border border-primary/25 bg-primary/10 px-4 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setFavoritesOpen(true)}>
                 {t("ui.favorites")}
-              </button>
-              <button className="h-[60px] rounded-xl border border-border bg-background px-4 text-sm font-bold transition hover:border-primary hover:text-primary" type="button" onClick={toggleUnitDisplayMode} title={t("ui.unit.display.hint")}>
-                {unitDisplayMode === "separate" ? t("ui.unit.cards.separate") : t("ui.unit.cards.combined")}
               </button>
               <button className="h-[60px] rounded-xl border border-border bg-background px-4 text-sm font-bold transition hover:border-primary hover:text-primary" type="button" onClick={toggleProductGrid}>
                 {productGridVisible ? t("ui.hide.products") : t("ui.show.products")}
@@ -1902,6 +1897,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setHeldBillsOpen(true);
             setMoreMenuOpen(false);
         }}/>
+          <MoreMenuButton label={t("ui.unit.display")} onClick={() => {
+            setUnitDisplayOpen(true);
+            setMoreMenuOpen(false);
+        }}/>
           <MoreMenuButton label={t("ui.cash.shift.count")} onClick={() => {
             setCashShiftCountOpen(true);
             setMoreMenuOpen(false);
@@ -1938,10 +1937,57 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         </div>
       </PosModal>) : null}
 
+      {unitDisplayOpen ? (<PosModal title={t("ui.unit.display")} onClose={() => setUnitDisplayOpen(false)}>
+        <p className="text-sm text-muted-foreground">{t("ui.unit.display.hint")}</p>
+        <div className="mt-4 grid gap-3" data-testid="pos-unit-display-mode">
+          <button
+            aria-pressed={unitDisplayMode === "separate"}
+            className={cn(
+              "rounded-xl border p-4 text-left transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              unitDisplayMode === "separate" ? "border-primary bg-primary/10" : "border-border bg-background",
+            )}
+            type="button"
+            onClick={() => setPosUnitDisplayMode("separate")}
+          >
+            <div className="flex items-start gap-3">
+              <span className={cn("mt-1 grid size-4 shrink-0 place-items-center rounded-full border", unitDisplayMode === "separate" ? "border-primary" : "border-muted-foreground")}>
+                {unitDisplayMode === "separate" ? <span className="size-2 rounded-full bg-primary"/> : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-foreground">{t("ui.unit.cards.separate")}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{t("ui.unit.cards.separate.hint")}</span>
+              </span>
+            </div>
+          </button>
+          <button
+            aria-pressed={unitDisplayMode === "combined"}
+            className={cn(
+              "rounded-xl border p-4 text-left transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+              unitDisplayMode === "combined" ? "border-primary bg-primary/10" : "border-border bg-background",
+            )}
+            type="button"
+            onClick={() => setPosUnitDisplayMode("combined")}
+          >
+            <div className="flex items-start gap-3">
+              <span className={cn("mt-1 grid size-4 shrink-0 place-items-center rounded-full border", unitDisplayMode === "combined" ? "border-primary" : "border-muted-foreground")}>
+                {unitDisplayMode === "combined" ? <span className="size-2 rounded-full bg-primary"/> : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-foreground">{t("ui.unit.cards.combined")}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{t("ui.unit.cards.combined.hint")}</span>
+              </span>
+            </div>
+          </button>
+        </div>
+        <p className="mt-4 text-xs font-semibold text-muted-foreground">
+          {t("ui.unit.display.current")}: {unitDisplayMode === "separate" ? t("ui.unit.cards.separate") : t("ui.unit.cards.combined")}
+        </p>
+      </PosModal>) : null}
+
       {favoritesOpen ? (<PosModal title={t("ui.favorites")} onClose={() => setFavoritesOpen(false)}>
         {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => {
-            addToCart(product);
+            selectProductForSale(product);
             setFavoritesOpen(false);
         }}/>))}
         </div>)}
