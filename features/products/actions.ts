@@ -130,11 +130,15 @@ export async function uploadProductImageAction(productId: string, formData: Form
 export async function searchProductImagesAction(input: {
   barcode?: string;
   productName?: string;
+  query?: string;
   source: ImageSearchSource;
 }) {
   try {
     await requireReadPermission(READ_PERMISSIONS.productsView);
-    const resolved = resolveImageSearchQuery(input.source, input);
+    const manualQuery = String(input.query ?? "").trim();
+    const resolved = manualQuery
+      ? ({ ok: true as const, query: manualQuery, source: input.source })
+      : resolveImageSearchQuery(input.source, input);
     if (!resolved.ok) {
       throw new Error(resolved.reason === "empty-name" ? "Product name is required" : "Barcode is required");
     }

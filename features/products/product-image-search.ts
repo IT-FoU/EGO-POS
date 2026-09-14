@@ -13,6 +13,7 @@ export type ProductImageSearchHit = {
   height?: number;
   id: string;
   importUrl: string;
+  sourceDomain?: string;
   sourcePageUrl?: string;
   thumbnailUrl: string;
   title: string;
@@ -47,6 +48,16 @@ function httpsUrl(value: unknown) {
   return url.startsWith("https://") ? url : "";
 }
 
+function sourceDomainFromUrl(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    const host = new URL(value).hostname.trim().toLowerCase();
+    return host || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function dimension(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
@@ -68,11 +79,13 @@ export function mapBraveImageResults(payload: unknown): ProductImageSearchHit[] 
     const importUrl = httpsUrl(record.properties?.url) || httpsUrl(record.thumbnail?.src);
     const thumbnailUrl = httpsUrl(record.thumbnail?.src) || importUrl;
     if (!importUrl || !thumbnailUrl) continue;
+    const sourcePageUrl = httpsUrl(record.url) || undefined;
     hits.push({
       height: dimension(record.properties?.height),
       id: `${index}:${importUrl}`,
       importUrl,
-      sourcePageUrl: httpsUrl(record.url) || undefined,
+      sourceDomain: sourceDomainFromUrl(sourcePageUrl) || sourceDomainFromUrl(importUrl),
+      sourcePageUrl,
       thumbnailUrl,
       title: trimValue(record.title) || "Image",
       width: dimension(record.properties?.width),

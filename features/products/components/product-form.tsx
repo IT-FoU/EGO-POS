@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
-import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, searchProductImagesAction, importRemoteProductImageAction, } from "@/features/products/actions";
+import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { createSupplierAction } from "@/features/suppliers/actions";
 import type { Supplier } from "@/features/suppliers/types";
@@ -25,6 +25,7 @@ import { optimizeProductImageFile } from "@/features/products/product-image-opti
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { ThemedSelect } from "@/features/products/components/themed-select";
+import { BraveImageSearchBrowser } from "@/features/products/components/brave-image-search-browser";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
 import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
@@ -2342,62 +2343,17 @@ function ProductImagesSection({ assignmentMode, barcode, isPending = false, onAp
     selectedImageId?: string;
     units: ProductUnit[];
 }) {
-    const [chooserOpen, setChooserOpen] = useState(false);
-    const [searching, setSearching] = useState(false);
+    const [browserOpen, setBrowserOpen] = useState(false);
     const [importing, setImporting] = useState(false);
     const [previewImage, setPreviewImage] = useState<ProductFormImage | null>(null);
-    const [results, setResults] = useState<ProductImageSearchHit[]>([]);
-    const [lastQuery, setLastQuery] = useState<string | null>(null);
-    const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
-    const nameReady = productName.trim().length > 0;
-    const barcodeReady = barcode.trim().length > 0;
     const selectedImage = productImages.find((image) => image.id === selectedImageId);
 
-    async function runSearch(source: "name" | "barcode") {
-        if (source === "name" && !nameReady) {
-            onSearchMessage(t("productNameRequiredForImageSearch"), "error");
-            return;
-        }
-        if (source === "barcode" && !barcodeReady) {
-            onSearchMessage(t("barcodeRequiredForImageSearch"), "error");
-            return;
-        }
-        setSearching(true);
-        setChooserOpen(false);
-        try {
-            const result = await searchProductImagesAction({
-                barcode,
-                productName,
-                source,
-            });
-            if (!result.ok || !result.data) {
-                onSearchMessage(localizeProductError(result.error ?? t("imageSearchNotConfigured")), "error");
-                setResults([]);
-                return;
-            }
-            setProviderConfigured(result.data.configured);
-            setLastQuery(result.data.query);
-            setResults(result.data.results);
-            if (!result.data.configured) {
-                onSearchMessage(t("imageSearchNotConfigured"), "warning");
-                return;
-            }
-            if (result.data.results.length === 0) {
-                onSearchMessage(t("noImageSearchResults"), "warning");
-            }
-        } catch (error) {
-            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageSearchNotConfigured")), "error");
-            setResults([]);
-        } finally {
-            setSearching(false);
-        }
-    }
-
-    async function selectSearchHit(hit: ProductImageSearchHit) {
+    async function useSearchHit(hit: ProductImageSearchHit) {
         setImporting(true);
         try {
             const image = await onImportSearchResult(hit);
             onSearchMessage(fillProductsCopy(t("uploadedForPreview"), { name: image.label }), "success");
+            setBrowserOpen(false);
         } catch (error) {
             onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")), "error");
         } finally {
@@ -2407,49 +2363,27 @@ function ProductImagesSection({ assignmentMode, barcode, isPending = false, onAp
 
     return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
       {previewImage ? (<ImagePreviewDialog image={previewImage} onClose={() => setPreviewImage(null)}/>) : null}
+      {browserOpen ? (
+        <BraveImageSearchBrowser
+          barcode={barcode}
+          importing={importing}
+          productName={productName}
+          onClose={() => {
+            if (!importing) setBrowserOpen(false);
+          }}
+          onUseImage={useSearchHit}
+        />
+      ) : null}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-semibold">{t("productImages")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("imageSearchHint")}</p>
         </div>
-        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setChooserOpen((open) => !open)} onFocus={() => setChooserOpen(true)}>
+        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setBrowserOpen(true)}>
           <Search aria-hidden="true" className="size-4"/>
           {t("searchImages")}
         </button>
       </div>
-
-      {chooserOpen ? (
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <p className="text-sm font-semibold">{t("chooseImageSearchSource")}</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <button className="rounded-md border border-border px-3 py-2 text-left text-sm font-semibold transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!nameReady} type="button" onClick={() => void runSearch("name")}>
-              {t("searchByProductName")}
-              <span className="mt-1 block text-xs font-normal text-muted-foreground">{nameReady ? productName.trim() : t("productNameRequiredForImageSearch")}</span>
-            </button>
-            <button className="rounded-md border border-border px-3 py-2 text-left text-sm font-semibold transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!barcodeReady} type="button" onClick={() => void runSearch("barcode")}>
-              {t("searchByBarcode")}
-              <span className="mt-1 block text-xs font-normal text-muted-foreground">{barcodeReady ? barcode.trim() : t("barcodeRequiredForImageSearch")}</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {searching || importing ? (<p className="mt-3 text-sm font-semibold text-muted-foreground">{importing ? t("importingImage") : t("searchingImages")}</p>) : null}
-      {providerConfigured === false ? (<p className="mt-3 text-sm text-muted-foreground">{t("imageSearchNotConfigured")}</p>) : null}
-      {lastQuery && providerConfigured && results.length === 0 && !searching ? (<p className="mt-3 text-sm text-muted-foreground">{t("noImageSearchResults")}</p>) : null}
-      {results.length > 0 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {results.map((hit) => (
-            <button className="overflow-hidden rounded-lg border border-border bg-background text-left transition hover:border-primary" disabled={importing} key={hit.id} type="button" onClick={() => void selectSearchHit(hit)}>
-              <div className="grid aspect-square place-items-center bg-card">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img alt={hit.title} className="size-full object-cover" decoding="async" loading="lazy" src={hit.thumbnailUrl}/>
-              </div>
-              <div className="truncate px-2 py-2 text-xs font-semibold">{hit.title}</div>
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
         <div className="rounded-lg border border-dashed border-border bg-background p-4">
