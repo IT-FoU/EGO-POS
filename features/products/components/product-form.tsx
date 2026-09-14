@@ -235,8 +235,19 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     const [selectedBrandId, setSelectedBrandId] = useState(product?.brandId ?? "");
     const [brandDialogOpen, setBrandDialogOpen] = useState(false);
     const [brandDraft, setBrandDraft] = useState("");
-    const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(() => suppliers.filter((row) => row.status === "active" || row.id === product?.supplierId));
-    const [selectedSupplierId, setSelectedSupplierId] = useState(product?.supplierId ?? "");
+    const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(() => {
+        const linkedIds = new Set([
+            ...(product?.supplierIds ?? []),
+            ...(product?.supplierId ? [product.supplierId] : []),
+        ]);
+        return suppliers.filter((row) => row.status === "active" || linkedIds.has(row.id));
+    });
+    const [assignedSupplierIds, setAssignedSupplierIds] = useState<string[]>(() => {
+        if (product?.supplierIds?.length) return [...product.supplierIds];
+        return product?.supplierId ? [product.supplierId] : [];
+    });
+    const [preferredSupplierId, setPreferredSupplierId] = useState(product?.supplierId ?? "");
+    const [supplierPickId, setSupplierPickId] = useState("");
     const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
     const [supplierDraft, setSupplierDraft] = useState("");
     const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
@@ -378,20 +389,31 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
         if (product?.brandId) setSelectedBrandId(product.brandId);
     }, [brands, product?.brandId]);
     useEffect(() => {
+        const linkedIds = new Set([
+            ...assignedSupplierIds,
+            ...(product?.supplierIds ?? []),
+            ...(product?.supplierId ? [product.supplierId] : []),
+        ]);
         setLocalSuppliers((current) => {
-            const next = suppliers.filter((row) => row.status === "active" || row.id === product?.supplierId);
+            const next = suppliers.filter((row) => row.status === "active" || linkedIds.has(row.id));
             const byId = new Map(next.map((supplier) => [supplier.id, supplier]));
             for (const supplier of current) {
-                if (!byId.has(supplier.id) && (supplier.status === "active" || supplier.id === product?.supplierId || supplier.id === selectedSupplierId)) {
+                if (!byId.has(supplier.id) && linkedIds.has(supplier.id)) {
                     byId.set(supplier.id, supplier);
                 }
             }
             return [...byId.values()].sort((a, b) => a.companyName.localeCompare(b.companyName));
         });
-        if (product?.supplierId) setSelectedSupplierId(product.supplierId);
-    // selectedSupplierId intentionally omitted — preserve inline create selection across refresh.
+        if (product?.supplierIds?.length) {
+            setAssignedSupplierIds([...product.supplierIds]);
+            setPreferredSupplierId(product.supplierId ?? product.supplierIds[0] ?? "");
+        } else if (product?.supplierId) {
+            setAssignedSupplierIds([product.supplierId]);
+            setPreferredSupplierId(product.supplierId);
+        }
+    // assignedSupplierIds intentionally omitted — preserve inline create/add selection across refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [product?.supplierId, suppliers]);
+    }, [product?.supplierId, product?.supplierIds, suppliers]);
     useEffect(() => {
         if (!previewSnapshot)
             return;
@@ -689,7 +711,9 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                 productCode,
                 sku,
                 category: categoryLabel(selectedCategoryId || String(formData.get("categoryId") ?? "")),
-                supplierName: supplierLabel(selectedSupplierId || String(formData.get("supplierId") ?? "")),
+                supplierName: assignedSupplierIds.length
+                    ? assignedSupplierIds.map((id) => supplierLabel(id)).filter((name) => name !== "—").join(", ") || "—"
+                    : "—",
                 brandName: brandLabel(selectedBrandId || String(formData.get("brandId") ?? "")),
                 description: String(formData.get("description") ?? "").trim() || "—",
             },
@@ -825,7 +849,8 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             sku: resolvedSku,
             status: String(formData.get("status") ?? "active"),
             stockDisplayMode: String(formData.get("stockDisplayMode") ?? "base_unit_only") as "base_unit_only" | "breakdown",
-            supplierId: selectedSupplierId || undefined,
+            supplierId: preferredSupplierId || assignedSupplierIds[0] || undefined,
+            supplierIds: assignedSupplierIds,
             tags,
             units: productUnits,
         };
@@ -1054,11 +1079,34 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                 const without = current.filter((supplier) => supplier.id !== mapped.id);
                 return [...without, mapped].sort((a, b) => a.companyName.localeCompare(b.companyName));
             });
-            setSelectedSupplierId(mapped.id);
+            setAssignedSupplierIds((current) => current.includes(mapped.id) ? current : [...current, mapped.id]);
+            setPreferredSupplierId((current) => current || mapped.id);
+            setSupplierPickId("");
             setSupplierDraft("");
             setSupplierDialogOpen(false);
             showFeedback(t("supplierSaved"), "success");
             router.refresh();
+        });
+    }
+    function addAssignedSupplier(supplierId: string) {
+        const nextId = supplierId.trim();
+        if (!nextId) return;
+        setAssignedSupplierIds((current) => {
+            if (current.includes(nextId)) return current;
+            const next = [...current, nextId];
+            setPreferredSupplierId((preferred) => preferred || nextId);
+            return next;
+        });
+        setSupplierPickId("");
+    }
+    function removeAssignedSupplier(supplierId: string) {
+        setAssignedSupplierIds((current) => {
+            const next = current.filter((id) => id !== supplierId);
+            setPreferredSupplierId((preferred) => {
+                if (preferred !== supplierId) return preferred;
+                return next[0] ?? "";
+            });
+            return next;
         });
     }
     function deleteCategory(categoryId: string) {
@@ -1208,11 +1256,29 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                   </div>
                   <div className="lg:col-span-3">
                     <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                      <span>{t("supplierName")}</span>
+                      <span>{t("suppliers")}</span>
+                      <div className="flex flex-wrap gap-2">
+                        {assignedSupplierIds.map((id) => {
+                          const supplier = localSuppliers.find((row) => row.id === id);
+                          const label = supplier?.companyName || supplier?.supplierCode || id;
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold" key={id}>
+                              {label}
+                              <button aria-label={t("removeSupplier")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
+                                <X aria-hidden="true" className="size-3.5"/>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
                       <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-                        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="supplierId" value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)}>
-                          <option value="">{t("noSupplierSelected")}</option>
-                          {localSuppliers.map((supplier) => (
+                        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" value={supplierPickId} onChange={(event) => {
+                          const next = event.target.value;
+                          setSupplierPickId(next);
+                          if (next) addAssignedSupplier(next);
+                        }}>
+                          <option value="">{t("addExistingSupplier")}</option>
+                          {localSuppliers.filter((supplier) => !assignedSupplierIds.includes(supplier.id)).map((supplier) => (
                             <option key={supplier.id} value={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
                           ))}
                         </select>
@@ -1220,7 +1286,25 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                           <Plus aria-hidden="true" className="size-4"/>
                         </button>
                       </div>
-                      <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                      {assignedSupplierIds.length > 0 ? (
+                        <div className="rounded-md border border-border bg-background p-3">
+                          <p className="text-xs font-semibold text-muted-foreground">{t("preferredSupplier")}</p>
+                          <div className="mt-2 space-y-2">
+                            {assignedSupplierIds.map((id) => {
+                              const supplier = localSuppliers.find((row) => row.id === id);
+                              const label = supplier?.companyName || supplier?.supplierCode || id;
+                              return (
+                                <label className="flex items-center gap-2 text-sm font-medium" key={`preferred-${id}`}>
+                                  <input checked={preferredSupplierId === id} name="preferredSupplierId" type="radio" value={id} onChange={() => setPreferredSupplierId(id)}/>
+                                  <span>{label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                      )}
                     </div>
                   </div>
                   <div className="lg:col-span-3">
@@ -1324,12 +1408,30 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                 <span className="text-xs text-muted-foreground">{t("skuHint")}</span>
               </Field>
                     <CategoryField categories={localCategories} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
-              <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                <span>{t("supplierName")}</span>
+              <div className="flex min-w-0 flex-col gap-2 text-sm font-medium md:col-span-2">
+                <span>{t("suppliers")}</span>
+                <div className="flex flex-wrap gap-2">
+                  {assignedSupplierIds.map((id) => {
+                    const supplier = localSuppliers.find((row) => row.id === id);
+                    const label = supplier?.companyName || supplier?.supplierCode || id;
+                    return (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold" key={id}>
+                        {label}
+                        <button aria-label={t("removeSupplier")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
+                          <X aria-hidden="true" className="size-3.5"/>
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
                 <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-                  <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="supplierId" value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)}>
-                    <option value="">{t("noSupplierSelected")}</option>
-                    {localSuppliers.map((supplier) => (
+                  <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" value={supplierPickId} onChange={(event) => {
+                    const next = event.target.value;
+                    setSupplierPickId(next);
+                    if (next) addAssignedSupplier(next);
+                  }}>
+                    <option value="">{t("addExistingSupplier")}</option>
+                    {localSuppliers.filter((supplier) => !assignedSupplierIds.includes(supplier.id)).map((supplier) => (
                       <option key={supplier.id} value={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
                     ))}
                   </select>
@@ -1337,7 +1439,25 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                     <Plus aria-hidden="true" className="size-4"/>
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                {assignedSupplierIds.length > 0 ? (
+                  <div className="rounded-md border border-border bg-background p-3">
+                    <p className="text-xs font-semibold text-muted-foreground">{t("preferredSupplier")}</p>
+                    <div className="mt-2 space-y-2">
+                      {assignedSupplierIds.map((id) => {
+                        const supplier = localSuppliers.find((row) => row.id === id);
+                        const label = supplier?.companyName || supplier?.supplierCode || id;
+                        return (
+                          <label className="flex items-center gap-2 text-sm font-medium" key={`preferred-edit-${id}`}>
+                            <input checked={preferredSupplierId === id} name="preferredSupplierId" type="radio" value={id} onChange={() => setPreferredSupplierId(id)}/>
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                )}
               </div>
               <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
                 <span>{t("brandName")}</span>

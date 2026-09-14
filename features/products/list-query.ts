@@ -54,6 +54,13 @@ export const productListInclude = {
     select: { expiryDate: true },
     take: 1,
   },
+  productSuppliers: {
+    select: {
+      isPreferred: true,
+      supplierId: true,
+      supplier: { select: { companyName: true, name: true } },
+    },
+  },
   supplier: { select: { companyName: true, id: true, name: true } },
   units: {
     orderBy: { sortOrder: "asc" as const },
@@ -149,7 +156,16 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
     ...productInventoryScopeWhere(scope),
     ...(query.categoryId && query.categoryId !== "all" ? { categoryId: query.categoryId } : {}),
     ...(query.brandId && query.brandId !== "all" ? { brandId: query.brandId } : {}),
-    ...(query.supplierId && query.supplierId !== "all" ? { supplierId: query.supplierId } : {}),
+    ...(query.supplierId && query.supplierId !== "all"
+      ? {
+          productSuppliers: {
+            some: {
+              companyId: scope.companyId,
+              supplierId: query.supplierId,
+            },
+          },
+        }
+      : {}),
     ...(query.status && query.status !== "all" ? { status: query.status } : {}),
     ...searchWhere,
     ...insightWhere,

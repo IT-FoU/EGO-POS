@@ -184,7 +184,10 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
                     .includes(normalizedQuery);
             const matchesCategory = categoryId === "all" || product.categoryId === categoryId;
             const matchesBrand = brandId === "all" || product.brandId === brandId;
-            const matchesSupplier = supplierId === "all" || product.supplierId === supplierId;
+            const matchesSupplier = supplierId === "all"
+                || product.supplierId === supplierId
+                || (product.supplierIds ?? []).includes(supplierId)
+                || (product.productSuppliers ?? []).some((row) => row.supplierId === supplierId);
             const matchesStatus = status === "all" || product.status === status;
             const matchesInsight = matchesInsightFilter(product, insightFilter);
             return matchesQuery && matchesCategory && matchesBrand && matchesSupplier && matchesStatus && matchesInsight;

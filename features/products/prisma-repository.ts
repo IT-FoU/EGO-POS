@@ -66,6 +66,10 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
       category: true,
       inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
       priceHistory: { orderBy: { createdAt: "desc" }, take: 50 },
+      productSuppliers: {
+        include: { supplier: { select: { companyName: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       supplier: true,
       units: { orderBy: { sortOrder: "asc" } },
     },
@@ -188,7 +192,10 @@ export type ProductWriteInput = {
   sku?: string;
   status?: string;
   stockDisplayMode?: "base_unit_only" | "breakdown";
+  /** Preferred supplier (denormalized products.supplier_id). */
   supplierId?: string;
+  /** All assigned supplier ids (product_suppliers). When provided on update, replaces the link set. */
+  supplierIds?: string[];
   tags?: string[];
   units?: ProductUnitWriteInput[];
 };
@@ -385,6 +392,10 @@ async function loadCreatedProduct(tx: any, productId: string) {
       brand: true,
       category: true,
       inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
+      productSuppliers: {
+        include: { supplier: { select: { companyName: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       supplier: true,
       units: { orderBy: { sortOrder: "asc" } },
     },
@@ -455,19 +466,111 @@ async function assertSupplierInBranch(client: any, scope: Awaited<ReturnType<typ
   });
 }
 
+function resolveAssignedSupplierIds(input: Partial<ProductWriteInput>) {
+  if (input.supplierIds !== undefined) {
+    return Array.from(new Set(input.supplierIds.map((id) => String(id ?? "").trim()).filter(Boolean)));
+  }
+  const preferred = optionalString(input.supplierId);
+  return preferred ? [preferred] : [];
+}
+
+/**
+ * Sync product_suppliers + products.supplier_id in one transactional path.
+ * Preferred removal rule: if preferred is removed/missing, auto-pick the first remaining assigned supplier.
+ * If no suppliers remain, clear products.supplier_id and delete all product_suppliers rows.
+ */
+async function syncProductSuppliers(
+  tx: any,
+  scope: Awaited<ReturnType<typeof resolveTenantScope>>,
+  productId: string,
+  input: Partial<ProductWriteInput>,
+) {
+  // Only sync when caller explicitly provides supplierIds or supplierId.
+  if (input.supplierIds === undefined && input.supplierId === undefined) {
+    return;
+  }
+
+  const assignedIds = resolveAssignedSupplierIds(input);
+  for (const supplierId of assignedIds) {
+    await assertSupplierInBranch(tx, scope, supplierId);
+  }
+
+  let preferredId = optionalString(input.supplierId);
+  if (preferredId && !assignedIds.includes(preferredId)) {
+    preferredId = undefined;
+  }
+  if (!preferredId && assignedIds.length > 0) {
+    preferredId = assignedIds[0];
+  }
+  if (assignedIds.length === 0) {
+    preferredId = undefined;
+  }
+
+  if (assignedIds.length === 0) {
+    await tx.productSupplier.deleteMany({ where: { companyId: scope.companyId, productId } });
+    await tx.product.update({ data: { supplierId: null }, where: { id: productId } });
+    return;
+  }
+
+  const existing = await tx.productSupplier.findMany({
+    select: { id: true, supplierId: true },
+    where: { companyId: scope.companyId, productId },
+  });
+  const existingBySupplier = new Map(existing.map((row: { id: string; supplierId: string }) => [row.supplierId, row.id]));
+
+  for (const supplierId of assignedIds) {
+    if (!existingBySupplier.has(supplierId)) {
+      await tx.productSupplier.create({
+        data: {
+          companyId: scope.companyId,
+          isPreferred: false,
+          productId,
+          supplierId,
+        },
+      });
+    }
+  }
+
+  await tx.productSupplier.deleteMany({
+    where: {
+      companyId: scope.companyId,
+      productId,
+      supplierId: { notIn: assignedIds },
+    },
+  });
+
+  // Clear all preferred flags first so the partial unique index never sees two trues.
+  await tx.productSupplier.updateMany({
+    data: { isPreferred: false },
+    where: { companyId: scope.companyId, productId },
+  });
+
+  if (preferredId) {
+    await tx.productSupplier.updateMany({
+      data: { isPreferred: true },
+      where: { companyId: scope.companyId, productId, supplierId: preferredId },
+    });
+  }
+
+  await tx.product.update({
+    data: { supplierId: preferredId ?? null },
+    where: { id: productId },
+  });
+}
+
 async function assertProductBranchReferences(
   client: any,
   scope: Awaited<ReturnType<typeof resolveTenantScope>>,
   input: Partial<ProductWriteInput>,
 ) {
   const categoryId = optionalString(input.categoryId);
-  const supplierId = optionalString(input.supplierId);
+  const supplierIds = resolveAssignedSupplierIds(input);
 
   if (categoryId) {
     await assertCategoryInBranch(client, scope, categoryId);
   }
 
-  if (supplierId) {
+  for (const supplierId of supplierIds) {
     await assertSupplierInBranch(client, scope, supplierId);
   }
 }
@@ -585,13 +688,18 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
       sku: optionalString(input.sku),
       status: input.status ?? "active",
       stockDisplayMode: input.stockDisplayMode ?? "base_unit_only",
-      supplierId: optionalString(input.supplierId),
+      supplierId: null,
       tags: input.tags ?? [],
       units: {
         create: units.map(({ id: _id, ...unit }) => unit),
       },
     },
     include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+  });
+
+  await syncProductSuppliers(tx, scope, createdProduct.id, {
+    supplierId: input.supplierId,
+    supplierIds: input.supplierIds ?? (optionalString(input.supplierId) ? [optionalString(input.supplierId)!] : []),
   });
 
   await seedDefaultWarehouseBalance(tx, createdProduct.id, tenant, warehouseId);
@@ -657,11 +765,12 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           sku: input.sku === undefined ? undefined : optionalString(input.sku),
           status: input.status,
           stockDisplayMode: input.stockDisplayMode,
-          supplierId: input.supplierId === undefined ? undefined : optionalString(input.supplierId),
           tags: input.tags,
         },
         where: { id: existing.id },
       });
+
+      await syncProductSuppliers(tx, scope, existing.id, input);
 
       if (input.units !== undefined) {
         const units = normalizedProductUnits(input.units, {
@@ -775,7 +884,16 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
       }
 
       const updatedProduct = await tx.product.findUniqueOrThrow({
-        include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+        include: {
+          brand: true,
+          category: true,
+          productSuppliers: {
+            include: { supplier: { select: { companyName: true, name: true } } },
+            orderBy: { createdAt: "asc" },
+          },
+          supplier: true,
+          units: { orderBy: { sortOrder: "asc" } },
+        },
         where: { id: existing.id },
       });
 
@@ -801,7 +919,10 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
       const existing = await tx.product.findFirstOrThrow({
-        include: { units: { orderBy: { sortOrder: "asc" } } },
+        include: {
+          productSuppliers: { orderBy: { createdAt: "asc" } },
+          units: { orderBy: { sortOrder: "asc" } },
+        },
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
       const timestamp = Date.now().toString().slice(-6);
@@ -824,7 +945,7 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
           sku: `COPY-${timestamp}`,
           status: "draft",
           stockDisplayMode: existing.stockDisplayMode,
-          supplierId: existing.supplierId,
+          supplierId: null,
           tags: existing.tags,
           units: {
             create: existing.units.map((unit: Record<string, any>) => ({
@@ -848,6 +969,14 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
           },
         },
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+      });
+
+      const linkedSupplierIds = (existing.productSuppliers as Array<{ supplierId: string }>).map((row) => row.supplierId);
+      await syncProductSuppliers(tx, scope, duplicatedProduct.id, {
+        supplierId: existing.supplierId ?? undefined,
+        supplierIds: linkedSupplierIds.length > 0
+          ? linkedSupplierIds
+          : (existing.supplierId ? [existing.supplierId] : []),
       });
 
       if (scope.warehouseId) {

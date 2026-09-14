@@ -239,6 +239,7 @@ model Company {
   categories     Category[]
   brands         Brand[]
   suppliers      Supplier[]
+  productSuppliers ProductSupplier[]
   inventoryLots  InventoryLot[]
   goodsReceipts  GoodsReceipt[]
   sales          Sale[]
@@ -523,6 +524,7 @@ model Product {
   barcodeHistory  ProductBarcodeHistory[]
   favoriteBy      FavoriteProduct[]
   promotionProducts PromotionProduct[]
+  productSuppliers ProductSupplier[]
 
   @@unique([companyId, sku])
   @@unique([companyId, productCode])
@@ -766,6 +768,7 @@ model Supplier {
   company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   branch       Branch    @relation(fields: [branchId], references: [id])
   products     Product[]
+  productSuppliers ProductSupplier[]
   purchases    Purchase[]
   payables     SupplierPayable[]
 
@@ -775,6 +778,24 @@ model Supplier {
   @@index([companyId, name])
   @@index([companyId, phone])
   @@map("suppliers")
+}
+
+model ProductSupplier {
+  id          String   @id @default(cuid())
+  companyId   String   @map("company_id")
+  productId   String   @map("product_id")
+  supplierId  String   @map("supplier_id")
+  isPreferred Boolean  @default(false) @map("is_preferred")
+  createdAt   DateTime @default(now()) @map("created_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+
+  @@unique([productId, supplierId])
+  @@index([companyId])
+  @@index([supplierId])
+  @@index([productId])
+  @@map("product_suppliers")
 }
 
 model SupplierPayable {

@@ -49,6 +49,12 @@ export type Product = {
   categoryName: string;
   supplierId?: string;
   supplierName: string;
+  supplierIds?: string[];
+  productSuppliers?: Array<{
+    isPreferred: boolean;
+    supplierId: string;
+    supplierName: string;
+  }>;
   brandId?: string;
   brandName: string;
   costPriceLak: number;
