@@ -81,6 +81,7 @@ export function mapPrismaPosProduct(product: Row, warehouseId?: string): PosProd
     categoryName: product.category?.nameEn ?? product.category?.nameLo ?? "",
     id: product.id,
     imageKey: compactProductImageKey(product.imageUrl),
+    productImageUrl: product.imageUrl || undefined,
     unitImageUrl: defaultSaleUnit?.imageUrl || product.imageUrl || undefined,
     nameEn: product.nameEn ?? "",
     nameLo: product.nameLo,

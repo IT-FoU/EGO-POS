@@ -24,6 +24,8 @@ export type PosProduct = {
   categoryId?: string;
   categoryName: string;
   imageKey: string;
+  /** Main product image (not unit-specific). Used as fallback for unit cards. */
+  productImageUrl?: string;
   unitImageUrl?: string;
   unitName: string;
   unitId?: string;
