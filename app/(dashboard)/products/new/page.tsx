@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+﻿import { cookies } from "next/headers";
 import { ProductForm } from "@/features/products/components/product-form";
 import {
   getBrands,
@@ -8,6 +8,8 @@ import {
 } from "@/features/products/product-service";
 import { getSuppliers } from "@/features/suppliers/supplier-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+
+export const dynamic = "force-dynamic";
 
 export default async function CreateProductPage({
   searchParams,

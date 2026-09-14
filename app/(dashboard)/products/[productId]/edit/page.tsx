@@ -11,6 +11,8 @@ import {
 import { getSuppliers } from "@/features/suppliers/supplier-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
+export const dynamic = "force-dynamic";
+
 export default async function EditProductPage({
   params,
 }: {
@@ -32,13 +34,27 @@ export default async function EditProductPage({
     notFound();
   }
 
+  const categoriesForForm =
+    product.categoryId && !categories.some((category) => category.id === product.categoryId)
+      ? [
+          ...categories,
+          {
+            id: product.categoryId,
+            nameEn: product.categoryName || product.categoryId,
+            nameLo: product.categoryName || product.categoryId,
+            productCount: 0,
+            status: "active" as const,
+          },
+        ]
+      : categories;
+
   return (
     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
       <ProductForm
         mode="edit"
         product={product}
         brands={brands}
-        categories={categories}
+        categories={categoriesForForm}
         images={images}
         locale={locale}
         pricingDefaults={pricingDefaults}

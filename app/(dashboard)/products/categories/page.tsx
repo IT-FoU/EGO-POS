@@ -1,7 +1,9 @@
-import { cookies } from "next/headers";
+﻿import { cookies } from "next/headers";
 import { CategoriesClient } from "@/features/products/components/categories-client";
 import { getCategories } from "@/features/products/product-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+
+export const dynamic = "force-dynamic";
 
 export default async function CategoriesPage() {
   const cookieStore = await cookies();

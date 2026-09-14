@@ -86,13 +86,18 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
 
 export async function getPrismaCategories(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
+  // Categories are company-level master data (same scope model as brands).
+  // Do not over-filter by branch or the Create Product picker can miss rows.
   const categories = await db.category.findMany({
     include: { _count: { select: { products: true } }, parent: true },
     orderBy: [{ nameEn: "asc" }, { nameLo: "asc" }],
-    where: { companyId: scope.companyId, ...branchOwnedWhere(scope) },
+    where: {
+      companyId: scope.companyId,
+      parentId: null,
+    },
   });
 
-  return categories.map(mapPrismaCategory);
+  return categories.map(mapPrismaCategory).filter((category: { status: string }) => category.status !== "inactive");
 }
 
 export async function getPrismaBrands(tenant: TenantContext) {
@@ -1231,9 +1236,9 @@ export async function upsertPrismaCategory(input: {
         await assertCategoryInBranch(tx, scope, parentId);
       }
 
-      // Reuse same company/branch category when name matches ignoring case/spacing.
+      // Reuse same company category when name matches ignoring case/spacing (company-level master data).
       const siblings = await tx.category.findMany({
-        where: { companyId: tenant.companyId, ...branchOwnedWhere(scope) },
+        where: { companyId: tenant.companyId, parentId: null },
         select: { id: true, nameEn: true, nameLo: true },
       });
       const duplicate = siblings.find((row: { nameEn?: string | null; nameLo: string }) => {

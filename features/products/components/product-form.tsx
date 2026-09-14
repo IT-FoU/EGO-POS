@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "rea
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
+import { localizedProductName } from "@/features/pos/product-display-name";
 import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, searchProductImagesAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
@@ -229,8 +230,8 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [statusConfirm, setStatusConfirm] = useState<ProductStatusConfirm>(null);
-    const [localCategories, setLocalCategories] = useState<Category[]>([]);
-    const [selectedCategoryId, setSelectedCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? "");
+    const [localCategories, setLocalCategories] = useState<Category[]>(categories);
+    const [selectedCategoryId, setSelectedCategoryId] = useState(product?.categoryId ?? "");
     const [localBrands, setLocalBrands] = useState<Brand[]>(brands);
     const [selectedBrandId, setSelectedBrandId] = useState(product?.brandId ?? "");
     const [brandDialogOpen, setBrandDialogOpen] = useState(false);
@@ -368,16 +369,18 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             for (const category of current) {
                 if (!byId.has(category.id)) byId.set(category.id, category);
             }
-            return [...byId.values()].sort((a, b) => (a.nameEn || a.nameLo).localeCompare(b.nameEn || b.nameLo));
+            return [...byId.values()].sort((a, b) =>
+                categoryDisplayName(a, locale).localeCompare(categoryDisplayName(b, locale)),
+            );
         });
         if (product?.categoryId && categories.some((category) => category.id === product.categoryId)) {
             setSelectedCategoryId(product.categoryId);
-        } else if (!selectedCategoryId && categories[0]?.id) {
-            setSelectedCategoryId(categories[0].id);
         }
+        // Do not auto-select the first category on Create — Owner must choose explicitly
+        // so the full list is obvious in the picker.
     // selectedCategoryId intentionally omitted — preserve inline create selection across refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [categories, product?.categoryId]);
+    }, [categories, locale, product?.categoryId]);
     useEffect(() => {
         setLocalBrands((current) => {
             const byId = new Map(brands.map((brand) => [brand.id, brand]));
@@ -691,7 +694,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     }
     function categoryLabel(categoryId: string) {
         const category = localCategories.find((item) => item.id === categoryId);
-        return category ? `${category.nameEn} / ${category.nameLo}` : "—";
+        return category ? categoryDisplayName(category, locale) : "—";
     }
     function brandLabel(brandId: string) {
         return localBrands.find((item) => item.id === brandId)?.name || "—";
@@ -1252,7 +1255,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                   </div>
 
                   <div className="lg:col-span-3">
-                    <CategoryField categories={localCategories} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
+                    <CategoryField categories={localCategories} locale={locale} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
                   </div>
                   <div className="lg:col-span-3">
                     <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
@@ -1407,7 +1410,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                 </div>
                 <span className="text-xs text-muted-foreground">{t("skuHint")}</span>
               </Field>
-                    <CategoryField categories={localCategories} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
+                    <CategoryField categories={localCategories} locale={locale} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
               <div className="flex min-w-0 flex-col gap-2 text-sm font-medium md:col-span-2">
                 <span>{t("suppliers")}</span>
                 <div className="flex flex-wrap gap-2">
@@ -2245,8 +2248,12 @@ function ImagePreviewDialog({ image, onClose }: {
         </div>
       </ProductSmallModal>);
 }
-function CategoryField({ categories, onAction, onChange, value, }: {
+function categoryDisplayName(category: { nameEn?: string | null; nameLo?: string | null }, locale: SupportedLocale) {
+    return localizedProductName(category, locale) || category.nameEn?.trim() || category.nameLo?.trim() || "";
+}
+function CategoryField({ categories, locale, onAction, onChange, value, }: {
     categories: Category[];
+    locale: SupportedLocale;
     onAction: (mode: "add" | "edit" | "delete", categoryId?: string) => void;
     onChange: (categoryId: string) => void;
     value?: string;
@@ -2256,10 +2263,10 @@ function CategoryField({ categories, onAction, onChange, value, }: {
     return (<div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
       <span>{t("category")}</span>
       <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="categoryId" value={selectedCategoryId} onChange={(event) => onChange(event.target.value)}>
-          {categories.length === 0 ? <option value="">{t("noCategoriesYet")}</option> : null}
+        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="categoryId" value={selectedCategoryId} onChange={(event) => onChange(event.target.value)} aria-label={t("category")}>
+          <option value="">{categories.length === 0 ? t("noCategoriesYet") : t("selectCategory")}</option>
           {categories.map((category) => (<option value={category.id} key={category.id}>
-              {category.nameEn} / {category.nameLo}
+              {categoryDisplayName(category, locale)}
             </option>))}
         </select>
         <div className="flex shrink-0 border-l border-border">
@@ -2274,6 +2281,9 @@ function CategoryField({ categories, onAction, onChange, value, }: {
           </button>
         </div>
       </div>
+      {categories.length > 0 ? (
+        <p className="text-xs text-muted-foreground">{fillProductsCopy(t("categoryCountAvailable"), { count: categories.length })}</p>
+      ) : null}
     </div>);
 }
 function ProductImagesSection({ assignmentMode, barcode, isPending = false, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onToggleUnitAssignment, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
