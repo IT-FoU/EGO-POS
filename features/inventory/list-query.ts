@@ -261,6 +261,8 @@ async function loadInventoryListSummary(
       ) lot ON true
       WHERE b.company_id = ${scope.companyId}
         AND b.warehouse_id = ANY(${input.warehouseIds})
+        AND p.is_active = true
+        AND p.status <> 'deleted'
         AND (
           ${input.search} = ''
           OR p.name_lo ILIKE ${pattern} ESCAPE '\\'
@@ -352,6 +354,8 @@ async function loadInventoryPageIds(
       ) lot ON true
       WHERE b.company_id = ${scope.companyId}
         AND b.warehouse_id = ANY(${input.warehouseIds})
+        AND p.is_active = true
+        AND p.status <> 'deleted'
         AND (
           ${input.search} = ''
           OR p.name_lo ILIKE ${pattern} ESCAPE '\\'
@@ -434,6 +438,8 @@ async function loadInventoryPreviewIds(
       ) lot ON true
       WHERE b.company_id = ${scope.companyId}
         AND b.warehouse_id = ANY(${input.warehouseIds})
+        AND p.is_active = true
+        AND p.status <> 'deleted'
         AND (
           ${input.search} = ''
           OR p.name_lo ILIKE ${pattern} ESCAPE '\\'

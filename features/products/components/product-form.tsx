@@ -24,6 +24,22 @@ import { ProductSmallModal } from "@/features/products/components/product-small-
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
 import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
+import {
+  formatMoneyDigits,
+  moneyInputDisplay,
+  moneyInputFromCommitted,
+  onMoneyInputBlur,
+  onMoneyInputChange,
+  onMoneyInputFocus,
+  parseMoneyDigits,
+} from "@/features/products/money-input";
+import {
+  onOpeningQtyBlur,
+  onOpeningQtyChange,
+  onOpeningQtyFocus,
+  openingQtyDisplay,
+  openingQtyFromCommitted,
+} from "@/features/products/opening-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import {
     applyLastCreateUnitSetupToDefaults,
@@ -1418,6 +1434,44 @@ function ReadinessRow({ label, ok }: { label: string; ok: boolean }) {
     </div>);
 }
 
+function QuantityReceivedField({ onCommit, value }: { onCommit: (quantity: number) => void; value: number }) {
+    const [state, setState] = useState(() => openingQtyFromCommitted(value));
+    const focusedRef = useRef(false);
+    useEffect(() => {
+        if (!focusedRef.current) {
+            setState(openingQtyFromCommitted(value));
+        }
+    }, [value]);
+    return (
+      <input
+        autoComplete="off"
+        className="field-input"
+        data-field="quantity-received"
+        inputMode="numeric"
+        type="text"
+        value={openingQtyDisplay(state)}
+        onBlur={() => {
+          focusedRef.current = false;
+          const next = onOpeningQtyBlur(state);
+          setState(next);
+          onCommit(next.committed);
+        }}
+        onChange={(event) => {
+          const next = onOpeningQtyChange(state, event.target.value);
+          setState(next);
+          onCommit(next.committed);
+        }}
+        onFocus={(event) => {
+          focusedRef.current = true;
+          setState(onOpeningQtyFocus(state));
+          const input = event.currentTarget;
+          input.select();
+          requestAnimationFrame(() => input.select());
+        }}
+      />
+    );
+}
+
 function InitialStockPreview({ onChange, units, value }: {
     onChange: (nextValue: InitialStockPreviewValue) => void;
     units: ProductUnit[];
@@ -1447,7 +1501,7 @@ function InitialStockPreview({ onChange, units, value }: {
           </select>
         </Field>
         <Field label={t("quantityReceived")}>
-          <input className="field-input" min="0" type="number" value={value.quantityReceived} onChange={(event) => update({ quantityReceived: Number(event.target.value) })}/>
+          <QuantityReceivedField value={value.quantityReceived} onCommit={(quantityReceived) => update({ quantityReceived })}/>
         </Field>
         <Field label={t("lotNumber")}>
           <input className="field-input" value={value.lotNumber} onChange={(event) => update({ lotNumber: event.target.value })} placeholder={t("previewLotPlaceholder")}/>
@@ -1704,12 +1758,10 @@ function HierarchyQtyField({ ariaLabel, committed, disabled, invalid, onCommit, 
 }
 
 function parseMoney(value: unknown) {
-    if (typeof value === "number")
-        return Number.isFinite(value) ? value : 0;
-    return Number(String(value ?? "").replaceAll(",", "")) || 0;
+    return parseMoneyDigits(value);
 }
 function formatMoney(value: unknown) {
-    return parseMoney(value).toLocaleString("en-US");
+    return formatMoneyDigits(value);
 }
 function MoneyInput({ className = "", defaultValue, disabled, name, onValueChange, required, value, }: {
     className?: string;
@@ -1720,35 +1772,45 @@ function MoneyInput({ className = "", defaultValue, disabled, name, onValueChang
     required?: boolean;
     value?: number;
 }) {
-    const [localValue, setLocalValue] = useState(formatMoney(value ?? defaultValue ?? 0));
-    const [isFocused, setIsFocused] = useState(false);
-    const numericValue = parseMoney(value ?? localValue);
-    function update(nextText: string) {
-        const digits = nextText.replace(/[^\d.]/g, "");
-        const nextNumber = parseMoney(digits);
-        const nextDisplay = digits ? formatMoney(nextNumber) : "";
-        setLocalValue(nextDisplay);
-        onValueChange?.(nextNumber);
-    }
-    const displayValue = value === undefined
-        ? localValue
-        : isFocused && parseMoney(value) === 0
-            ? localValue === "0" ? "" : localValue
-            : formatMoney(value);
+    const committed = parseMoneyDigits(value ?? defaultValue ?? 0);
+    const [state, setState] = useState(() => moneyInputFromCommitted(committed));
+    const focusedRef = useRef(false);
+    useEffect(() => {
+        if (!focusedRef.current) {
+            setState(moneyInputFromCommitted(committed));
+        }
+    }, [committed]);
+    const displayValue = moneyInputDisplay(state);
     return (<>
-      {name ? <input name={name} type="hidden" value={numericValue}/> : null}
-      <input className={`field-input ${className}`} disabled={disabled} inputMode="decimal" required={required} value={displayValue} onChange={(event) => update(event.target.value)} onFocus={() => {
-            setIsFocused(true);
-            if (parseMoney(displayValue) === 0) {
-                setLocalValue("");
-            }
-        }} onBlur={() => {
-            setIsFocused(false);
-            if (!displayValue) {
-                setLocalValue("0");
-                onValueChange?.(0);
-            }
-        }}/>
+      {name ? <input name={name} type="hidden" value={committed}/> : null}
+      <input
+        autoComplete="off"
+        className={`field-input ${className}`}
+        data-field="money-input"
+        disabled={disabled}
+        inputMode="numeric"
+        required={required}
+        value={displayValue}
+        onBlur={() => {
+          focusedRef.current = false;
+          const next = onMoneyInputBlur(state);
+          setState(next);
+          onValueChange?.(next.committed);
+        }}
+        onChange={(event) => {
+          const next = onMoneyInputChange(state, event.target.value);
+          setState(next);
+          onValueChange?.(next.committed);
+        }}
+        onFocus={(event) => {
+          if (disabled) return;
+          focusedRef.current = true;
+          setState(onMoneyInputFocus(state));
+          const input = event.currentTarget;
+          input.select();
+          requestAnimationFrame(() => input.select());
+        }}
+      />
     </>);
 }
 function CategoryCrudDialog({ categories, onClose, onDelete, onSave, state, }: {
