@@ -15,9 +15,11 @@ import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "rea
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
-import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
-import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, searchProductImagesAction, importRemoteProductImageAction, } from "@/features/products/actions";
+import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
+import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, searchProductImagesAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
+import { createSupplierAction } from "@/features/suppliers/actions";
+import type { Supplier } from "@/features/suppliers/types";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
@@ -175,15 +177,17 @@ function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, 
         }, defaults),
     ];
 }
-export function ProductForm({ mode, product, categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, }: {
+export function ProductForm({ mode, product, brands = [], categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, suppliers = [], }: {
     mode: "create" | "edit";
     product?: Product;
+    brands?: Brand[];
     categories: Category[];
     images: MockProductImage[];
     initialBarcode?: string;
     sourceFlow?: string;
     locale?: SupportedLocale;
     pricingDefaults?: UnitPricingDefaultsMap;
+    suppliers?: Supplier[];
 }) {
     const locale = useAppLocale(localeProp);
     const t = (key: string) => tProducts(key, locale);
@@ -226,6 +230,15 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [statusConfirm, setStatusConfirm] = useState<ProductStatusConfirm>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
+    const [selectedCategoryId, setSelectedCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? "");
+    const [localBrands, setLocalBrands] = useState<Brand[]>(brands);
+    const [selectedBrandId, setSelectedBrandId] = useState(product?.brandId ?? "");
+    const [brandDialogOpen, setBrandDialogOpen] = useState(false);
+    const [brandDraft, setBrandDraft] = useState("");
+    const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(() => suppliers.filter((row) => row.status === "active" || row.id === product?.supplierId));
+    const [selectedSupplierId, setSelectedSupplierId] = useState(product?.supplierId ?? "");
+    const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+    const [supplierDraft, setSupplierDraft] = useState("");
     const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
     const [duplicateBarcodeMatch, setDuplicateBarcodeMatch] = useState<DuplicateBarcodeMatch | null>(null);
     const [checkingBarcodeUnitId, setCheckingBarcodeUnitId] = useState<string | null>(null);
@@ -339,8 +352,46 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         });
     }
     useEffect(() => {
-        setLocalCategories(categories);
-    }, [categories]);
+        setLocalCategories((current) => {
+            const byId = new Map(categories.map((category) => [category.id, category]));
+            for (const category of current) {
+                if (!byId.has(category.id)) byId.set(category.id, category);
+            }
+            return [...byId.values()].sort((a, b) => (a.nameEn || a.nameLo).localeCompare(b.nameEn || b.nameLo));
+        });
+        if (product?.categoryId && categories.some((category) => category.id === product.categoryId)) {
+            setSelectedCategoryId(product.categoryId);
+        } else if (!selectedCategoryId && categories[0]?.id) {
+            setSelectedCategoryId(categories[0].id);
+        }
+    // selectedCategoryId intentionally omitted — preserve inline create selection across refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [categories, product?.categoryId]);
+    useEffect(() => {
+        setLocalBrands((current) => {
+            const byId = new Map(brands.map((brand) => [brand.id, brand]));
+            for (const brand of current) {
+                if (!byId.has(brand.id)) byId.set(brand.id, brand);
+            }
+            return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+        });
+        if (product?.brandId) setSelectedBrandId(product.brandId);
+    }, [brands, product?.brandId]);
+    useEffect(() => {
+        setLocalSuppliers((current) => {
+            const next = suppliers.filter((row) => row.status === "active" || row.id === product?.supplierId);
+            const byId = new Map(next.map((supplier) => [supplier.id, supplier]));
+            for (const supplier of current) {
+                if (!byId.has(supplier.id) && (supplier.status === "active" || supplier.id === product?.supplierId || supplier.id === selectedSupplierId)) {
+                    byId.set(supplier.id, supplier);
+                }
+            }
+            return [...byId.values()].sort((a, b) => a.companyName.localeCompare(b.companyName));
+        });
+        if (product?.supplierId) setSelectedSupplierId(product.supplierId);
+    // selectedSupplierId intentionally omitted — preserve inline create selection across refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [product?.supplierId, suppliers]);
     useEffect(() => {
         if (!previewSnapshot)
             return;
@@ -620,6 +671,13 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         const category = localCategories.find((item) => item.id === categoryId);
         return category ? `${category.nameEn} / ${category.nameLo}` : "—";
     }
+    function brandLabel(brandId: string) {
+        return localBrands.find((item) => item.id === brandId)?.name || "—";
+    }
+    function supplierLabel(supplierId: string) {
+        const supplier = localSuppliers.find((item) => item.id === supplierId);
+        return supplier ? (supplier.companyName || supplier.supplierCode) : "—";
+    }
     function openProductPreview(form: HTMLFormElement | null) {
         if (!form)
             return;
@@ -630,9 +688,9 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 productName,
                 productCode,
                 sku,
-                category: categoryLabel(String(formData.get("categoryId") ?? "")),
-                supplierName: String(formData.get("supplierName") ?? "").trim() || "—",
-                brandName: String(formData.get("brandName") ?? "").trim() || "—",
+                category: categoryLabel(selectedCategoryId || String(formData.get("categoryId") ?? "")),
+                supplierName: supplierLabel(selectedSupplierId || String(formData.get("supplierId") ?? "")),
+                brandName: brandLabel(selectedBrandId || String(formData.get("brandId") ?? "")),
                 description: String(formData.get("description") ?? "").trim() || "—",
             },
             images: productImages,
@@ -745,7 +803,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             ?? baseUnit;
         const payload = {
             barcode: derivedBarcode,
-            brandId: undefined,
+            brandId: selectedBrandId || undefined,
             categoryId: categoryId || undefined,
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
@@ -767,7 +825,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             sku: resolvedSku,
             status: String(formData.get("status") ?? "active"),
             stockDisplayMode: String(formData.get("stockDisplayMode") ?? "base_unit_only") as "base_unit_only" | "breakdown",
-            supplierId: undefined,
+            supplierId: selectedSupplierId || undefined,
             tags,
             units: productUnits,
         };
@@ -914,12 +972,92 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 nameEn: nextName,
                 nameLo: nextName,
             });
-            if (!result.ok) {
+            if (!result.ok || !result.data) {
                 showFeedback(localizeProductError(result.error ?? "Category save failed."), "error");
                 return;
             }
+            const saved = result.data as { id: string; nameEn?: string | null; nameLo: string };
+            const mapped: Category = {
+                id: saved.id,
+                nameEn: saved.nameEn ?? saved.nameLo,
+                nameLo: saved.nameLo,
+                productCount: 0,
+                status: "active",
+            };
+            setLocalCategories((current) => {
+                const without = current.filter((category) => category.id !== mapped.id);
+                return [...without, mapped].sort((a, b) => (a.nameEn || a.nameLo).localeCompare(b.nameEn || b.nameLo));
+            });
+            setSelectedCategoryId(mapped.id);
             showFeedback(t("categorySaved"), "success");
             setCategoryDialog(null);
+            router.refresh();
+        });
+    }
+    function saveBrandInline() {
+        const nextName = brandDraft.trim();
+        if (!nextName) {
+            showFeedback(t("brandSaveFailed"), "error");
+            return;
+        }
+        startTransition(async () => {
+            const result = await upsertBrandAction({ name: nextName });
+            if (!result.ok || !result.data) {
+                showFeedback(localizeProductError(result.error ?? "Brand save failed."), "error");
+                return;
+            }
+            const saved = result.data as { id: string; name: string };
+            const mapped: Brand = { id: saved.id, name: saved.name, productCount: 0 };
+            setLocalBrands((current) => {
+                const without = current.filter((brand) => brand.id !== mapped.id);
+                return [...without, mapped].sort((a, b) => a.name.localeCompare(b.name));
+            });
+            setSelectedBrandId(mapped.id);
+            setBrandDraft("");
+            setBrandDialogOpen(false);
+            showFeedback(t("brandSaved"), "success");
+            router.refresh();
+        });
+    }
+    function saveSupplierInline() {
+        const nextName = supplierDraft.trim();
+        if (!nextName) {
+            showFeedback(t("supplierSaveFailed"), "error");
+            return;
+        }
+        startTransition(async () => {
+            const code = `SUP-${Date.now().toString().slice(-6)}`;
+            const result = await createSupplierAction({ companyName: nextName, supplierCode: code });
+            if (!result.ok || !result.data) {
+                showFeedback(localizeProductError(result.error ?? "Supplier save failed."), "error");
+                return;
+            }
+            const saved = result.data as { id: string; companyName?: string; name?: string; supplierCode?: string };
+            const mapped: Supplier = {
+                id: saved.id,
+                address: "",
+                averageDeliveryDays: 0,
+                companyName: saved.companyName || saved.name || nextName,
+                contactPerson: "",
+                creditLimitLak: 0,
+                creditTerms: "",
+                email: "",
+                notes: "",
+                openingBalanceLak: 0,
+                outstandingBalanceLak: 0,
+                phone: "",
+                status: "active",
+                supplierCode: saved.supplierCode || code,
+                taxNumber: "",
+            };
+            setLocalSuppliers((current) => {
+                const without = current.filter((supplier) => supplier.id !== mapped.id);
+                return [...without, mapped].sort((a, b) => a.companyName.localeCompare(b.companyName));
+            });
+            setSelectedSupplierId(mapped.id);
+            setSupplierDraft("");
+            setSupplierDialogOpen(false);
+            showFeedback(t("supplierSaved"), "success");
             router.refresh();
         });
     }
@@ -996,6 +1134,23 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           {message}
         </div>) : null}
       {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      {brandDialogOpen ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape footer={<div className="flex justify-end gap-2">
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setBrandDialogOpen(false)}>{t("cancel")}</button>
+            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={saveBrandInline}>{t("save")}</button>
+          </div>} onClose={() => setBrandDialogOpen(false)} size="sm" title={t("addBrand")}>
+          <Field label={t("brandName")}>
+            <input className="field-input" value={brandDraft} onChange={(event) => setBrandDraft(event.target.value)} placeholder={t("brandNamePlaceholder")} autoFocus/>
+          </Field>
+        </ProductSmallModal>) : null}
+      {supplierDialogOpen ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape footer={<div className="flex justify-end gap-2">
+            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSupplierDialogOpen(false)}>{t("cancel")}</button>
+            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={saveSupplierInline}>{t("save")}</button>
+          </div>} onClose={() => setSupplierDialogOpen(false)} size="sm" title={t("addSupplier")}>
+          <Field label={t("supplierName")}>
+            <input className="field-input" value={supplierDraft} onChange={(event) => setSupplierDraft(event.target.value)} placeholder={t("supplierNamePlaceholder")} autoFocus/>
+          </Field>
+          <p className="mt-2 text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+        </ProductSmallModal>) : null}
       {statusConfirm && product ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStatusConfirm(null)}>{t("cancel")}</button>
             {statusConfirm === "archive" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
@@ -1049,17 +1204,40 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                   </div>
 
                   <div className="lg:col-span-3">
-                    <CategoryField categories={localCategories} defaultValue={localCategories[0]?.id} onAction={openCategoryDialog}/>
+                    <CategoryField categories={localCategories} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
                   </div>
                   <div className="lg:col-span-3">
-                    <Field label={t("supplierName")}>
-                      <input className="field-input" name="supplierName" placeholder={t("supplierNamePlaceholder")}/>
-                    </Field>
+                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+                      <span>{t("supplierName")}</span>
+                      <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
+                        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="supplierId" value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)}>
+                          <option value="">{t("noSupplierSelected")}</option>
+                          {localSuppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
+                          ))}
+                        </select>
+                        <button aria-label={t("addSupplier")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setSupplierDialogOpen(true)}>
+                          <Plus aria-hidden="true" className="size-4"/>
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                    </div>
                   </div>
                   <div className="lg:col-span-3">
-                    <Field label={t("brandName")}>
-                      <input className="field-input" name="brandName" placeholder={t("brandNamePlaceholder")}/>
-                    </Field>
+                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+                      <span>{t("brandName")}</span>
+                      <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
+                        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="brandId" value={selectedBrandId} onChange={(event) => setSelectedBrandId(event.target.value)}>
+                          <option value="">{t("noBrandSelected")}</option>
+                          {localBrands.map((brand) => (
+                            <option key={brand.id} value={brand.id}>{brand.name}</option>
+                          ))}
+                        </select>
+                        <button aria-label={t("addBrand")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setBrandDialogOpen(true)}>
+                          <Plus aria-hidden="true" className="size-4"/>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <div className="lg:col-span-6">
                     <Field label={t("descriptionNotes")}>
@@ -1145,13 +1323,36 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 </div>
                 <span className="text-xs text-muted-foreground">{t("skuHint")}</span>
               </Field>
-                    <CategoryField categories={localCategories} defaultValue={product?.categoryId ?? localCategories[0]?.id} onAction={openCategoryDialog}/>
-              <Field label={t("supplierName")}>
-                <input className="field-input" name="supplierName" placeholder={t("supplierNamePlaceholder")}/>
-              </Field>
-              <Field label={t("brandName")}>
-                <input className="field-input" name="brandName" placeholder={t("brandNamePlaceholder")}/>
-              </Field>
+                    <CategoryField categories={localCategories} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
+              <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+                <span>{t("supplierName")}</span>
+                <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
+                  <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="supplierId" value={selectedSupplierId} onChange={(event) => setSelectedSupplierId(event.target.value)}>
+                    <option value="">{t("noSupplierSelected")}</option>
+                    {localSuppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
+                    ))}
+                  </select>
+                  <button aria-label={t("addSupplier")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setSupplierDialogOpen(true)}>
+                    <Plus aria-hidden="true" className="size-4"/>
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+              </div>
+              <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+                <span>{t("brandName")}</span>
+                <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
+                  <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="brandId" value={selectedBrandId} onChange={(event) => setSelectedBrandId(event.target.value)}>
+                    <option value="">{t("noBrandSelected")}</option>
+                    {localBrands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>{brand.name}</option>
+                    ))}
+                  </select>
+                  <button aria-label={t("addBrand")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setBrandDialogOpen(true)}>
+                    <Plus aria-hidden="true" className="size-4"/>
+                  </button>
+                </div>
+              </div>
               <div className="md:col-span-2">
                 <Field label={t("descriptionNotes")}>
                   <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" defaultValue={product?.description} placeholder={t("staffNotesPlaceholder")}/>
@@ -1924,28 +2125,19 @@ function ImagePreviewDialog({ image, onClose }: {
         </div>
       </ProductSmallModal>);
 }
-function CategoryField({ categories, defaultValue, onAction, }: {
+function CategoryField({ categories, onAction, onChange, value, }: {
     categories: Category[];
-    defaultValue?: string;
     onAction: (mode: "add" | "edit" | "delete", categoryId?: string) => void;
+    onChange: (categoryId: string) => void;
+    value?: string;
 }) {
-    const [selectedCategoryId, setSelectedCategoryId] = useState(defaultValue ?? categories[0]?.id ?? "");
-    useEffect(() => {
-        if (categories.length === 0) {
-            setSelectedCategoryId("");
-            return;
-        }
-        if (!categories.some((category) => category.id === selectedCategoryId)) {
-            setSelectedCategoryId(defaultValue && categories.some((category) => category.id === defaultValue)
-                ? defaultValue
-                : categories[0]?.id ?? "");
-        }
-    }, [categories, defaultValue, selectedCategoryId]);
+    const selectedCategoryId = value ?? "";
     const hasSelectedCategory = Boolean(selectedCategoryId);
     return (<div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
       <span>{t("category")}</span>
       <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="categoryId" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
+        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="categoryId" value={selectedCategoryId} onChange={(event) => onChange(event.target.value)}>
+          {categories.length === 0 ? <option value="">{t("noCategoriesYet")}</option> : null}
           {categories.map((category) => (<option value={category.id} key={category.id}>
               {category.nameEn} / {category.nameLo}
             </option>))}

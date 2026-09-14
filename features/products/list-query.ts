@@ -16,12 +16,14 @@ export type ProductInsightFilter =
   | "no_image";
 
 export type ProductListQuery = {
+  brandId?: string;
   categoryId?: string;
   insight?: ProductInsightFilter;
   page?: number;
   pageSize?: number;
   search?: string;
   status?: ProductStatus | "all";
+  supplierId?: string;
 };
 
 export type ProductListSummary = {
@@ -45,13 +47,14 @@ export type ProductListPage = {
 
 export const productListInclude = {
   balances: { select: { quantity: true } },
+  brand: { select: { id: true, name: true } },
   category: { select: { id: true, nameEn: true, nameLo: true } },
   inventoryLots: {
     orderBy: { expiryDate: "asc" as const },
     select: { expiryDate: true },
     take: 1,
   },
-  supplier: { select: { companyName: true, name: true } },
+  supplier: { select: { companyName: true, id: true, name: true } },
   units: {
     orderBy: { sortOrder: "asc" as const },
     select: {
@@ -133,6 +136,7 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
           { sku: likeContains(search) },
           { productCode: likeContains(search) },
           { category: { OR: [{ nameEn: likeContains(search) }, { nameLo: likeContains(search) }] } },
+          { brand: { name: likeContains(search) } },
           { supplier: { OR: [{ name: likeContains(search) }, { companyName: likeContains(search) }] } },
           { units: { some: { barcode: likeContains(search) } } },
         ],
@@ -144,6 +148,8 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
     ...branchOwnedWhere(scope),
     ...productInventoryScopeWhere(scope),
     ...(query.categoryId && query.categoryId !== "all" ? { categoryId: query.categoryId } : {}),
+    ...(query.brandId && query.brandId !== "all" ? { brandId: query.brandId } : {}),
+    ...(query.supplierId && query.supplierId !== "all" ? { supplierId: query.supplierId } : {}),
     ...(query.status && query.status !== "all" ? { status: query.status } : {}),
     ...searchWhere,
     ...insightWhere,

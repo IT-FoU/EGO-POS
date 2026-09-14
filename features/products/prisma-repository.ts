@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { normalizeMasterName } from "@/features/products/master-name";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
@@ -88,6 +89,20 @@ export async function getPrismaCategories(tenant: TenantContext) {
   });
 
   return categories.map(mapPrismaCategory);
+}
+
+export async function getPrismaBrands(tenant: TenantContext) {
+  const scope = await resolveTenantScope(tenant);
+  const brands = await db.brand.findMany({
+    include: { _count: { select: { products: true } } },
+    orderBy: { name: "asc" },
+    where: { companyId: scope.companyId },
+  });
+  return brands.map((brand: { id: string; name: string; _count?: { products: number } }) => ({
+    id: brand.id,
+    name: brand.name,
+    productCount: brand._count?.products ?? 0,
+  }));
 }
 
 export async function getPrismaProductImages() {
@@ -1060,6 +1075,12 @@ export async function upsertPrismaCategory(input: {
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
       const parentId = optionalString(input.parentId);
+      const nameLo = normalizeMasterName(input.nameLo);
+      const nameEn = normalizeMasterName(input.nameEn) || nameLo;
+      if (!nameLo) {
+        throw new Error("Category name is required.");
+      }
+
       if (input.id) {
         const existing = await tx.category.findFirstOrThrow({
           where: { companyId: tenant.companyId, id: input.id, ...branchOwnedWhere(scope) },
@@ -1069,8 +1090,8 @@ export async function upsertPrismaCategory(input: {
         }
         return tx.category.update({
           data: {
-            nameEn: optionalString(input.nameEn),
-            nameLo: stringValue(input.nameLo),
+            nameEn: nameEn || null,
+            nameLo,
             parentId,
           },
           where: { id: existing.id },
@@ -1081,15 +1102,68 @@ export async function upsertPrismaCategory(input: {
         await assertCategoryInBranch(tx, scope, parentId);
       }
 
+      // Reuse same company/branch category when name matches ignoring case/spacing.
+      const siblings = await tx.category.findMany({
+        where: { companyId: tenant.companyId, ...branchOwnedWhere(scope) },
+        select: { id: true, nameEn: true, nameLo: true },
+      });
+      const duplicate = siblings.find((row: { nameEn?: string | null; nameLo: string }) => {
+        const lo = normalizeMasterName(row.nameLo).toLocaleLowerCase("en-US");
+        const en = normalizeMasterName(row.nameEn).toLocaleLowerCase("en-US");
+        const target = nameLo.toLocaleLowerCase("en-US");
+        return lo === target || (en && en === target);
+      });
+      if (duplicate) {
+        return tx.category.findFirstOrThrow({ where: { id: duplicate.id } });
+      }
+
       return tx.category.create({
-          data: {
-            branchId: scope.branchId,
-            companyId: tenant.companyId,
-            nameEn: optionalString(input.nameEn),
-            nameLo: stringValue(input.nameLo),
-            parentId,
-          },
+        data: {
+          branchId: scope.branchId,
+          companyId: tenant.companyId,
+          nameEn: nameEn || null,
+          nameLo,
+          parentId,
+        },
+      });
+    },
+  });
+}
+
+export async function upsertPrismaBrand(input: { id?: string; name: string }, tenant: TenantContext) {
+  return withTenantTransaction({
+    action: input.id ? "update" : "create",
+    module: "products",
+    newData: input,
+    tenant,
+    write: async (tx) => {
+      const name = normalizeMasterName(input.name);
+      if (!name) {
+        throw new Error("Brand name is required.");
+      }
+      if (input.id) {
+        const existing = await tx.brand.findFirstOrThrow({
+          where: { companyId: tenant.companyId, id: input.id },
         });
+        return tx.brand.update({
+          data: { name },
+          where: { id: existing.id },
+        });
+      }
+      const brands = await tx.brand.findMany({
+        where: { companyId: tenant.companyId },
+        select: { id: true, name: true },
+      });
+      const duplicate = brands.find((row: { name: string }) => normalizeMasterName(row.name).toLocaleLowerCase("en-US") === name.toLocaleLowerCase("en-US"));
+      if (duplicate) {
+        return tx.brand.findFirstOrThrow({ where: { id: duplicate.id } });
+      }
+      return tx.brand.create({
+        data: {
+          companyId: tenant.companyId,
+          name,
+        },
+      });
     },
   });
 }

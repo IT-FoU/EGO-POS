@@ -47,7 +47,9 @@ export type Product = {
   tags?: string[];
   categoryId: string;
   categoryName: string;
+  supplierId?: string;
   supplierName: string;
+  brandId?: string;
   brandName: string;
   costPriceLak: number;
   currentStock?: number;
@@ -77,6 +79,12 @@ export type Category = {
   parentNameLo?: string;
   productCount: number;
   status: "active" | "inactive";
+};
+
+export type Brand = {
+  id: string;
+  name: string;
+  productCount?: number;
 };
 
 export type MockProductImage = {

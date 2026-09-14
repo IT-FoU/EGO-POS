@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIcon, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, AlertCircle, Archive, Clock, Package, Boxes, X, Trash2, } from "lucide-react";
-import type { Category, Product, ProductStatus } from "@/features/products/types";
+import type { Brand, Category, Product, ProductStatus } from "@/features/products/types";
 import type { ProductListPage, ProductInsightFilter } from "@/features/products/list-query";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
 import { StatusBadge } from "@/features/products/components/status-badge";
@@ -23,6 +23,7 @@ import { ProductSmallModal } from "@/features/products/components/product-small-
 import { formatLak } from "@/features/products/format";
 import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
+import type { Supplier } from "@/features/suppliers/types";
 import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
 type ProductsTranslate = (key: string) => string;
@@ -66,18 +67,24 @@ function useProductsT() {
     return { locale, t };
 }
 
-export function ProductListClient({ products: initialProducts, categories: initialCategories, listPage: initialListPage }: {
+export function ProductListClient({ products: initialProducts, brands: initialBrands = [], categories: initialCategories, listPage: initialListPage, suppliers: initialSuppliers = [] }: {
     products: Product[];
+    brands?: Brand[];
     categories: Category[];
     listPage?: ProductListPage;
+    suppliers?: Supplier[];
 }) {
     const router = useRouter();
     const { locale, t } = useProductsT();
     const [products, setProducts] = useState<Product[]>(initialProducts);
+    const [brands, setBrands] = useState<Brand[]>(initialBrands);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
+    const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
     const [listPage, setListPage] = useState<ProductListPage | undefined>(initialListPage);
     const [query, setQuery] = useState("");
     const [categoryId, setCategoryId] = useState("all");
+    const [brandId, setBrandId] = useState("all");
+    const [supplierId, setSupplierId] = useState("all");
     const [status, setStatus] = useState<ProductStatus | "all">("active");
     const [insightFilter, setInsightFilter] = useState<InsightFilter>("all");
     const [expandedInsight, setExpandedInsight] = useState<SummaryInsight | null>(null);
@@ -99,8 +106,14 @@ export function ProductListClient({ products: initialProducts, categories: initi
         setListPage(initialListPage);
     }, [initialListPage, initialProducts]);
     useEffect(() => {
+        setBrands(initialBrands);
+    }, [initialBrands]);
+    useEffect(() => {
         setCategories(initialCategories);
     }, [initialCategories]);
+    useEffect(() => {
+        setSuppliers(initialSuppliers);
+    }, [initialSuppliers]);
     const skipServerFetch = useRef(true);
     useEffect(() => {
         if (!initialListPage) return;
@@ -111,12 +124,14 @@ export function ProductListClient({ products: initialProducts, categories: initi
         const handle = window.setTimeout(() => {
             startTransition(async () => {
                 const result = await loadProductListAction({
+                    brandId,
                     categoryId,
                     insight: insightFilter,
                     page,
                     pageSize,
                     search: query,
                     status,
+                    supplierId,
                 });
                 if (!result.ok || !result.data) return;
                 const next = result.data as ProductListPage;
@@ -125,7 +140,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
             });
         }, 250);
         return () => window.clearTimeout(handle);
-    }, [categoryId, initialListPage, insightFilter, page, pageSize, query, status]);
+    }, [brandId, categoryId, initialListPage, insightFilter, page, pageSize, query, status, supplierId]);
     const productInsights = useMemo(() => listPage?.summary ?? getProductInsights(products), [listPage, products]);
     const insightProducts = useMemo(() => getInsightProducts(products), [products]);
     const productShellStats = useMemo(() => {
@@ -160,6 +175,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
                     product.nameLo,
                     product.nameEn,
                     product.categoryName,
+                    product.brandName,
                     product.supplierName,
                     ...product.units.map((unit) => unit.barcode),
                 ]
@@ -167,11 +183,13 @@ export function ProductListClient({ products: initialProducts, categories: initi
                     .toLowerCase()
                     .includes(normalizedQuery);
             const matchesCategory = categoryId === "all" || product.categoryId === categoryId;
+            const matchesBrand = brandId === "all" || product.brandId === brandId;
+            const matchesSupplier = supplierId === "all" || product.supplierId === supplierId;
             const matchesStatus = status === "all" || product.status === status;
             const matchesInsight = matchesInsightFilter(product, insightFilter);
-            return matchesQuery && matchesCategory && matchesStatus && matchesInsight;
+            return matchesQuery && matchesCategory && matchesBrand && matchesSupplier && matchesStatus && matchesInsight;
         });
-    }, [categoryId, insightFilter, products, query, status]);
+    }, [brandId, categoryId, insightFilter, products, query, status, supplierId]);
     const filteredProducts = listPage ? products : clientFilteredProducts;
     const totalCount = listPage?.totalCount ?? filteredProducts.length;
     const totalPages = listPage?.totalPages ?? Math.max(1, Math.ceil(filteredProducts.length / pageSize));
@@ -273,7 +291,7 @@ export function ProductListClient({ products: initialProducts, categories: initi
 
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="grid gap-3">
-          <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(360px,1fr)_220px_180px]">
+          <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(280px,1fr)_180px_180px_180px_160px]">
             <label className="relative">
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
               <input className="h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm outline-none transition focus:border-primary" placeholder={t("searchPlaceholder")} value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }}/>
@@ -283,6 +301,16 @@ export function ProductListClient({ products: initialProducts, categories: initi
               {categories.map((category) => (<option value={category.id} key={category.id}>
                   {locale === "lo" ? (category.nameLo || category.nameEn) : (category.nameEn || category.nameLo)}
                 </option>))}
+            </select>
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={brandId} onChange={(event) => { setBrandId(event.target.value); setPage(1); }} aria-label={t("filterByBrand")}>
+              <option value="all">{t("allBrands")}</option>
+              {brands.map((brand) => (<option value={brand.id} key={brand.id}>{brand.name}</option>))}
+            </select>
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={supplierId} onChange={(event) => { setSupplierId(event.target.value); setPage(1); }} aria-label={t("filterBySupplier")}>
+              <option value="all">{t("allSuppliers")}</option>
+              {suppliers.filter((supplier) => supplier.status === "active").map((supplier) => (
+                <option value={supplier.id} key={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
+              ))}
             </select>
             <select className="h-11 rounded-md border border-border bg-background px-3 text-sm capitalize outline-none transition focus:border-primary" value={status} onChange={(event) => { setStatus(event.target.value as ProductStatus | "all"); setPage(1); }} aria-label={t("filterByStatus")}>
               {statusOptions.map((option) => (<option value={option} key={option}>

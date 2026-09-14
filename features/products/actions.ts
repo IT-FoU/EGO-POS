@@ -13,6 +13,7 @@ import {
   getPrismaProductListPage,
   getPrismaUnitPricingDefaults,
   updatePrismaProduct,
+  upsertPrismaBrand,
   upsertPrismaCategory,
   type ProductWriteInput,
   type BulkPriceUpdateInput,
@@ -34,6 +35,8 @@ import type { ProductListQuery } from "@/features/products/list-query";
 
 function revalidateProductCataloguePaths() {
   revalidatePath("/products");
+  revalidatePath("/products/new");
+  revalidatePath("/products/categories");
   revalidatePath("/pos");
 }
 
@@ -223,9 +226,31 @@ export async function bulkPriceUpdateAction(input: BulkPriceUpdateInput) {
 }
 
 export async function upsertCategoryAction(input: { id?: string; nameEn?: string; nameLo: string; parentId?: string }) {
-  try { return writeSuccess(await upsertPrismaCategory(input, await tenant(WRITE_PERMISSIONS.categoriesManage))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await upsertPrismaCategory(input, await tenant(WRITE_PERMISSIONS.categoriesManage));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function upsertBrandAction(input: { id?: string; name: string }) {
+  try {
+    const data = await upsertPrismaBrand(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function deleteCategoryAction(categoryId: string) {
-  try { return writeSuccess(await deletePrismaCategory(categoryId, await tenant(WRITE_PERMISSIONS.categoriesManage))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await deletePrismaCategory(categoryId, await tenant(WRITE_PERMISSIONS.categoriesManage));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
