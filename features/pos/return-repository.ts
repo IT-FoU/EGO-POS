@@ -563,6 +563,11 @@ async function mapReturnReceipt(
   const productMap = new Map<string, Record<string, any>>(
     (products as Array<Record<string, any>>).map((product) => [String(product.id), product]),
   );
+  const saleItemUnitById = new Map<string, string>(
+    ((sale.items ?? []) as Array<Record<string, any>>)
+      .map((item) => [String(item.id), item.unit?.unitName ? String(item.unit.unitName) : ""] as const)
+      .filter((entry) => entry[1]),
+  );
 
   return {
     approvedBy: approvedByUser?.fullName ?? approvedByUser?.username ?? refund.approvedBy ?? null,
@@ -592,6 +597,7 @@ async function mapReturnReceipt(
     }),
     returnedItems: (refund.items ?? []).map((item: Record<string, any>) => {
       const product = productMap.get(String(item.productId));
+      const unitName = saleItemUnitById.get(String(item.saleItemId ?? "")) || undefined;
       return {
         amountLak: amount(item.amount),
         condition: asCondition(item.condition),
@@ -599,6 +605,7 @@ async function mapReturnReceipt(
         nameLo: String(product?.nameLo ?? product?.nameEn ?? "Item"),
         quantity: amount(item.quantity),
         reason: item.reason ?? null,
+        unitName,
       };
     }),
     saleId: String(sale.id),

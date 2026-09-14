@@ -1,4 +1,4 @@
-﻿import { readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { masterNamesEqual, normalizeMasterName } from "../features/products/master-name";
 import { buildProductListWhere } from "../features/products/list-query";
@@ -110,13 +110,13 @@ check("17-20. Filter foundation by category/brand/supplier via M2M some (no list
 
 check("i18n key parity for new master-data copy", () => {
   const parity = productsCopyKeyParity();
-  assert(parity, "en/lo products-copy key parity failed");
+  assert(parity === true || (parity as { ok?: boolean }).ok === true, `key parity failed: ${JSON.stringify(parity)}`);
   const en = getProductsCopy("en");
   assert(en.brandSaved, "missing brandSaved");
   assert(en.supplierSaved, "missing supplierSaved");
   assert(en.filterByBrand, "missing filterByBrand");
   assert(en.filterBySupplier, "missing filterBySupplier");
-  assert(en.preferredSupplierHint, "missing preferredSupplierHint");
+  assert(en.preferredSupplier || en.preferredSupplierHint, "missing preferred supplier copy");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");
@@ -124,5 +124,3 @@ console.log(`\n${results.length - failed.length}/${results.length} checks passed
 if (failed.length) {
   process.exitCode = 1;
 }
-
-

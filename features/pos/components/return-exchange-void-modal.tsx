@@ -320,7 +320,10 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
                                 onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, selected: event.target.checked } }))}
                               />
                               <span className="min-w-0 flex-1">
-                                <span className="font-semibold">{localizedProductName(item)}</span>
+                                <span className="font-semibold">
+                                  {localizedProductName(item)}
+                                  {item.unitName ? ` — ${item.unitName}` : ""}
+                                </span>
                                 <span className="block text-xs text-muted-foreground">
                                   {fillPosCopy(tPos("ui.remaining.line"), { remain: item.remainingQuantity, total: item.originalQuantity, amount: formatLak(item.remainingPaidLak) })}
                                 </span>
@@ -475,7 +478,11 @@ function ReturnReceiptView({ onClose, receipt }: { onClose: () => void; receipt:
         <div className="my-4 border-t border-dashed border-border" />
         {receipt.returnedItems.map((item, index) => (
           <div className="flex justify-between gap-3" key={`ret-${index}`}>
-            <span>{localizedProductName(item)} x{item.quantity} ({conditionLabel(item.condition)})</span>
+            <span>
+              {localizedProductName(item)}
+              {item.unitName ? ` — ${item.unitName}` : ""}
+              {" "}x{item.quantity} ({conditionLabel(item.condition)})
+            </span>
             <span>{formatLak(item.amountLak)}</span>
           </div>
         ))}

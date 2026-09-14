@@ -178,6 +178,12 @@ check("client wiring + More menu Unit Display control", () => {
   assert(!client.includes("toggleUnitDisplayMode"), "header toggle removed");
 });
 
+check("return/refund UI shows sold unit name", () => {
+  const returnModal = readFileSync(join(root, "features/pos/components/return-exchange-void-modal.tsx"), "utf8");
+  assert(returnModal.includes('item.unitName ? ` — ${item.unitName}` : ""'), "return line unit label");
+  assert(returnModal.includes("localizedProductName(item)"), "return product name");
+});
+
 const failed = results.filter((row) => row.status === "FAIL");
 if (failed.length) {
   console.error(`\n${failed.length} failed`);
