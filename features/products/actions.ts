@@ -108,11 +108,14 @@ export async function uploadProductImageAction(productId: string, formData: Form
     }
     const assignToUnitId = String(formData.get("assignToUnitId") ?? "").trim() || undefined;
     const assignToUnitIds = formData.getAll("assignToUnitIds").map((value) => String(value).trim()).filter(Boolean);
+    const setProductMainRaw = String(formData.get("setProductMain") ?? "true").trim().toLowerCase();
+    const setProductMain = setProductMainRaw !== "false" && setProductMainRaw !== "0";
     return writeSuccess(await uploadAndAttachProductImages(productId, {
       assignToUnitId,
       assignToUnitIds,
       main,
       mainType: main.type,
+      setProductMain,
       thumb,
       thumbType: thumb.type,
     }, await tenant(WRITE_PERMISSIONS.productsUpdate)));

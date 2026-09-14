@@ -1,15 +1,20 @@
+import { isUnitEnabled } from "@/features/products/unit-hierarchy";
+
 export type UnitImageOrigin = "inherited" | "custom" | "none";
 export type ProductImageAssignmentMode = "all" | "base";
 
 export type AssignableProductImage = {
   id: string;
   storagePath?: string;
+  url?: string;
 };
 
 export type AssignableUnit = {
   id: string;
   imageUrl?: string;
   isBaseUnit?: boolean;
+  status?: "active" | "inactive";
+  unitName?: string;
 };
 
 export function productImageRef(image: AssignableProductImage) {
@@ -52,22 +57,26 @@ export function isProtectedCustomUnit(
   return origins[unitId] === "custom";
 }
 
+function isAssignableUnit(unit: AssignableUnit) {
+  return isUnitEnabled(unit);
+}
+
 export function applyProductImageAssignment<T extends AssignableUnit>(options: {
   image: AssignableProductImage;
   mode: ProductImageAssignmentMode;
   origins: Record<string, UnitImageOrigin>;
+  /** When true, leave units already marked custom untouched (main-image replace path). */
+  protectCustom?: boolean;
   units: T[];
 }): { origins: Record<string, UnitImageOrigin>; units: T[] } {
   const imageRef = productImageRef(options.image);
   const origins = { ...options.origins };
+  const protectCustom = options.protectCustom ?? false;
   const units = options.units.map((unit) => {
-    if (isProtectedCustomUnit(unit.id, origins)) {
-      return unit;
-    }
+    if (!isAssignableUnit(unit)) return unit;
+    if (protectCustom && isProtectedCustomUnit(unit.id, origins)) return unit;
     const shouldAssign = options.mode === "all" || Boolean(unit.isBaseUnit);
-    if (!shouldAssign) {
-      return unit;
-    }
+    if (!shouldAssign) return unit;
     origins[unit.id] = "inherited";
     return { ...unit, imageUrl: imageRef };
   });
@@ -108,7 +117,7 @@ export function assignImageToNewUnit<T extends AssignableUnit>(options: {
 }
 
 export function markUnitImageChoice(
-  unitId: string,
+  _unitId: string,
   nextImageUrl: string | undefined,
   image: AssignableProductImage | undefined,
 ): UnitImageOrigin {
@@ -119,12 +128,84 @@ export function markUnitImageChoice(
   return "custom";
 }
 
+/** Toggle one ACTIVE unit on/off for a specific uploaded image. Disabled units are ignored. */
+export function toggleUnitImageAssignment<T extends AssignableUnit>(options: {
+  assign: boolean;
+  image: AssignableProductImage;
+  mainImage?: AssignableProductImage | null;
+  origins: Record<string, UnitImageOrigin>;
+  unitId: string;
+  units: T[];
+}): { origins: Record<string, UnitImageOrigin>; units: T[] } {
+  const imageRef = productImageRef(options.image);
+  const origins = { ...options.origins };
+  const units = options.units.map((unit) => {
+    if (unit.id !== options.unitId) return unit;
+    if (!isAssignableUnit(unit)) return unit;
+    if (options.assign) {
+      const inherited = Boolean(options.mainImage && productImageRef(options.mainImage) === imageRef);
+      origins[unit.id] = inherited ? "inherited" : "custom";
+      return { ...unit, imageUrl: imageRef };
+    }
+    origins[unit.id] = "none";
+    return { ...unit, imageUrl: undefined };
+  });
+  return { origins, units };
+}
+
+export function clearImageAssignments<T extends AssignableUnit>(options: {
+  image: AssignableProductImage;
+  origins: Record<string, UnitImageOrigin>;
+  units: T[];
+}): { origins: Record<string, UnitImageOrigin>; units: T[] } {
+  const origins = { ...options.origins };
+  const units = options.units.map((unit) => {
+    if (!unitUsesProductImage(unit, options.image)) return unit;
+    origins[unit.id] = "none";
+    return { ...unit, imageUrl: undefined };
+  });
+  return { origins, units };
+}
+
 export function unitImageSelectValue(unit: AssignableUnit, images: AssignableProductImage[]) {
   if (!unit.imageUrl) return "";
   const match = images.find((image) => unit.imageUrl === image.id || (image.storagePath && unit.imageUrl === image.storagePath));
   return match ? productImageRef(match) : unit.imageUrl;
 }
 
+export function findImageForUnit(unit: AssignableUnit, images: AssignableProductImage[]) {
+  if (!unit.imageUrl) return undefined;
+  return images.find((image) => unit.imageUrl === image.id || (image.storagePath && unit.imageUrl === image.storagePath));
+}
+
+/** Display priority: unit-specific → main product image fallback → none. */
+export function resolveUnitImageDisplay(
+  unit: AssignableUnit,
+  images: AssignableProductImage[],
+  mainImage?: AssignableProductImage | null,
+): {
+  image?: AssignableProductImage;
+  origin: UnitImageOrigin | "fallback";
+} {
+  const assigned = findImageForUnit(unit, images);
+  if (assigned) {
+    const inherited = Boolean(mainImage && unitUsesProductImage(unit, mainImage));
+    return { image: assigned, origin: inherited ? "inherited" : "custom" };
+  }
+  if (mainImage && (mainImage.url || mainImage.storagePath || mainImage.id)) {
+    return { image: mainImage, origin: "fallback" };
+  }
+  return { origin: "none" };
+}
+
 export function inheritedUnitIds(units: AssignableUnit[], origins: Record<string, UnitImageOrigin>) {
   return units.filter((unit) => origins[unit.id] === "inherited").map((unit) => unit.id);
+}
+
+export function unitsAssignedToImage(units: AssignableUnit[], image: AssignableProductImage) {
+  return units.filter((unit) => unitUsesProductImage(unit, image));
+}
+
+export function activeAssignableUnits<T extends AssignableUnit>(units: T[]) {
+  return units.filter((unit) => isAssignableUnit(unit));
 }

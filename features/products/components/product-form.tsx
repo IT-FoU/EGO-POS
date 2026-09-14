@@ -55,14 +55,19 @@ import {
     type ProductRequiredFieldKey,
 } from "@/features/products/product-sku";
 import {
+    activeAssignableUnits,
     applyProductImageAssignment,
     assignImageToNewUnit,
+    clearImageAssignments,
     inferAssignmentMode,
     inferUnitImageOrigins,
     markUnitImageChoice,
     productImageRef,
     replaceInheritedProductImage,
+    resolveUnitImageDisplay,
+    toggleUnitImageAssignment,
     unitImageSelectValue,
+    unitUsesProductImage,
     type ProductImageAssignmentMode,
     type UnitImageOrigin,
 } from "@/features/products/unit-image-assignment";
@@ -553,24 +558,46 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         adoptProductImage(image);
         return image;
     }
+    function toggleImageUnitAssignment(imageId: string, unitId: string, assign: boolean) {
+        const image = productImages.find((item) => item.id === imageId);
+        if (!image) return;
+        const mainImage = productImages.find((item) => item.id === selectedImageId);
+        setUnits((current) => {
+            const next = toggleUnitImageAssignment({
+                assign,
+                image,
+                mainImage,
+                origins: unitImageOriginsRef.current,
+                unitId,
+                units: current,
+            });
+            unitImageOriginsRef.current = next.origins;
+            setUnitImageOrigins(next.origins);
+            return next.units;
+        });
+    }
     function removeProductImage(imageId: string) {
+        const removed = productImages.find((image) => image.id === imageId);
         setProductImages((current) => {
-            const removed = current.find((image) => image.id === imageId);
-            if (removed?.url.startsWith("blob:")) {
-                URL.revokeObjectURL(removed.url);
+            const target = current.find((image) => image.id === imageId);
+            if (target?.url.startsWith("blob:")) {
+                URL.revokeObjectURL(target.url);
             }
             return current.filter((image) => image.id !== imageId);
         });
         if (selectedImageId === imageId) {
             setSelectedImageId(undefined);
         }
-        setUnits((current) => current.map((unit) => unit.imageUrl === imageId ? { ...unit, imageUrl: undefined } : unit));
-        setUnitImageOrigins((current) => {
-            const next = { ...current };
-            for (const [unitId, origin] of Object.entries(next)) {
-                if (origin === "inherited") next[unitId] = "none";
-            }
-            return next;
+        if (!removed) return;
+        setUnits((current) => {
+            const next = clearImageAssignments({
+                image: removed,
+                origins: unitImageOriginsRef.current,
+                units: current,
+            });
+            unitImageOriginsRef.current = next.origins;
+            setUnitImageOrigins(next.origins);
+            return next.units;
         });
     }
     function addBarcodeAlias(unitId: string) {
@@ -746,17 +773,38 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         };
         const selectedImage = productImages.find((image) => image.id === selectedImageId);
         async function persistSavedProduct(savedProduct: { id: string; units?: Array<{ id: string; unitName: string }> }) {
-            if (selectedImage?.pendingMain && selectedImage.pendingThumb) {
+            const savedUnits = savedProduct.units ?? [];
+            const savedIdByName = new Map(
+                savedUnits.map((unit) => [unit.unitName.trim().toLowerCase(), unit.id] as const),
+            );
+            function mapAssignedUnitIds(image: ProductFormImage) {
+                return units
+                    .filter((unit) => isUnitEnabled(unit) && unitUsesProductImage(unit, image))
+                    .map((unit) => {
+                        if (!unit.id.startsWith("unit-") && savedUnits.some((saved) => saved.id === unit.id)) {
+                            return unit.id;
+                        }
+                        return savedIdByName.get(unit.unitName.trim().toLowerCase());
+                    })
+                    .filter((unitId): unitId is string => Boolean(unitId));
+            }
+
+            const pendingImages = productImages.filter((image) => image.pendingMain && image.pendingThumb);
+            // Upload main/selected first so products.image_url is set, then other assigned pending images.
+            const orderedPending = [
+                ...pendingImages.filter((image) => image.id === selectedImageId),
+                ...pendingImages.filter((image) => image.id !== selectedImageId),
+            ];
+
+            for (const image of orderedPending) {
+                const assignedUnitIds = mapAssignedUnitIds(image);
+                const isMain = image.id === selectedImageId;
+                // Skip non-main pending images that are not assigned to any unit.
+                if (!isMain && assignedUnitIds.length === 0) continue;
                 const imageData = new FormData();
-                imageData.set("main", selectedImage.pendingMain);
-                imageData.set("thumb", selectedImage.pendingThumb);
-                const inheritedNames = new Set(units
-                    .filter((unit) => unitImageOriginsRef.current[unit.id] === "inherited")
-                    .map((unit) => unit.unitName.trim())
-                    .filter(Boolean));
-                const assignedUnitIds = (savedProduct.units ?? [])
-                    .filter((unit) => inheritedNames.has(unit.unitName.trim()))
-                    .map((unit) => unit.id);
+                imageData.set("main", image.pendingMain!);
+                imageData.set("thumb", image.pendingThumb!);
+                imageData.set("setProductMain", isMain ? "true" : "false");
                 if (assignedUnitIds[0]) {
                     imageData.set("assignToUnitId", assignedUnitIds[0]);
                 }
@@ -774,7 +822,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     return false;
                 }
             }
-            else if (mode === "edit" && !selectedImage && product?.imageUrl) {
+
+            if (orderedPending.length === 0 && mode === "edit" && !selectedImage && product?.imageUrl) {
                 const cleared = await clearProductImageAction(savedProduct.id);
                 if (!cleared.ok) {
                     const imageError = localizeProductError(cleared.error ?? t("imageUploadFailed"));
@@ -1061,12 +1110,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
                     setAliasInput("");
                     setAliasDrawerUnitId(unitId);
-                }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+                }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
               <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onToggleUnitAssignment={toggleImageUnitAssignment} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units}/>
             </>) : (<>
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <h2 className="text-lg font-semibold">{t("basicProductInformation")}</h2>
@@ -1152,11 +1201,11 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
                 setAliasInput("");
                 setAliasDrawerUnitId(unitId);
-            }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+            }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
           <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onToggleUnitAssignment={toggleImageUnitAssignment} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units}/>
           {product ? <ProductHistorySection product={product}/> : null}
           </>)}
         </div>
@@ -1538,7 +1587,7 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onConversionInvalidChange: _onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, unitImageOrigins, units, updateUnit, }: {
+function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onConversionInvalidChange: _onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, selectedImageId, unitImageOrigins, units, updateUnit, }: {
     applyRoundingToAll: (roundingLak: number) => void;
     barcodeAliases: BarcodeAliasState;
     onCheckBarcode?: (unitId: string, barcode: string) => void;
@@ -1547,11 +1596,13 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     onUnitImageChange: (unitId: string, imageUrl: string | undefined) => void;
     productImages: ProductFormImage[];
     removeUnit: (unitId: string) => void;
+    selectedImageId?: string;
     unitImageOrigins: Record<string, UnitImageOrigin>;
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
     const [roundingForAll, setRoundingForAll] = useState(0);
+    const mainImage = productImages.find((image) => image.id === selectedImageId);
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1641,19 +1692,36 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 <MoneyInput className="h-10 min-w-28" disabled={(unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
               </td>
               <td className="px-3 py-3">
-                <div className="grid min-w-44 gap-1">
-                <select className="field-input h-10" value={unitImageSelectValue(unit, productImages)} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
-                  <option value="">{t("notAssigned")}</option>
-                  {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
-                </select>
+                {(() => {
+                  const display = resolveUnitImageDisplay(unit, productImages, mainImage);
+                  return (
+                <div className="grid min-w-44 gap-1" data-field="unit-image-cell">
+                <div className="flex items-center gap-2">
+                  <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background">
+                    {display.image?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="" className="size-full object-cover" decoding="async" src={display.image.url}/>
+                    ) : (
+                      <ImagePlus aria-hidden="true" className="size-4 text-muted-foreground"/>
+                    )}
+                  </div>
+                  <select className="field-input h-10 min-w-0 flex-1" value={unitImageSelectValue(unit, productImages)} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
+                    <option value="">{t("notAssigned")}</option>
+                    {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
+                  </select>
+                </div>
                 <span className="text-[11px] font-medium text-muted-foreground">
-                  {unitImageOrigins[unit.id] === "inherited"
+                  {display.origin === "inherited" || unitImageOrigins[unit.id] === "inherited"
                     ? t("inheritedFromProductImage")
-                    : unitImageOrigins[unit.id] === "custom"
+                    : display.origin === "custom" || unitImageOrigins[unit.id] === "custom"
                       ? t("customUnitImage")
-                      : t("notAssigned")}
+                      : display.origin === "fallback"
+                        ? t("inheritedFromProductImage")
+                        : t("notAssigned")}
                 </span>
                 </div>
+                  );
+                })()}
               </td>
               <td className="px-3 py-3">
                 <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
@@ -1896,7 +1964,7 @@ function CategoryField({ categories, defaultValue, onAction, }: {
       </div>
     </div>);
 }
-function ProductImagesSection({ assignmentMode, barcode, isPending = false, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
+function ProductImagesSection({ assignmentMode, barcode, isPending = false, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onToggleUnitAssignment, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
     assignmentMode: ProductImageAssignmentMode | null;
     barcode: string;
     isPending?: boolean;
@@ -1907,6 +1975,7 @@ function ProductImagesSection({ assignmentMode, barcode, isPending = false, onAp
     onSave: () => void;
     onSearchMessage: (message: string, tone: "success" | "error" | "warning") => void;
     onSetMainImage: (imageUrl: string) => void;
+    onToggleUnitAssignment: (imageId: string, unitId: string, assign: boolean) => void;
     onUpload: (file: File | undefined) => void;
     productImages: ProductFormImage[];
     productName: string;
@@ -1914,7 +1983,6 @@ function ProductImagesSection({ assignmentMode, barcode, isPending = false, onAp
     saveValidationIssues?: string[];
     selectedImageId?: string;
     units: ProductUnit[];
-    updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
     const [chooserOpen, setChooserOpen] = useState(false);
     const [searching, setSearching] = useState(false);
@@ -2062,8 +2130,8 @@ function ProductImagesSection({ assignmentMode, barcode, isPending = false, onAp
           </div>
           {productImages.length === 0 ? (<div className="mt-4 grid min-h-36 place-items-center rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{t("noProductImagesYet")}</div>) : (<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {productImages.map((image) => {
-                const assignedUnits = units.filter((unit) => unit.imageUrl === image.id || unit.imageUrl === image.storagePath);
-                return (<div className="rounded-lg border border-border bg-card p-3" key={image.id}>
+                const assignableUnits = activeAssignableUnits(units);
+                return (<div className="rounded-lg border border-border bg-card p-3" data-field="uploaded-image-card" key={image.id}>
                     <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
                       <button className="size-full" type="button" onClick={() => setPreviewImage(image)}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2071,11 +2139,25 @@ function ProductImagesSection({ assignmentMode, barcode, isPending = false, onAp
                       </button>
                     </div>
                     <div className="mt-2 truncate text-sm font-semibold">{image.label}</div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {assignedUnits.length === 0
-                        ? t("notAssigned")
-                        : assignedUnits.map((unit) => unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit")).join(", ")}
-                    </p>
+                    <div className="mt-2 grid gap-1" data-field="unit-image-assignment">
+                      {assignableUnits.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">{t("notAssigned")}</p>
+                      ) : assignableUnits.map((unit) => {
+                        const checked = unitUsesProductImage(unit, image);
+                        const label = unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit");
+                        return (
+                          <label className="flex items-center gap-2 text-xs font-semibold" key={`${image.id}-${unit.id}`}>
+                            <input
+                              checked={checked}
+                              data-unit-id={unit.id}
+                              type="checkbox"
+                              onChange={(event) => onToggleUnitAssignment(image.id, unit.id, event.target.checked)}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                     <button className="mt-2 h-9 w-full rounded-md border border-border text-xs font-semibold transition hover:border-primary" type="button" onClick={() => {
                         onSetMainImage(image.id);
                         onSearchMessage(fillProductsCopy(t("setMainImageMessage"), { name: image.label }), "success");
