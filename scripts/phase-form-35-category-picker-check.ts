@@ -21,10 +21,30 @@ function check(name: string, run: () => void) {
 
 const root = process.cwd();
 const form = readFileSync(join(root, "features/products/components/product-form.tsx"), "utf8");
+const themedSelect = readFileSync(join(root, "features/products/components/themed-select.tsx"), "utf8");
 const repo = readFileSync(join(root, "features/products/prisma-repository.ts"), "utf8");
 const newPage = readFileSync(join(root, "app/(dashboard)/products/new/page.tsx"), "utf8");
 const editPage = readFileSync(join(root, "app/(dashboard)/products/[productId]/edit/page.tsx"), "utf8");
 const catPage = readFileSync(join(root, "app/(dashboard)/products/categories/page.tsx"), "utf8");
+
+check("CategoryField uses themed custom select (not native popup)", () => {
+  assert(form.includes('import { ThemedSelect } from "@/features/products/components/themed-select"'), "ThemedSelect import missing");
+  assert(form.includes("function CategoryField"), "CategoryField missing");
+  const categoryField = form.slice(form.indexOf("function CategoryField"), form.indexOf("function ProductImagesSection"));
+  assert(categoryField.includes("<ThemedSelect"), "CategoryField still not using ThemedSelect");
+  assert(categoryField.includes('name="categoryId"'), "hidden categoryId name missing");
+  assert(!categoryField.includes("<select"), "CategoryField still uses native select");
+});
+
+check("ThemedSelect uses dark card panel styles", () => {
+  assert(themedSelect.includes("bg-card text-card-foreground"), "dropdown panel missing card theme classes");
+  assert(themedSelect.includes("border-border"), "dropdown missing border theme");
+  assert(themedSelect.includes("text-foreground"), "option text missing foreground");
+  assert(themedSelect.includes("hover:bg-muted/50") || themedSelect.includes("hover:bg-muted"), "hover state missing");
+  assert(themedSelect.includes("bg-primary/20"), "selected state missing");
+  assert(themedSelect.includes('role="listbox"'), "listbox role missing");
+  assert(themedSelect.includes('role="option"'), "option role missing");
+});
 
 check("No EN/LO slash labels in CategoryField", () => {
   assert(!form.includes("{category.nameEn} / {category.nameLo}"), "slash label still present");

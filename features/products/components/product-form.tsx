@@ -24,6 +24,7 @@ import type { Supplier } from "@/features/suppliers/types";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
+import { ThemedSelect } from "@/features/products/components/themed-select";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
 import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
@@ -1274,17 +1275,25 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                           );
                         })}
                       </div>
-                      <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-                        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" value={supplierPickId} onChange={(event) => {
-                          const next = event.target.value;
-                          setSupplierPickId(next);
-                          if (next) addAssignedSupplier(next);
-                        }}>
-                          <option value="">{t("addExistingSupplier")}</option>
-                          {localSuppliers.filter((supplier) => !assignedSupplierIds.includes(supplier.id)).map((supplier) => (
-                            <option key={supplier.id} value={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
-                          ))}
-                        </select>
+                      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+                        <ThemedSelect
+                          ariaLabel={t("addExistingSupplier")}
+                          options={[
+                            { label: t("addExistingSupplier"), value: "" },
+                            ...localSuppliers
+                              .filter((supplier) => !assignedSupplierIds.includes(supplier.id))
+                              .map((supplier) => ({
+                                label: supplier.companyName || supplier.supplierCode,
+                                value: supplier.id,
+                              })),
+                          ]}
+                          placeholder={t("addExistingSupplier")}
+                          value={supplierPickId}
+                          onChange={(next) => {
+                            setSupplierPickId("");
+                            if (next) addAssignedSupplier(next);
+                          }}
+                        />
                         <button aria-label={t("addSupplier")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setSupplierDialogOpen(true)}>
                           <Plus aria-hidden="true" className="size-4"/>
                         </button>
@@ -1313,13 +1322,18 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                   <div className="lg:col-span-3">
                     <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
                       <span>{t("brandName")}</span>
-                      <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-                        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="brandId" value={selectedBrandId} onChange={(event) => setSelectedBrandId(event.target.value)}>
-                          <option value="">{t("noBrandSelected")}</option>
-                          {localBrands.map((brand) => (
-                            <option key={brand.id} value={brand.id}>{brand.name}</option>
-                          ))}
-                        </select>
+                      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+                        <ThemedSelect
+                          ariaLabel={t("brandName")}
+                          name="brandId"
+                          options={[
+                            { label: t("noBrandSelected"), value: "" },
+                            ...localBrands.map((brand) => ({ label: brand.name, value: brand.id })),
+                          ]}
+                          placeholder={t("noBrandSelected")}
+                          value={selectedBrandId}
+                          onChange={setSelectedBrandId}
+                        />
                         <button aria-label={t("addBrand")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setBrandDialogOpen(true)}>
                           <Plus aria-hidden="true" className="size-4"/>
                         </button>
@@ -1427,17 +1441,25 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                     );
                   })}
                 </div>
-                <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-                  <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" value={supplierPickId} onChange={(event) => {
-                    const next = event.target.value;
-                    setSupplierPickId(next);
-                    if (next) addAssignedSupplier(next);
-                  }}>
-                    <option value="">{t("addExistingSupplier")}</option>
-                    {localSuppliers.filter((supplier) => !assignedSupplierIds.includes(supplier.id)).map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>{supplier.companyName || supplier.supplierCode}</option>
-                    ))}
-                  </select>
+                <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+                  <ThemedSelect
+                    ariaLabel={t("addExistingSupplier")}
+                    options={[
+                      { label: t("addExistingSupplier"), value: "" },
+                      ...localSuppliers
+                        .filter((supplier) => !assignedSupplierIds.includes(supplier.id))
+                        .map((supplier) => ({
+                          label: supplier.companyName || supplier.supplierCode,
+                          value: supplier.id,
+                        })),
+                    ]}
+                    placeholder={t("addExistingSupplier")}
+                    value={supplierPickId}
+                    onChange={(next) => {
+                      setSupplierPickId("");
+                      if (next) addAssignedSupplier(next);
+                    }}
+                  />
                   <button aria-label={t("addSupplier")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setSupplierDialogOpen(true)}>
                     <Plus aria-hidden="true" className="size-4"/>
                   </button>
@@ -1464,13 +1486,18 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
               </div>
               <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
                 <span>{t("brandName")}</span>
-                <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-                  <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="brandId" value={selectedBrandId} onChange={(event) => setSelectedBrandId(event.target.value)}>
-                    <option value="">{t("noBrandSelected")}</option>
-                    {localBrands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>{brand.name}</option>
-                    ))}
-                  </select>
+                <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+                  <ThemedSelect
+                    ariaLabel={t("brandName")}
+                    name="brandId"
+                    options={[
+                      { label: t("noBrandSelected"), value: "" },
+                      ...localBrands.map((brand) => ({ label: brand.name, value: brand.id })),
+                    ]}
+                    placeholder={t("noBrandSelected")}
+                    value={selectedBrandId}
+                    onChange={setSelectedBrandId}
+                  />
                   <button aria-label={t("addBrand")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setBrandDialogOpen(true)}>
                     <Plus aria-hidden="true" className="size-4"/>
                   </button>
@@ -2260,15 +2287,24 @@ function CategoryField({ categories, locale, onAction, onChange, value, }: {
 }) {
     const selectedCategoryId = value ?? "";
     const hasSelectedCategory = Boolean(selectedCategoryId);
+    const options = [
+        { label: categories.length === 0 ? t("noCategoriesYet") : t("selectCategory"), value: "" },
+        ...categories.map((category) => ({
+            label: categoryDisplayName(category, locale),
+            value: category.id,
+        })),
+    ];
     return (<div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
       <span>{t("category")}</span>
-      <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="categoryId" value={selectedCategoryId} onChange={(event) => onChange(event.target.value)} aria-label={t("category")}>
-          <option value="">{categories.length === 0 ? t("noCategoriesYet") : t("selectCategory")}</option>
-          {categories.map((category) => (<option value={category.id} key={category.id}>
-              {categoryDisplayName(category, locale)}
-            </option>))}
-        </select>
+      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+        <ThemedSelect
+          ariaLabel={t("category")}
+          name="categoryId"
+          options={options}
+          placeholder={categories.length === 0 ? t("noCategoriesYet") : t("selectCategory")}
+          value={selectedCategoryId}
+          onChange={onChange}
+        />
         <div className="flex shrink-0 border-l border-border">
           <button aria-label={t("addCategory")} className="grid size-11 place-items-center transition hover:bg-card" type="button" onClick={() => onAction("add")}>
             <Plus aria-hidden="true" className="size-4"/>
