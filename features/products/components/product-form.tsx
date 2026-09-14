@@ -11,15 +11,15 @@ import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
 const t = tProducts;
-import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
-import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
+import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteBrandAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
-import { createSupplierAction } from "@/features/suppliers/actions";
+import { archiveSupplierAction, createSupplierAction, updateSupplierAction } from "@/features/suppliers/actions";
 import type { Supplier } from "@/features/suppliers/types";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
@@ -94,7 +94,22 @@ type CategoryDialogState = {
     mode: "add" | "edit" | "delete";
     categoryId?: string;
 } | null;
+type BrandDialogState = {
+    mode: "add" | "edit" | "delete";
+    brandId?: string;
+} | null;
+type SupplierDialogState = {
+    mode: "add" | "edit" | "archive";
+    supplierId?: string;
+} | null;
 type ProductStatusConfirm = "archive" | "delete" | null;
+
+const DIALOG_BTN_SECONDARY = "h-10 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary hover:bg-card active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40";
+const DIALOG_BTN_PRIMARY = "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50";
+const DIALOG_BTN_DANGER = "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-danger px-4 text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:pointer-events-none disabled:opacity-50";
+const MASTER_TOOL_BTN = "grid size-11 place-items-center transition hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40";
+const MASTER_TOOL_BTN_DANGER = "grid size-11 place-items-center border-l border-border text-danger transition hover:bg-danger/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:pointer-events-none disabled:opacity-40";
+const MASTER_TOOL_BTN_MID = "grid size-11 place-items-center border-l border-border transition hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40";
 type InitialStockPreviewValue = {
     addOpeningStock: boolean;
     receiveUnitId: string;
@@ -236,7 +251,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     const [selectedCategoryId, setSelectedCategoryId] = useState(product?.categoryId ?? "");
     const [localBrands, setLocalBrands] = useState<Brand[]>(brands);
     const [selectedBrandId, setSelectedBrandId] = useState(product?.brandId ?? "");
-    const [brandDialogOpen, setBrandDialogOpen] = useState(false);
+    const [brandDialog, setBrandDialog] = useState<BrandDialogState>(null);
     const [brandDraft, setBrandDraft] = useState("");
     const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(() => {
         const linkedIds = new Set([
@@ -251,8 +266,12 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     });
     const [preferredSupplierId, setPreferredSupplierId] = useState(product?.supplierId ?? "");
     const [supplierPickId, setSupplierPickId] = useState("");
-    const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+    const [supplierDialog, setSupplierDialog] = useState<SupplierDialogState>(null);
     const [supplierDraft, setSupplierDraft] = useState("");
+    const closeCategoryDialog = useCallback(() => setCategoryDialog(null), []);
+    const closeBrandDialog = useCallback(() => setBrandDialog(null), []);
+    const closeSupplierDialog = useCallback(() => setSupplierDialog(null), []);
+    const closeStatusConfirm = useCallback(() => setStatusConfirm(null), []);
     const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
     const [duplicateBarcodeMatch, setDuplicateBarcodeMatch] = useState<DuplicateBarcodeMatch | null>(null);
     const [checkingBarcodeUnitId, setCheckingBarcodeUnitId] = useState<string | null>(null);
@@ -1024,14 +1043,28 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             router.refresh();
         });
     }
+    function openBrandDialog(mode: "add" | "edit" | "delete", brandId?: string) {
+        const brand = brandId ? localBrands.find((row) => row.id === brandId) : undefined;
+        setBrandDraft(mode === "add" ? "" : (brand?.name ?? ""));
+        setBrandDialog({ mode, brandId });
+    }
+    function openSupplierDialog(mode: "add" | "edit" | "archive", supplierId?: string) {
+        const supplier = supplierId ? localSuppliers.find((row) => row.id === supplierId) : undefined;
+        setSupplierDraft(mode === "add" ? "" : (supplier?.companyName || supplier?.supplierCode || ""));
+        setSupplierDialog({ mode, supplierId });
+    }
     function saveBrandInline() {
+        if (!brandDialog || brandDialog.mode === "delete") return;
         const nextName = brandDraft.trim();
         if (!nextName) {
             showFeedback(t("brandSaveFailed"), "error");
             return;
         }
         startTransition(async () => {
-            const result = await upsertBrandAction({ name: nextName });
+            const result = await upsertBrandAction({
+                id: brandDialog.mode === "edit" ? brandDialog.brandId : undefined,
+                name: nextName,
+            });
             if (!result.ok || !result.data) {
                 showFeedback(localizeProductError(result.error ?? "Brand save failed."), "error");
                 return;
@@ -1044,18 +1077,53 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             });
             setSelectedBrandId(mapped.id);
             setBrandDraft("");
-            setBrandDialogOpen(false);
+            setBrandDialog(null);
             showFeedback(t("brandSaved"), "success");
             router.refresh();
         });
     }
+    function deleteBrandInline() {
+        const brandId = brandDialog?.brandId;
+        if (!brandId) return;
+        startTransition(async () => {
+            const result = await deleteBrandAction(brandId);
+            if (!result.ok) {
+                showFeedback(localizeProductError(result.error ?? t("brandDeleteFailed")), "error");
+                return;
+            }
+            setLocalBrands((current) => current.filter((brand) => brand.id !== brandId));
+            if (selectedBrandId === brandId) setSelectedBrandId("");
+            setBrandDialog(null);
+            showFeedback(t("brandDeleted"), "success");
+            router.refresh();
+        });
+    }
     function saveSupplierInline() {
+        if (!supplierDialog || supplierDialog.mode === "archive") return;
         const nextName = supplierDraft.trim();
         if (!nextName) {
             showFeedback(t("supplierSaveFailed"), "error");
             return;
         }
         startTransition(async () => {
+            if (supplierDialog.mode === "edit" && supplierDialog.supplierId) {
+                const result = await updateSupplierAction(supplierDialog.supplierId, { companyName: nextName });
+                if (!result.ok || !result.data) {
+                    showFeedback(localizeProductError(result.error ?? "Supplier save failed."), "error");
+                    return;
+                }
+                const saved = result.data as { id: string; companyName?: string; name?: string; supplierCode?: string };
+                setLocalSuppliers((current) => current.map((supplier) => (
+                    supplier.id === saved.id
+                        ? { ...supplier, companyName: saved.companyName || saved.name || nextName, supplierCode: saved.supplierCode || supplier.supplierCode }
+                        : supplier
+                )).sort((a, b) => a.companyName.localeCompare(b.companyName)));
+                setSupplierDraft("");
+                setSupplierDialog(null);
+                showFeedback(t("supplierSaved"), "success");
+                router.refresh();
+                return;
+            }
             const code = `SUP-${Date.now().toString().slice(-6)}`;
             const result = await createSupplierAction({ companyName: nextName, supplierCode: code });
             if (!result.ok || !result.data) {
@@ -1088,8 +1156,31 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             setPreferredSupplierId((current) => current || mapped.id);
             setSupplierPickId("");
             setSupplierDraft("");
-            setSupplierDialogOpen(false);
+            setSupplierDialog(null);
             showFeedback(t("supplierSaved"), "success");
+            router.refresh();
+        });
+    }
+    function archiveSupplierInline() {
+        const supplierId = supplierDialog?.supplierId;
+        if (!supplierId) return;
+        startTransition(async () => {
+            const result = await archiveSupplierAction(supplierId);
+            if (!result.ok) {
+                showFeedback(localizeProductError(result.error ?? t("supplierArchiveFailed")), "error");
+                return;
+            }
+            setLocalSuppliers((current) => current.filter((supplier) => supplier.id !== supplierId));
+            setAssignedSupplierIds((current) => {
+                const next = current.filter((id) => id !== supplierId);
+                setPreferredSupplierId((preferred) => {
+                    if (preferred !== supplierId) return preferred;
+                    return next[0] ?? "";
+                });
+                return next;
+            });
+            setSupplierDialog(null);
+            showFeedback(t("supplierArchived"), "success");
             router.refresh();
         });
     }
@@ -1186,28 +1277,13 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
       {message ? (<div className={feedbackClassName} role={messageTone === "success" ? "status" : "alert"}>
           {message}
         </div>) : null}
-      {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
-      {brandDialogOpen ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape footer={<div className="flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setBrandDialogOpen(false)}>{t("cancel")}</button>
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={saveBrandInline}>{t("save")}</button>
-          </div>} onClose={() => setBrandDialogOpen(false)} size="sm" title={t("addBrand")}>
-          <Field label={t("brandName")}>
-            <input className="field-input" value={brandDraft} onChange={(event) => setBrandDraft(event.target.value)} placeholder={t("brandNamePlaceholder")} autoFocus/>
-          </Field>
-        </ProductSmallModal>) : null}
-      {supplierDialogOpen ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape footer={<div className="flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSupplierDialogOpen(false)}>{t("cancel")}</button>
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={saveSupplierInline}>{t("save")}</button>
-          </div>} onClose={() => setSupplierDialogOpen(false)} size="sm" title={t("addSupplier")}>
-          <Field label={t("supplierName")}>
-            <input className="field-input" value={supplierDraft} onChange={(event) => setSupplierDraft(event.target.value)} placeholder={t("supplierNamePlaceholder")} autoFocus/>
-          </Field>
-          <p className="mt-2 text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
-        </ProductSmallModal>) : null}
+      {categoryDialog ? (<CategoryCrudDialog categories={localCategories} isPending={isPending} state={categoryDialog} onClose={closeCategoryDialog} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      {brandDialog ? (<BrandCrudDialog brands={localBrands} draft={brandDraft} isPending={isPending} state={brandDialog} onClose={closeBrandDialog} onDelete={deleteBrandInline} onDraftChange={setBrandDraft} onSave={saveBrandInline}/>) : null}
+      {supplierDialog ? (<SupplierCrudDialog draft={supplierDraft} isPending={isPending} state={supplierDialog} suppliers={localSuppliers} onArchive={archiveSupplierInline} onClose={closeSupplierDialog} onDraftChange={setSupplierDraft} onSave={saveSupplierInline}/>) : null}
       {statusConfirm && product ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStatusConfirm(null)}>{t("cancel")}</button>
-            {statusConfirm === "archive" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
-          </div>} onClose={() => setStatusConfirm(null)} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
+            <button className={DIALOG_BTN_SECONDARY} type="button" onClick={closeStatusConfirm}>{t("cancel")}</button>
+            {statusConfirm === "archive" ? (<button className={DIALOG_BTN_PRIMARY} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className={DIALOG_BTN_DANGER} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
+          </div>} onClose={closeStatusConfirm} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
           <p className="rounded-md border border-border bg-background p-3 text-sm font-semibold">{productName || product.nameEn || product.nameLo}</p>
         </ProductSmallModal>) : null}
       {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} onSave={() => {
@@ -1269,7 +1345,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                           return (
                             <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold" key={id}>
                               {label}
-                              <button aria-label={t("removeSupplier")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
+                              <button aria-label={t("removeSupplierFromProduct")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
                                 <X aria-hidden="true" className="size-3.5"/>
                               </button>
                             </span>
@@ -1282,7 +1358,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                           options={[
                             { label: t("addExistingSupplier"), value: "" },
                             ...localSuppliers
-                              .filter((supplier) => !assignedSupplierIds.includes(supplier.id))
+                              .filter((supplier) => supplier.status === "active" && !assignedSupplierIds.includes(supplier.id))
                               .map((supplier) => ({
                                 label: supplier.companyName || supplier.supplierCode,
                                 value: supplier.id,
@@ -1295,10 +1371,19 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                             if (next) addAssignedSupplier(next);
                           }}
                         />
-                        <button aria-label={t("addSupplier")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setSupplierDialogOpen(true)}>
-                          <Plus aria-hidden="true" className="size-4"/>
-                        </button>
+                        <div className="flex shrink-0 border-l border-border">
+                          <button aria-label={t("addSupplier")} className={MASTER_TOOL_BTN} type="button" onClick={() => openSupplierDialog("add")}>
+                            <Plus aria-hidden="true" className="size-4"/>
+                          </button>
+                          <button aria-label={t("editSupplier")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("edit", preferredSupplierId)}>
+                            <Pencil aria-hidden="true" className="size-4"/>
+                          </button>
+                          <button aria-label={t("archiveSupplierMaster")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("archive", preferredSupplierId)}>
+                            <Trash2 aria-hidden="true" className="size-4"/>
+                          </button>
+                        </div>
                       </div>
+                      <p className="text-xs text-muted-foreground">{t("supplierMasterHint")}</p>
                       {assignedSupplierIds.length > 0 ? (
                         <div className="rounded-md border border-border bg-background p-3">
                           <p className="text-xs font-semibold text-muted-foreground">{t("preferredSupplier")}</p>
@@ -1321,25 +1406,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                     </div>
                   </div>
                   <div className="lg:col-span-3">
-                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                      <span>{t("brandName")}</span>
-                      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
-                        <ThemedSelect
-                          ariaLabel={t("brandName")}
-                          name="brandId"
-                          options={[
-                            { label: t("noBrandSelected"), value: "" },
-                            ...localBrands.map((brand) => ({ label: brand.name, value: brand.id })),
-                          ]}
-                          placeholder={t("noBrandSelected")}
-                          value={selectedBrandId}
-                          onChange={setSelectedBrandId}
-                        />
-                        <button aria-label={t("addBrand")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setBrandDialogOpen(true)}>
-                          <Plus aria-hidden="true" className="size-4"/>
-                        </button>
-                      </div>
-                    </div>
+                    <BrandField brands={localBrands} value={selectedBrandId} onChange={setSelectedBrandId} onAction={openBrandDialog}/>
                   </div>
                   <div className="lg:col-span-6">
                     <Field label={t("descriptionNotes")}>
@@ -1435,7 +1502,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                     return (
                       <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold" key={id}>
                         {label}
-                        <button aria-label={t("removeSupplier")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
+                        <button aria-label={t("removeSupplierFromProduct")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
                           <X aria-hidden="true" className="size-3.5"/>
                         </button>
                       </span>
@@ -1448,7 +1515,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                     options={[
                       { label: t("addExistingSupplier"), value: "" },
                       ...localSuppliers
-                        .filter((supplier) => !assignedSupplierIds.includes(supplier.id))
+                        .filter((supplier) => supplier.status === "active" && !assignedSupplierIds.includes(supplier.id))
                         .map((supplier) => ({
                           label: supplier.companyName || supplier.supplierCode,
                           value: supplier.id,
@@ -1461,10 +1528,19 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                       if (next) addAssignedSupplier(next);
                     }}
                   />
-                  <button aria-label={t("addSupplier")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setSupplierDialogOpen(true)}>
-                    <Plus aria-hidden="true" className="size-4"/>
-                  </button>
+                  <div className="flex shrink-0 border-l border-border">
+                    <button aria-label={t("addSupplier")} className={MASTER_TOOL_BTN} type="button" onClick={() => openSupplierDialog("add")}>
+                      <Plus aria-hidden="true" className="size-4"/>
+                    </button>
+                    <button aria-label={t("editSupplier")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("edit", preferredSupplierId)}>
+                      <Pencil aria-hidden="true" className="size-4"/>
+                    </button>
+                    <button aria-label={t("archiveSupplierMaster")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("archive", preferredSupplierId)}>
+                      <Trash2 aria-hidden="true" className="size-4"/>
+                    </button>
+                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">{t("supplierMasterHint")}</p>
                 {assignedSupplierIds.length > 0 ? (
                   <div className="rounded-md border border-border bg-background p-3">
                     <p className="text-xs font-semibold text-muted-foreground">{t("preferredSupplier")}</p>
@@ -1485,25 +1561,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                   <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
                 )}
               </div>
-              <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-                <span>{t("brandName")}</span>
-                <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
-                  <ThemedSelect
-                    ariaLabel={t("brandName")}
-                    name="brandId"
-                    options={[
-                      { label: t("noBrandSelected"), value: "" },
-                      ...localBrands.map((brand) => ({ label: brand.name, value: brand.id })),
-                    ]}
-                    placeholder={t("noBrandSelected")}
-                    value={selectedBrandId}
-                    onChange={setSelectedBrandId}
-                  />
-                  <button aria-label={t("addBrand")} className="grid size-11 shrink-0 place-items-center border-l border-border transition hover:bg-card" type="button" onClick={() => setBrandDialogOpen(true)}>
-                    <Plus aria-hidden="true" className="size-4"/>
-                  </button>
-                </div>
-              </div>
+              <BrandField brands={localBrands} value={selectedBrandId} onChange={setSelectedBrandId} onAction={openBrandDialog}/>
               <div className="md:col-span-2">
                 <Field label={t("descriptionNotes")}>
                   <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" defaultValue={product?.description} placeholder={t("staffNotesPlaceholder")}/>
@@ -2045,31 +2103,35 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
               </td>
               <td className="px-3 py-3">
                 {(() => {
-                  const display = resolveUnitImageDisplay(unit, productImages, mainImage);
+                  const enabled = isUnitEnabled(unit);
+                  const display = resolveUnitImageDisplay(unit, productImages, mainImage, {
+                    allowMainFallback: false,
+                    hideDisabledAssignment: true,
+                  });
                   return (
-                <div className="grid min-w-44 gap-1" data-field="unit-image-cell">
+                <div className="grid min-w-44 gap-1" data-field="unit-image-cell" data-unit-enabled={enabled ? "true" : "false"}>
                 <div className="flex items-center gap-2">
                   <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background">
-                    {display.image?.url ? (
+                    {enabled && display.image?.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img alt="" className="size-full object-cover" decoding="async" src={display.image.url}/>
                     ) : (
                       <ImagePlus aria-hidden="true" className="size-4 text-muted-foreground"/>
                     )}
                   </div>
-                  <select className="field-input h-10 min-w-0 flex-1" value={unitImageSelectValue(unit, productImages)} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
+                  <select className="field-input h-10 min-w-0 flex-1" disabled={!enabled} value={enabled ? unitImageSelectValue(unit, productImages) : ""} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
                     <option value="">{t("notAssigned")}</option>
                     {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
                   </select>
                 </div>
                 <span className="text-[11px] font-medium text-muted-foreground">
-                  {display.origin === "inherited" || unitImageOrigins[unit.id] === "inherited"
+                  {!enabled
+                    ? t("notAssigned")
+                    : display.origin === "inherited" || unitImageOrigins[unit.id] === "inherited"
                     ? t("inheritedFromProductImage")
                     : display.origin === "custom" || unitImageOrigins[unit.id] === "custom"
                       ? t("customUnitImage")
-                      : display.origin === "fallback"
-                        ? t("inheritedFromProductImage")
-                        : t("notAssigned")}
+                      : t("notAssigned")}
                 </span>
                 </div>
                   );
@@ -2233,8 +2295,9 @@ function MoneyInput({ className = "", defaultValue, disabled, name, onValueChang
       />
     </>);
 }
-function CategoryCrudDialog({ categories, onClose, onDelete, onSave, state, }: {
+function CategoryCrudDialog({ categories, isPending = false, onClose, onDelete, onSave, state, }: {
     categories: Category[];
+    isPending?: boolean;
     onClose: () => void;
     onDelete: (categoryId: string) => void;
     onSave: (input: {
@@ -2251,18 +2314,77 @@ function CategoryCrudDialog({ categories, onClose, onDelete, onSave, state, }: {
     const title = state.mode === "add" ? t("addCategory") : state.mode === "edit" ? t("editCategory") : t("deleteCategory");
     const isDelete = state.mode === "delete";
     return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isDelete} footer={isDelete ? (<div className="flex justify-end gap-2">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-              <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => state.categoryId && onDelete(state.categoryId)}>{t("delete")}</button>
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_DANGER} disabled={isPending || !state.categoryId} type="button" onClick={() => state.categoryId && onDelete(state.categoryId)}>{isPending ? t("saving") : t("delete")}</button>
             </div>) : (<div className="flex justify-end gap-2">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onSave({ id: state.mode === "edit" ? state.categoryId : undefined, nameLo: name })}>{t("save")}</button>
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_PRIMARY} disabled={isPending || !name.trim()} type="button" onClick={() => onSave({ id: state.mode === "edit" ? state.categoryId : undefined, nameLo: name })}>{isPending ? t("saving") : t("save")}</button>
             </div>)} onClose={onClose} size="sm" title={title}>
         {isDelete ? (<>
             <p className="text-sm text-muted-foreground">{t("deleteCategoryConfirm")}</p>
             <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{category?.nameEn || category?.nameLo || t("selectedCategory")}</p>
           </>) : (<Field label={state.mode === "add" ? t("categoryName") : t("currentCategoryName")}>
-              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus/>
+              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus disabled={isPending}/>
             </Field>)}
+      </ProductSmallModal>);
+}
+function BrandCrudDialog({ brands, draft, isPending = false, onClose, onDelete, onDraftChange, onSave, state, }: {
+    brands: Brand[];
+    draft: string;
+    isPending?: boolean;
+    onClose: () => void;
+    onDelete: () => void;
+    onDraftChange: (value: string) => void;
+    onSave: () => void;
+    state: Exclude<BrandDialogState, null>;
+}) {
+    const brand = brands.find((item) => item.id === state.brandId);
+    const title = state.mode === "add" ? t("addBrand") : state.mode === "edit" ? t("editBrand") : t("deleteBrand");
+    const isDelete = state.mode === "delete";
+    return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isDelete} footer={isDelete ? (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_DANGER} disabled={isPending || !state.brandId} type="button" onClick={onDelete}>{isPending ? t("saving") : t("delete")}</button>
+            </div>) : (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_PRIMARY} disabled={isPending || !draft.trim()} type="button" onClick={onSave}>{isPending ? t("saving") : t("save")}</button>
+            </div>)} onClose={onClose} size="sm" title={title}>
+        {isDelete ? (<>
+            <p className="text-sm text-muted-foreground">{t("deleteBrandConfirm")}</p>
+            <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{brand?.name || t("noBrandSelected")}</p>
+          </>) : (<Field label={t("brandName")}>
+              <input className="field-input" value={draft} onChange={(event) => onDraftChange(event.target.value)} placeholder={t("brandNamePlaceholder")} autoFocus disabled={isPending}/>
+            </Field>)}
+      </ProductSmallModal>);
+}
+function SupplierCrudDialog({ draft, isPending = false, onArchive, onClose, onDraftChange, onSave, state, suppliers, }: {
+    draft: string;
+    isPending?: boolean;
+    onArchive: () => void;
+    onClose: () => void;
+    onDraftChange: (value: string) => void;
+    onSave: () => void;
+    state: Exclude<SupplierDialogState, null>;
+    suppliers: Supplier[];
+}) {
+    const supplier = suppliers.find((item) => item.id === state.supplierId);
+    const title = state.mode === "add" ? t("addSupplier") : state.mode === "edit" ? t("editSupplier") : t("archiveSupplierMaster");
+    const isArchive = state.mode === "archive";
+    return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isArchive} footer={isArchive ? (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_DANGER} disabled={isPending || !state.supplierId} type="button" onClick={onArchive}>{isPending ? t("saving") : t("archive")}</button>
+            </div>) : (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_PRIMARY} disabled={isPending || !draft.trim()} type="button" onClick={onSave}>{isPending ? t("saving") : t("save")}</button>
+            </div>)} onClose={onClose} size="sm" title={title}>
+        {isArchive ? (<>
+            <p className="text-sm text-muted-foreground">{t("archiveSupplierConfirm")}</p>
+            <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{supplier?.companyName || supplier?.supplierCode || t("suppliers")}</p>
+          </>) : (<>
+            <Field label={t("supplierName")}>
+              <input className="field-input" value={draft} onChange={(event) => onDraftChange(event.target.value)} placeholder={t("supplierNamePlaceholder")} autoFocus disabled={isPending}/>
+            </Field>
+            <p className="mt-2 text-xs text-muted-foreground">{t("supplierMasterHint")}</p>
+          </>)}
       </ProductSmallModal>);
 }
 function ImagePreviewDialog({ image, onClose }: {
@@ -2278,6 +2400,42 @@ function ImagePreviewDialog({ image, onClose }: {
 }
 function categoryDisplayName(category: { nameEn?: string | null; nameLo?: string | null }, locale: SupportedLocale) {
     return localizedProductName(category, locale) || category.nameEn?.trim() || category.nameLo?.trim() || "";
+}
+function BrandField({ brands, onAction, onChange, value, }: {
+    brands: Brand[];
+    onAction: (mode: "add" | "edit" | "delete", brandId?: string) => void;
+    onChange: (brandId: string) => void;
+    value?: string;
+}) {
+    const selectedBrandId = value ?? "";
+    const hasSelectedBrand = Boolean(selectedBrandId);
+    return (<div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+      <span>{t("brandName")}</span>
+      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+        <ThemedSelect
+          ariaLabel={t("brandName")}
+          name="brandId"
+          options={[
+            { label: t("noBrandSelected"), value: "" },
+            ...brands.map((brand) => ({ label: brand.name, value: brand.id })),
+          ]}
+          placeholder={t("noBrandSelected")}
+          value={selectedBrandId}
+          onChange={onChange}
+        />
+        <div className="flex shrink-0 border-l border-border">
+          <button aria-label={t("addBrand")} className={MASTER_TOOL_BTN} type="button" onClick={() => onAction("add")}>
+            <Plus aria-hidden="true" className="size-4"/>
+          </button>
+          <button aria-label={t("editBrand")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!hasSelectedBrand} onClick={() => onAction("edit", selectedBrandId)}>
+            <Pencil aria-hidden="true" className="size-4"/>
+          </button>
+          <button aria-label={t("deleteBrand")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!hasSelectedBrand} onClick={() => onAction("delete", selectedBrandId)}>
+            <Trash2 aria-hidden="true" className="size-4"/>
+          </button>
+        </div>
+      </div>
+    </div>);
 }
 function CategoryField({ categories, locale, onAction, onChange, value, }: {
     categories: Category[];
@@ -2307,13 +2465,13 @@ function CategoryField({ categories, locale, onAction, onChange, value, }: {
           onChange={onChange}
         />
         <div className="flex shrink-0 border-l border-border">
-          <button aria-label={t("addCategory")} className="grid size-11 place-items-center transition hover:bg-card" type="button" onClick={() => onAction("add")}>
+          <button aria-label={t("addCategory")} className={MASTER_TOOL_BTN} type="button" onClick={() => onAction("add")}>
             <Plus aria-hidden="true" className="size-4"/>
           </button>
-          <button aria-label={t("editCategory")} className="grid size-11 place-items-center border-l border-border transition hover:bg-card disabled:opacity-40" type="button" disabled={!hasSelectedCategory} onClick={() => onAction("edit", selectedCategoryId)}>
+          <button aria-label={t("editCategory")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!hasSelectedCategory} onClick={() => onAction("edit", selectedCategoryId)}>
             <Pencil aria-hidden="true" className="size-4"/>
           </button>
-          <button aria-label={t("deleteCategory")} className="grid size-11 place-items-center border-l border-border text-danger transition hover:bg-danger/10 disabled:opacity-40" type="button" disabled={!hasSelectedCategory} onClick={() => onAction("delete", selectedCategoryId)}>
+          <button aria-label={t("deleteCategory")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!hasSelectedCategory} onClick={() => onAction("delete", selectedCategoryId)}>
             <Trash2 aria-hidden="true" className="size-4"/>
           </button>
         </div>

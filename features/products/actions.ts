@@ -7,6 +7,7 @@ import {
   archivePrismaProduct,
   bulkUpdatePrismaProductPrices,
   createPrismaProduct,
+  deletePrismaBrand,
   deletePrismaCategory,
   deletePrismaProduct,
   duplicatePrismaProduct,
@@ -252,6 +253,16 @@ export async function upsertBrandAction(input: { id?: string; name: string }) {
 export async function deleteCategoryAction(categoryId: string) {
   try {
     const data = await deletePrismaCategory(categoryId, await tenant(WRITE_PERMISSIONS.categoriesManage));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function deleteBrandAction(brandId: string) {
+  try {
+    const data = await deletePrismaBrand(brandId, await tenant(WRITE_PERMISSIONS.productsUpdate));
     revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {

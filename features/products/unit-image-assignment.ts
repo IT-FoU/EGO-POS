@@ -73,10 +73,24 @@ export function applyProductImageAssignment<T extends AssignableUnit>(options: {
   const origins = { ...options.origins };
   const protectCustom = options.protectCustom ?? false;
   const units = options.units.map((unit) => {
-    if (!isAssignableUnit(unit)) return unit;
+    // Disabled units never receive new assignments and must not keep this image visible.
+    if (!isAssignableUnit(unit)) {
+      if (unitUsesProductImage(unit, options.image)) {
+        origins[unit.id] = "none";
+        return { ...unit, imageUrl: undefined };
+      }
+      return unit;
+    }
     if (protectCustom && isProtectedCustomUnit(unit.id, origins)) return unit;
     const shouldAssign = options.mode === "all" || Boolean(unit.isBaseUnit);
-    if (!shouldAssign) return unit;
+    if (!shouldAssign) {
+      // Base-only: clear this image from non-base units so Pack/Box do not keep it.
+      if (options.mode === "base" && unitUsesProductImage(unit, options.image)) {
+        origins[unit.id] = "none";
+        return { ...unit, imageUrl: undefined };
+      }
+      return unit;
+    }
     origins[unit.id] = "inherited";
     return { ...unit, imageUrl: imageRef };
   });
@@ -183,16 +197,26 @@ export function resolveUnitImageDisplay(
   unit: AssignableUnit,
   images: AssignableProductImage[],
   mainImage?: AssignableProductImage | null,
+  options?: {
+    /** When false, skip main-image fallback (Create/Edit assignment UI). Default true for POS. */
+    allowMainFallback?: boolean;
+    /** When true, disabled units never show an assigned/fallback image. */
+    hideDisabledAssignment?: boolean;
+  },
 ): {
   image?: AssignableProductImage;
   origin: UnitImageOrigin | "fallback";
 } {
+  if (options?.hideDisabledAssignment && !isAssignableUnit(unit)) {
+    return { origin: "none" };
+  }
   const assigned = findImageForUnit(unit, images);
   if (assigned) {
     const inherited = Boolean(mainImage && unitUsesProductImage(unit, mainImage));
     return { image: assigned, origin: inherited ? "inherited" : "custom" };
   }
-  if (mainImage && (mainImage.url || mainImage.storagePath || mainImage.id)) {
+  const allowFallback = options?.allowMainFallback !== false;
+  if (allowFallback && mainImage && (mainImage.url || mainImage.storagePath || mainImage.id)) {
     return { image: mainImage, origin: "fallback" };
   }
   return { origin: "none" };

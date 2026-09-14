@@ -1329,3 +1329,24 @@ export async function deletePrismaCategory(categoryId: string, tenant: TenantCon
     },
   });
 }
+
+export async function deletePrismaBrand(brandId: string, tenant: TenantContext) {
+  return withTenantTransaction({
+    action: "delete",
+    module: "products",
+    oldData: { brandId },
+    tenant,
+    write: async (tx) => {
+      const existing = await tx.brand.findFirstOrThrow({
+        include: { _count: { select: { products: true } } },
+        where: { companyId: tenant.companyId, id: brandId },
+      });
+
+      if (existing._count.products > 0) {
+        throw new Error("Brand cannot be deleted while products reference it. Rename instead, or remove the brand from those products first.");
+      }
+
+      return tx.brand.delete({ where: { id: existing.id } });
+    },
+  });
+}

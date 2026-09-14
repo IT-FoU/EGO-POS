@@ -123,15 +123,28 @@ check("9. Apply to all units", () => {
 });
 
 check("10. Apply to base unit only", () => {
+  const seeded = [
+    unit("piece", "Piece", { isBaseUnit: true }),
+    unit("pack", "Pack", { imageUrl: productImageRef(imageA) }),
+    unit("box", "Box", { imageUrl: productImageRef(imageA) }),
+  ];
   const next = applyProductImageAssignment({
     image: imageA,
     mode: "base",
-    origins: {},
-    units: trio(),
+    origins: { pack: "inherited", box: "inherited" },
+    units: seeded,
   });
   assert(next.units.find((row) => row.id === "piece")?.imageUrl === productImageRef(imageA), "base");
-  assert(!next.units.find((row) => row.id === "pack")?.imageUrl, "pack untouched");
-  assert(!next.units.find((row) => row.id === "box")?.imageUrl, "box untouched");
+  assert(!next.units.find((row) => row.id === "pack")?.imageUrl, "pack cleared");
+  assert(!next.units.find((row) => row.id === "box")?.imageUrl, "box cleared");
+});
+
+check("10b. Apply base vs all visibly differ when all active", () => {
+  const units = trio();
+  const baseOnly = applyProductImageAssignment({ image: imageA, mode: "base", origins: {}, units });
+  const all = applyProductImageAssignment({ image: imageA, mode: "all", origins: {}, units });
+  assert(baseOnly.units[0]!.imageUrl && !baseOnly.units[1]!.imageUrl && !baseOnly.units[2]!.imageUrl, "base-only");
+  assert(all.units.every((row) => row.imageUrl === productImageRef(imageA)), "all-units");
 });
 
 check("11-12. Custom Pack not overwritten by Main Image; unit priority", () => {
@@ -196,6 +209,30 @@ check("18. Disabled unit cannot receive new assignment", () => {
   assert(!next.units[1]!.imageUrl, "inactive pack ignored");
   const applied = applyProductImageAssignment({ image: imageA, mode: "all", origins: {}, units });
   assert(!applied.units[1]!.imageUrl, "apply-all skips inactive");
+  assert(applied.units[0]!.imageUrl === productImageRef(imageA), "piece assigned");
+  assert(applied.units[2]!.imageUrl === productImageRef(imageA), "box assigned");
+});
+
+check("19. Disabled units hide assignment display", () => {
+  const pack = unit("pack", "Pack", { status: "inactive", imageUrl: productImageRef(imageA) });
+  const hidden = resolveUnitImageDisplay(pack, [imageA], imageA, { hideDisabledAssignment: true, allowMainFallback: false });
+  assert(hidden.origin === "none" && !hidden.image, "disabled hidden");
+  const formCell = resolveUnitImageDisplay(unit("pack", "Pack"), [imageA], imageA, { allowMainFallback: false });
+  assert(formCell.origin === "none", "form UI no fallback");
+});
+
+check("20. Piece-only apply-all equals apply-base", () => {
+  const units = [
+    unit("piece", "Piece", { isBaseUnit: true }),
+    unit("pack", "Pack", { status: "inactive" }),
+    unit("box", "Box", { status: "inactive" }),
+  ];
+  const baseOnly = applyProductImageAssignment({ image: imageA, mode: "base", origins: {}, units });
+  const all = applyProductImageAssignment({ image: imageA, mode: "all", origins: {}, units });
+  assert(baseOnly.units[0]!.imageUrl === productImageRef(imageA), "base piece");
+  assert(all.units[0]!.imageUrl === productImageRef(imageA), "all piece");
+  assert(!baseOnly.units[1]!.imageUrl && !all.units[1]!.imageUrl, "pack off");
+  assert(!baseOnly.units[2]!.imageUrl && !all.units[2]!.imageUrl, "box off");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");
