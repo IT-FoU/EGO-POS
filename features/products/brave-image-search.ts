@@ -51,23 +51,27 @@ export async function searchBraveImages(
   url.searchParams.set("safesearch", "strict");
   url.searchParams.set("country", "ALL");
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
   let response: Response;
   try {
+    // Cloudflare Workers decompresses responses automatically — do not set Accept-Encoding.
     response = await fetchImpl(url, {
       headers: {
         Accept: "application/json",
-        "Accept-Encoding": "gzip",
         "X-Subscription-Token": apiKey,
       },
       method: "GET",
-      redirect: "error",
-      signal: AbortSignal.timeout(10_000),
+      signal: controller.signal,
     });
   } catch (error) {
     if (error instanceof ImageSearchRequestError || error instanceof ImageSearchConfigurationError) {
       throw error;
     }
     throw new ImageSearchRequestError("Image search is temporarily unavailable.");
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
