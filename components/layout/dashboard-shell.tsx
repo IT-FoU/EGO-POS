@@ -3,7 +3,7 @@
 import type { Session } from "next-auth";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   BadgePercent,
@@ -112,6 +112,8 @@ export function DashboardShell({
   session: Session;
 }) {
   const pathname = usePathname();
+  const headerRef = useRef<HTMLElement>(null);
+  const headerSpacerRef = useRef<HTMLDivElement>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [storeName, setStoreName] = useState(
     normalizeStoreName(session.user.activeCompanyName ?? "Business"),
@@ -120,6 +122,25 @@ export function DashboardShell({
   const [planName, setPlanName] = useState("Free Plan");
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const locale = useAppLocale(session.user.locale);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const spacer = headerSpacerRef.current;
+    if (!header || !spacer) return;
+
+    const syncHeaderHeight = () => {
+      spacer.style.height = `${Math.ceil(header.getBoundingClientRect().height)}px`;
+    };
+
+    syncHeaderHeight();
+    const observer = new ResizeObserver(syncHeaderHeight);
+    observer.observe(header);
+    window.addEventListener("resize", syncHeaderHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncHeaderHeight);
+    };
+  }, []);
 
   useEffect(() => {
     setPendingHref(null);
@@ -169,7 +190,7 @@ export function DashboardShell({
   );
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-border bg-card lg:flex lg:flex-col">
         <div className="border-b border-border p-6">
           <div className="flex items-center gap-3">
@@ -210,7 +231,10 @@ export function DashboardShell({
         </nav>
       </aside>
       <div className="min-w-0 lg:pl-72">
-        <header className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-4 backdrop-blur md:px-8">
+        <header
+          className="fixed top-0 right-0 left-0 z-30 border-b border-border bg-background px-4 py-4 md:px-8 lg:left-72"
+          ref={headerRef}
+        >
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold">
@@ -266,6 +290,7 @@ export function DashboardShell({
               })}
           </nav>
         </header>
+        <div aria-hidden="true" ref={headerSpacerRef} />
         <main className="mx-auto w-full min-w-0 max-w-none overflow-x-hidden px-4 py-6 md:px-6 2xl:max-w-7xl 2xl:px-8">
           {children}
         </main>
