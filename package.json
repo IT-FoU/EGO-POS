@@ -87,7 +87,8 @@
     "test:ui-13-small-modal-round1": "tsx scripts/phase-ui-13-small-modal-round1-check.ts",
     "test:ui-14-small-modal-round2": "tsx scripts/phase-ui-14-small-modal-round2-check.ts",
     "test:owner-pricing-qty-visibility": "tsx scripts/phase-form-32-owner-pricing-qty-visibility-check.ts",
-    "test:unit-image-assignment": "tsx scripts/phase-form-33-unit-image-assignment-check.ts"
+    "test:unit-image-assignment": "tsx scripts/phase-form-33-unit-image-assignment-check.ts",
+    "test:pos-combined-image": "tsx scripts/phase-fix-37-pos-combined-image-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",

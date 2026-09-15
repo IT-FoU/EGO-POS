@@ -143,6 +143,8 @@ check("persistable refs reject Base64", () => {
   assert(thrown, "expected embedded data rejection");
   const path = persistableProductImageUrl("products/co_1/p_1/v1/main.webp", { companyId: "co_1", productId: "p_1" });
   assert(path === "products/co_1/p_1/v1/main.webp", String(path));
+  const slashPath = persistableProductImageUrl("/products/co_1/p_1/v1/main.webp", { companyId: "co_1", productId: "p_1" });
+  assert(slashPath === "products/co_1/p_1/v1/main.webp", "leading slash normalized");
 });
 
 check("audit sanitizer strips Base64 and keeps storage paths", () => {
@@ -239,9 +241,10 @@ await checkAsync("POS mapping returns thumbnail reference and strips Base64", as
   assert(delivered.unitImageUrl?.startsWith("https://product-images.local/") === true, String(delivered.unitImageUrl));
   assert(!isEmbeddedImagePayload(delivered.unitImageUrl), "POS must not receive Base64");
 
+  const legacyPayload = "data:image/jpeg;base64," + "A".repeat(120);
   const legacy = mapPrismaPosProduct({
     id: "p_legacy",
-    imageUrl: "data:image/jpeg;base64," + "A".repeat(120),
+    imageUrl: legacyPayload,
     nameEn: "Old",
     nameLo: "Old",
     sellingPriceLak: 1,
@@ -249,7 +252,10 @@ await checkAsync("POS mapping returns thumbnail reference and strips Base64", as
     units: [{ conversionQty: 1, id: "u", imageUrl: "data:image/jpeg;base64," + "B".repeat(120), isBaseUnit: true, isDefaultSaleUnit: true, sellingPriceLak: 1, status: "active", unitName: "Piece" }],
   });
   const [legacyDelivered] = await attachPosProductImageDelivery([legacy]);
-  assert(!legacyDelivered.unitImageUrl || !isEmbeddedImagePayload(legacyDelivered.unitImageUrl), "legacy Base64 stripped from POS");
+  // Legacy data-URI must remain displayable on Combined/Separate until Owner re-uploads to Storage.
+  assert(legacyDelivered.productImageUrl === legacyPayload, "legacy main kept for display");
+  assert(isEmbeddedImagePayload(legacyDelivered.unitImageUrl), "legacy main used on Combined card");
+  assert(isRenderableImageUrl(legacyDelivered.unitImageUrl), "combined card is not blank");
 });
 
 type Tx = any;

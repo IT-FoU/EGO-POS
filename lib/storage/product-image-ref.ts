@@ -41,6 +41,34 @@ export function isProductStoragePath(value?: string | null): value is ProductSto
   return value.startsWith(PRODUCT_IMAGE_PATH_PREFIX) && !isHttpUrl(value) && !isEmbeddedImagePayload(value);
 }
 
+/**
+ * Canonical storage object path for upload/remove/sign.
+ * Accepts bare `products/...` paths; rejects signed/public URLs and embedded payloads.
+ * Strips leading slashes and query/hash fragments that cause Supabase "Invalid path" errors.
+ */
+export function normalizeStorageObjectPath(value?: string | null): ProductStoragePath | undefined {
+  if (!value) return undefined;
+  let path = value.trim();
+  if (!path || isEmbeddedImagePayload(path)) return undefined;
+  if (isHttpUrl(path)) {
+    const marker = `/${PRODUCT_IMAGE_BUCKET}/`;
+    const idx = path.indexOf(marker);
+    if (idx < 0) return undefined;
+    path = path.slice(idx + marker.length);
+  }
+  path = path.replace(/^\/+/, "").split("?")[0]?.split("#")[0] ?? "";
+  return isProductStoragePath(path) ? path : undefined;
+}
+
+/** Legacy data-URI / http display refs allowed for POS/list rendering only — never persist as new writes. */
+export function displayableProductImageRef(value?: string | null) {
+  if (!value) return undefined;
+  if (isProductStoragePath(value)) return undefined;
+  if (isDataUri(value) || isBlobUrl(value)) return value;
+  if (isHttpUrl(value) && !isEmbeddedImagePayload(value)) return value;
+  return undefined;
+}
+
 export function isRenderableImageUrl(value?: string | null) {
   return Boolean(value && (isHttpUrl(value) || isDataUri(value) || isBlobUrl(value)));
 }
@@ -106,8 +134,9 @@ export function persistableProductImageUrl(
   if (isEmbeddedImagePayload(trimmed)) {
     throw new Error("Product images cannot be stored as embedded data. Upload the image file instead.");
   }
-  if (isProductStoragePath(trimmed)) {
-    return assertProductImagePathScope(trimmed, expected);
+  const normalized = normalizeStorageObjectPath(trimmed);
+  if (normalized) {
+    return assertProductImagePathScope(normalized, expected);
   }
   throw new Error("Product image reference is invalid.");
 }
