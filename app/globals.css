@@ -72,7 +72,9 @@ html {
 body {
   min-height: 100%;
   margin: 0;
-  overflow-x: hidden;
+  /* Do not set overflow-x on body: any non-visible overflow ancestor
+     breaks position:sticky for the shared dashboard top header.
+     Horizontal clipping stays on dashboard main / page containers. */
   background: var(--background);
   color: var(--foreground);
   font-family: var(--app-font-family);
