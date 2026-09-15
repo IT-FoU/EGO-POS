@@ -259,6 +259,7 @@ model Company {
   backups        Backup[]
   qrPaymentBanks QrPaymentBank[]
   qrPaymentAccounts QrPaymentAccount[]
+  branchFavoriteProducts BranchFavoriteProduct[]
 
   @@map("companies")
 }
@@ -315,6 +316,7 @@ model Branch {
   qrPaymentAccounts QrPaymentAccount[]
   storeActivityLogs StoreActivityLog[]
   companyUsers CompanyUser[]
+  branchFavoriteProducts BranchFavoriteProduct[]
 
   @@index([companyId])
   @@map("branches")
@@ -523,6 +525,7 @@ model Product {
   priceHistory    ProductPriceHistory[]
   barcodeHistory  ProductBarcodeHistory[]
   favoriteBy      FavoriteProduct[]
+  branchFavorites BranchFavoriteProduct[]
   promotionProducts PromotionProduct[]
   productSuppliers ProductSupplier[]
 
@@ -1357,6 +1360,23 @@ model FavoriteProduct {
 
   @@unique([userId, productId])
   @@map("favorite_products")
+}
+
+/// Shared POS favorites for a store branch (not per cashier/browser/terminal).
+model BranchFavoriteProduct {
+  id        String   @id @default(cuid())
+  companyId String   @map("company_id")
+  branchId  String   @map("branch_id")
+  productId String   @map("product_id")
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, productId])
+  @@index([companyId, branchId])
+  @@map("branch_favorite_products")
 }
 
 model PosDevice {

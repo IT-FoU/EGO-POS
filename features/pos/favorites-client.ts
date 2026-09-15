@@ -1,0 +1,17 @@
+async function readJson<T>(response: Response): Promise<T> {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    throw new Error(String(payload?.error || payload?.message || "Favorite update failed."));
+  }
+  return (payload?.data ?? payload) as T;
+}
+
+export async function setPosFavorite(productId: string, favorite: boolean) {
+  return readJson<{ favorite: boolean; productId: string }>(
+    await fetch("/api/pos/favorites", {
+      body: JSON.stringify({ favorite, productId }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }),
+  );
+}

@@ -5,7 +5,7 @@ import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
+import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosPromotion, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
@@ -38,6 +38,7 @@ import {
 } from "@/features/pos/pos-unit-display-settings";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
+import { setPosFavorite } from "@/features/pos/favorites-client";
 import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
 import {
   applyPosCatalogueRefresh,
@@ -718,6 +719,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         setUnitSelectionProduct(product);
+    }
+    async function toggleFavorite(product: PosProduct) {
+        const nextFavorite = !Boolean(product.isFavorite);
+        const previousProducts = visibleProducts;
+        setVisibleProducts((current) =>
+          current.map((entry) => (entry.id === product.id ? { ...entry, isFavorite: nextFavorite } : entry)),
+        );
+        try {
+            await setPosFavorite(product.id, nextFavorite);
+        } catch (error) {
+            setVisibleProducts(previousProducts);
+            setMessage(error instanceof Error ? error.message : t("ui.favorite.update.failed"));
+        }
     }
     function scanBarcode() {
         const normalized = productQuery.trim();
@@ -1771,7 +1785,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               <div className="col-span-full rounded-xl border border-dashed border-border p-6 text-center text-sm font-semibold text-muted-foreground">
                 {productQuery ? t("ui.no.search.results") : t("ui.no.products")}
               </div>
-            ) : filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)}/>))}
+            ) : filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)} onToggleFavorite={() => void toggleFavorite(product)}/>))}
           </section>) : null}
         </main>
 
@@ -1989,7 +2003,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => {
             selectProductForSale(product);
             setFavoritesOpen(false);
-        }}/>))}
+        }} onToggleFavorite={() => void toggleFavorite(product)}/>))}
         </div>)}
       </PosModal>) : null}
 
@@ -2207,28 +2221,48 @@ function InfoLine({ label, muted = false, strike = false, value }: {
       <div className={cn("truncate font-semibold", muted && "text-muted-foreground", strike && "line-through decoration-muted-foreground/70")}>{value}</div>
     </div>);
 }
-function ProductGridItem({ onClick, product, stockReferenceDate, }: {
+function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
+    onToggleFavorite: () => void;
     product: PosProduct;
     stockReferenceDate: Date;
 }) {
     const sellableQty = maxSellQty(product.stockQty, product.conversionQty ?? 1);
-    return (<>
-      <button className="group relative min-h-[190px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} — ${product.unitName} / ${product.sku}`}>
-        <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
-        <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/90 via-black/75 to-black/10 p-3 pt-8 text-white backdrop-blur-[2px]">
-          <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={localizedProductName(product)}>{localizedProductName(product)}</div>
-          <div className="mt-1 inline-flex max-w-full items-center rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white" title={product.unitName}>{product.unitName}</div>
-          <div className="mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/70" title={product.sku}>{product.sku}</div>
-          <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
-            <div className="min-w-0 overflow-hidden">
-              <div className="truncate text-[16px] font-black leading-none text-primary" title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+    const isFavorite = Boolean(product.isFavorite);
+    return (
+      <div className="group relative min-h-[190px] min-w-0">
+        <button
+          aria-label={isFavorite ? t("ui.remove.from.favorites") : t("ui.add.to.favorites")}
+          aria-pressed={isFavorite}
+          className="absolute right-2 top-2 z-20 grid size-9 place-items-center rounded-full border border-white/35 bg-black/55 text-white shadow-sm backdrop-blur-sm transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30"
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onToggleFavorite();
+          }}
+        >
+          <Star
+            aria-hidden="true"
+            className={cn("size-4", isFavorite ? "fill-[#FACC15] text-[#FACC15]" : "fill-transparent text-white")}
+          />
+        </button>
+        <button className="relative min-h-[190px] w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} — ${product.unitName} / ${product.sku}`}>
+          <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
+          <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/90 via-black/75 to-black/10 p-3 pt-8 text-white backdrop-blur-[2px]">
+            <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={localizedProductName(product)}>{localizedProductName(product)}</div>
+            <div className="mt-1 inline-flex max-w-full items-center rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white" title={product.unitName}>{product.unitName}</div>
+            <div className="mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/70" title={product.sku}>{product.sku}</div>
+            <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
+              <div className="min-w-0 overflow-hidden">
+                <div className="truncate text-[16px] font-black leading-none text-primary" title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+              </div>
+              <StockBadge product={product} sellableQty={sellableQty} stockReferenceDate={stockReferenceDate}/>
             </div>
-            <StockBadge product={product} sellableQty={sellableQty} stockReferenceDate={stockReferenceDate}/>
           </div>
-        </div>
-      </button>
-    </>);
+        </button>
+      </div>
+    );
 }
 function CartMeta({ label, value }: {
     label: string;

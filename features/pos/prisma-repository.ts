@@ -155,7 +155,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const branchWhere = branchOwnedWhere(scope);
   const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
   const now = new Date();
-  const [products, settings, customers, promotions, membershipLevels, openSession, qrBanks] = await timedPosLoad(
+  const [products, settings, customers, promotions, membershipLevels, openSession, qrBanks, favoriteProductIds] = await timedPosLoad(
     "parallel-reads",
     () =>
       Promise.all([
@@ -208,12 +208,22 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
         }),
         getOpenCashSession(tenant, { scope }),
         getPrismaPosQrBanks(tenant, scope.branchId),
+        db.branchFavoriteProduct.findMany({
+          select: { productId: true },
+          where: {
+            branchId: scope.branchId,
+            companyId: scope.companyId,
+          },
+        }),
       ]),
   );
   const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
   // Preview sale numbers are display-only. Checkout still issues/validates via resolvePosSaleNo.
   const nextSaleNo = "";
+  const favoriteIdSet = new Set(
+    (favoriteProductIds as Array<{ productId: string }>).map((row) => row.productId),
+  );
   if (posLoadTimingEnabled()) {
     console.info(`[pos-load] total ${Date.now() - started}ms`);
   }
@@ -258,7 +268,12 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       id: String(level.id),
       name: String(level.name),
     })),
-    products: await attachPosProductImageDelivery(products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId))),
+    products: await attachPosProductImageDelivery(
+      products.map((product: Record<string, any>) => ({
+        ...mapPrismaPosProduct(product, scope.warehouseId),
+        isFavorite: favoriteIdSet.has(String(product.id)),
+      })),
+    ),
     promotionBanners: promotions
       .map((promotion: Record<string, unknown>) => String(promotion.promotionName || promotion.description || ""))
       .filter(Boolean),
