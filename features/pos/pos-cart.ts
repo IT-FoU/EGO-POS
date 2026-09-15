@@ -109,6 +109,18 @@ export function resolveUnitCardImageUrl(product: PosProduct, unit: PosProductUni
   return undefined;
 }
 
+/** Combined product card: main product image first; never depends on a specific unit image. */
+export function resolveCombinedCardImageUrl(product: PosProduct) {
+  if (isRenderableImageUrl(product.productImageUrl)) return product.productImageUrl;
+  if (isRenderableImageUrl(product.unitImageUrl)) return product.unitImageUrl;
+  const defaultUnit =
+    product.units?.find((unit) => unit.isDefaultSaleUnit) ??
+    product.units?.find((unit) => unit.isBaseUnit) ??
+    product.units?.[0];
+  if (isRenderableImageUrl(defaultUnit?.imageUrl)) return defaultUnit?.imageUrl;
+  return undefined;
+}
+
 export function productWithSaleUnit(product: PosProduct, unit: PosProductUnit): PosProduct {
   return {
     ...product,
@@ -138,7 +150,11 @@ export function projectPosCatalogueCards(
   products: PosProduct[],
   mode: "separate" | "combined",
 ): PosProduct[] {
-  return mode === "separate" ? expandPosSellableUnitCards(products) : products;
+  if (mode === "separate") return expandPosSellableUnitCards(products);
+  return products.map((product) => ({
+    ...product,
+    unitImageUrl: resolveCombinedCardImageUrl(product),
+  }));
 }
 
 export type AddPosCartResult = {

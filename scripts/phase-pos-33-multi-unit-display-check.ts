@@ -7,6 +7,7 @@ import {
   planPosCartAdd,
   productWithSaleUnit,
   projectPosCatalogueCards,
+  resolveCombinedCardImageUrl,
   resolveUnitCardImageUrl,
 } from "../features/pos/pos-cart";
 import { DEFAULT_POS_UNIT_DISPLAY_MODE, parsePosUnitDisplayMode } from "../features/pos/pos-unit-display-settings";
@@ -122,6 +123,46 @@ check("5-9. unit price + image priority", () => {
   const noMain = { ...cola, productImageUrl: undefined, unitImageUrl: undefined };
   const boxOnly = unit({ id: "box2", unitName: "Box", sellingPriceLak: 1 });
   assert(!resolveUnitCardImageUrl(noMain, boxOnly), "placeholder path");
+});
+
+check("combined card uses main product image without unit image", () => {
+  const legacyMain = "data:image/jpeg;base64,/9j/4AAQ";
+  const withMainOnly = product("Pepsi", [
+    unit({ id: "piece", unitName: "Piece", isBaseUnit: true, isDefaultSaleUnit: true, sellingPriceLak: 12000 }),
+    unit({ id: "pack", unitName: "Pack", sellingPriceLak: 70000, conversionQty: 6 }),
+  ]);
+  withMainOnly.productImageUrl = legacyMain;
+  withMainOnly.unitImageUrl = undefined;
+  for (const row of withMainOnly.units ?? []) row.imageUrl = undefined;
+
+  const combined = projectPosCatalogueCards([withMainOnly], "combined");
+  assert(combined.length === 1, "one combined card");
+  assert(combined[0]!.unitImageUrl === legacyMain, "combined shows main image");
+  assert(resolveCombinedCardImageUrl(withMainOnly) === legacyMain, "resolve combined main");
+
+  const separate = projectPosCatalogueCards([withMainOnly], "separate");
+  assert(separate.every((card) => card.unitImageUrl === legacyMain), "separate falls back to main");
+});
+
+check("combined card falls back to default unit image when no main", () => {
+  const drink = product("Milk", [
+    unit({ id: "piece", unitName: "Piece", isBaseUnit: true, isDefaultSaleUnit: true, sellingPriceLak: 1, imageUrl: "https://cdn.example/piece.webp" }),
+  ]);
+  drink.productImageUrl = undefined;
+  drink.unitImageUrl = undefined;
+  const combined = projectPosCatalogueCards([drink], "combined");
+  assert(combined[0]!.unitImageUrl?.includes("piece"), "combined uses default unit image");
+});
+
+check("combined/separate placeholder when no image at all", () => {
+  const blank = product("Blank", [
+    unit({ id: "piece", unitName: "Piece", isBaseUnit: true, isDefaultSaleUnit: true, sellingPriceLak: 1 }),
+  ]);
+  blank.productImageUrl = undefined;
+  blank.unitImageUrl = undefined;
+  for (const row of blank.units ?? []) row.imageUrl = undefined;
+  assert(!resolveCombinedCardImageUrl(blank), "combined placeholder");
+  assert(!resolveUnitCardImageUrl(blank, blank.units![0]!), "separate placeholder");
 });
 
 check("10-14. cart identity productId+unitId", () => {

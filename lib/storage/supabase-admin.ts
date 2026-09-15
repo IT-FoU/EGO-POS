@@ -10,8 +10,19 @@ function readWorkerBinding(name: string) {
   }
 }
 
+/** Strip accidental REST/Storage/Auth suffixes that break Storage API paths. */
+export function normalizeSupabaseProjectUrl(raw?: string | null) {
+  if (!raw) return undefined;
+  let url = raw.trim().replace(/\/+$/, "");
+  if (!url) return undefined;
+  url = url.replace(/\/rest\/v1(?:\/.*)?$/i, "");
+  url = url.replace(/\/storage\/v1(?:\/.*)?$/i, "");
+  url = url.replace(/\/auth\/v1(?:\/.*)?$/i, "");
+  return url.replace(/\/+$/, "") || undefined;
+}
+
 export function readSupabaseUrl() {
-  return readWorkerBinding("SUPABASE_URL") ?? process.env.SUPABASE_URL?.trim();
+  return normalizeSupabaseProjectUrl(readWorkerBinding("SUPABASE_URL") ?? process.env.SUPABASE_URL);
 }
 
 export function readSupabaseServiceRoleKey() {

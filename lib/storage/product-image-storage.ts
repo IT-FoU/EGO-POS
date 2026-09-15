@@ -1,6 +1,23 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { PRODUCT_IMAGE_BUCKET } from "@/lib/storage/product-image-ref";
+import { PRODUCT_IMAGE_BUCKET, normalizeStorageObjectPath } from "@/lib/storage/product-image-ref";
 import { assertNoPublicSupabaseServiceRole, readSupabaseServiceRoleKey, readSupabaseUrl } from "@/lib/storage/supabase-admin";
+
+function requireStorageObjectPath(path: string) {
+  const normalized = normalizeStorageObjectPath(path);
+  if (!normalized) {
+    throw new Error("Product image path is invalid.");
+  }
+  return normalized;
+}
+
+function filterStorageObjectPaths(paths: string[]): string[] {
+  const out: string[] = [];
+  for (const path of paths) {
+    const normalized = normalizeStorageObjectPath(path);
+    if (normalized) out.push(normalized);
+  }
+  return [...new Set(out)];
+}
 
 export const PRODUCT_IMAGE_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24;
 export const PRODUCT_IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable";
@@ -57,7 +74,8 @@ class SupabaseProductImageStorage implements ProductImageStorage {
   constructor(private readonly client: SupabaseClient) {}
 
   async upload(path: string, object: ProductImageObject, options?: { upsert?: boolean }) {
-    const { error } = await this.client.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, object.bytes, {
+    const objectPath = requireStorageObjectPath(path);
+    const { error } = await this.client.storage.from(PRODUCT_IMAGE_BUCKET).upload(objectPath, object.bytes, {
       cacheControl: object.cacheControl ?? PRODUCT_IMAGE_CACHE_CONTROL,
       contentType: object.contentType,
       upsert: options?.upsert ?? false,
@@ -68,7 +86,7 @@ class SupabaseProductImageStorage implements ProductImageStorage {
   }
 
   async remove(paths: string[]) {
-    const unique = [...new Set(paths.filter(Boolean))];
+    const unique = filterStorageObjectPaths(paths);
     if (unique.length === 0) return;
     const { error } = await this.client.storage.from(PRODUCT_IMAGE_BUCKET).remove(unique);
     if (error) {
@@ -77,7 +95,7 @@ class SupabaseProductImageStorage implements ProductImageStorage {
   }
 
   async createSignedUrls(paths: string[], expiresInSeconds = PRODUCT_IMAGE_SIGNED_URL_TTL_SECONDS) {
-    const unique = [...new Set(paths.filter(Boolean))];
+    const unique = filterStorageObjectPaths(paths);
     const urls = new Map<string, string>();
     for (let index = 0; index < unique.length; index += 50) {
       const chunk = unique.slice(index, index + 50);
@@ -95,7 +113,8 @@ class SupabaseProductImageStorage implements ProductImageStorage {
   }
 
   publicUrl(path: string) {
-    return this.client.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
+    const objectPath = requireStorageObjectPath(path);
+    return this.client.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl;
   }
 }
 
@@ -140,7 +159,7 @@ export function getProductImageStorage(): ProductImageStorage {
 }
 
 export async function signProductImagePaths(paths: string[]) {
-  const unique = [...new Set(paths.filter(Boolean))];
+  const unique = filterStorageObjectPaths(paths);
   if (unique.length === 0) return new Map<string, string>();
   if (storageOverride) {
     return storageOverride.createSignedUrls(unique);
@@ -156,7 +175,7 @@ export async function signProductImagePaths(paths: string[]) {
 }
 
 export async function removeProductImageObjects(paths: string[]) {
-  const unique = [...new Set(paths.filter(Boolean))];
+  const unique = filterStorageObjectPaths(paths);
   if (unique.length === 0) return;
   await getProductImageStorage().remove(unique);
 }

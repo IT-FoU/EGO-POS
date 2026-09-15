@@ -1,6 +1,7 @@
 import type { PosProduct } from "@/features/pos/types";
 import {
   compactProductImageKey,
+  displayableProductImageRef,
   isEmbeddedImagePayload,
   isProductStoragePath,
   isRenderableImageUrl,
@@ -26,6 +27,10 @@ function collectDeliveryPaths(imageUrl?: string | null) {
     if (thumb) paths.push(thumb);
   }
   return paths;
+}
+
+function resolveDisplayImage(raw: string | undefined, signed: Map<string, string>) {
+  return deliveryFor(raw, signed) ?? displayableProductImageRef(raw);
 }
 
 export async function attachProductImageDelivery<T extends { imageUrl?: string; units?: Array<{ imageUrl?: string }> }>(
@@ -71,6 +76,8 @@ export async function attachProductImageDelivery<T extends { imageUrl?: string; 
 export async function attachPosProductImageDelivery(products: PosProduct[]): Promise<PosProduct[]> {
   const paths: string[] = [];
   for (const product of products) {
+    // Combined + Separate both need product main image signed — not only unitImageUrl.
+    paths.push(...collectDeliveryPaths(product.productImageUrl));
     paths.push(...collectDeliveryPaths(product.unitImageUrl));
     paths.push(...collectDeliveryPaths(typeof product.imageKey === "string" && isProductStoragePath(product.imageKey) ? product.imageKey : undefined));
     for (const unit of product.units ?? []) {
@@ -80,23 +87,21 @@ export async function attachPosProductImageDelivery(products: PosProduct[]): Pro
   const signed = await signProductImagePaths(paths);
 
   return products.map((product) => {
-    const units = (product.units ?? []).map((unit) => {
-      const unitThumb = thumbPathFromMain(unit.imageUrl) ?? (isProductStoragePath(unit.imageUrl) ? unit.imageUrl : undefined);
-      const delivery = deliveryFor(unitThumb, signed);
-      return {
-        ...unit,
-        imageUrl: isEmbeddedImagePayload(unit.imageUrl) ? undefined : delivery ?? (isRenderableImageUrl(unit.imageUrl) ? unit.imageUrl : undefined),
-      };
-    });
+    const units = (product.units ?? []).map((unit) => ({
+      ...unit,
+      imageUrl: resolveDisplayImage(unit.imageUrl, signed),
+    }));
     const defaultUnit = units.find((unit) => unit.isDefaultSaleUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
-    const productThumb = thumbPathFromMain(product.unitImageUrl) ?? (isProductStoragePath(product.unitImageUrl) ? product.unitImageUrl : undefined);
-    const fallbackThumb = defaultUnit?.imageUrl ?? deliveryFor(productThumb, signed);
+    const productMain = resolveDisplayImage(product.productImageUrl, signed);
+    const unitFallback = resolveDisplayImage(product.unitImageUrl, signed);
+    // Combined cards read unitImageUrl; prefer main product image, then unit/default, then legacy display refs.
+    const combinedImage = productMain ?? unitFallback ?? defaultUnit?.imageUrl;
+
     return {
       ...product,
       imageKey: compactProductImageKey(product.imageKey),
-      unitImageUrl: isEmbeddedImagePayload(product.unitImageUrl)
-        ? fallbackThumb
-        : fallbackThumb ?? (isRenderableImageUrl(product.unitImageUrl) ? product.unitImageUrl : undefined),
+      productImageUrl: productMain ?? displayableProductImageRef(product.productImageUrl),
+      unitImageUrl: combinedImage,
       units,
     };
   });
