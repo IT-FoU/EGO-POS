@@ -1,17 +1,20 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import { requireReadPermission, requireWritePermission, WRITE_PERMISSIONS, READ_PERMISSIONS, type WritePermissionKey } from "@/lib/auth/permissions";
 import {
   archivePrismaProduct,
   bulkUpdatePrismaProductPrices,
   createPrismaProduct,
+  deletePrismaBrand,
   deletePrismaCategory,
   deletePrismaProduct,
   duplicatePrismaProduct,
   getPrismaProductListPage,
   getPrismaUnitPricingDefaults,
   updatePrismaProduct,
+  upsertPrismaBrand,
   upsertPrismaCategory,
   type ProductWriteInput,
   type BulkPriceUpdateInput,
@@ -30,6 +33,13 @@ import { bytesToBase64, importRemoteProductImageBytes } from "@/features/product
 import { clearProductImages, uploadAndAttachProductImages } from "@/features/products/product-image-service";
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
+
+function revalidateProductCataloguePaths() {
+  revalidatePath("/products");
+  revalidatePath("/products/new");
+  revalidatePath("/products/categories");
+  revalidatePath("/pos");
+}
 
 function readWorkerBinding(name: string) {
   try {
@@ -74,11 +84,23 @@ export async function loadUnitPricingDefaultsAction() {
 }
 
 export async function createProductAction(input: ProductWriteInput) {
-  try { return writeSuccess(await createPrismaProduct(input, await tenant(WRITE_PERMISSIONS.productsCreate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await createPrismaProduct(input, await tenant(WRITE_PERMISSIONS.productsCreate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function updateProductAction(productId: string, input: Partial<ProductWriteInput>) {
-  try { return writeSuccess(await updatePrismaProduct(productId, input, await tenant(WRITE_PERMISSIONS.productsUpdate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await updatePrismaProduct(productId, input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function uploadProductImageAction(productId: string, formData: FormData) {
@@ -90,11 +112,14 @@ export async function uploadProductImageAction(productId: string, formData: Form
     }
     const assignToUnitId = String(formData.get("assignToUnitId") ?? "").trim() || undefined;
     const assignToUnitIds = formData.getAll("assignToUnitIds").map((value) => String(value).trim()).filter(Boolean);
+    const setProductMainRaw = String(formData.get("setProductMain") ?? "true").trim().toLowerCase();
+    const setProductMain = setProductMainRaw !== "false" && setProductMainRaw !== "0";
     return writeSuccess(await uploadAndAttachProductImages(productId, {
       assignToUnitId,
       assignToUnitIds,
       main,
       mainType: main.type,
+      setProductMain,
       thumb,
       thumbType: thumb.type,
     }, await tenant(WRITE_PERMISSIONS.productsUpdate)));
@@ -106,11 +131,15 @@ export async function uploadProductImageAction(productId: string, formData: Form
 export async function searchProductImagesAction(input: {
   barcode?: string;
   productName?: string;
+  query?: string;
   source: ImageSearchSource;
 }) {
   try {
     await requireReadPermission(READ_PERMISSIONS.productsView);
-    const resolved = resolveImageSearchQuery(input.source, input);
+    const manualQuery = String(input.query ?? "").trim();
+    const resolved = manualQuery
+      ? ({ ok: true as const, query: manualQuery, source: input.source })
+      : resolveImageSearchQuery(input.source, input);
     if (!resolved.ok) {
       throw new Error(resolved.reason === "empty-name" ? "Product name is required" : "Barcode is required");
     }
@@ -162,25 +191,81 @@ export async function clearProductImageAction(productId: string) {
 }
 
 export async function archiveProductAction(productId: string) {
-  try { return writeSuccess(await archivePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await archivePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function deleteProductAction(productId: string) {
-  try { return writeSuccess(await deletePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await deletePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function duplicateProductAction(productId: string) {
-  try { return writeSuccess(await duplicatePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsCreate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await duplicatePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsCreate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function bulkPriceUpdateAction(input: BulkPriceUpdateInput) {
-  try { return writeSuccess(await bulkUpdatePrismaProductPrices(input, await tenant(WRITE_PERMISSIONS.productsUpdate))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await bulkUpdatePrismaProductPrices(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function upsertCategoryAction(input: { id?: string; nameEn?: string; nameLo: string; parentId?: string }) {
-  try { return writeSuccess(await upsertPrismaCategory(input, await tenant(WRITE_PERMISSIONS.categoriesManage))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await upsertPrismaCategory(input, await tenant(WRITE_PERMISSIONS.categoriesManage));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function upsertBrandAction(input: { id?: string; name: string }) {
+  try {
+    const data = await upsertPrismaBrand(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function deleteCategoryAction(categoryId: string) {
-  try { return writeSuccess(await deletePrismaCategory(categoryId, await tenant(WRITE_PERMISSIONS.categoriesManage))); } catch (error) { return writeFailure(error); }
+  try {
+    const data = await deletePrismaCategory(categoryId, await tenant(WRITE_PERMISSIONS.categoriesManage));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function deleteBrandAction(brandId: string) {
+  try {
+    const data = await deletePrismaBrand(brandId, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }

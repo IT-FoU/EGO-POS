@@ -57,6 +57,8 @@ export type ProductImageUploadInput = {
   assignToUnitIds?: string[];
   main: Blob | File | Uint8Array;
   mainType?: string;
+  /** When false, upload + assign units only — do not change products.image_url. Default true. */
+  setProductMain?: boolean;
   thumb: Blob | File | Uint8Array;
   thumbType?: string;
 };
@@ -96,17 +98,19 @@ export async function uploadAndAttachProductImages(
     ...(input.assignToUnitId ? [input.assignToUnitId] : []),
     ...(input.assignToUnitIds ?? []),
   ])].filter((unitId) => existingUnitIds.has(unitId));
+  const setProductMain = input.setProductMain !== false;
   const previousPaths = collectImageStoragePaths({
-    imageUrl: existing.imageUrl,
+    imageUrl: setProductMain ? existing.imageUrl : undefined,
     units: existing.units.filter((unit: { id: string; imageUrl?: string | null }) => {
       if (assignToUnitIds.includes(unit.id)) return true;
-      return Boolean(existing.imageUrl && unit.imageUrl === existing.imageUrl);
+      return Boolean(setProductMain && existing.imageUrl && unit.imageUrl === existing.imageUrl);
     }),
   });
-  const previousProductPaths = collectImageStoragePaths({ imageUrl: existing.imageUrl });
+  const previousProductPaths = setProductMain ? collectImageStoragePaths({ imageUrl: existing.imageUrl }) : [];
   const paths = buildProductImagePaths({
     companyId: tenant.companyId,
     productId: existing.id,
+    unitId: !setProductMain && assignToUnitIds[0] ? assignToUnitIds[0] : undefined,
   });
 
   persistableProductImageUrl(paths.mainPath, { companyId: tenant.companyId, productId: existing.id });
@@ -133,7 +137,7 @@ export async function uploadAndAttachProductImages(
     saved = await writeProductImageChange({
       action: "update_image",
       client,
-      newData: { imageUrl: paths.mainPath, productId: existing.id, thumbPath: paths.thumbPath, unitIds: assignToUnitIds },
+      newData: { imageUrl: setProductMain ? paths.mainPath : existing.imageUrl, productId: existing.id, thumbPath: paths.thumbPath, unitIds: assignToUnitIds },
       oldData: { imageUrl: existing.imageUrl, productId: existing.id },
       tenant,
       write: async (tx) => {
@@ -142,17 +146,19 @@ export async function uploadAndAttachProductImages(
           throw new Error("Product was not found.");
         }
         const previousProductPath = typeof current.imageUrl === "string" ? current.imageUrl : undefined;
-        await tx.product.update({
-          data: { imageUrl: paths.mainPath },
-          where: { id: current.id },
-        });
+        if (setProductMain) {
+          await tx.product.update({
+            data: { imageUrl: paths.mainPath },
+            where: { id: current.id },
+          });
+        }
         if (assignToUnitIds.length > 0) {
           await tx.productUnit.updateMany({
             data: { imageUrl: paths.mainPath },
             where: { id: { in: assignToUnitIds }, productId: current.id },
           });
         }
-        if (previousProductPath && previousProductPath !== paths.mainPath) {
+        if (setProductMain && previousProductPath && previousProductPath !== paths.mainPath) {
           await tx.productUnit.updateMany({
             data: { imageUrl: paths.mainPath },
             where: { imageUrl: previousProductPath, productId: current.id },

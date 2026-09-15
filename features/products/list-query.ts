@@ -16,12 +16,14 @@ export type ProductInsightFilter =
   | "no_image";
 
 export type ProductListQuery = {
+  brandId?: string;
   categoryId?: string;
   insight?: ProductInsightFilter;
   page?: number;
   pageSize?: number;
   search?: string;
   status?: ProductStatus | "all";
+  supplierId?: string;
 };
 
 export type ProductListSummary = {
@@ -45,13 +47,21 @@ export type ProductListPage = {
 
 export const productListInclude = {
   balances: { select: { quantity: true } },
+  brand: { select: { id: true, name: true } },
   category: { select: { id: true, nameEn: true, nameLo: true } },
   inventoryLots: {
     orderBy: { expiryDate: "asc" as const },
     select: { expiryDate: true },
     take: 1,
   },
-  supplier: { select: { companyName: true, name: true } },
+  productSuppliers: {
+    select: {
+      isPreferred: true,
+      supplierId: true,
+      supplier: { select: { companyName: true, name: true } },
+    },
+  },
+  supplier: { select: { companyName: true, id: true, name: true } },
   units: {
     orderBy: { sortOrder: "asc" as const },
     select: {
@@ -133,6 +143,7 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
           { sku: likeContains(search) },
           { productCode: likeContains(search) },
           { category: { OR: [{ nameEn: likeContains(search) }, { nameLo: likeContains(search) }] } },
+          { brand: { name: likeContains(search) } },
           { supplier: { OR: [{ name: likeContains(search) }, { companyName: likeContains(search) }] } },
           { units: { some: { barcode: likeContains(search) } } },
         ],
@@ -144,6 +155,17 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
     ...branchOwnedWhere(scope),
     ...productInventoryScopeWhere(scope),
     ...(query.categoryId && query.categoryId !== "all" ? { categoryId: query.categoryId } : {}),
+    ...(query.brandId && query.brandId !== "all" ? { brandId: query.brandId } : {}),
+    ...(query.supplierId && query.supplierId !== "all"
+      ? {
+          productSuppliers: {
+            some: {
+              companyId: scope.companyId,
+              supplierId: query.supplierId,
+            },
+          },
+        }
+      : {}),
     ...(query.status && query.status !== "all" ? { status: query.status } : {}),
     ...searchWhere,
     ...insightWhere,
@@ -161,6 +183,7 @@ async function loadLowStockIds(scope: BranchScope, client: any) {
       GROUP BY product_id
     ) stock ON stock.product_id = p.id
     WHERE p.company_id = ${scope.companyId}
+      AND p.status <> 'deleted'
       AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
       AND (
         ${scope.isOwner}
@@ -273,6 +296,7 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
       LIMIT 1
     ) lot ON true
     WHERE p.company_id = ${scope.companyId}
+      AND p.status <> 'deleted'
       AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
       AND (
         ${scope.isOwner}

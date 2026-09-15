@@ -18,7 +18,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   const url = new URL(request.url);
   return runWrite(
-    (tenant) => url.searchParams.get("hard") === "true" ? deletePrismaProduct(id, tenant) : archivePrismaProduct(id, tenant),
+    async (tenant) => {
+      if (url.searchParams.get("hard") === "true") {
+        const result = await deletePrismaProduct(id, tenant);
+        return result.product;
+      }
+      return archivePrismaProduct(id, tenant);
+    },
     undefined,
     WRITE_PERMISSIONS.productsDelete,
     { allowManagerPinApproval: true, route: "/api/products/[id]", storeAction: STORE_ACTIONS.PRODUCT_DELETE, targetId: id, targetType: "product" },

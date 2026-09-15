@@ -46,6 +46,7 @@ export function mapPrismaProduct(product: PrismaProduct): Product {
       oldBarcode: entry.oldBarcode ?? undefined,
       unitName: entry.unitName ?? undefined,
     })),
+    brandId: product.brandId ?? undefined,
     brandName: product.brand?.name ?? "",
     categoryId: product.categoryId ?? "",
     categoryName: product.category?.nameEn ?? product.category?.nameLo ?? "",
@@ -71,6 +72,25 @@ export function mapPrismaProduct(product: PrismaProduct): Product {
     sku: product.sku ?? "",
     status: (product.status ?? "active") as ProductStatus,
     stockDisplayMode: product.stockDisplayMode ?? "base_unit_only",
+    supplierId: product.supplierId ?? undefined,
+    supplierIds: Array.isArray(product.productSuppliers)
+      ? product.productSuppliers.map((row: Record<string, any>) => String(row.supplierId))
+      : product.supplierId
+        ? [String(product.supplierId)]
+        : [],
+    productSuppliers: Array.isArray(product.productSuppliers)
+      ? product.productSuppliers.map((row: Record<string, any>) => ({
+          isPreferred: Boolean(row.isPreferred),
+          supplierId: String(row.supplierId),
+          supplierName: row.supplier?.companyName ?? row.supplier?.name ?? "",
+        }))
+      : product.supplierId
+        ? [{
+            isPreferred: true,
+            supplierId: String(product.supplierId),
+            supplierName: product.supplier?.companyName ?? product.supplier?.name ?? "",
+          }]
+        : [],
     supplierName: product.supplier?.companyName ?? product.supplier?.name ?? "",
     tags: Array.isArray(product.tags) ? product.tags.map(String) : [],
     units: (product.units ?? []).map(mapPrismaProductUnit),

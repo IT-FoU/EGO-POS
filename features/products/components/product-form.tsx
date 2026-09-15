@@ -11,28 +11,68 @@ import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
 const t = tProducts;
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ImagePlus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
-import type { Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
-import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteCategoryAction, updateProductAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, searchProductImagesAction, importRemoteProductImageAction, } from "@/features/products/actions";
+import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
+import { localizedProductName } from "@/features/pos/product-display-name";
+import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
+import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteBrandAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
+import { archiveSupplierAction, createSupplierAction, updateSupplierAction } from "@/features/suppliers/actions";
+import type { Supplier } from "@/features/suppliers/types";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
-import { applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
+import { ThemedSelect } from "@/features/products/components/themed-select";
+import { BraveImageSearchBrowser } from "@/features/products/components/brave-image-search-browser";
+import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
+import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
+import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
+import {
+  formatMoneyDigits,
+  moneyInputDisplay,
+  moneyInputFromCommitted,
+  onMoneyInputBlur,
+  onMoneyInputChange,
+  onMoneyInputFocus,
+  parseMoneyDigits,
+} from "@/features/products/money-input";
+import {
+  onOpeningQtyBlur,
+  onOpeningQtyChange,
+  onOpeningQtyFocus,
+  openingQtyDisplay,
+  openingQtyFromCommitted,
+} from "@/features/products/opening-qty-input";
 import { applyDefaultsToNewUnit, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
+import {
+    applyLastCreateUnitSetupToDefaults,
+    extractLastCreateUnitSetupFromUnits,
+    readLastCreateUnitSetup,
+    writeLastCreateUnitSetup,
+} from "@/features/products/last-create-unit-setup";
 import type { ProductImageSearchHit } from "@/features/products/product-image-search";
 import {
+    buildSkuFromProductName,
+    collectProductRequiredGaps,
+    ensureSkuWhenEmpty,
+    type ProductRequiredFieldKey,
+} from "@/features/products/product-sku";
+import {
+    activeAssignableUnits,
     applyProductImageAssignment,
     assignImageToNewUnit,
+    clearImageAssignments,
     inferAssignmentMode,
     inferUnitImageOrigins,
     markUnitImageChoice,
     productImageRef,
     replaceInheritedProductImage,
+    resolveUnitImageDisplay,
+    toggleUnitImageAssignment,
     unitImageSelectValue,
+    unitUsesProductImage,
     type ProductImageAssignmentMode,
     type UnitImageOrigin,
 } from "@/features/products/unit-image-assignment";
@@ -54,7 +94,22 @@ type CategoryDialogState = {
     mode: "add" | "edit" | "delete";
     categoryId?: string;
 } | null;
+type BrandDialogState = {
+    mode: "add" | "edit" | "delete";
+    brandId?: string;
+} | null;
+type SupplierDialogState = {
+    mode: "add" | "edit" | "archive";
+    supplierId?: string;
+} | null;
 type ProductStatusConfirm = "archive" | "delete" | null;
+
+const DIALOG_BTN_SECONDARY = "h-10 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary hover:bg-card active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40";
+const DIALOG_BTN_PRIMARY = "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50";
+const DIALOG_BTN_DANGER = "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-danger px-4 text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:pointer-events-none disabled:opacity-50";
+const MASTER_TOOL_BTN = "grid size-11 place-items-center transition hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40";
+const MASTER_TOOL_BTN_DANGER = "grid size-11 place-items-center border-l border-border text-danger transition hover:bg-danger/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:pointer-events-none disabled:opacity-40";
+const MASTER_TOOL_BTN_MID = "grid size-11 place-items-center border-l border-border transition hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40";
 type InitialStockPreviewValue = {
     addOpeningStock: boolean;
     receiveUnitId: string;
@@ -126,29 +181,31 @@ function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, 
         }, defaults),
         applyDefaultsToNewUnit({
             ...emptyUnit,
-            conversionQty: 12,
+            conversionQty: 6,
             id: "unit-pack",
             sortOrder: 1,
             unitName: "Pack",
         }, defaults),
         applyDefaultsToNewUnit({
             ...emptyUnit,
-            conversionQty: 24,
+            conversionQty: 60,
             id: "unit-box",
             sortOrder: 2,
             unitName: "Box",
         }, defaults),
     ];
 }
-export function ProductForm({ mode, product, categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, }: {
+export function ProductForm({ mode, product, brands = [], categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, suppliers = [], }: {
     mode: "create" | "edit";
     product?: Product;
+    brands?: Brand[];
     categories: Category[];
     images: MockProductImage[];
     initialBarcode?: string;
     sourceFlow?: string;
     locale?: SupportedLocale;
     pricingDefaults?: UnitPricingDefaultsMap;
+    suppliers?: Supplier[];
 }) {
     const locale = useAppLocale(localeProp);
     const t = (key: string) => tProducts(key, locale);
@@ -190,13 +247,38 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [statusConfirm, setStatusConfirm] = useState<ProductStatusConfirm>(null);
-    const [localCategories, setLocalCategories] = useState<Category[]>([]);
+    const [localCategories, setLocalCategories] = useState<Category[]>(categories);
+    const [selectedCategoryId, setSelectedCategoryId] = useState(product?.categoryId ?? "");
+    const [localBrands, setLocalBrands] = useState<Brand[]>(brands);
+    const [selectedBrandId, setSelectedBrandId] = useState(product?.brandId ?? "");
+    const [brandDialog, setBrandDialog] = useState<BrandDialogState>(null);
+    const [brandDraft, setBrandDraft] = useState("");
+    const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(() => {
+        const linkedIds = new Set([
+            ...(product?.supplierIds ?? []),
+            ...(product?.supplierId ? [product.supplierId] : []),
+        ]);
+        return suppliers.filter((row) => row.status === "active" || linkedIds.has(row.id));
+    });
+    const [assignedSupplierIds, setAssignedSupplierIds] = useState<string[]>(() => {
+        if (product?.supplierIds?.length) return [...product.supplierIds];
+        return product?.supplierId ? [product.supplierId] : [];
+    });
+    const [preferredSupplierId, setPreferredSupplierId] = useState(product?.supplierId ?? "");
+    const [supplierPickId, setSupplierPickId] = useState("");
+    const [supplierDialog, setSupplierDialog] = useState<SupplierDialogState>(null);
+    const [supplierDraft, setSupplierDraft] = useState("");
+    const closeCategoryDialog = useCallback(() => setCategoryDialog(null), []);
+    const closeBrandDialog = useCallback(() => setBrandDialog(null), []);
+    const closeSupplierDialog = useCallback(() => setSupplierDialog(null), []);
+    const closeStatusConfirm = useCallback(() => setStatusConfirm(null), []);
     const [barcodeAliases, setBarcodeAliases] = useState<BarcodeAliasState>({});
     const [duplicateBarcodeMatch, setDuplicateBarcodeMatch] = useState<DuplicateBarcodeMatch | null>(null);
     const [checkingBarcodeUnitId, setCheckingBarcodeUnitId] = useState<string | null>(null);
     const [aliasDrawerUnitId, setAliasDrawerUnitId] = useState<string | null>(null);
     const [aliasInput, setAliasInput] = useState("");
     const [unitsShareStock, setUnitsShareStock] = useState(true);
+    const [conversionInvalid, setConversionInvalid] = useState(false);
     const [initialStockPreview, setInitialStockPreview] = useState<InitialStockPreviewValue>({
         addOpeningStock: false,
         receiveUnitId: "unit-base",
@@ -209,7 +291,19 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         note: "",
     });
     const [previewSnapshot, setPreviewSnapshot] = useState<ProductPreviewSnapshot | null>(null);
-    const [units, setUnits] = useState<ProductUnit[]>(product?.units ?? createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode));
+    const [units, setUnits] = useState<ProductUnit[]>(() => hydrateHierarchyQty(product?.units ?? createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode)));
+    // Apply last successful Create unit setup on the client only (avoid SSR/localStorage hydration mismatch).
+    useLayoutEffect(() => {
+        if (mode !== "create") return;
+        const remembered = readLastCreateUnitSetup();
+        if (!remembered) return;
+        setUnits(hydrateHierarchyQty(applyLastCreateUnitSetupToDefaults(
+            createDefaultSharedUnits(pricingDefaults, inventoryHandoffBarcode),
+            remembered,
+        )));
+    // Intentional mount-only restore for Create Product.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const initialProductImage = product?.imageUrl || product?.imageDisplayUrl || product?.imageThumbUrl
         ? {
             id: "product-main-image",
@@ -223,10 +317,127 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     const imageAssignmentModeRef = useRef(imageAssignmentMode);
     imageAssignmentModeRef.current = imageAssignmentMode;
     const [message, setMessage] = useState<string | null>(null);
+    const [messageTone, setMessageTone] = useState<"success" | "error" | "warning">("success");
+    const [saveValidationIssues, setSaveValidationIssues] = useState<string[]>([]);
+    const formRef = useRef<HTMLFormElement | null>(null);
     const isCreate = mode === "create";
+
+    function showFeedback(nextMessage: string, tone: "success" | "error" | "warning") {
+        setMessageTone(tone);
+        setMessage(nextMessage);
+    }
+
+    function labelForRequiredField(field: ProductRequiredFieldKey) {
+        if (field === "productName") return t("productName");
+        if (field === "sku") return t("sku");
+        return t("category");
+    }
+
+    function focusRequiredField(field: ProductRequiredFieldKey) {
+        const name = field === "category" ? "categoryId" : field;
+        const el = formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.focus();
+    }
+
+    function scrollSaveFeedbackIntoView() {
+        requestAnimationFrame(() => {
+            formRef.current
+                ?.querySelector<HTMLElement>('[data-testid="product-save-validation-summary"]')
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+    }
+
+    function focusFirstInvalidQtyField() {
+        const el = formRef.current?.querySelector<HTMLElement>('[data-field="qty-in-base"][data-invalid="true"]')
+            ?? formRef.current?.querySelector<HTMLElement>('[data-field="qty-in-base"]');
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.focus();
+    }
+
+    function focusDuplicateConflict(errorText: string) {
+        const normalized = errorText.toLowerCase();
+        if (normalized.includes("sku")) {
+            focusRequiredField("sku");
+            return;
+        }
+        if (normalized.includes("barcode")) {
+            const el = formRef.current?.querySelector<HTMLElement>('input[data-field="unit-barcode"]');
+            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            el?.focus();
+        }
+    }
+
+    function showSaveFailureNearButton(issues: string[], tone: "error" | "warning" = "error") {
+        setSaveValidationIssues(issues);
+        showFeedback(
+            `${t("unableToSaveProduct")}\n${t("pleaseCompleteRequired")}\n${issues.map((issue) => `• ${issue}`).join("\n")}`,
+            tone,
+        );
+        scrollSaveFeedbackIntoView();
+    }
+
+    function maybeAutofillSkuFromName(nameOverride?: string) {
+        const nameValue = (nameOverride ?? productName).trim();
+        setSku((current) => {
+            const next = ensureSkuWhenEmpty(nameValue, current);
+            return next || current;
+        });
+    }
     useEffect(() => {
-        setLocalCategories(categories);
-    }, [categories]);
+        setLocalCategories((current) => {
+            const byId = new Map(categories.map((category) => [category.id, category]));
+            for (const category of current) {
+                if (!byId.has(category.id)) byId.set(category.id, category);
+            }
+            return [...byId.values()].sort((a, b) =>
+                categoryDisplayName(a, locale).localeCompare(categoryDisplayName(b, locale)),
+            );
+        });
+        if (product?.categoryId && categories.some((category) => category.id === product.categoryId)) {
+            setSelectedCategoryId(product.categoryId);
+        }
+        // Do not auto-select the first category on Create — Owner must choose explicitly
+        // so the full list is obvious in the picker.
+    // selectedCategoryId intentionally omitted — preserve inline create selection across refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [categories, locale, product?.categoryId]);
+    useEffect(() => {
+        setLocalBrands((current) => {
+            const byId = new Map(brands.map((brand) => [brand.id, brand]));
+            for (const brand of current) {
+                if (!byId.has(brand.id)) byId.set(brand.id, brand);
+            }
+            return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+        });
+        if (product?.brandId) setSelectedBrandId(product.brandId);
+    }, [brands, product?.brandId]);
+    useEffect(() => {
+        const linkedIds = new Set([
+            ...assignedSupplierIds,
+            ...(product?.supplierIds ?? []),
+            ...(product?.supplierId ? [product.supplierId] : []),
+        ]);
+        setLocalSuppliers((current) => {
+            const next = suppliers.filter((row) => row.status === "active" || linkedIds.has(row.id));
+            const byId = new Map(next.map((supplier) => [supplier.id, supplier]));
+            for (const supplier of current) {
+                if (!byId.has(supplier.id) && linkedIds.has(supplier.id)) {
+                    byId.set(supplier.id, supplier);
+                }
+            }
+            return [...byId.values()].sort((a, b) => a.companyName.localeCompare(b.companyName));
+        });
+        if (product?.supplierIds?.length) {
+            setAssignedSupplierIds([...product.supplierIds]);
+            setPreferredSupplierId(product.supplierId ?? product.supplierIds[0] ?? "");
+        } else if (product?.supplierId) {
+            setAssignedSupplierIds([product.supplierId]);
+            setPreferredSupplierId(product.supplierId);
+        }
+    // assignedSupplierIds intentionally omitted — preserve inline create/add selection across refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [product?.supplierId, product?.supplierIds, suppliers]);
     useEffect(() => {
         if (!previewSnapshot)
             return;
@@ -359,10 +570,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         });
     }
     function generateSku() {
-        const baseName = productName.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
-        const prefix = (baseName || "SKU").slice(0, 12);
-        const timestamp = Date.now().toString().slice(-4);
-        setSku(`${prefix}-${timestamp}`);
+        setSku(buildSkuFromProductName(productName));
     }
     function generateProductCode() {
         const timestamp = Date.now().toString().slice(-4);
@@ -421,10 +629,10 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     url: previewUrl,
                 };
                 adoptProductImage(image);
-                setMessage(fillProductsCopy(t("uploadedForPreview"), { name: file.name }));
+                showFeedback(fillProductsCopy(t("uploadedForPreview"), { name: file.name }), "success");
             }
             catch (error) {
-                setMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")));
+                showFeedback(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")), "error");
             }
         })();
     }
@@ -447,24 +655,46 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         adoptProductImage(image);
         return image;
     }
+    function toggleImageUnitAssignment(imageId: string, unitId: string, assign: boolean) {
+        const image = productImages.find((item) => item.id === imageId);
+        if (!image) return;
+        const mainImage = productImages.find((item) => item.id === selectedImageId);
+        setUnits((current) => {
+            const next = toggleUnitImageAssignment({
+                assign,
+                image,
+                mainImage,
+                origins: unitImageOriginsRef.current,
+                unitId,
+                units: current,
+            });
+            unitImageOriginsRef.current = next.origins;
+            setUnitImageOrigins(next.origins);
+            return next.units;
+        });
+    }
     function removeProductImage(imageId: string) {
+        const removed = productImages.find((image) => image.id === imageId);
         setProductImages((current) => {
-            const removed = current.find((image) => image.id === imageId);
-            if (removed?.url.startsWith("blob:")) {
-                URL.revokeObjectURL(removed.url);
+            const target = current.find((image) => image.id === imageId);
+            if (target?.url.startsWith("blob:")) {
+                URL.revokeObjectURL(target.url);
             }
             return current.filter((image) => image.id !== imageId);
         });
         if (selectedImageId === imageId) {
             setSelectedImageId(undefined);
         }
-        setUnits((current) => current.map((unit) => unit.imageUrl === imageId ? { ...unit, imageUrl: undefined } : unit));
-        setUnitImageOrigins((current) => {
-            const next = { ...current };
-            for (const [unitId, origin] of Object.entries(next)) {
-                if (origin === "inherited") next[unitId] = "none";
-            }
-            return next;
+        if (!removed) return;
+        setUnits((current) => {
+            const next = clearImageAssignments({
+                image: removed,
+                origins: unitImageOriginsRef.current,
+                units: current,
+            });
+            unitImageOriginsRef.current = next.origins;
+            setUnitImageOrigins(next.origins);
+            return next.units;
         });
     }
     function addBarcodeAlias(unitId: string) {
@@ -485,7 +715,14 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     }
     function categoryLabel(categoryId: string) {
         const category = localCategories.find((item) => item.id === categoryId);
-        return category ? `${category.nameEn} / ${category.nameLo}` : "—";
+        return category ? categoryDisplayName(category, locale) : "—";
+    }
+    function brandLabel(brandId: string) {
+        return localBrands.find((item) => item.id === brandId)?.name || "—";
+    }
+    function supplierLabel(supplierId: string) {
+        const supplier = localSuppliers.find((item) => item.id === supplierId);
+        return supplier ? (supplier.companyName || supplier.supplierCode) : "—";
     }
     function openProductPreview(form: HTMLFormElement | null) {
         if (!form)
@@ -497,9 +734,11 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 productName,
                 productCode,
                 sku,
-                category: categoryLabel(String(formData.get("categoryId") ?? "")),
-                supplierName: String(formData.get("supplierName") ?? "").trim() || "—",
-                brandName: String(formData.get("brandName") ?? "").trim() || "—",
+                category: categoryLabel(selectedCategoryId || String(formData.get("categoryId") ?? "")),
+                supplierName: assignedSupplierIds.length
+                    ? assignedSupplierIds.map((id) => supplierLabel(id)).filter((name) => name !== "—").join(", ") || "—"
+                    : "—",
+                brandName: brandLabel(selectedBrandId || String(formData.get("brandId") ?? "")),
                 description: String(formData.get("description") ?? "").trim() || "—",
             },
             images: productImages,
@@ -511,13 +750,58 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     }
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        const formData = new FormData(event.currentTarget);
+        saveProductFromForm(event.currentTarget);
+    }
+    function handleSaveClick() {
+        if (isPending) return;
+        if (formRef.current) {
+            saveProductFromForm(formRef.current);
+        }
+    }
+    function handleFormKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
+        if (event.key !== "Enter") return;
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        const tag = target.tagName;
+        if (tag === "TEXTAREA") return;
+        if (tag === "BUTTON" && (target as HTMLButtonElement).type === "submit") return;
+        // Barcode scanners and ordinary inputs must never implicit-submit the product form.
+        event.preventDefault();
+    }
+    function saveProductFromForm(form: HTMLFormElement) {
+        const formData = new FormData(form);
+        const nameValue = String(formData.get("productName") ?? productName).trim();
+        const resolvedSku = ensureSkuWhenEmpty(nameValue, sku);
+        if (resolvedSku && resolvedSku !== sku) {
+            setSku(resolvedSku);
+        }
+        const categoryId = String(formData.get("categoryId") ?? "").trim();
+        const requireCategory = localCategories.length > 0;
+        const gaps = collectProductRequiredGaps({
+            categoryId,
+            productName: nameValue,
+            requireCategory,
+            sku: resolvedSku,
+        });
+        if (gaps.length > 0) {
+            const labels = gaps.map(labelForRequiredField);
+            showSaveFailureNearButton(labels, "error");
+            focusRequiredField(gaps[0]!);
+            return;
+        }
+        setSaveValidationIssues([]);
         const tags = String(formData.get("tags") ?? "")
             .split(",")
             .map((tag) => tag.trim())
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
-        const sourceUnits = visibleUnits.length > 0 ? visibleUnits : [{
+        if (conversionInvalid || visibleUnits.some(isActiveUnitQtyInvalid)) {
+            showSaveFailureNearButton([t("qtyInBaseMustBePositive")], "error");
+            focusFirstInvalidQtyField();
+            return;
+        }
+        const preparedUnits = applyAutomaticSellingPrices(applyHierarchyConversions(visibleUnits));
+        const sourceUnits = preparedUnits.length > 0 ? preparedUnits : [{
                 ...emptyUnit,
                 barcode,
                 costPriceLak: product?.costPriceLak ?? 0,
@@ -535,9 +819,11 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         const sellingPriceLak = parseMoney(defaultSaleUnit?.sellingPriceLak ?? product?.sellingPriceLak ?? 0);
         const hasBaseUnit = visibleUnits.some((unit) => unit.isBaseUnit);
         const productUnits = sourceUnits.map((unit, index) => {
-            const conversionQty = Math.max(Number(unit.conversionQty) || 1, 1);
+            const conversionQty = isUnitEnabled(unit)
+                ? parsePositiveIntQty(unit.conversionQty) as number
+                : (parseIntegerQty(unit.conversionQty) ?? 0);
             const isBaseUnit = hasBaseUnit ? unit.isBaseUnit : index === 0;
-            const unitPrice = Number(unit.sellingPriceLak) || (isBaseUnit ? sellingPriceLak : sellingPriceLak * conversionQty);
+            const unitPrice = Number(unit.sellingPriceLak) || 0;
             return {
                 barcode: unit.barcode.trim() || undefined,
                 allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
@@ -565,8 +851,8 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             ?? baseUnit;
         const payload = {
             barcode: derivedBarcode,
-            brandId: undefined,
-            categoryId: String(formData.get("categoryId") ?? "").trim() || undefined,
+            brandId: selectedBrandId || undefined,
+            categoryId: categoryId || undefined,
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
             imageUrl: productImages.find((image) => image.id === selectedImageId)?.storagePath,
@@ -580,30 +866,52 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 unitName: receiveUnit?.unitName.trim() || undefined,
             } : undefined,
             minStock: Number(formData.get("minStock") ?? 0),
-            nameEn: String(formData.get("productName") ?? "").trim(),
-            nameLo: String(formData.get("productName") ?? "").trim(),
+            nameEn: nameValue,
+            nameLo: nameValue,
             productCode,
             sellingPriceLak,
-            sku,
+            sku: resolvedSku,
             status: String(formData.get("status") ?? "active"),
             stockDisplayMode: String(formData.get("stockDisplayMode") ?? "base_unit_only") as "base_unit_only" | "breakdown",
-            supplierId: undefined,
+            supplierId: preferredSupplierId || assignedSupplierIds[0] || undefined,
+            supplierIds: assignedSupplierIds,
             tags,
             units: productUnits,
         };
         const selectedImage = productImages.find((image) => image.id === selectedImageId);
         async function persistSavedProduct(savedProduct: { id: string; units?: Array<{ id: string; unitName: string }> }) {
-            if (selectedImage?.pendingMain && selectedImage.pendingThumb) {
+            const savedUnits = savedProduct.units ?? [];
+            const savedIdByName = new Map(
+                savedUnits.map((unit) => [unit.unitName.trim().toLowerCase(), unit.id] as const),
+            );
+            function mapAssignedUnitIds(image: ProductFormImage) {
+                return units
+                    .filter((unit) => isUnitEnabled(unit) && unitUsesProductImage(unit, image))
+                    .map((unit) => {
+                        if (!unit.id.startsWith("unit-") && savedUnits.some((saved) => saved.id === unit.id)) {
+                            return unit.id;
+                        }
+                        return savedIdByName.get(unit.unitName.trim().toLowerCase());
+                    })
+                    .filter((unitId): unitId is string => Boolean(unitId));
+            }
+
+            const pendingImages = productImages.filter((image) => image.pendingMain && image.pendingThumb);
+            // Upload main/selected first so products.image_url is set, then other assigned pending images.
+            const orderedPending = [
+                ...pendingImages.filter((image) => image.id === selectedImageId),
+                ...pendingImages.filter((image) => image.id !== selectedImageId),
+            ];
+
+            for (const image of orderedPending) {
+                const assignedUnitIds = mapAssignedUnitIds(image);
+                const isMain = image.id === selectedImageId;
+                // Skip non-main pending images that are not assigned to any unit.
+                if (!isMain && assignedUnitIds.length === 0) continue;
                 const imageData = new FormData();
-                imageData.set("main", selectedImage.pendingMain);
-                imageData.set("thumb", selectedImage.pendingThumb);
-                const inheritedNames = new Set(units
-                    .filter((unit) => unitImageOriginsRef.current[unit.id] === "inherited")
-                    .map((unit) => unit.unitName.trim())
-                    .filter(Boolean));
-                const assignedUnitIds = (savedProduct.units ?? [])
-                    .filter((unit) => inheritedNames.has(unit.unitName.trim()))
-                    .map((unit) => unit.id);
+                imageData.set("main", image.pendingMain!);
+                imageData.set("thumb", image.pendingThumb!);
+                imageData.set("setProductMain", isMain ? "true" : "false");
                 if (assignedUnitIds[0]) {
                     imageData.set("assignToUnitId", assignedUnitIds[0]);
                 }
@@ -612,16 +920,23 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 }
                 const uploaded = await uploadProductImageAction(savedProduct.id, imageData);
                 if (!uploaded.ok) {
-                    setMessage(localizeProductError(uploaded.error ?? t("imageUploadFailed")));
+                    const imageError = localizeProductError(uploaded.error ?? t("imageUploadFailed"));
+                    setSaveValidationIssues([imageError]);
+                    showFeedback(imageError, "error");
+                    scrollSaveFeedbackIntoView();
                     router.refresh();
                     router.push(`/products/${savedProduct.id}/edit`);
                     return false;
                 }
             }
-            else if (mode === "edit" && !selectedImage && product?.imageUrl) {
+
+            if (orderedPending.length === 0 && mode === "edit" && !selectedImage && product?.imageUrl) {
                 const cleared = await clearProductImageAction(savedProduct.id);
                 if (!cleared.ok) {
-                    setMessage(localizeProductError(cleared.error ?? t("imageUploadFailed")));
+                    const imageError = localizeProductError(cleared.error ?? t("imageUploadFailed"));
+                    setSaveValidationIssues([imageError]);
+                    showFeedback(imageError, "error");
+                    scrollSaveFeedbackIntoView();
                     return false;
                 }
             }
@@ -631,14 +946,22 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             startTransition(async () => {
                 const result = await createProductAction(payload);
                 if (!result.ok) {
-                    setMessage(localizeProductError(result.error ?? "Product save failed."));
+                    const errorText = localizeProductError(result.error ?? "Product save failed.");
+                    setSaveValidationIssues([errorText]);
+                    showFeedback(errorText, "error");
+                    scrollSaveFeedbackIntoView();
+                    focusDuplicateConflict(result.error ?? errorText);
                     return;
                 }
+                // Successful create only — failed/cancelled forms must not rewrite remembered unit setup.
+                writeLastCreateUnitSetup(extractLastCreateUnitSetupFromUnits(sourceUnits));
+                // Product exists even if image upload fails; POS must see it immediately.
+                signalPosCatalogueInvalidation();
                 const saved = result.data as { id: string; units?: Array<{ id: string; unitName: string }> };
                 const uploaded = await persistSavedProduct(saved);
                 if (!uploaded) return;
-                setMessage(t("productSaved"));
-                signalPosCatalogueInvalidation();
+                setSaveValidationIssues([]);
+                showFeedback(t("productSaved"), "success");
                 router.refresh();
                 router.push("/products");
             });
@@ -648,19 +971,25 @@ export function ProductForm({ mode, product, categories, images: _images, initia
             startTransition(async () => {
                 const result = await updateProductAction(product.id, payload);
                 if (!result.ok) {
-                    setMessage(localizeProductError(result.error ?? "Product save failed."));
+                    const errorText = localizeProductError(result.error ?? "Product save failed.");
+                    setSaveValidationIssues([errorText]);
+                    showFeedback(errorText, "error");
+                    scrollSaveFeedbackIntoView();
+                    focusDuplicateConflict(result.error ?? errorText);
                     return;
                 }
+                signalPosCatalogueInvalidation();
                 const saved = (result.data as { id: string; units?: Array<{ id: string; unitName: string }> } | undefined) ?? product;
                 const uploaded = await persistSavedProduct({ id: saved.id, units: saved.units ?? product.units });
                 if (!uploaded) return;
-                setMessage(t("productSaved"));
+                setSaveValidationIssues([]);
+                showFeedback(t("productSaved"), "success");
                 router.refresh();
                 router.push("/products");
             });
             return;
         }
-        setMessage(t("productSaveFailed"));
+        showFeedback(t("productSaveFailed"), "error");
     }
     function duplicateProduct() {
         if (!product)
@@ -668,10 +997,11 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         startTransition(async () => {
             const result = await duplicateProductAction(product.id);
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Duplicate product failed."));
+                showFeedback(localizeProductError(result.error ?? "Duplicate product failed."), "error");
                 return;
             }
-            setMessage(t("productDuplicated"));
+            showFeedback(t("productDuplicated"), "success");
+            signalPosCatalogueInvalidation();
             router.refresh();
             router.push("/products");
         });
@@ -682,7 +1012,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
     }) {
         const nextName = input.nameLo.trim();
         if (!nextName) {
-            setMessage(t("categorySaveFailed"));
+            showFeedback(t("categorySaveFailed"), "error");
             return;
         }
         startTransition(async () => {
@@ -691,24 +1021,199 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 nameEn: nextName,
                 nameLo: nextName,
             });
-            if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Category save failed."));
+            if (!result.ok || !result.data) {
+                showFeedback(localizeProductError(result.error ?? "Category save failed."), "error");
                 return;
             }
-            setMessage(t("categorySaved"));
+            const saved = result.data as { id: string; nameEn?: string | null; nameLo: string };
+            const mapped: Category = {
+                id: saved.id,
+                nameEn: saved.nameEn ?? saved.nameLo,
+                nameLo: saved.nameLo,
+                productCount: 0,
+                status: "active",
+            };
+            setLocalCategories((current) => {
+                const without = current.filter((category) => category.id !== mapped.id);
+                return [...without, mapped].sort((a, b) => (a.nameEn || a.nameLo).localeCompare(b.nameEn || b.nameLo));
+            });
+            setSelectedCategoryId(mapped.id);
+            showFeedback(t("categorySaved"), "success");
             setCategoryDialog(null);
             router.refresh();
+        });
+    }
+    function openBrandDialog(mode: "add" | "edit" | "delete", brandId?: string) {
+        const brand = brandId ? localBrands.find((row) => row.id === brandId) : undefined;
+        setBrandDraft(mode === "add" ? "" : (brand?.name ?? ""));
+        setBrandDialog({ mode, brandId });
+    }
+    function openSupplierDialog(mode: "add" | "edit" | "archive", supplierId?: string) {
+        const supplier = supplierId ? localSuppliers.find((row) => row.id === supplierId) : undefined;
+        setSupplierDraft(mode === "add" ? "" : (supplier?.companyName || supplier?.supplierCode || ""));
+        setSupplierDialog({ mode, supplierId });
+    }
+    function saveBrandInline() {
+        if (!brandDialog || brandDialog.mode === "delete") return;
+        const nextName = brandDraft.trim();
+        if (!nextName) {
+            showFeedback(t("brandSaveFailed"), "error");
+            return;
+        }
+        startTransition(async () => {
+            const result = await upsertBrandAction({
+                id: brandDialog.mode === "edit" ? brandDialog.brandId : undefined,
+                name: nextName,
+            });
+            if (!result.ok || !result.data) {
+                showFeedback(localizeProductError(result.error ?? "Brand save failed."), "error");
+                return;
+            }
+            const saved = result.data as { id: string; name: string };
+            const mapped: Brand = { id: saved.id, name: saved.name, productCount: 0 };
+            setLocalBrands((current) => {
+                const without = current.filter((brand) => brand.id !== mapped.id);
+                return [...without, mapped].sort((a, b) => a.name.localeCompare(b.name));
+            });
+            setSelectedBrandId(mapped.id);
+            setBrandDraft("");
+            setBrandDialog(null);
+            showFeedback(t("brandSaved"), "success");
+            router.refresh();
+        });
+    }
+    function deleteBrandInline() {
+        const brandId = brandDialog?.brandId;
+        if (!brandId) return;
+        startTransition(async () => {
+            const result = await deleteBrandAction(brandId);
+            if (!result.ok) {
+                showFeedback(localizeProductError(result.error ?? t("brandDeleteFailed")), "error");
+                return;
+            }
+            setLocalBrands((current) => current.filter((brand) => brand.id !== brandId));
+            if (selectedBrandId === brandId) setSelectedBrandId("");
+            setBrandDialog(null);
+            showFeedback(t("brandDeleted"), "success");
+            router.refresh();
+        });
+    }
+    function saveSupplierInline() {
+        if (!supplierDialog || supplierDialog.mode === "archive") return;
+        const nextName = supplierDraft.trim();
+        if (!nextName) {
+            showFeedback(t("supplierSaveFailed"), "error");
+            return;
+        }
+        startTransition(async () => {
+            if (supplierDialog.mode === "edit" && supplierDialog.supplierId) {
+                const result = await updateSupplierAction(supplierDialog.supplierId, { companyName: nextName });
+                if (!result.ok || !result.data) {
+                    showFeedback(localizeProductError(result.error ?? "Supplier save failed."), "error");
+                    return;
+                }
+                const saved = result.data as { id: string; companyName?: string; name?: string; supplierCode?: string };
+                setLocalSuppliers((current) => current.map((supplier) => (
+                    supplier.id === saved.id
+                        ? { ...supplier, companyName: saved.companyName || saved.name || nextName, supplierCode: saved.supplierCode || supplier.supplierCode }
+                        : supplier
+                )).sort((a, b) => a.companyName.localeCompare(b.companyName)));
+                setSupplierDraft("");
+                setSupplierDialog(null);
+                showFeedback(t("supplierSaved"), "success");
+                router.refresh();
+                return;
+            }
+            const code = `SUP-${Date.now().toString().slice(-6)}`;
+            const result = await createSupplierAction({ companyName: nextName, supplierCode: code });
+            if (!result.ok || !result.data) {
+                showFeedback(localizeProductError(result.error ?? "Supplier save failed."), "error");
+                return;
+            }
+            const saved = result.data as { id: string; companyName?: string; name?: string; supplierCode?: string };
+            const mapped: Supplier = {
+                id: saved.id,
+                address: "",
+                averageDeliveryDays: 0,
+                companyName: saved.companyName || saved.name || nextName,
+                contactPerson: "",
+                creditLimitLak: 0,
+                creditTerms: "",
+                email: "",
+                notes: "",
+                openingBalanceLak: 0,
+                outstandingBalanceLak: 0,
+                phone: "",
+                status: "active",
+                supplierCode: saved.supplierCode || code,
+                taxNumber: "",
+            };
+            setLocalSuppliers((current) => {
+                const without = current.filter((supplier) => supplier.id !== mapped.id);
+                return [...without, mapped].sort((a, b) => a.companyName.localeCompare(b.companyName));
+            });
+            setAssignedSupplierIds((current) => current.includes(mapped.id) ? current : [...current, mapped.id]);
+            setPreferredSupplierId((current) => current || mapped.id);
+            setSupplierPickId("");
+            setSupplierDraft("");
+            setSupplierDialog(null);
+            showFeedback(t("supplierSaved"), "success");
+            router.refresh();
+        });
+    }
+    function archiveSupplierInline() {
+        const supplierId = supplierDialog?.supplierId;
+        if (!supplierId) return;
+        startTransition(async () => {
+            const result = await archiveSupplierAction(supplierId);
+            if (!result.ok) {
+                showFeedback(localizeProductError(result.error ?? t("supplierArchiveFailed")), "error");
+                return;
+            }
+            setLocalSuppliers((current) => current.filter((supplier) => supplier.id !== supplierId));
+            setAssignedSupplierIds((current) => {
+                const next = current.filter((id) => id !== supplierId);
+                setPreferredSupplierId((preferred) => {
+                    if (preferred !== supplierId) return preferred;
+                    return next[0] ?? "";
+                });
+                return next;
+            });
+            setSupplierDialog(null);
+            showFeedback(t("supplierArchived"), "success");
+            router.refresh();
+        });
+    }
+    function addAssignedSupplier(supplierId: string) {
+        const nextId = supplierId.trim();
+        if (!nextId) return;
+        setAssignedSupplierIds((current) => {
+            if (current.includes(nextId)) return current;
+            const next = [...current, nextId];
+            setPreferredSupplierId((preferred) => preferred || nextId);
+            return next;
+        });
+        setSupplierPickId("");
+    }
+    function removeAssignedSupplier(supplierId: string) {
+        setAssignedSupplierIds((current) => {
+            const next = current.filter((id) => id !== supplierId);
+            setPreferredSupplierId((preferred) => {
+                if (preferred !== supplierId) return preferred;
+                return next[0] ?? "";
+            });
+            return next;
         });
     }
     function deleteCategory(categoryId: string) {
         startTransition(async () => {
             const result = await deleteCategoryAction(categoryId);
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Cannot delete category because products still use it."));
+                showFeedback(localizeProductError(result.error ?? "Cannot delete category because products still use it."), "error");
                 return;
             }
             setLocalCategories((current) => current.filter((category) => category.id !== categoryId));
-            setMessage(t("categoryDeleted"));
+            showFeedback(t("categoryDeleted"), "success");
             setCategoryDialog(null);
             router.refresh();
         });
@@ -721,10 +1226,16 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 ? await archiveProductAction(product.id)
                 : await deleteProductAction(product.id);
             if (!result.ok) {
-                setMessage(localizeProductError(result.error ?? "Product save failed."));
+                showFeedback(localizeProductError(result.error ?? "Product save failed."), "error");
                 return;
             }
-            setMessage(action === "archive" ? t("productArchived") : t("productDeletedSuccess"));
+            showFeedback(action === "archive" ? t("productArchived") : (
+                result.data && typeof result.data === "object" && "deleteMode" in result.data
+                    && (result.data as { deleteMode?: string }).deleteMode === "soft"
+                    ? t("productRemovedFromCatalogue")
+                    : t("productDeletedSuccess")
+            ), "success");
+            signalPosCatalogueInvalidation();
             router.refresh();
             router.push("/products");
         });
@@ -733,7 +1244,12 @@ export function ProductForm({ mode, product, categories, images: _images, initia
         units.find((unit) => unit.isBaseUnit)?.barcode ||
         units.find((unit) => unit.barcode.trim().length > 0)?.barcode ||
         barcode).trim();
-    return (<form className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit}>
+    const feedbackClassName = messageTone === "success"
+        ? "rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success whitespace-pre-line"
+        : messageTone === "warning"
+            ? "rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning whitespace-pre-line"
+            : "rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger whitespace-pre-line";
+    return (<form ref={formRef} className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden" onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate>
       <div className="sticky top-2 z-20 -mx-1 flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-background/95 px-2 py-2 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div>
           <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground transition hover:text-foreground" href="/products">
@@ -758,17 +1274,22 @@ export function ProductForm({ mode, product, categories, images: _images, initia
           </div>) : null}
       </div>
 
-      {message ? (<div className="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
+      {message ? (<div className={feedbackClassName} role={messageTone === "success" ? "status" : "alert"}>
           {message}
         </div>) : null}
-      {categoryDialog ? (<CategoryCrudDialog categories={localCategories} state={categoryDialog} onClose={() => setCategoryDialog(null)} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      {categoryDialog ? (<CategoryCrudDialog categories={localCategories} isPending={isPending} state={categoryDialog} onClose={closeCategoryDialog} onDelete={deleteCategory} onSave={saveCategory}/>) : null}
+      {brandDialog ? (<BrandCrudDialog brands={localBrands} draft={brandDraft} isPending={isPending} state={brandDialog} onClose={closeBrandDialog} onDelete={deleteBrandInline} onDraftChange={setBrandDraft} onSave={saveBrandInline}/>) : null}
+      {supplierDialog ? (<SupplierCrudDialog draft={supplierDraft} isPending={isPending} state={supplierDialog} suppliers={localSuppliers} onArchive={archiveSupplierInline} onClose={closeSupplierDialog} onDraftChange={setSupplierDraft} onSave={saveSupplierInline}/>) : null}
       {statusConfirm && product ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStatusConfirm(null)}>{t("cancel")}</button>
-            {statusConfirm === "archive" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
-          </div>} onClose={() => setStatusConfirm(null)} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
+            <button className={DIALOG_BTN_SECONDARY} type="button" onClick={closeStatusConfirm}>{t("cancel")}</button>
+            {statusConfirm === "archive" ? (<button className={DIALOG_BTN_PRIMARY} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className={DIALOG_BTN_DANGER} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
+          </div>} onClose={closeStatusConfirm} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
           <p className="rounded-md border border-border bg-background p-3 text-sm font-semibold">{productName || product.nameEn || product.nameLo}</p>
         </ProductSmallModal>) : null}
-      {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} snapshot={previewSnapshot}/>) : null}
+      {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} onSave={() => {
+            setPreviewSnapshot(null);
+            handleSaveClick();
+        }} snapshot={previewSnapshot}/>) : null}
       {aliasDrawerUnitId ? (<BarcodeAliasDrawer aliasInput={aliasInput} aliases={barcodeAliases[aliasDrawerUnitId] ?? []} onAddAlias={() => addBarcodeAlias(aliasDrawerUnitId)} onAliasInputChange={setAliasInput} onClose={() => setAliasDrawerUnitId(null)} onRemoveAlias={(aliasIndex) => removeBarcodeAlias(aliasDrawerUnitId, aliasIndex)} onUpdateMainBarcode={(barcodeValue) => updateUnit(aliasDrawerUnitId, { barcode: barcodeValue })} unit={units.find((unit) => unit.id === aliasDrawerUnitId)}/>) : null}
       <input type="hidden" name="status" value={product?.status ?? "active"}/>
       <input type="hidden" name="minStock" value={product?.minStock ?? 0}/>
@@ -783,7 +1304,7 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 <div className="mt-4 grid gap-3 lg:grid-cols-6">
                   <div className="lg:col-span-6">
                     <Field label={t("productName")}>
-                      <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} placeholder={t("productNamePlaceholder")} required/>
+                      <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={(event) => maybeAutofillSkuFromName(event.currentTarget.value)} placeholder={t("productNamePlaceholder")} required/>
                     </Field>
                   </div>
 
@@ -812,17 +1333,80 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                   </div>
 
                   <div className="lg:col-span-3">
-                    <CategoryField categories={localCategories} defaultValue={localCategories[0]?.id} onAction={openCategoryDialog}/>
+                    <CategoryField categories={localCategories} locale={locale} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
                   </div>
                   <div className="lg:col-span-3">
-                    <Field label={t("supplierName")}>
-                      <input className="field-input" name="supplierName" placeholder={t("supplierNamePlaceholder")}/>
-                    </Field>
+                    <div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+                      <span>{t("suppliers")}</span>
+                      <div className="flex flex-wrap gap-2">
+                        {assignedSupplierIds.map((id) => {
+                          const supplier = localSuppliers.find((row) => row.id === id);
+                          const label = supplier?.companyName || supplier?.supplierCode || id;
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold" key={id}>
+                              {label}
+                              <button aria-label={t("removeSupplierFromProduct")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
+                                <X aria-hidden="true" className="size-3.5"/>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+                        <ThemedSelect
+                          ariaLabel={t("addExistingSupplier")}
+                          options={[
+                            { label: t("addExistingSupplier"), value: "" },
+                            ...localSuppliers
+                              .filter((supplier) => supplier.status === "active" && !assignedSupplierIds.includes(supplier.id))
+                              .map((supplier) => ({
+                                label: supplier.companyName || supplier.supplierCode,
+                                value: supplier.id,
+                              })),
+                          ]}
+                          placeholder={t("addExistingSupplier")}
+                          value={supplierPickId}
+                          onChange={(next) => {
+                            setSupplierPickId("");
+                            if (next) addAssignedSupplier(next);
+                          }}
+                        />
+                        <div className="flex shrink-0 border-l border-border">
+                          <button aria-label={t("addSupplier")} className={MASTER_TOOL_BTN} type="button" onClick={() => openSupplierDialog("add")}>
+                            <Plus aria-hidden="true" className="size-4"/>
+                          </button>
+                          <button aria-label={t("editSupplier")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("edit", preferredSupplierId)}>
+                            <Pencil aria-hidden="true" className="size-4"/>
+                          </button>
+                          <button aria-label={t("archiveSupplierMaster")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("archive", preferredSupplierId)}>
+                            <Trash2 aria-hidden="true" className="size-4"/>
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t("supplierMasterHint")}</p>
+                      {assignedSupplierIds.length > 0 ? (
+                        <div className="rounded-md border border-border bg-background p-3">
+                          <p className="text-xs font-semibold text-muted-foreground">{t("preferredSupplier")}</p>
+                          <div className="mt-2 space-y-2">
+                            {assignedSupplierIds.map((id) => {
+                              const supplier = localSuppliers.find((row) => row.id === id);
+                              const label = supplier?.companyName || supplier?.supplierCode || id;
+                              return (
+                                <label className="flex items-center gap-2 text-sm font-medium" key={`preferred-${id}`}>
+                                  <input checked={preferredSupplierId === id} name="preferredSupplierId" type="radio" value={id} onChange={() => setPreferredSupplierId(id)}/>
+                                  <span>{label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                      )}
+                    </div>
                   </div>
                   <div className="lg:col-span-3">
-                    <Field label={t("brandName")}>
-                      <input className="field-input" name="brandName" placeholder={t("brandNamePlaceholder")}/>
-                    </Field>
+                    <BrandField brands={localBrands} value={selectedBrandId} onChange={setSelectedBrandId} onAction={openBrandDialog}/>
                   </div>
                   <div className="lg:col-span-6">
                     <Field label={t("descriptionNotes")}>
@@ -870,22 +1454,22 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                     </button>
                   </div>
                 </div>
-                <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
+                <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
                     setAliasInput("");
                     setAliasDrawerUnitId(unitId);
-                }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+                }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
               </details>
               <InitialStockPreview onChange={setInitialStockPreview} units={units} value={initialStockPreview}/>
-              <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
+              <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onToggleUnitAssignment={toggleImageUnitAssignment} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units}/>
             </>) : (<>
           <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-5">
             <h2 className="text-lg font-semibold">{t("basicProductInformation")}</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
               <Field label={t("productName")}>
-                <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} required/>
+                <input className="field-input" name="productName" value={productName} onChange={(event) => setProductName(event.target.value)} onBlur={(event) => maybeAutofillSkuFromName(event.currentTarget.value)} required/>
               </Field>
               </div>
               <Field label={t("productCode")}>
@@ -908,13 +1492,76 @@ export function ProductForm({ mode, product, categories, images: _images, initia
                 </div>
                 <span className="text-xs text-muted-foreground">{t("skuHint")}</span>
               </Field>
-                    <CategoryField categories={localCategories} defaultValue={product?.categoryId ?? localCategories[0]?.id} onAction={openCategoryDialog}/>
-              <Field label={t("supplierName")}>
-                <input className="field-input" name="supplierName" placeholder={t("supplierNamePlaceholder")}/>
-              </Field>
-              <Field label={t("brandName")}>
-                <input className="field-input" name="brandName" placeholder={t("brandNamePlaceholder")}/>
-              </Field>
+                    <CategoryField categories={localCategories} locale={locale} value={selectedCategoryId} onChange={setSelectedCategoryId} onAction={openCategoryDialog}/>
+              <div className="flex min-w-0 flex-col gap-2 text-sm font-medium md:col-span-2">
+                <span>{t("suppliers")}</span>
+                <div className="flex flex-wrap gap-2">
+                  {assignedSupplierIds.map((id) => {
+                    const supplier = localSuppliers.find((row) => row.id === id);
+                    const label = supplier?.companyName || supplier?.supplierCode || id;
+                    return (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold" key={id}>
+                        {label}
+                        <button aria-label={t("removeSupplierFromProduct")} className="rounded p-0.5 text-muted-foreground transition hover:bg-danger/10 hover:text-danger" type="button" onClick={() => removeAssignedSupplier(id)}>
+                          <X aria-hidden="true" className="size-3.5"/>
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+                  <ThemedSelect
+                    ariaLabel={t("addExistingSupplier")}
+                    options={[
+                      { label: t("addExistingSupplier"), value: "" },
+                      ...localSuppliers
+                        .filter((supplier) => supplier.status === "active" && !assignedSupplierIds.includes(supplier.id))
+                        .map((supplier) => ({
+                          label: supplier.companyName || supplier.supplierCode,
+                          value: supplier.id,
+                        })),
+                    ]}
+                    placeholder={t("addExistingSupplier")}
+                    value={supplierPickId}
+                    onChange={(next) => {
+                      setSupplierPickId("");
+                      if (next) addAssignedSupplier(next);
+                    }}
+                  />
+                  <div className="flex shrink-0 border-l border-border">
+                    <button aria-label={t("addSupplier")} className={MASTER_TOOL_BTN} type="button" onClick={() => openSupplierDialog("add")}>
+                      <Plus aria-hidden="true" className="size-4"/>
+                    </button>
+                    <button aria-label={t("editSupplier")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("edit", preferredSupplierId)}>
+                      <Pencil aria-hidden="true" className="size-4"/>
+                    </button>
+                    <button aria-label={t("archiveSupplierMaster")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!preferredSupplierId} onClick={() => preferredSupplierId && openSupplierDialog("archive", preferredSupplierId)}>
+                      <Trash2 aria-hidden="true" className="size-4"/>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("supplierMasterHint")}</p>
+                {assignedSupplierIds.length > 0 ? (
+                  <div className="rounded-md border border-border bg-background p-3">
+                    <p className="text-xs font-semibold text-muted-foreground">{t("preferredSupplier")}</p>
+                    <div className="mt-2 space-y-2">
+                      {assignedSupplierIds.map((id) => {
+                        const supplier = localSuppliers.find((row) => row.id === id);
+                        const label = supplier?.companyName || supplier?.supplierCode || id;
+                        return (
+                          <label className="flex items-center gap-2 text-sm font-medium" key={`preferred-edit-${id}`}>
+                            <input checked={preferredSupplierId === id} name="preferredSupplierId" type="radio" value={id} onChange={() => setPreferredSupplierId(id)}/>
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("preferredSupplierHint")}</p>
+                )}
+              </div>
+              <BrandField brands={localBrands} value={selectedBrandId} onChange={setSelectedBrandId} onAction={openBrandDialog}/>
               <div className="md:col-span-2">
                 <Field label={t("descriptionNotes")}>
                   <textarea className="min-h-28 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" name="description" defaultValue={product?.description} placeholder={t("staffNotesPlaceholder")}/>
@@ -961,14 +1608,14 @@ export function ProductForm({ mode, product, categories, images: _images, initia
               </div>
             </div>
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("conversionWarning")}</p>
-            <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onOpenAlias={(unitId) => {
+            <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
                 setAliasInput("");
                 setAliasDrawerUnitId(unitId);
-            }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
+            }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
-          <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
+          <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
-            }} onPreview={openProductPreview} onSearchMessage={setMessage} onSetMainImage={setMainProductImage} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} units={units} updateUnit={updateUnit}/>
+            }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onToggleUnitAssignment={toggleImageUnitAssignment} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units}/>
           {product ? <ProductHistorySection product={product}/> : null}
           </>)}
         </div>
@@ -1087,9 +1734,10 @@ function BarcodeAliasDrawer({ aliasInput, aliases, onAddAlias, onAliasInputChang
     </div>);
 }
 
-function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
+function ProductPreviewDrawer({ isPending, onClose, onSave, snapshot, }: {
     isPending: boolean;
     onClose: () => void;
+    onSave: () => void;
     snapshot: ProductPreviewSnapshot;
 }) {
     const baseUnit = snapshot.units.find((unit) => unit.isBaseUnit) ?? snapshot.units[0];
@@ -1138,11 +1786,11 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
                   <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-3">{t("unit")}</th>
-                      <th className="px-3 py-3">{t("qtyInBase")}</th>
+                      <th className="px-3 py-3">{t("pieceQuantity")}</th>
                       <th className="px-3 py-3">{t("barcode")}</th>
                       <th className="px-3 py-3">{t("barcodeAliases")}</th>
                       <th className="px-3 py-3">{t("costLak")}</th>
-                      <th className="px-3 py-3">{t("priceLak")}</th>
+                      <th className="px-3 py-3">{t("sellingPrice")}</th>
                       <th className="px-3 py-3">{t("base")}</th>
                       <th className="px-3 py-3">{t("defaultSale")}</th>
                       <th className="px-3 py-3">{t("defaultReceiving")}</th>
@@ -1153,7 +1801,7 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
                   <tbody>
                     {snapshot.units.length === 0 ? (<tr><td className="px-3 py-5 text-muted-foreground" colSpan={11}>{t("noUnitRows")}</td></tr>) : snapshot.units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
                         <td className="px-3 py-3 font-semibold">{unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit")}</td>
-                        <td className="px-3 py-3">{formatMoney(unit.conversionQty)}</td>
+                        <td className="px-3 py-3">{hierarchyRelationText(unit, snapshot.units)}</td>
                         <td className="px-3 py-3 font-mono">{unit.barcode || "—"}</td>
                         <td className="px-3 py-3 font-mono">{(snapshot.barcodeAliases[unit.id] ?? []).length > 0 ? snapshot.barcodeAliases[unit.id].join(", ") : "—"}</td>
                         <td className="px-3 py-3">{formatMoney(unit.costPriceLak ?? 0)}</td>
@@ -1220,9 +1868,9 @@ function ProductPreviewDrawer({ isPending, onClose, snapshot, }: {
           <button className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" type="button" onClick={onClose}>
             {t("closePreviewEdit")}
           </button>
-          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="submit" disabled={isPending}>
-            <Save aria-hidden="true"/>
-            {t("saveProduct")}
+          <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="button" disabled={isPending} onClick={onSave} data-testid="product-preview-save">
+            {isPending ? <Loader2 aria-hidden="true" className="size-4 animate-spin"/> : <Save aria-hidden="true"/>}
+            {isPending ? t("saving") : t("saveProduct")}
           </button>
         </div>
       </aside>
@@ -1243,6 +1891,44 @@ function ReadinessRow({ label, ok }: { label: string; ok: boolean }) {
         {ok ? t("ready") : t("missing")}
       </span>
     </div>);
+}
+
+function QuantityReceivedField({ onCommit, value }: { onCommit: (quantity: number) => void; value: number }) {
+    const [state, setState] = useState(() => openingQtyFromCommitted(value));
+    const focusedRef = useRef(false);
+    useEffect(() => {
+        if (!focusedRef.current) {
+            setState(openingQtyFromCommitted(value));
+        }
+    }, [value]);
+    return (
+      <input
+        autoComplete="off"
+        className="field-input"
+        data-field="quantity-received"
+        inputMode="numeric"
+        type="text"
+        value={openingQtyDisplay(state)}
+        onBlur={() => {
+          focusedRef.current = false;
+          const next = onOpeningQtyBlur(state);
+          setState(next);
+          onCommit(next.committed);
+        }}
+        onChange={(event) => {
+          const next = onOpeningQtyChange(state, event.target.value);
+          setState(next);
+          onCommit(next.committed);
+        }}
+        onFocus={(event) => {
+          focusedRef.current = true;
+          setState(onOpeningQtyFocus(state));
+          const input = event.currentTarget;
+          input.select();
+          requestAnimationFrame(() => input.select());
+        }}
+      />
+    );
 }
 
 function InitialStockPreview({ onChange, units, value }: {
@@ -1274,7 +1960,7 @@ function InitialStockPreview({ onChange, units, value }: {
           </select>
         </Field>
         <Field label={t("quantityReceived")}>
-          <input className="field-input" min="0" type="number" value={value.quantityReceived} onChange={(event) => update({ quantityReceived: Number(event.target.value) })}/>
+          <QuantityReceivedField value={value.quantityReceived} onCommit={(quantityReceived) => update({ quantityReceived })}/>
         </Field>
         <Field label={t("lotNumber")}>
           <input className="field-input" value={value.lotNumber} onChange={(event) => update({ lotNumber: event.target.value })} placeholder={t("previewLotPlaceholder")}/>
@@ -1311,23 +1997,22 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onOpenAlias, onUnitImageChange, productImages, removeUnit, unitImageOrigins, units, updateUnit, }: {
+function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onConversionInvalidChange: _onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, selectedImageId, unitImageOrigins, units, updateUnit, }: {
     applyRoundingToAll: (roundingLak: number) => void;
     barcodeAliases: BarcodeAliasState;
     onCheckBarcode?: (unitId: string, barcode: string) => void;
+    onConversionInvalidChange?: (invalid: boolean) => void;
     onOpenAlias: (unitId: string) => void;
     onUnitImageChange: (unitId: string, imageUrl: string | undefined) => void;
     productImages: ProductFormImage[];
     removeUnit: (unitId: string) => void;
+    selectedImageId?: string;
     unitImageOrigins: Record<string, UnitImageOrigin>;
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
-    const [selectedUnitIds, setSelectedUnitIds] = useState<Record<string, boolean>>({});
     const [roundingForAll, setRoundingForAll] = useState(0);
-    function toggleSelected(unitId: string, checked: boolean) {
-        setSelectedUnitIds((current) => ({ ...current, [unitId]: checked }));
-    }
+    const mainImage = productImages.find((image) => image.id === selectedImageId);
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1364,19 +2049,25 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
           </tr>
         </thead>
         <tbody>
-          {units.map((unit) => (<tr className="border-b border-border last:border-b-0" key={unit.id}>
+          {units.map((unit) => (
+            <tr className="border-b border-border last:border-b-0" key={unit.id}>
               <td className="px-3 py-3">
-                <input aria-label={fillProductsCopy(t("selectProduct"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={Boolean(selectedUnitIds[unit.id])} onChange={(event) => toggleSelected(unit.id, event.target.checked)}/>
+                <input aria-label={fillProductsCopy(t("enableNamedUnit"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={isUnitEnabled(unit)} onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
               </td>
               <td className="px-3 py-3">
                 <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                <input className="field-input h-10 min-w-24" type="number" min="1" value={unit.conversionQty} disabled={unit.isBaseUnit} onChange={(event) => updateUnit(unit.id, { conversionQty: Number(event.target.value) })}/>
+                <HierarchyQtyField
+                  ariaLabel={t("qtyInBase")}
+                  committed={Number.isFinite(unit.conversionQty) ? unit.conversionQty : null}
+                  invalid={isActiveUnitQtyInvalid(unit)}
+                  onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
+                />
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
-                  <input className="field-input h-10 min-w-36 font-mono" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
+                  <input className="field-input h-10 min-w-36 font-mono" data-field="unit-barcode" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
                   <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
                     {t("plusAlias")}
                   </button>
@@ -1411,22 +2102,43 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 <MoneyInput className="h-10 min-w-28" disabled={(unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
               </td>
               <td className="px-3 py-3">
-                <div className="grid min-w-44 gap-1">
-                <select className="field-input h-10" value={unitImageSelectValue(unit, productImages)} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
-                  <option value="">{t("notAssigned")}</option>
-                  {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
-                </select>
+                {(() => {
+                  const enabled = isUnitEnabled(unit);
+                  const display = resolveUnitImageDisplay(unit, productImages, mainImage, {
+                    allowMainFallback: false,
+                    hideDisabledAssignment: true,
+                  });
+                  return (
+                <div className="grid min-w-44 gap-1" data-field="unit-image-cell" data-unit-enabled={enabled ? "true" : "false"}>
+                <div className="flex items-center gap-2">
+                  <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-background">
+                    {enabled && display.image?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img alt="" className="size-full object-cover" decoding="async" src={display.image.url}/>
+                    ) : (
+                      <ImagePlus aria-hidden="true" className="size-4 text-muted-foreground"/>
+                    )}
+                  </div>
+                  <select className="field-input h-10 min-w-0 flex-1" disabled={!enabled} value={enabled ? unitImageSelectValue(unit, productImages) : ""} onChange={(event) => onUnitImageChange(unit.id, event.target.value || undefined)}>
+                    <option value="">{t("notAssigned")}</option>
+                    {productImages.map((image) => (<option key={image.id} value={productImageRef(image)}>{image.label}</option>))}
+                  </select>
+                </div>
                 <span className="text-[11px] font-medium text-muted-foreground">
-                  {unitImageOrigins[unit.id] === "inherited"
+                  {!enabled
+                    ? t("notAssigned")
+                    : display.origin === "inherited" || unitImageOrigins[unit.id] === "inherited"
                     ? t("inheritedFromProductImage")
-                    : unitImageOrigins[unit.id] === "custom"
+                    : display.origin === "custom" || unitImageOrigins[unit.id] === "custom"
                       ? t("customUnitImage")
                       : t("notAssigned")}
                 </span>
                 </div>
+                  );
+                })()}
               </td>
               <td className="px-3 py-3">
-                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, conversionQty: 1, isPurchaseUnit: true })} name="baseUnit"/>
+                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
               </td>
               <td className="px-3 py-3">
                 <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
@@ -1448,19 +2160,90 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                   <Trash2 aria-hidden="true"/>
                 </button>
               </td>
-            </tr>))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
     </>);
 }
+
+function HierarchyQtyField({ ariaLabel, committed, disabled, invalid, onCommit, }: {
+    ariaLabel: string;
+    committed: number | null;
+    disabled?: boolean;
+    invalid?: boolean;
+    onCommit: (qty: number) => void;
+}) {
+    const [draft, setDraft] = useState(committed === null ? "" : String(committed));
+    const [error, setError] = useState("");
+    const focusedRef = useRef(false);
+    useEffect(() => {
+        if (!focusedRef.current) {
+            setDraft(committed === null ? "" : String(committed));
+        }
+    }, [committed]);
+    function pushDraft(raw: string) {
+        const next = onQtyInputChange({
+            committed,
+            draft: raw,
+            error: false,
+        }, raw);
+        setDraft(next.draft ?? raw);
+        setError(next.error ? t("qtyInBaseMustBePositive") : "");
+        if (next.committed === null) {
+            onCommit(Number.NaN);
+            return;
+        }
+        onCommit(next.committed);
+    }
+    return (
+      <div className="flex flex-col">
+        <input
+          aria-label={ariaLabel}
+          autoComplete="off"
+          className="field-input h-10 w-24"
+          data-field="qty-in-base"
+          data-invalid={invalid || error ? "true" : "false"}
+          disabled={disabled}
+          inputMode="numeric"
+          type="text"
+          value={draft}
+          onBlur={() => {
+            focusedRef.current = false;
+            const next = onQtyInputBlur({
+              committed,
+              draft,
+              error: parsePositiveIntQty(draft) === null,
+            });
+            setError(next.error ? t("qtyInBaseMustBePositive") : "");
+          }}
+          onChange={(event) => {
+            pushDraft(event.target.value);
+          }}
+          onFocus={(event) => {
+            focusedRef.current = true;
+            const input = event.currentTarget;
+            input.select();
+            requestAnimationFrame(() => input.select());
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        {error ? <p className="mt-1 text-xs font-semibold text-danger">{error}</p> : null}
+      </div>
+    );
+}
+
 function parseMoney(value: unknown) {
-    if (typeof value === "number")
-        return Number.isFinite(value) ? value : 0;
-    return Number(String(value ?? "").replaceAll(",", "")) || 0;
+    return parseMoneyDigits(value);
 }
 function formatMoney(value: unknown) {
-    return parseMoney(value).toLocaleString("en-US");
+    return formatMoneyDigits(value);
 }
 function MoneyInput({ className = "", defaultValue, disabled, name, onValueChange, required, value, }: {
     className?: string;
@@ -1471,39 +2254,50 @@ function MoneyInput({ className = "", defaultValue, disabled, name, onValueChang
     required?: boolean;
     value?: number;
 }) {
-    const [localValue, setLocalValue] = useState(formatMoney(value ?? defaultValue ?? 0));
-    const [isFocused, setIsFocused] = useState(false);
-    const numericValue = parseMoney(value ?? localValue);
-    function update(nextText: string) {
-        const digits = nextText.replace(/[^\d.]/g, "");
-        const nextNumber = parseMoney(digits);
-        const nextDisplay = digits ? formatMoney(nextNumber) : "";
-        setLocalValue(nextDisplay);
-        onValueChange?.(nextNumber);
-    }
-    const displayValue = value === undefined
-        ? localValue
-        : isFocused && parseMoney(value) === 0
-            ? localValue === "0" ? "" : localValue
-            : formatMoney(value);
+    const committed = parseMoneyDigits(value ?? defaultValue ?? 0);
+    const [state, setState] = useState(() => moneyInputFromCommitted(committed));
+    const focusedRef = useRef(false);
+    useEffect(() => {
+        if (!focusedRef.current) {
+            setState(moneyInputFromCommitted(committed));
+        }
+    }, [committed]);
+    const displayValue = moneyInputDisplay(state);
     return (<>
-      {name ? <input name={name} type="hidden" value={numericValue}/> : null}
-      <input className={`field-input ${className}`} disabled={disabled} inputMode="decimal" required={required} value={displayValue} onChange={(event) => update(event.target.value)} onFocus={() => {
-            setIsFocused(true);
-            if (parseMoney(displayValue) === 0) {
-                setLocalValue("");
-            }
-        }} onBlur={() => {
-            setIsFocused(false);
-            if (!displayValue) {
-                setLocalValue("0");
-                onValueChange?.(0);
-            }
-        }}/>
+      {name ? <input name={name} type="hidden" value={committed}/> : null}
+      <input
+        autoComplete="off"
+        className={`field-input ${className}`}
+        data-field="money-input"
+        disabled={disabled}
+        inputMode="numeric"
+        required={required}
+        value={displayValue}
+        onBlur={() => {
+          focusedRef.current = false;
+          const next = onMoneyInputBlur(state);
+          setState(next);
+          onValueChange?.(next.committed);
+        }}
+        onChange={(event) => {
+          const next = onMoneyInputChange(state, event.target.value);
+          setState(next);
+          onValueChange?.(next.committed);
+        }}
+        onFocus={(event) => {
+          if (disabled) return;
+          focusedRef.current = true;
+          setState(onMoneyInputFocus(state));
+          const input = event.currentTarget;
+          input.select();
+          requestAnimationFrame(() => input.select());
+        }}
+      />
     </>);
 }
-function CategoryCrudDialog({ categories, onClose, onDelete, onSave, state, }: {
+function CategoryCrudDialog({ categories, isPending = false, onClose, onDelete, onSave, state, }: {
     categories: Category[];
+    isPending?: boolean;
     onClose: () => void;
     onDelete: (categoryId: string) => void;
     onSave: (input: {
@@ -1520,18 +2314,77 @@ function CategoryCrudDialog({ categories, onClose, onDelete, onSave, state, }: {
     const title = state.mode === "add" ? t("addCategory") : state.mode === "edit" ? t("editCategory") : t("deleteCategory");
     const isDelete = state.mode === "delete";
     return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isDelete} footer={isDelete ? (<div className="flex justify-end gap-2">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-              <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => state.categoryId && onDelete(state.categoryId)}>{t("delete")}</button>
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_DANGER} disabled={isPending || !state.categoryId} type="button" onClick={() => state.categoryId && onDelete(state.categoryId)}>{isPending ? t("saving") : t("delete")}</button>
             </div>) : (<div className="flex justify-end gap-2">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onClose}>{t("cancel")}</button>
-              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => onSave({ id: state.mode === "edit" ? state.categoryId : undefined, nameLo: name })}>{t("save")}</button>
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_PRIMARY} disabled={isPending || !name.trim()} type="button" onClick={() => onSave({ id: state.mode === "edit" ? state.categoryId : undefined, nameLo: name })}>{isPending ? t("saving") : t("save")}</button>
             </div>)} onClose={onClose} size="sm" title={title}>
         {isDelete ? (<>
             <p className="text-sm text-muted-foreground">{t("deleteCategoryConfirm")}</p>
             <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{category?.nameEn || category?.nameLo || t("selectedCategory")}</p>
           </>) : (<Field label={state.mode === "add" ? t("categoryName") : t("currentCategoryName")}>
-              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus/>
+              <input className="field-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus disabled={isPending}/>
             </Field>)}
+      </ProductSmallModal>);
+}
+function BrandCrudDialog({ brands, draft, isPending = false, onClose, onDelete, onDraftChange, onSave, state, }: {
+    brands: Brand[];
+    draft: string;
+    isPending?: boolean;
+    onClose: () => void;
+    onDelete: () => void;
+    onDraftChange: (value: string) => void;
+    onSave: () => void;
+    state: Exclude<BrandDialogState, null>;
+}) {
+    const brand = brands.find((item) => item.id === state.brandId);
+    const title = state.mode === "add" ? t("addBrand") : state.mode === "edit" ? t("editBrand") : t("deleteBrand");
+    const isDelete = state.mode === "delete";
+    return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isDelete} footer={isDelete ? (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_DANGER} disabled={isPending || !state.brandId} type="button" onClick={onDelete}>{isPending ? t("saving") : t("delete")}</button>
+            </div>) : (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_PRIMARY} disabled={isPending || !draft.trim()} type="button" onClick={onSave}>{isPending ? t("saving") : t("save")}</button>
+            </div>)} onClose={onClose} size="sm" title={title}>
+        {isDelete ? (<>
+            <p className="text-sm text-muted-foreground">{t("deleteBrandConfirm")}</p>
+            <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{brand?.name || t("noBrandSelected")}</p>
+          </>) : (<Field label={t("brandName")}>
+              <input className="field-input" value={draft} onChange={(event) => onDraftChange(event.target.value)} placeholder={t("brandNamePlaceholder")} autoFocus disabled={isPending}/>
+            </Field>)}
+      </ProductSmallModal>);
+}
+function SupplierCrudDialog({ draft, isPending = false, onArchive, onClose, onDraftChange, onSave, state, suppliers, }: {
+    draft: string;
+    isPending?: boolean;
+    onArchive: () => void;
+    onClose: () => void;
+    onDraftChange: (value: string) => void;
+    onSave: () => void;
+    state: Exclude<SupplierDialogState, null>;
+    suppliers: Supplier[];
+}) {
+    const supplier = suppliers.find((item) => item.id === state.supplierId);
+    const title = state.mode === "add" ? t("addSupplier") : state.mode === "edit" ? t("editSupplier") : t("archiveSupplierMaster");
+    const isArchive = state.mode === "archive";
+    return (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={!isArchive} footer={isArchive ? (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_DANGER} disabled={isPending || !state.supplierId} type="button" onClick={onArchive}>{isPending ? t("saving") : t("archive")}</button>
+            </div>) : (<div className="flex justify-end gap-2">
+              <button className={DIALOG_BTN_SECONDARY} disabled={isPending} type="button" onClick={onClose}>{t("cancel")}</button>
+              <button className={DIALOG_BTN_PRIMARY} disabled={isPending || !draft.trim()} type="button" onClick={onSave}>{isPending ? t("saving") : t("save")}</button>
+            </div>)} onClose={onClose} size="sm" title={title}>
+        {isArchive ? (<>
+            <p className="text-sm text-muted-foreground">{t("archiveSupplierConfirm")}</p>
+            <p className="mt-2 rounded-md border border-border bg-background p-3 text-sm font-semibold">{supplier?.companyName || supplier?.supplierCode || t("suppliers")}</p>
+          </>) : (<>
+            <Field label={t("supplierName")}>
+              <input className="field-input" value={draft} onChange={(event) => onDraftChange(event.target.value)} placeholder={t("supplierNamePlaceholder")} autoFocus disabled={isPending}/>
+            </Field>
+            <p className="mt-2 text-xs text-muted-foreground">{t("supplierMasterHint")}</p>
+          </>)}
       </ProductSmallModal>);
 }
 function ImagePreviewDialog({ image, onClose }: {
@@ -1545,121 +2398,122 @@ function ImagePreviewDialog({ image, onClose }: {
         </div>
       </ProductSmallModal>);
 }
-function CategoryField({ categories, defaultValue, onAction, }: {
-    categories: Category[];
-    defaultValue?: string;
-    onAction: (mode: "add" | "edit" | "delete", categoryId?: string) => void;
+function categoryDisplayName(category: { nameEn?: string | null; nameLo?: string | null }, locale: SupportedLocale) {
+    return localizedProductName(category, locale) || category.nameEn?.trim() || category.nameLo?.trim() || "";
+}
+function BrandField({ brands, onAction, onChange, value, }: {
+    brands: Brand[];
+    onAction: (mode: "add" | "edit" | "delete", brandId?: string) => void;
+    onChange: (brandId: string) => void;
+    value?: string;
 }) {
-    const [selectedCategoryId, setSelectedCategoryId] = useState(defaultValue ?? categories[0]?.id ?? "");
-    useEffect(() => {
-        if (categories.length === 0) {
-            setSelectedCategoryId("");
-            return;
-        }
-        if (!categories.some((category) => category.id === selectedCategoryId)) {
-            setSelectedCategoryId(defaultValue && categories.some((category) => category.id === defaultValue)
-                ? defaultValue
-                : categories[0]?.id ?? "");
-        }
-    }, [categories, defaultValue, selectedCategoryId]);
-    const hasSelectedCategory = Boolean(selectedCategoryId);
+    const selectedBrandId = value ?? "";
+    const hasSelectedBrand = Boolean(selectedBrandId);
     return (<div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
-      <span>{t("category")}</span>
-      <div className="flex min-w-0 overflow-hidden rounded-md border border-border bg-background focus-within:border-primary">
-        <select className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" name="categoryId" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
-          {categories.map((category) => (<option value={category.id} key={category.id}>
-              {category.nameEn} / {category.nameLo}
-            </option>))}
-        </select>
+      <span>{t("brandName")}</span>
+      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+        <ThemedSelect
+          ariaLabel={t("brandName")}
+          name="brandId"
+          options={[
+            { label: t("noBrandSelected"), value: "" },
+            ...brands.map((brand) => ({ label: brand.name, value: brand.id })),
+          ]}
+          placeholder={t("noBrandSelected")}
+          value={selectedBrandId}
+          onChange={onChange}
+        />
         <div className="flex shrink-0 border-l border-border">
-          <button aria-label={t("addCategory")} className="grid size-11 place-items-center transition hover:bg-card" type="button" onClick={() => onAction("add")}>
+          <button aria-label={t("addBrand")} className={MASTER_TOOL_BTN} type="button" onClick={() => onAction("add")}>
             <Plus aria-hidden="true" className="size-4"/>
           </button>
-          <button aria-label={t("editCategory")} className="grid size-11 place-items-center border-l border-border transition hover:bg-card disabled:opacity-40" type="button" disabled={!hasSelectedCategory} onClick={() => onAction("edit", selectedCategoryId)}>
+          <button aria-label={t("editBrand")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!hasSelectedBrand} onClick={() => onAction("edit", selectedBrandId)}>
             <Pencil aria-hidden="true" className="size-4"/>
           </button>
-          <button aria-label={t("deleteCategory")} className="grid size-11 place-items-center border-l border-border text-danger transition hover:bg-danger/10 disabled:opacity-40" type="button" disabled={!hasSelectedCategory} onClick={() => onAction("delete", selectedCategoryId)}>
+          <button aria-label={t("deleteBrand")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!hasSelectedBrand} onClick={() => onAction("delete", selectedBrandId)}>
             <Trash2 aria-hidden="true" className="size-4"/>
           </button>
         </div>
       </div>
     </div>);
 }
-function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSearchMessage, onSetMainImage, onUpload, productImages, productName, removeProductImage, selectedImageId, units, }: {
+function CategoryField({ categories, locale, onAction, onChange, value, }: {
+    categories: Category[];
+    locale: SupportedLocale;
+    onAction: (mode: "add" | "edit" | "delete", categoryId?: string) => void;
+    onChange: (categoryId: string) => void;
+    value?: string;
+}) {
+    const selectedCategoryId = value ?? "";
+    const hasSelectedCategory = Boolean(selectedCategoryId);
+    const options = [
+        { label: categories.length === 0 ? t("noCategoriesYet") : t("selectCategory"), value: "" },
+        ...categories.map((category) => ({
+            label: categoryDisplayName(category, locale),
+            value: category.id,
+        })),
+    ];
+    return (<div className="flex min-w-0 flex-col gap-2 text-sm font-medium">
+      <span>{t("category")}</span>
+      <div className="flex min-w-0 rounded-md border border-border bg-background focus-within:border-primary">
+        <ThemedSelect
+          ariaLabel={t("category")}
+          name="categoryId"
+          options={options}
+          placeholder={categories.length === 0 ? t("noCategoriesYet") : t("selectCategory")}
+          value={selectedCategoryId}
+          onChange={onChange}
+        />
+        <div className="flex shrink-0 border-l border-border">
+          <button aria-label={t("addCategory")} className={MASTER_TOOL_BTN} type="button" onClick={() => onAction("add")}>
+            <Plus aria-hidden="true" className="size-4"/>
+          </button>
+          <button aria-label={t("editCategory")} className={MASTER_TOOL_BTN_MID} type="button" disabled={!hasSelectedCategory} onClick={() => onAction("edit", selectedCategoryId)}>
+            <Pencil aria-hidden="true" className="size-4"/>
+          </button>
+          <button aria-label={t("deleteCategory")} className={MASTER_TOOL_BTN_DANGER} type="button" disabled={!hasSelectedCategory} onClick={() => onAction("delete", selectedCategoryId)}>
+            <Trash2 aria-hidden="true" className="size-4"/>
+          </button>
+        </div>
+      </div>
+      {categories.length > 0 ? (
+        <p className="text-xs text-muted-foreground">{fillProductsCopy(t("categoryCountAvailable"), { count: categories.length })}</p>
+      ) : null}
+    </div>);
+}
+function ProductImagesSection({ assignmentMode, barcode, isPending = false, onApplyAssignment, onImportSearchResult, onPreview, onRemove, onSave, onSearchMessage, onSetMainImage, onToggleUnitAssignment, onUpload, productImages, productName, removeProductImage, saveValidationIssues = [], selectedImageId, units, }: {
     assignmentMode: ProductImageAssignmentMode | null;
     barcode: string;
+    isPending?: boolean;
     onApplyAssignment: (mode: ProductImageAssignmentMode, image?: ProductFormImage) => void;
     onImportSearchResult: (hit: ProductImageSearchHit) => Promise<ProductFormImage>;
     onPreview: (form: HTMLFormElement | null) => void;
     onRemove: () => void;
-    onSearchMessage: (message: string) => void;
+    onSave: () => void;
+    onSearchMessage: (message: string, tone: "success" | "error" | "warning") => void;
     onSetMainImage: (imageUrl: string) => void;
+    onToggleUnitAssignment: (imageId: string, unitId: string, assign: boolean) => void;
     onUpload: (file: File | undefined) => void;
     productImages: ProductFormImage[];
     productName: string;
     removeProductImage: (imageUrl: string) => void;
+    saveValidationIssues?: string[];
     selectedImageId?: string;
     units: ProductUnit[];
-    updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
-    const [chooserOpen, setChooserOpen] = useState(false);
-    const [searching, setSearching] = useState(false);
+    const [browserOpen, setBrowserOpen] = useState(false);
     const [importing, setImporting] = useState(false);
     const [previewImage, setPreviewImage] = useState<ProductFormImage | null>(null);
-    const [results, setResults] = useState<ProductImageSearchHit[]>([]);
-    const [lastQuery, setLastQuery] = useState<string | null>(null);
-    const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
-    const nameReady = productName.trim().length > 0;
-    const barcodeReady = barcode.trim().length > 0;
     const selectedImage = productImages.find((image) => image.id === selectedImageId);
 
-    async function runSearch(source: "name" | "barcode") {
-        if (source === "name" && !nameReady) {
-            onSearchMessage(t("productNameRequiredForImageSearch"));
-            return;
-        }
-        if (source === "barcode" && !barcodeReady) {
-            onSearchMessage(t("barcodeRequiredForImageSearch"));
-            return;
-        }
-        setSearching(true);
-        setChooserOpen(false);
-        try {
-            const result = await searchProductImagesAction({
-                barcode,
-                productName,
-                source,
-            });
-            if (!result.ok || !result.data) {
-                onSearchMessage(localizeProductError(result.error ?? t("imageSearchNotConfigured")));
-                setResults([]);
-                return;
-            }
-            setProviderConfigured(result.data.configured);
-            setLastQuery(result.data.query);
-            setResults(result.data.results);
-            if (!result.data.configured) {
-                onSearchMessage(t("imageSearchNotConfigured"));
-                return;
-            }
-            if (result.data.results.length === 0) {
-                onSearchMessage(t("noImageSearchResults"));
-            }
-        } catch (error) {
-            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageSearchNotConfigured")));
-            setResults([]);
-        } finally {
-            setSearching(false);
-        }
-    }
-
-    async function selectSearchHit(hit: ProductImageSearchHit) {
+    async function useSearchHit(hit: ProductImageSearchHit) {
         setImporting(true);
         try {
             const image = await onImportSearchResult(hit);
-            onSearchMessage(fillProductsCopy(t("uploadedForPreview"), { name: image.label }));
+            onSearchMessage(fillProductsCopy(t("uploadedForPreview"), { name: image.label }), "success");
+            setBrowserOpen(false);
         } catch (error) {
-            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")));
+            onSearchMessage(localizeProductError(error instanceof Error ? error.message : t("imageOptimizeFailed")), "error");
         } finally {
             setImporting(false);
         }
@@ -1667,49 +2521,27 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
 
     return (<section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
       {previewImage ? (<ImagePreviewDialog image={previewImage} onClose={() => setPreviewImage(null)}/>) : null}
+      {browserOpen ? (
+        <BraveImageSearchBrowser
+          barcode={barcode}
+          importing={importing}
+          productName={productName}
+          onClose={() => {
+            if (!importing) setBrowserOpen(false);
+          }}
+          onUseImage={useSearchHit}
+        />
+      ) : null}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-semibold">{t("productImages")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("imageSearchHint")}</p>
         </div>
-        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setChooserOpen((open) => !open)} onFocus={() => setChooserOpen(true)}>
+        <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setBrowserOpen(true)}>
           <Search aria-hidden="true" className="size-4"/>
           {t("searchImages")}
         </button>
       </div>
-
-      {chooserOpen ? (
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <p className="text-sm font-semibold">{t("chooseImageSearchSource")}</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <button className="rounded-md border border-border px-3 py-2 text-left text-sm font-semibold transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!nameReady} type="button" onClick={() => void runSearch("name")}>
-              {t("searchByProductName")}
-              <span className="mt-1 block text-xs font-normal text-muted-foreground">{nameReady ? productName.trim() : t("productNameRequiredForImageSearch")}</span>
-            </button>
-            <button className="rounded-md border border-border px-3 py-2 text-left text-sm font-semibold transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!barcodeReady} type="button" onClick={() => void runSearch("barcode")}>
-              {t("searchByBarcode")}
-              <span className="mt-1 block text-xs font-normal text-muted-foreground">{barcodeReady ? barcode.trim() : t("barcodeRequiredForImageSearch")}</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {searching || importing ? (<p className="mt-3 text-sm font-semibold text-muted-foreground">{importing ? t("importingImage") : t("searchingImages")}</p>) : null}
-      {providerConfigured === false ? (<p className="mt-3 text-sm text-muted-foreground">{t("imageSearchNotConfigured")}</p>) : null}
-      {lastQuery && providerConfigured && results.length === 0 && !searching ? (<p className="mt-3 text-sm text-muted-foreground">{t("noImageSearchResults")}</p>) : null}
-      {results.length > 0 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {results.map((hit) => (
-            <button className="overflow-hidden rounded-lg border border-border bg-background text-left transition hover:border-primary" disabled={importing} key={hit.id} type="button" onClick={() => void selectSearchHit(hit)}>
-              <div className="grid aspect-square place-items-center bg-card">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img alt={hit.title} className="size-full object-cover" decoding="async" loading="lazy" src={hit.thumbnailUrl}/>
-              </div>
-              <div className="truncate px-2 py-2 text-xs font-semibold">{hit.title}</div>
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
         <div className="rounded-lg border border-dashed border-border bg-background p-4">
@@ -1748,8 +2580,8 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
           </div>
           {productImages.length === 0 ? (<div className="mt-4 grid min-h-36 place-items-center rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{t("noProductImagesYet")}</div>) : (<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {productImages.map((image) => {
-                const assignedUnits = units.filter((unit) => unit.imageUrl === image.id || unit.imageUrl === image.storagePath);
-                return (<div className="rounded-lg border border-border bg-card p-3" key={image.id}>
+                const assignableUnits = activeAssignableUnits(units);
+                return (<div className="rounded-lg border border-border bg-card p-3" data-field="uploaded-image-card" key={image.id}>
                     <div className="grid aspect-square place-items-center overflow-hidden rounded-md border border-border bg-background">
                       <button className="size-full" type="button" onClick={() => setPreviewImage(image)}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1757,14 +2589,28 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
                       </button>
                     </div>
                     <div className="mt-2 truncate text-sm font-semibold">{image.label}</div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {assignedUnits.length === 0
-                        ? t("notAssigned")
-                        : assignedUnits.map((unit) => unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit")).join(", ")}
-                    </p>
+                    <div className="mt-2 grid gap-1" data-field="unit-image-assignment">
+                      {assignableUnits.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">{t("notAssigned")}</p>
+                      ) : assignableUnits.map((unit) => {
+                        const checked = unitUsesProductImage(unit, image);
+                        const label = unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit");
+                        return (
+                          <label className="flex items-center gap-2 text-xs font-semibold" key={`${image.id}-${unit.id}`}>
+                            <input
+                              checked={checked}
+                              data-unit-id={unit.id}
+                              type="checkbox"
+                              onChange={(event) => onToggleUnitAssignment(image.id, unit.id, event.target.checked)}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                     <button className="mt-2 h-9 w-full rounded-md border border-border text-xs font-semibold transition hover:border-primary" type="button" onClick={() => {
                         onSetMainImage(image.id);
-                        onSearchMessage(fillProductsCopy(t("setMainImageMessage"), { name: image.label }));
+                        onSearchMessage(fillProductsCopy(t("setMainImageMessage"), { name: image.label }), "success");
                     }}>
                       {t("setAsMainImage")}
                     </button>
@@ -1774,16 +2620,27 @@ function ProductImagesSection({ assignmentMode, barcode, onApplyAssignment, onIm
                   </div>);
             })}
             </div>)}
+          {saveValidationIssues.length > 0 ? (
+            <div className="mt-4 rounded-md border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert" data-testid="product-save-validation-summary">
+              <p className="font-semibold">{t("unableToSaveProduct")}</p>
+              <p className="mt-1">{t("pleaseCompleteRequired")}</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {saveValidationIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <Link className="inline-flex h-11 items-center justify-center rounded-md border border-border px-5 text-sm font-semibold transition hover:border-primary" href="/products">
               {t("cancel")}
             </Link>
-            <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10" type="button" onClick={(event) => onPreview(event.currentTarget.form)}>
+            <button className="inline-flex h-11 items-center justify-center rounded-md border border-primary px-5 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-50" type="button" disabled={isPending} onClick={(event) => onPreview(event.currentTarget.form)}>
               {t("previewProduct")}
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="submit">
-              <Save aria-hidden="true"/>
-              {t("save")}
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-50" type="button" disabled={isPending} onClick={onSave} data-testid="product-save-button" aria-busy={isPending}>
+              {isPending ? <Loader2 aria-hidden="true" className="size-4 animate-spin"/> : <Save aria-hidden="true"/>}
+              {isPending ? t("saving") : t("saveProduct")}
             </button>
           </div>
         </div>

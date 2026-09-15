@@ -8,6 +8,7 @@ export type ProductUnit = {
   id: string;
   unitName: string;
   conversionQty: number;
+  hierarchyQty?: number;
   barcode: string;
   costPriceLak?: number;
   pricingMode?: UnitPricingMode;
@@ -46,7 +47,15 @@ export type Product = {
   tags?: string[];
   categoryId: string;
   categoryName: string;
+  supplierId?: string;
   supplierName: string;
+  supplierIds?: string[];
+  productSuppliers?: Array<{
+    isPreferred: boolean;
+    supplierId: string;
+    supplierName: string;
+  }>;
+  brandId?: string;
   brandName: string;
   costPriceLak: number;
   currentStock?: number;
@@ -76,6 +85,12 @@ export type Category = {
   parentNameLo?: string;
   productCount: number;
   status: "active" | "inactive";
+};
+
+export type Brand = {
+  id: string;
+  name: string;
+  productCount?: number;
 };
 
 export type MockProductImage = {

@@ -13,7 +13,6 @@ import {
   applyUnitPricingPatch,
   deriveSharedUnitCost,
   sellingPriceFromCost,
-  syncSharedStockCosts,
 } from "../features/products/unit-pricing";
 import { applyDefaultsToNewUnit, parseUnitPricingDefaults } from "../features/products/unit-pricing-defaults";
 import type { TenantContext } from "../lib/db/write-context";
@@ -44,9 +43,9 @@ function check(name: string, run: () => void) {
   }
 }
 
-const piece = { addAmountLak: 0, conversionQty: 1, costPriceLak: 0, id: "piece", markupPercent: 0, pricingMode: "manual" as const, roundingLak: 0, sellingPriceLak: 0 };
-const pack = { ...piece, conversionQty: 6, id: "pack" };
-const box = { ...piece, conversionQty: 24, id: "box" };
+const piece = { addAmountLak: 0, conversionQty: 1, costPriceLak: 0, id: "piece", markupPercent: 0, pricingMode: "manual" as const, roundingLak: 0, sellingPriceLak: 0, status: "active" as const, unitName: "Piece" };
+const pack = { ...piece, conversionQty: 6, id: "pack", unitName: "Pack" };
+const box = { ...piece, conversionQty: 24, id: "box", unitName: "Box" };
 
 check("A. Box 250000 / 24 = Piece 10416", () => {
   assert(deriveSharedUnitCost(250000, 24, 1) === 10416, `got ${deriveSharedUnitCost(250000, 24, 1)}`);
@@ -60,17 +59,37 @@ check("C. Piece 11000 * 24 = Box 264000", () => {
   assert(deriveSharedUnitCost(11000, 1, 24) === 264000, `got ${deriveSharedUnitCost(11000, 1, 24)}`);
 });
 
-check("R. Box cost recalculates Piece and Pack", () => {
-  const synced = syncSharedStockCosts([piece, pack, box], "box", 250000);
-  assert(synced.find((unit) => unit.id === "piece")?.costPriceLak === 10416, "piece cost");
-  assert(synced.find((unit) => unit.id === "pack")?.costPriceLak === 62500, "pack cost");
-  assert(synced.find((unit) => unit.id === "box")?.costPriceLak === 250000, "box cost");
+check("R. Box cost edit does not rewrite Piece or Pack", () => {
+  const start = [
+    { ...piece, costPriceLak: 5000 },
+    { ...pack, costPriceLak: 28000 },
+    { ...box, costPriceLak: 120000 },
+  ];
+  const synced = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { costPriceLak: 250000 },
+    shareStock: true,
+    units: start,
+  });
+  assert(synced.find((unit) => unit.id === "piece")?.costPriceLak === 5000, "piece cost");
+  assert(synced.find((unit) => unit.id === "pack")?.costPriceLak === 28000, "pack cost");
+  assert(synced.find((unit) => unit.id === "box")?.costPriceLak === 250000, "box cost is manual");
 });
 
-check("Q. Piece cost recalculates Pack and Box", () => {
-  const synced = syncSharedStockCosts([piece, pack, box], "piece", 11000);
-  assert(synced.find((unit) => unit.id === "pack")?.costPriceLak === 66000, "pack cost");
-  assert(synced.find((unit) => unit.id === "box")?.costPriceLak === 264000, "box cost");
+check("Q. Piece cost does not recalculate Pack or Box cost", () => {
+  const synced = applyUnitPricingPatch({
+    editedUnitId: "piece",
+    patch: { costPriceLak: 11000 },
+    shareStock: true,
+    units: [
+      { ...piece, costPriceLak: 5000 },
+      { ...pack, costPriceLak: 28000 },
+      { ...box, costPriceLak: 250000 },
+    ],
+  });
+  assert(synced.find((unit) => unit.id === "piece")?.costPriceLak === 11000, "piece cost");
+  assert(synced.find((unit) => unit.id === "pack")?.costPriceLak === 28000, "pack cost unchanged");
+  assert(synced.find((unit) => unit.id === "box")?.costPriceLak === 250000, "box cost unchanged");
 });
 
 check("D. 12100 markup 0 round 500 → 12500", () => {
@@ -121,24 +140,34 @@ check("J/K/L. Cost, markup, rounding recalc independently", () => {
 });
 
 check("M. Piece/Pack/Box different markup calculate independently", () => {
-  const synced = syncSharedStockCosts(
-    [
+  const piecePriced = applyUnitPricingPatch({
+    editedUnitId: "piece",
+    patch: { costPriceLak: 10416 },
+    shareStock: true,
+    units: [
       { ...piece, markupPercent: 30, pricingMode: "cost_plus_percent", roundingLak: 500 },
-      { ...pack, markupPercent: 20, pricingMode: "cost_plus_percent", roundingLak: 1000 },
-      { ...box, markupPercent: 15, pricingMode: "cost_plus_percent", roundingLak: 1000 },
+      { ...pack, costPriceLak: 28000, markupPercent: 20, pricingMode: "cost_plus_percent", roundingLak: 1000 },
+      { ...box, costPriceLak: 250000, markupPercent: 15, pricingMode: "cost_plus_percent", roundingLak: 1000 },
     ],
-    "box",
-    250000,
-  );
+  });
+  const packPriced = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { costPriceLak: 28000 },
+    shareStock: true,
+    units: piecePriced,
+  });
   const priced = applyUnitPricingPatch({
     editedUnitId: "box",
     patch: { costPriceLak: 250000 },
     shareStock: true,
-    units: synced,
+    units: packPriced,
   });
   assert(priced[0].sellingPriceLak === 14000, `piece price ${priced[0].sellingPriceLak}`);
-  assert(priced[1].sellingPriceLak === 75000, `pack price ${priced[1].sellingPriceLak}`);
+  assert(priced[1].sellingPriceLak === 34000, `pack price ${priced[1].sellingPriceLak}`);
   assert(priced[2].sellingPriceLak === 288000, `box price ${priced[2].sellingPriceLak}`);
+  assert(priced[0].costPriceLak === 10416, "piece cost");
+  assert(priced[1].costPriceLak === 28000, "pack cost");
+  assert(priced[2].costPriceLak === 250000, "box cost");
 });
 
 check("H. Manual mode does not overwrite selling price", () => {

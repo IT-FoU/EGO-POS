@@ -87,6 +87,14 @@ check("Create Product and Quick Stock In emit invalidation", () => {
   assert(posActions.includes("loadPosCatalogueAction"), "missing catalogue loader");
 });
 
+check("Edit and Delete also emit POS invalidation", () => {
+  const productList = readFileSync(join(root, "features/products/components/product-list-client.tsx"), "utf8");
+  const productActions = readFileSync(join(root, "features/products/actions.ts"), "utf8");
+  assert(productForm.includes("updateProductAction") && productForm.includes("signalPosCatalogueInvalidation()"), "update path must signal");
+  assert(productList.includes("signalPosCatalogueInvalidation()"), "list delete must signal");
+  assert(productActions.includes('revalidatePath("/pos")'), "server must revalidate /pos");
+});
+
 const failed = results.filter((row) => row.status === "FAIL");
 console.log(JSON.stringify({ failed: failed.length, passed: results.filter((row) => row.status === "PASS").length, results, total: results.length }, null, 2));
 if (failed.length) process.exit(1);

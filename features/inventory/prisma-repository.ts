@@ -50,7 +50,11 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext, client: 
     client.inventoryBalance.findMany({
       include: { product: { select: inventoryProductSelect } },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      where: { companyId: scope.companyId, warehouseId: { in: scope.warehouseIds } },
+      where: {
+        companyId: scope.companyId,
+        warehouseId: { in: scope.warehouseIds },
+        product: { isActive: true, status: { not: "deleted" } },
+      },
     }),
     client.stockMovement.findMany({
       include: {

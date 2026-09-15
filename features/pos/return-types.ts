@@ -99,6 +99,7 @@ export type ReturnReceiptSnapshot = {
     nameLo: string;
     quantity: number;
     reason?: string | null;
+    unitName?: string;
   }>;
   saleId: string;
 };

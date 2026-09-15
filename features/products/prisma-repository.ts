@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/db/prisma";
+import { normalizeMasterName } from "@/features/products/master-name";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
 import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
+import { applyPersistedHierarchyCosts } from "@/features/products/unit-hierarchy";
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
 import { cleanupHardDeletedProductImages } from "@/features/products/product-image-service";
+import { resolveProductDeleteMode, sumHistoricalProductRefs } from "@/features/products/product-delete";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
@@ -63,6 +66,10 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
       category: true,
       inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
       priceHistory: { orderBy: { createdAt: "desc" }, take: 50 },
+      productSuppliers: {
+        include: { supplier: { select: { companyName: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       supplier: true,
       units: { orderBy: { sortOrder: "asc" } },
     },
@@ -79,13 +86,32 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
 
 export async function getPrismaCategories(tenant: TenantContext) {
   const scope = await resolveTenantScope(tenant);
+  // Categories are company-level master data (same scope model as brands).
+  // Do not over-filter by branch or the Create Product picker can miss rows.
   const categories = await db.category.findMany({
     include: { _count: { select: { products: true } }, parent: true },
     orderBy: [{ nameEn: "asc" }, { nameLo: "asc" }],
-    where: { companyId: scope.companyId, ...branchOwnedWhere(scope) },
+    where: {
+      companyId: scope.companyId,
+      parentId: null,
+    },
   });
 
-  return categories.map(mapPrismaCategory);
+  return categories.map(mapPrismaCategory).filter((category: { status: string }) => category.status !== "inactive");
+}
+
+export async function getPrismaBrands(tenant: TenantContext) {
+  const scope = await resolveTenantScope(tenant);
+  const brands = await db.brand.findMany({
+    include: { _count: { select: { products: true } } },
+    orderBy: { name: "asc" },
+    where: { companyId: scope.companyId },
+  });
+  return brands.map((brand: { id: string; name: string; _count?: { products: number } }) => ({
+    id: brand.id,
+    name: brand.name,
+    productCount: brand._count?.products ?? 0,
+  }));
 }
 
 export async function getPrismaProductImages() {
@@ -171,7 +197,10 @@ export type ProductWriteInput = {
   sku?: string;
   status?: string;
   stockDisplayMode?: "base_unit_only" | "breakdown";
+  /** Preferred supplier (denormalized products.supplier_id). */
   supplierId?: string;
+  /** All assigned supplier ids (product_suppliers). When provided on update, replaces the link set. */
+  supplierIds?: string[];
   tags?: string[];
   units?: ProductUnitWriteInput[];
 };
@@ -237,7 +266,9 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
     .map((unit) => ({
       addAmountLak: unit.addAmountLak === undefined ? undefined : numberValue(unit.addAmountLak),
       barcode: optionalString(unit.barcode),
-      conversionQty: Math.max(numberValue(unit.conversionQty, 1), 1),
+      conversionQty: Number.isFinite(Number(unit.conversionQty))
+        ? Number(unit.conversionQty)
+        : unit.status === "inactive" ? 0 : Number.NaN,
       costPriceLak: unit.costPriceLak === undefined ? undefined : toLakInteger(unit.costPriceLak),
       id: optionalString(unit.id),
       imageUrl: unitImageRef(unit.imageUrl, expected),
@@ -275,16 +306,20 @@ function normalizedProductUnits(input: ProductUnitWriteInput[] | undefined, fall
         status: "active" as const,
         unitName: "Piece",
       }];
-  const baseIndex = source.findIndex((unit) => unit.isBaseUnit);
-  const defaultSaleIndex = source.findIndex((unit) => unit.isDefaultSaleUnit);
+  const hierarchied = applyPersistedHierarchyCosts(source);
+  const baseIndex = hierarchied.findIndex((unit) => unit.isBaseUnit);
+  const defaultSaleIndex = hierarchied.findIndex((unit) => unit.isDefaultSaleUnit);
 
-  return applyAutomaticSellingPrices(source.map((unit, index) => ({
-    ...unit,
-    conversionQty: baseIndex >= 0 ? index === baseIndex ? 1 : unit.conversionQty : index === 0 ? 1 : unit.conversionQty,
-    isBaseUnit: baseIndex >= 0 ? index === baseIndex : index === 0,
-    isDefaultSaleUnit: defaultSaleIndex >= 0 ? index === defaultSaleIndex : (baseIndex >= 0 ? index === baseIndex : index === 0),
-    isPurchaseUnit: unit.isPurchaseUnit || (baseIndex >= 0 ? index === baseIndex : index === 0),
-  })));
+  return applyAutomaticSellingPrices(hierarchied.map((unit, index) => {
+    const { hierarchyQty: _hierarchyQty, ...persisted } = unit as typeof unit & { hierarchyQty?: number };
+    return {
+      ...persisted,
+      conversionQty: unit.conversionQty,
+      isBaseUnit: baseIndex >= 0 ? index === baseIndex : index === 0,
+      isDefaultSaleUnit: defaultSaleIndex >= 0 ? index === defaultSaleIndex : (baseIndex >= 0 ? index === baseIndex : index === 0),
+      isPurchaseUnit: unit.isPurchaseUnit || (baseIndex >= 0 ? index === baseIndex : index === 0),
+    };
+  }));
 }
 
 function assertNonNegative(value: unknown, label: string) {
@@ -362,6 +397,10 @@ async function loadCreatedProduct(tx: any, productId: string) {
       brand: true,
       category: true,
       inventoryLots: { orderBy: { expiryDate: "asc" }, take: 1 },
+      productSuppliers: {
+        include: { supplier: { select: { companyName: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       supplier: true,
       units: { orderBy: { sortOrder: "asc" } },
     },
@@ -381,7 +420,9 @@ function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
 
   for (const [index, unit] of (input.units ?? []).entries()) {
     rejectEmbeddedProductImage(unit.imageUrl, `Unit ${index + 1} image`);
-    assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
+    if (unit.status !== "inactive") {
+      assertPositive(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
+    }
     assertSafePricingValue(unit.conversionQty, `Unit ${index + 1} conversion quantity`);
     assertNonNegative(unit.addAmountLak, `Unit ${index + 1} add amount`);
     assertNonNegative(unit.costPriceLak, `Unit ${index + 1} cost price`);
@@ -430,19 +471,111 @@ async function assertSupplierInBranch(client: any, scope: Awaited<ReturnType<typ
   });
 }
 
+function resolveAssignedSupplierIds(input: Partial<ProductWriteInput>) {
+  if (input.supplierIds !== undefined) {
+    return Array.from(new Set(input.supplierIds.map((id) => String(id ?? "").trim()).filter(Boolean)));
+  }
+  const preferred = optionalString(input.supplierId);
+  return preferred ? [preferred] : [];
+}
+
+/**
+ * Sync product_suppliers + products.supplier_id in one transactional path.
+ * Preferred removal rule: if preferred is removed/missing, auto-pick the first remaining assigned supplier.
+ * If no suppliers remain, clear products.supplier_id and delete all product_suppliers rows.
+ */
+async function syncProductSuppliers(
+  tx: any,
+  scope: Awaited<ReturnType<typeof resolveTenantScope>>,
+  productId: string,
+  input: Partial<ProductWriteInput>,
+) {
+  // Only sync when caller explicitly provides supplierIds or supplierId.
+  if (input.supplierIds === undefined && input.supplierId === undefined) {
+    return;
+  }
+
+  const assignedIds = resolveAssignedSupplierIds(input);
+  for (const supplierId of assignedIds) {
+    await assertSupplierInBranch(tx, scope, supplierId);
+  }
+
+  let preferredId = optionalString(input.supplierId);
+  if (preferredId && !assignedIds.includes(preferredId)) {
+    preferredId = undefined;
+  }
+  if (!preferredId && assignedIds.length > 0) {
+    preferredId = assignedIds[0];
+  }
+  if (assignedIds.length === 0) {
+    preferredId = undefined;
+  }
+
+  if (assignedIds.length === 0) {
+    await tx.productSupplier.deleteMany({ where: { companyId: scope.companyId, productId } });
+    await tx.product.update({ data: { supplierId: null }, where: { id: productId } });
+    return;
+  }
+
+  const existing = await tx.productSupplier.findMany({
+    select: { id: true, supplierId: true },
+    where: { companyId: scope.companyId, productId },
+  });
+  const existingBySupplier = new Map(existing.map((row: { id: string; supplierId: string }) => [row.supplierId, row.id]));
+
+  for (const supplierId of assignedIds) {
+    if (!existingBySupplier.has(supplierId)) {
+      await tx.productSupplier.create({
+        data: {
+          companyId: scope.companyId,
+          isPreferred: false,
+          productId,
+          supplierId,
+        },
+      });
+    }
+  }
+
+  await tx.productSupplier.deleteMany({
+    where: {
+      companyId: scope.companyId,
+      productId,
+      supplierId: { notIn: assignedIds },
+    },
+  });
+
+  // Clear all preferred flags first so the partial unique index never sees two trues.
+  await tx.productSupplier.updateMany({
+    data: { isPreferred: false },
+    where: { companyId: scope.companyId, productId },
+  });
+
+  if (preferredId) {
+    await tx.productSupplier.updateMany({
+      data: { isPreferred: true },
+      where: { companyId: scope.companyId, productId, supplierId: preferredId },
+    });
+  }
+
+  await tx.product.update({
+    data: { supplierId: preferredId ?? null },
+    where: { id: productId },
+  });
+}
+
 async function assertProductBranchReferences(
   client: any,
   scope: Awaited<ReturnType<typeof resolveTenantScope>>,
   input: Partial<ProductWriteInput>,
 ) {
   const categoryId = optionalString(input.categoryId);
-  const supplierId = optionalString(input.supplierId);
+  const supplierIds = resolveAssignedSupplierIds(input);
 
   if (categoryId) {
     await assertCategoryInBranch(client, scope, categoryId);
   }
 
-  if (supplierId) {
+  for (const supplierId of supplierIds) {
     await assertSupplierInBranch(client, scope, supplierId);
   }
 }
@@ -560,13 +693,18 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
       sku: optionalString(input.sku),
       status: input.status ?? "active",
       stockDisplayMode: input.stockDisplayMode ?? "base_unit_only",
-      supplierId: optionalString(input.supplierId),
+      supplierId: null,
       tags: input.tags ?? [],
       units: {
         create: units.map(({ id: _id, ...unit }) => unit),
       },
     },
     include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+  });
+
+  await syncProductSuppliers(tx, scope, createdProduct.id, {
+    supplierId: input.supplierId,
+    supplierIds: input.supplierIds ?? (optionalString(input.supplierId) ? [optionalString(input.supplierId)!] : []),
   });
 
   await seedDefaultWarehouseBalance(tx, createdProduct.id, tenant, warehouseId);
@@ -632,11 +770,12 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           sku: input.sku === undefined ? undefined : optionalString(input.sku),
           status: input.status,
           stockDisplayMode: input.stockDisplayMode,
-          supplierId: input.supplierId === undefined ? undefined : optionalString(input.supplierId),
           tags: input.tags,
         },
         where: { id: existing.id },
       });
+
+      await syncProductSuppliers(tx, scope, existing.id, input);
 
       if (input.units !== undefined) {
         const units = normalizedProductUnits(input.units, {
@@ -750,7 +889,16 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
       }
 
       const updatedProduct = await tx.product.findUniqueOrThrow({
-        include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+        include: {
+          brand: true,
+          category: true,
+          productSuppliers: {
+            include: { supplier: { select: { companyName: true, name: true } } },
+            orderBy: { createdAt: "asc" },
+          },
+          supplier: true,
+          units: { orderBy: { sortOrder: "asc" } },
+        },
         where: { id: existing.id },
       });
 
@@ -776,7 +924,10 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
       const existing = await tx.product.findFirstOrThrow({
-        include: { units: { orderBy: { sortOrder: "asc" } } },
+        include: {
+          productSuppliers: { orderBy: { createdAt: "asc" } },
+          units: { orderBy: { sortOrder: "asc" } },
+        },
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
       const timestamp = Date.now().toString().slice(-6);
@@ -799,7 +950,7 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
           sku: `COPY-${timestamp}`,
           status: "draft",
           stockDisplayMode: existing.stockDisplayMode,
-          supplierId: existing.supplierId,
+          supplierId: null,
           tags: existing.tags,
           units: {
             create: existing.units.map((unit: Record<string, any>) => ({
@@ -823,6 +974,14 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
           },
         },
         include: { brand: true, category: true, supplier: true, units: { orderBy: { sortOrder: "asc" } } },
+      });
+
+      const linkedSupplierIds = (existing.productSuppliers as Array<{ supplierId: string }>).map((row) => row.supplierId);
+      await syncProductSuppliers(tx, scope, duplicatedProduct.id, {
+        supplierId: existing.supplierId ?? undefined,
+        supplierIds: linkedSupplierIds.length > 0
+          ? linkedSupplierIds
+          : (existing.supplierId ? [existing.supplierId] : []),
       });
 
       if (scope.warehouseId) {
@@ -974,7 +1133,12 @@ export async function archivePrismaProduct(productId: string, tenant: TenantCont
   });
 }
 
-export async function deletePrismaProduct(productId: string, tenant: TenantContext) {
+export type ProductDeleteResult = {
+  deleteMode: "hard" | "soft";
+  product: ReturnType<typeof mapPrismaProduct>;
+};
+
+export async function deletePrismaProduct(productId: string, tenant: TenantContext): Promise<ProductDeleteResult> {
   let hardDeletedImages: { imageUrl?: string | null; units?: Array<{ imageUrl?: string | null }> } | null = null;
   const result = await withTenantTransaction({
     action: "delete",
@@ -988,7 +1152,6 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
           _count: {
             select: {
               adjustments: true,
-              balances: true,
               goodsReceiptItems: true,
               inventoryLots: true,
               movements: true,
@@ -996,28 +1159,34 @@ export async function deletePrismaProduct(productId: string, tenant: TenantConte
               saleItems: true,
             },
           },
+          balances: { select: { id: true, quantity: true } },
           units: { select: { imageUrl: true } },
         },
         where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
       });
-      const referenceCount = Object.values(existing._count as Record<string, number>).reduce(
-        (total, count) => total + count,
-        0,
-      );
+      const historicalReferenceCount = sumHistoricalProductRefs(existing._count as Record<string, number>);
+      const deleteMode = resolveProductDeleteMode({
+        balances: existing.balances,
+        historicalReferenceCount,
+      });
 
-      if (referenceCount > 0) {
+      if (deleteMode === "soft") {
         const archivedProduct = await tx.product.update({
           data: { isActive: false, status: "deleted" },
           where: { id: existing.id },
         });
 
-        return mapPrismaProduct(archivedProduct);
+        return { deleteMode, product: mapPrismaProduct(archivedProduct) } satisfies ProductDeleteResult;
+      }
+
+      if (existing.balances.length > 0) {
+        await tx.inventoryBalance.deleteMany({ where: { productId: existing.id } });
       }
 
       hardDeletedImages = { imageUrl: existing.imageUrl, units: existing.units };
       const deletedProduct = await tx.product.delete({ where: { id: existing.id } });
 
-      return mapPrismaProduct(deletedProduct);
+      return { deleteMode, product: mapPrismaProduct(deletedProduct) } satisfies ProductDeleteResult;
     },
   });
   if (hardDeletedImages) {
@@ -1040,6 +1209,12 @@ export async function upsertPrismaCategory(input: {
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
       const parentId = optionalString(input.parentId);
+      const nameLo = normalizeMasterName(input.nameLo);
+      const nameEn = normalizeMasterName(input.nameEn) || nameLo;
+      if (!nameLo) {
+        throw new Error("Category name is required.");
+      }
+
       if (input.id) {
         const existing = await tx.category.findFirstOrThrow({
           where: { companyId: tenant.companyId, id: input.id, ...branchOwnedWhere(scope) },
@@ -1049,8 +1224,8 @@ export async function upsertPrismaCategory(input: {
         }
         return tx.category.update({
           data: {
-            nameEn: optionalString(input.nameEn),
-            nameLo: stringValue(input.nameLo),
+            nameEn: nameEn || null,
+            nameLo,
             parentId,
           },
           where: { id: existing.id },
@@ -1061,15 +1236,68 @@ export async function upsertPrismaCategory(input: {
         await assertCategoryInBranch(tx, scope, parentId);
       }
 
+      // Reuse same company category when name matches ignoring case/spacing (company-level master data).
+      const siblings = await tx.category.findMany({
+        where: { companyId: tenant.companyId, parentId: null },
+        select: { id: true, nameEn: true, nameLo: true },
+      });
+      const duplicate = siblings.find((row: { nameEn?: string | null; nameLo: string }) => {
+        const lo = normalizeMasterName(row.nameLo).toLocaleLowerCase("en-US");
+        const en = normalizeMasterName(row.nameEn).toLocaleLowerCase("en-US");
+        const target = nameLo.toLocaleLowerCase("en-US");
+        return lo === target || (en && en === target);
+      });
+      if (duplicate) {
+        return tx.category.findFirstOrThrow({ where: { id: duplicate.id } });
+      }
+
       return tx.category.create({
-          data: {
-            branchId: scope.branchId,
-            companyId: tenant.companyId,
-            nameEn: optionalString(input.nameEn),
-            nameLo: stringValue(input.nameLo),
-            parentId,
-          },
+        data: {
+          branchId: scope.branchId,
+          companyId: tenant.companyId,
+          nameEn: nameEn || null,
+          nameLo,
+          parentId,
+        },
+      });
+    },
+  });
+}
+
+export async function upsertPrismaBrand(input: { id?: string; name: string }, tenant: TenantContext) {
+  return withTenantTransaction({
+    action: input.id ? "update" : "create",
+    module: "products",
+    newData: input,
+    tenant,
+    write: async (tx) => {
+      const name = normalizeMasterName(input.name);
+      if (!name) {
+        throw new Error("Brand name is required.");
+      }
+      if (input.id) {
+        const existing = await tx.brand.findFirstOrThrow({
+          where: { companyId: tenant.companyId, id: input.id },
         });
+        return tx.brand.update({
+          data: { name },
+          where: { id: existing.id },
+        });
+      }
+      const brands = await tx.brand.findMany({
+        where: { companyId: tenant.companyId },
+        select: { id: true, name: true },
+      });
+      const duplicate = brands.find((row: { name: string }) => normalizeMasterName(row.name).toLocaleLowerCase("en-US") === name.toLocaleLowerCase("en-US"));
+      if (duplicate) {
+        return tx.brand.findFirstOrThrow({ where: { id: duplicate.id } });
+      }
+      return tx.brand.create({
+        data: {
+          companyId: tenant.companyId,
+          name,
+        },
+      });
     },
   });
 }
@@ -1098,6 +1326,27 @@ export async function deletePrismaCategory(categoryId: string, tenant: TenantCon
       }
 
       return tx.category.delete({ where: { id: existing.id } });
+    },
+  });
+}
+
+export async function deletePrismaBrand(brandId: string, tenant: TenantContext) {
+  return withTenantTransaction({
+    action: "delete",
+    module: "products",
+    oldData: { brandId },
+    tenant,
+    write: async (tx) => {
+      const existing = await tx.brand.findFirstOrThrow({
+        include: { _count: { select: { products: true } } },
+        where: { companyId: tenant.companyId, id: brandId },
+      });
+
+      if (existing._count.products > 0) {
+        throw new Error("Brand cannot be deleted while products reference it. Rename instead, or remove the brand from those products first.");
+      }
+
+      return tx.brand.delete({ where: { id: existing.id } });
     },
   });
 }

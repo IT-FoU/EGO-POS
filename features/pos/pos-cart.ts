@@ -36,16 +36,36 @@ export function filterPosCatalogue(products: PosProduct[], query: string, catego
   });
 }
 
-export function findPosScanMatch(products: PosProduct[], rawQuery: string) {
+export function findPosScanMatch(products: PosProduct[], rawQuery: string): {
+  conflict?: boolean;
+  matches?: Array<{ product: PosProduct; unit: PosProductUnit }>;
+  product: PosProduct;
+  unit?: PosProductUnit;
+} | null {
   const normalized = rawQuery.trim();
   if (!normalized) return null;
 
   const lower = normalized.toLowerCase();
+  const unitMatches: Array<{ product: PosProduct; unit: PosProductUnit }> = [];
   for (const product of products) {
     const unit = (product.units ?? []).find((item) => item.barcode === normalized && item.status !== "inactive");
     if (unit) {
-      return { product, unit };
+      unitMatches.push({ product, unit });
     }
+  }
+  if (unitMatches.length > 1) {
+    return {
+      conflict: true,
+      matches: unitMatches,
+      product: unitMatches[0]!.product,
+      unit: unitMatches[0]!.unit,
+    };
+  }
+  if (unitMatches.length === 1) {
+    return unitMatches[0]!;
+  }
+
+  for (const product of products) {
     if (product.barcode === normalized) {
       return { product, unit: undefined };
     }
@@ -82,6 +102,13 @@ export function resolvePosSaleUnits(product: PosProduct): PosProductUnit[] {
   return units;
 }
 
+export function resolveUnitCardImageUrl(product: PosProduct, unit: PosProductUnit) {
+  if (isRenderableImageUrl(unit.imageUrl)) return unit.imageUrl;
+  if (isRenderableImageUrl(product.productImageUrl)) return product.productImageUrl;
+  if (isRenderableImageUrl(product.unitImageUrl)) return product.unitImageUrl;
+  return undefined;
+}
+
 export function productWithSaleUnit(product: PosProduct, unit: PosProductUnit): PosProduct {
   return {
     ...product,
@@ -90,9 +117,28 @@ export function productWithSaleUnit(product: PosProduct, unit: PosProductUnit): 
     costPriceLak: unit.costPriceLak,
     priceLak: unit.sellingPriceLak,
     unitId: unit.id,
-    unitImageUrl: isRenderableImageUrl(unit.imageUrl) ? unit.imageUrl : product.unitImageUrl,
+    unitImageUrl: resolveUnitCardImageUrl(product, unit),
     unitName: unit.unitName,
   };
+}
+
+/** Expand catalogue products into per-unit sellable cards (enabled/sellable units only). */
+export function expandPosSellableUnitCards(products: PosProduct[]): PosProduct[] {
+  const cards: PosProduct[] = [];
+  for (const product of products) {
+    const saleUnits = resolvePosSaleUnits(product);
+    for (const unit of saleUnits) {
+      cards.push(productWithSaleUnit(product, unit));
+    }
+  }
+  return cards;
+}
+
+export function projectPosCatalogueCards(
+  products: PosProduct[],
+  mode: "separate" | "combined",
+): PosProduct[] {
+  return mode === "separate" ? expandPosSellableUnitCards(products) : products;
 }
 
 export type AddPosCartResult = {

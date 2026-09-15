@@ -1,11 +1,15 @@
-import { cookies } from "next/headers";
+﻿import { cookies } from "next/headers";
 import { ProductForm } from "@/features/products/components/product-form";
 import {
+  getBrands,
   getCategories,
   getMockProductImages,
   getUnitPricingDefaults,
 } from "@/features/products/product-service";
+import { getSuppliers } from "@/features/suppliers/supplier-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
+
+export const dynamic = "force-dynamic";
 
 export default async function CreateProductPage({
   searchParams,
@@ -19,21 +23,25 @@ export default async function CreateProductPage({
   const sourceFlow = Array.isArray(fromParam) ? fromParam[0] : fromParam;
   const cookieStore = await cookies();
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  const [categories, images, pricingDefaults] = await Promise.all([
+  const [brands, categories, images, pricingDefaults, suppliers] = await Promise.all([
+    getBrands(),
     getCategories(),
     getMockProductImages(),
     getUnitPricingDefaults(),
+    getSuppliers(),
   ]);
 
   return (
     <ProductForm
       mode="create"
+      brands={brands}
       categories={categories}
       images={images}
       initialBarcode={initialBarcode}
       locale={locale}
       pricingDefaults={pricingDefaults}
       sourceFlow={sourceFlow}
+      suppliers={suppliers}
     />
   );
 }

@@ -1,4 +1,12 @@
 import type { UnitPricingMode } from "@/features/products/types";
+import {
+  applyHierarchyConversions,
+  isUnitEnabled,
+  type HierarchyUnit,
+} from "@/features/products/unit-hierarchy";
+import { toLakInteger } from "@/features/products/unit-pricing-math";
+
+export { conversionMillis, deriveSharedUnitCost, toLakInteger } from "@/features/products/unit-pricing-math";
 
 export const UNIT_ROUNDING_INCREMENTS = [0, 500, 1000] as const;
 export const PERSISTED_ROUNDING_INCREMENTS = [0, 500, 1000, 5000] as const;
@@ -6,53 +14,13 @@ export const PERSISTED_ROUNDING_INCREMENTS = [0, 500, 1000, 5000] as const;
 const MARKUP_SCALE = 1000n;
 const PERCENT_SCALE = 100n * MARKUP_SCALE;
 
-export type SharedStockUnit = {
+export type SharedStockUnit = HierarchyUnit & {
   addAmountLak?: number;
-  conversionQty: number;
-  costPriceLak?: number;
-  id?: string;
   markupPercent?: number;
   pricingMode?: UnitPricingMode;
   roundingLak?: number;
   sellingPriceLak: number;
 };
-
-export function toLakInteger(value: unknown) {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return 0;
-  return Math.trunc(parsed);
-}
-
-export function conversionMillis(value: unknown) {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0n;
-  return BigInt(Math.trunc(parsed * 1000 + 1e-9));
-}
-
-export function deriveSharedUnitCost(editedCostLak: number, editedConversion: number, targetConversion: number) {
-  const editedCost = toLakInteger(editedCostLak);
-  const from = conversionMillis(editedConversion);
-  const to = conversionMillis(targetConversion);
-  if (from <= 0n) return 0;
-  return Number((BigInt(editedCost) * to) / from);
-}
-
-export function syncSharedStockCosts<T extends SharedStockUnit>(units: T[], editedUnitId: string, nextCostLak: number): T[] {
-  const edited = units.find((unit) => unit.id === editedUnitId);
-  if (!edited) return units;
-  const editedConversion = Number(edited.conversionQty);
-  if (conversionMillis(editedConversion) <= 0n) return units;
-  const editedCost = toLakInteger(nextCostLak);
-  return units.map((unit) => {
-    if (unit.id === editedUnitId) {
-      return { ...unit, costPriceLak: editedCost };
-    }
-    return {
-      ...unit,
-      costPriceLak: deriveSharedUnitCost(editedCost, editedConversion, Number(unit.conversionQty)),
-    };
-  });
-}
 
 export function markupMillis(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -105,6 +73,7 @@ export function sellingPriceFromCost(input: {
 
 export function applyAutomaticSellingPrices<T extends SharedStockUnit>(units: T[]): T[] {
   return units.map((unit) => {
+    if (!isUnitEnabled(unit)) return unit;
     const nextPrice = sellingPriceFromCost(unit);
     if (nextPrice === undefined) return unit;
     return { ...unit, sellingPriceLak: nextPrice };
@@ -120,21 +89,34 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
   const current = input.units.find((unit) => unit.id === input.editedUnitId);
   if (!current) return input.units;
 
-  const nextConversion = input.patch.conversionQty === undefined ? Number(current.conversionQty) : Number(input.patch.conversionQty);
-  if (input.patch.conversionQty !== undefined && conversionMillis(nextConversion) <= 0n) {
+  const patch: Partial<T> = { ...input.patch };
+  if (patch.status === "inactive") {
+    const remainingEnabled = input.units.filter((unit) => unit.id !== input.editedUnitId && isUnitEnabled(unit));
+    if (remainingEnabled.length === 0) {
+      return input.units;
+    }
+  }
+
+  if (patch.conversionQty !== undefined && typeof patch.conversionQty !== "number") {
     return input.units;
   }
 
-  let nextUnits = input.units.map((unit) => unit.id === input.editedUnitId ? { ...unit, ...input.patch } : unit);
-
-  const costChanged = input.patch.costPriceLak !== undefined;
-  const conversionChanged = input.patch.conversionQty !== undefined;
-  if (input.shareStock && (costChanged || conversionChanged)) {
-    const anchor = nextUnits.find((unit) => unit.id === input.editedUnitId)!;
-    nextUnits = syncSharedStockCosts(nextUnits, anchor.id ?? input.editedUnitId, Number(anchor.costPriceLak ?? 0));
-  }
-
-  return applyAutomaticSellingPrices(nextUnits);
+  const nextUnits = input.units.map((unit) => unit.id === input.editedUnitId ? { ...unit, ...patch } : unit);
+  const normalized = applyHierarchyConversions(nextUnits);
+  const pricingChanged = [
+    "addAmountLak",
+    "costPriceLak",
+    "markupPercent",
+    "pricingMode",
+    "roundingLak",
+  ].some((key) => patch[key as keyof T] !== undefined);
+  if (!pricingChanged) return normalized;
+  return normalized.map((unit) => {
+    if (unit.id !== input.editedUnitId || !isUnitEnabled(unit)) return unit;
+    const nextPrice = sellingPriceFromCost(unit);
+    if (nextPrice === undefined) return unit;
+    return { ...unit, sellingPriceLak: nextPrice };
+  });
 }
 
 export function applyRoundingToAllUnits<T extends SharedStockUnit>(units: T[], roundingLak: number): T[] {

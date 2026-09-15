@@ -1,8 +1,9 @@
-import type { Category, MockProductImage, Product } from "@/features/products/types";
+import type { Brand, Category, MockProductImage, Product } from "@/features/products/types";
 import type { ProductListPage, ProductListQuery } from "@/features/products/list-query";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import {
+  getPrismaBrands,
   getPrismaCategories,
   getPrismaProductById,
   getPrismaProductImages,
@@ -26,6 +27,10 @@ export async function getProductById(productId: string): Promise<Product | null>
 
 export async function getCategories(): Promise<Category[]> {
   return getPrismaCategories(tenantFromSession(await requireSession()));
+}
+
+export async function getBrands(): Promise<Brand[]> {
+  return getPrismaBrands(tenantFromSession(await requireSession()));
 }
 
 export async function getUnitPricingDefaults(): Promise<UnitPricingDefaultsMap> {

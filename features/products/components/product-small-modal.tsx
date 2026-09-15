@@ -36,7 +36,11 @@ export function ProductSmallModal({
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // Focus the dialog shell once on mount. Do NOT depend on `onClose` — parents often pass
+  // inline lambdas that change every keystroke and would steal focus from inputs.
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
@@ -45,7 +49,7 @@ export function ProductSmallModal({
       if (event.key === "Escape" && closeOnEscape) {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     }
 
@@ -54,12 +58,12 @@ export function ProductSmallModal({
       window.removeEventListener("keydown", handleKeyDown);
       previous?.focus();
     };
-  }, [closeOnEscape, onClose]);
+  }, [closeOnEscape]);
 
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"
-      onClick={closeOnBackdrop ? onClose : undefined}
+      onClick={closeOnBackdrop ? () => onCloseRef.current() : undefined}
     >
       <section
         ref={dialogRef}
@@ -82,9 +86,9 @@ export function ProductSmallModal({
             ) : null}
           </div>
           <button
-            className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground"
+            className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:bg-card hover:text-foreground active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-40"
             type="button"
-            onClick={onClose}
+            onClick={() => onCloseRef.current()}
             aria-label={closeAriaLabel ?? tProducts("close", locale)}
           >
             <X className="size-4" aria-hidden="true" />

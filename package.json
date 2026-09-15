@@ -25,6 +25,12 @@
     "test:inventory-lots": "tsx scripts/phase-fix-03-inventory-lots-check.ts",
     "test:products-first-stock": "tsx scripts/phase-fix-05-products-first-stock-check.ts",
     "test:unit-pricing": "tsx scripts/phase-fix-23-shared-stock-pricing-check.ts",
+    "test:unit-hierarchy": "tsx scripts/phase-fix-25-unit-hierarchy-pricing-check.ts",
+    "test:unit-hierarchy-ui": "tsx scripts/phase-fix-26-unit-hierarchy-ui-check.ts",
+    "test:unit-pricing-v2": "tsx scripts/phase-fix-28-unit-pricing-v2-check.ts",
+    "test:product-save-ux": "tsx scripts/phase-fix-29-product-save-ux-check.ts",
+    "test:product-enter-delete": "tsx scripts/phase-fix-30-product-enter-delete-check.ts",
+    "test:last-unit-setup-pos-refresh": "tsx scripts/phase-fix-31-last-unit-setup-pos-refresh-check.ts",
     "test:pos-discovery": "tsx scripts/phase-fix-06-pos-discovery-cart-check.ts",
     "test:pos-catalogue-refresh": "tsx scripts/phase-fix-22-pos-catalogue-refresh-check.ts",
     "test:pos-checkout": "tsx scripts/phase-fix-07-pos-checkout-check.ts",
@@ -79,7 +85,9 @@
     "test:ui-11-pos-small-modal": "tsx scripts/phase-ui-11-pos-small-modal-geometry-check.ts",
     "test:ui-12-products-small-modal": "tsx scripts/phase-ui-12-products-small-modal-geometry-check.ts",
     "test:ui-13-small-modal-round1": "tsx scripts/phase-ui-13-small-modal-round1-check.ts",
-    "test:ui-14-small-modal-round2": "tsx scripts/phase-ui-14-small-modal-round2-check.ts"
+    "test:ui-14-small-modal-round2": "tsx scripts/phase-ui-14-small-modal-round2-check.ts",
+    "test:owner-pricing-qty-visibility": "tsx scripts/phase-form-32-owner-pricing-qty-visibility-check.ts",
+    "test:unit-image-assignment": "tsx scripts/phase-form-33-unit-image-assignment-check.ts"
   },
   "dependencies": {
     "@next/swc-wasm-nodejs": "^16.2.12",
