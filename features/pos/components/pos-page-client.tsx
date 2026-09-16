@@ -2073,6 +2073,11 @@ function InfoLine({ label, muted = false, strike = false, value }: {
       <div className={cn("truncate font-semibold", muted && "text-muted-foreground", strike && "line-through decoration-muted-foreground/70")}>{value}</div>
     </div>);
 }
+/** Lightweight contrast aid for product-card text over unknown photo backgrounds (no image analysis). */
+const productCardReadableTextShadow =
+    "[text-shadow:0_1px_2px_rgba(0,0,0,0.88),0_0_8px_rgba(0,0,0,0.45)]";
+const productCardPriceTextShadow =
+    "[text-shadow:0_1px_2px_rgba(0,0,0,0.75),0_0_6px_rgba(0,0,0,0.35)]";
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
     onToggleFavorite: () => void;
@@ -2100,13 +2105,14 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
         </button>
         <button className="relative min-h-[190px] w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} / ${product.sku}`}>
           <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
-          <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/90 via-black/75 to-black/10 p-3 pt-8 text-white backdrop-blur-[2px]">
-            <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={localizedProductName(product)}>{localizedProductName(product)}</div>
-            <div className="mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/70" title={product.sku}>{product.sku}</div>
+          {/* Subtle bottom scrim only — no large dark plate / blur. Text stays contrast-safe via soft shadow (no per-image analysis). */}
+          <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/50 via-black/20 to-transparent p-3 pt-12">
+            <div className={cn("line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white", productCardReadableTextShadow)} title={localizedProductName(product)}>{localizedProductName(product)}</div>
+            <div className={cn("mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/85", productCardReadableTextShadow)} title={product.sku}>{product.sku}</div>
             <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
               <div className="min-w-0 overflow-hidden">
-                <div className="truncate text-[16px] font-black leading-none text-primary" title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
-                <div className="mt-0.5 truncate text-[11px] font-semibold text-white/75" title={product.unitName}>{product.unitName}</div>
+                <div className={cn("truncate text-[16px] font-black leading-none text-primary", productCardPriceTextShadow)} title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+                <div className={cn("mt-0.5 truncate text-[11px] font-semibold text-white/85", productCardReadableTextShadow)} title={product.unitName}>{product.unitName}</div>
               </div>
               <StockBadge product={product} stockReferenceDate={stockReferenceDate}/>
             </div>
@@ -2130,7 +2136,7 @@ function StockBadge({ product, stockReferenceDate }: {
 }) {
     const warning = getStockWarning(product, stockReferenceDate);
     const label = warning ? stockWarningLabel(warning.tone) : fillPosCopy(t("ui.stock.left"), { qty: product.stockQty });
-    return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warning ? warningBadgeClass(warning.tone) : "bg-primary/20 text-primary")} title={label}>
+    return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warning ? warningBadgeClass(warning.tone) : "bg-emerald-500/25 text-emerald-800 dark:text-emerald-200")} title={label}>
       {label}
     </span>);
 }
