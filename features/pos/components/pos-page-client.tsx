@@ -2078,9 +2078,9 @@ const productCardReadableTextShadow =
     "[text-shadow:0_1px_2px_rgba(0,0,0,0.88),0_0_8px_rgba(0,0,0,0.45)]";
 const productCardPriceTextShadow =
     "[text-shadow:0_1px_2px_rgba(0,0,0,0.75),0_0_6px_rgba(0,0,0,0.35)]";
-/** Lightweight CSS adaptive: black base + mix-blend-mode difference produces light bg→dark text / dark bg→light text. */
+/** Lightweight CSS adaptive: white base + mix-blend-mode difference produces light bg→dark text / dark bg→light text. */
 const productCardAdaptiveName =
-    "text-black mix-blend-difference";
+    "text-white mix-blend-difference";
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
     onToggleFavorite: () => void;
@@ -2114,7 +2114,7 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
             <div className={cn("mt-1 max-w-full truncate font-mono text-[10px] font-semibold", productCardAdaptiveName)} title={product.sku}>{product.sku}</div>
             <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
               <div className="min-w-0 overflow-hidden">
-                <div className={cn("truncate text-[16px] font-black leading-none text-emerald-400 dark:text-emerald-300", productCardPriceTextShadow)} title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+                <div className={cn("truncate text-[16px] font-black leading-none text-emerald-600 dark:text-emerald-400", productCardPriceTextShadow)} title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
                 <div className={cn("mt-0.5 truncate text-[11px] font-semibold", productCardAdaptiveName)} title={product.unitName}>{product.unitName}</div>
               </div>
               <StockBadge product={product} stockReferenceDate={stockReferenceDate}/>
