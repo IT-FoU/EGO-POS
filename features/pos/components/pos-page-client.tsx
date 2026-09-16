@@ -2078,6 +2078,9 @@ const productCardReadableTextShadow =
     "[text-shadow:0_1px_2px_rgba(0,0,0,0.88),0_0_8px_rgba(0,0,0,0.45)]";
 const productCardPriceTextShadow =
     "[text-shadow:0_1px_2px_rgba(0,0,0,0.75),0_0_6px_rgba(0,0,0,0.35)]";
+/** Lightweight CSS adaptive: black base + mix-blend-mode difference produces light bg→dark text / dark bg→light text. */
+const productCardAdaptiveName =
+    "text-black mix-blend-difference";
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
     onToggleFavorite: () => void;
@@ -2106,13 +2109,13 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
         <button className="relative min-h-[190px] w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} / ${product.sku}`}>
           <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
           {/* Subtle bottom scrim only — no large dark plate / blur. Text stays contrast-safe via soft shadow (no per-image analysis). */}
-          <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/50 via-black/20 to-transparent p-3 pt-12">
-            <div className={cn("line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white", productCardReadableTextShadow)} title={localizedProductName(product)}>{localizedProductName(product)}</div>
-            <div className={cn("mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/85", productCardReadableTextShadow)} title={product.sku}>{product.sku}</div>
+          <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/60 via-black/30 to-transparent p-3 pt-12">
+            <div className={cn("line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug", productCardAdaptiveName)} title={localizedProductName(product)}>{localizedProductName(product)}</div>
+            <div className={cn("mt-1 max-w-full truncate font-mono text-[10px] font-semibold", productCardAdaptiveName)} title={product.sku}>{product.sku}</div>
             <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
               <div className="min-w-0 overflow-hidden">
-                <div className={cn("truncate text-[16px] font-black leading-none text-primary", productCardPriceTextShadow)} title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
-                <div className={cn("mt-0.5 truncate text-[11px] font-semibold text-white/85", productCardReadableTextShadow)} title={product.unitName}>{product.unitName}</div>
+                <div className={cn("truncate text-[16px] font-black leading-none text-emerald-400 dark:text-emerald-300", productCardPriceTextShadow)} title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+                <div className={cn("mt-0.5 truncate text-[11px] font-semibold", productCardAdaptiveName)} title={product.unitName}>{product.unitName}</div>
               </div>
               <StockBadge product={product} stockReferenceDate={stockReferenceDate}/>
             </div>
