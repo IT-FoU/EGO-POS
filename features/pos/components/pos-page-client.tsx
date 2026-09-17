@@ -2221,6 +2221,16 @@ function InfoLine({ label, muted = false, strike = false, value }: {
       <div className={cn("truncate font-semibold", muted && "text-muted-foreground", strike && "line-through decoration-muted-foreground/70")}>{value}</div>
     </div>);
 }
+/** Owner STEP 2 — floating labels (fixed contrast, CSS only). */
+const POS_CARD_PRICE_AVOCADO = "#56B203";
+const POS_CARD_STOCK_APPLE = "#BDB600";
+const posCardFloatingNameClass =
+  "text-white [paint-order:stroke_fill] [-webkit-text-stroke:0.35px_rgba(0,0,0,0.5)] [text-shadow:0_1px_2px_rgba(0,0,0,0.72),0_0_1px_rgba(0,0,0,0.85)]";
+const posCardFloatingUnitClass =
+  "text-white uppercase tracking-wide [paint-order:stroke_fill] [-webkit-text-stroke:0.3px_rgba(0,0,0,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.65)]";
+const posCardFloatingSkuClass =
+  "text-white/75 [text-shadow:0_1px_2px_rgba(0,0,0,0.55)] [-webkit-text-stroke:0.2px_rgba(0,0,0,0.35)]";
+
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
     onToggleFavorite: () => void;
@@ -2249,13 +2259,18 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
         </button>
         <button className="relative min-h-[190px] w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} — ${product.unitName} / ${product.sku}`}>
           <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
-          <div className="absolute inset-x-0 bottom-0 min-w-0 overflow-hidden bg-gradient-to-t from-black/90 via-black/75 to-black/10 p-3 pt-8 text-white backdrop-blur-[2px]">
-            <div className="line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug text-white" title={localizedProductName(product)}>{localizedProductName(product)}</div>
-            <div className="mt-1 inline-flex max-w-full items-center rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white" title={product.unitName}>{product.unitName}</div>
-            <div className="mt-1 max-w-full truncate font-mono text-[10px] font-semibold text-white/70" title={product.sku}>{product.sku}</div>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/20 to-transparent"/>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 min-w-0 p-3">
+            <div className={cn("line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug", posCardFloatingNameClass)} title={localizedProductName(product)}>{localizedProductName(product)}</div>
+            <div className={cn("mt-0.5 max-w-full truncate text-[11px] font-bold", posCardFloatingUnitClass)} title={product.unitName}>{product.unitName}</div>
+            <div className={cn("mt-0.5 max-w-full truncate font-mono text-[10px] font-semibold", posCardFloatingSkuClass)} title={product.sku}>{product.sku}</div>
             <div className="mt-2 flex min-w-0 items-end justify-between gap-2 overflow-hidden">
-              <div className="min-w-0 overflow-hidden">
-                <div className="truncate text-[16px] font-black leading-none text-primary" title={`${formatLak(product.priceLak)} LAK`}>{formatLak(product.priceLak)} LAK</div>
+              <div
+                className="min-w-0 truncate text-[17px] font-black leading-none [text-shadow:0_1px_2px_rgba(0,0,0,0.55),0_0_1px_rgba(0,0,0,0.4)]"
+                style={{ color: POS_CARD_PRICE_AVOCADO }}
+                title={`${formatLak(product.priceLak)} LAK`}
+              >
+                {formatLak(product.priceLak)} LAK
               </div>
               <StockBadge product={product} sellableQty={sellableQty} stockReferenceDate={stockReferenceDate}/>
             </div>
@@ -2281,7 +2296,16 @@ function StockBadge({ product, sellableQty, stockReferenceDate, }: {
     const warning = getStockWarning(product, stockReferenceDate);
     const available = sellableQty ?? maxSellQty(product.stockQty, product.conversionQty ?? 1);
     const label = warning ? stockWarningLabel(warning.tone) : fillPosCopy(t("ui.stock.left"), { qty: available });
-    return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warning ? warningBadgeClass(warning.tone) : "bg-primary/20 text-primary")} title={`${label} (${product.unitName})`}>
+    if (warning) {
+      return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm", warningBadgeClass(warning.tone))} title={`${label} (${product.unitName})`}>
+        {label}
+      </span>);
+    }
+    return (<span
+      className="max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full border border-black/10 bg-white/85 px-2 py-0.5 text-[10px] font-bold shadow-sm dark:border-white/15 dark:bg-white/12"
+      style={{ color: POS_CARD_STOCK_APPLE }}
+      title={`${label} (${product.unitName})`}
+    >
       {label}
     </span>);
 }
