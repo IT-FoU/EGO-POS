@@ -167,7 +167,7 @@ check("6. Manual Pack Selling Price fully editable", () => {
     units: trio(),
   });
   assert(next.find((row) => row.id === "pack")?.sellingPriceLak === 40000, "manual pack");
-  assert(productForm.includes('disabled={(unit.pricingMode ?? "manual") !== "manual"}'), "auto modes disable selling");
+  assert(productForm.includes('disabled={!enabled || (unit.pricingMode ?? "manual") !== "manual"}'), "auto modes disable selling");
   assert(productForm.includes('data-field="money-input"'), "draft money input");
 });
 

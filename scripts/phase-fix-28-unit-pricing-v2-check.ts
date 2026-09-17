@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+﻿import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   applyHierarchyConversions,
   applyPersistedHierarchyCosts,
+  hierarchyQtyEditor,
+  hierarchyRelationText,
   hydrateHierarchyQty,
   isActiveUnitQtyInvalid,
   isHierarchyQtyLocked,
@@ -19,7 +21,6 @@ import {
   qtyInputDisplay,
   qtyInputFromCommitted,
   simulateQtyClearThenType,
-  simulateQtyReplace,
 } from "../features/products/unit-qty-input";
 import { requiredBaseQty } from "../features/pos/pos-cart";
 
@@ -45,15 +46,15 @@ function unit(id: string, unitName: string, conversionQty: number, extra: Record
   return {
     addAmountLak: 0,
     conversionQty,
-    costPriceLak: extra.costPriceLak as number | undefined ?? 0,
+    costPriceLak: (extra.costPriceLak as number | undefined) ?? 0,
     id,
-    markupPercent: extra.markupPercent as number | undefined ?? 0,
+    markupPercent: (extra.markupPercent as number | undefined) ?? 0,
     pricingMode: (extra.pricingMode as "manual" | "cost_plus_percent" | "cost_plus_amount" | undefined) ?? "manual",
-    roundingLak: extra.roundingLak as number | undefined ?? 0,
-    sellingPriceLak: extra.sellingPriceLak as number | undefined ?? 0,
+    roundingLak: (extra.roundingLak as number | undefined) ?? 0,
+    sellingPriceLak: (extra.sellingPriceLak as number | undefined) ?? 0,
     status: (extra.status as "active" | "inactive" | undefined) ?? "active",
     unitName,
-    barcode: extra.barcode as string | undefined ?? "",
+    barcode: (extra.barcode as string | undefined) ?? "",
     ...extra,
   };
 }
@@ -66,119 +67,204 @@ const trio = () => [piece(), pack(6, 28000), box(60, 250000)];
 const root = process.cwd();
 const productForm = readFileSync(join(root, "features/products/components/product-form.tsx"), "utf8");
 const hierarchy = readFileSync(join(root, "features/products/unit-hierarchy.ts"), "utf8");
-const pricing = readFileSync(join(root, "features/products/unit-pricing.ts"), "utf8");
-const qtyInput = readFileSync(join(root, "features/products/unit-qty-input.ts"), "utf8");
-const prismaRepo = readFileSync(join(root, "features/products/prisma-repository.ts"), "utf8");
 const posCart = readFileSync(join(root, "features/pos/pos-cart.ts"), "utf8");
 const posRepo = readFileSync(join(root, "features/pos/prisma-repository.ts"), "utf8");
 const posClient = readFileSync(join(root, "features/pos/components/pos-page-client.tsx"), "utf8");
 
-check("source: no forced/locked 1 on QTY IN BASE path", () => {
-  assert(productForm.includes('{t("qtyInBase")}'), "QTY IN BASE missing");
-  assert(productForm.includes("HierarchyQtyField"), "draft field missing");
-  assert(productForm.includes("value={draft}"), "local draft missing");
-  assert(!productForm.includes("disabled readOnly value={1}"), "piece still locked at 1");
-  assert(!productForm.includes("isHierarchyQtyLocked(unit) ?"), "piece still branched as locked");
-  assert(!productForm.includes("parsePositiveIntQty(unit.conversionQty) ?? 1"), "input still coalesces to 1");
-  assert(!productForm.includes("isHierarchyQtyLocked(unit) ? 1"), "save still forces piece 1");
-  assert(!hierarchy.includes("return { ...unit, conversionQty: 1 }"), "hydrate still forces piece 1");
-  assert(!pricing.includes("isHierarchyQtyLocked(current)"), "patch still blocks piece qty");
-  assert(!pricing.includes("parsePositiveIntQty(patch.conversionQty) === null"), "patch still rejects 0");
-  assert(!prismaRepo.includes("Math.max(numberValue(unit.conversionQty, 1), 1)"), "repo still min-1");
-  assert(!qtyInput.includes("draft: undefined") || qtyInput.includes("state.draft"), "qty helper present");
-  assert(productForm.includes("qtyInBaseMustBePositive"), "save copy missing");
-  assert(productForm.includes("Number.isFinite(unit.conversionQty) ? unit.conversionQty : null"), "blank must stay blank");
-  assert(!productForm.includes("1 Box = ${qty} Packs") && !hierarchy.includes("1 Box = ${qty} Packs"), "pack hierarchy UI still present");
-  assert(!pricing.includes("deriveSharedUnitCost("), "pricing patch still derives cost");
+check("1. Piece locked to 1", () => {
+  const units = hydrateHierarchyQty(trio());
+  const pieceUnit = units.find((row) => row.id === "piece")!;
+  assert(isHierarchyQtyLocked(pieceUnit, units), "piece not locked");
+  assert(pieceUnit.conversionQty === 1 && pieceUnit.hierarchyQty === 1, "piece qty");
+  const editor = hierarchyQtyEditor(pieceUnit, units);
+  assert(editor.locked && editor.value === 1, JSON.stringify(editor));
+  assert(productForm.includes("disabled") && productForm.includes("readOnly") && productForm.includes("value={1}"), "form lock");
+  const patched = applyUnitPricingPatch({
+    editedUnitId: "piece",
+    patch: { conversionQty: 5, hierarchyQty: 5 },
+    shareStock: true,
+    units,
+  });
+  assert(patched.find((row) => row.id === "piece")?.conversionQty === 1, "piece patch blocked");
 });
 
-check("Piece: 1 → blank → 5 = 5", () => {
-  const typed = simulateQtyClearThenType(1, "5");
-  assert(typed.blank === "" && typed.committed === 5 && typed.display === "5", JSON.stringify(typed));
-  const next = applyUnitPricingPatch({ editedUnitId: "piece", patch: { conversionQty: 5 }, shareStock: true, units: trio() });
-  assert(next.find((row) => row.id === "piece")?.conversionQty === 5, "piece 5");
-  assert(isHierarchyQtyLocked(next.find((row) => row.id === "piece")!) === false, "piece unlocked");
+check("2. Stale Piece qty normalized to 1", () => {
+  const stored = hydrateHierarchyQty([piece(5), pack(6), box(60)]);
+  assert(stored.find((row) => row.id === "piece")?.conversionQty === 1, "stale 5 → 1");
+  assert(stored.find((row) => row.id === "piece")?.hierarchyQty === 1, "hierarchy 1");
 });
 
-check("Pack: 1 → blank → 6 = 6", () => {
-  const typed = simulateQtyClearThenType(1, "6");
-  assert(typed.blank === "" && typed.committed === 6 && typed.display === "6", JSON.stringify(typed));
+check("3. Pack enabled → Box relation = Packs", () => {
+  const units = hydrateHierarchyQty([piece(), pack(6), box(24)]);
+  const boxUnit = units.find((row) => row.id === "box")!;
+  assert(boxUnit.hierarchyQty === 4 && boxUnit.conversionQty === 24, JSON.stringify(boxUnit));
+  assert(hierarchyRelationText(boxUnit, units) === "1 Box = 4 Packs", hierarchyRelationText(boxUnit, units));
+  const editor = hierarchyQtyEditor(boxUnit, units);
+  assert(editor.prefix === "1 Box =" && editor.suffix === "Packs" && editor.value === 4, JSON.stringify(editor));
+  assert(productForm.includes('t("packsWord")') && productForm.includes('t("oneBoxEquals")'), "form labels");
 });
 
-check("Box: 1 → blank → 60 = 60", () => {
-  const typed = simulateQtyClearThenType(1, "60");
-  assert(typed.blank === "" && typed.committed === 60 && typed.display === "60", JSON.stringify(typed));
+check("4. Pack disabled → Box relation = Pieces", () => {
+  const start = hydrateHierarchyQty([piece(), pack(6), box(24)]);
+  const disabled = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { status: "inactive" },
+    shareStock: true,
+    units: start,
+  });
+  const boxUnit = disabled.find((row) => row.id === "box")!;
+  assert(boxUnit.conversionQty === 24, "stock pieces kept");
+  assert(hierarchyRelationText(boxUnit, disabled) === "1 Box = 24 Pieces", hierarchyRelationText(boxUnit, disabled));
+  const editor = hierarchyQtyEditor(boxUnit, disabled);
+  assert(editor.suffix === "Pieces" && editor.value === 24, JSON.stringify(editor));
 });
 
-check("Piece: 1 → 0 remains 0 while editing", () => {
-  const typed = onQtyInputChange(onQtyInputFocus(qtyInputFromCommitted(1)), "0");
-  assert(qtyInputDisplay(typed) === "0" && typed.committed === 0, JSON.stringify(typed));
-  const blurred = onQtyInputBlur(typed);
-  assert(qtyInputDisplay(blurred) === "0" && blurred.committed === 0, JSON.stringify(blurred));
+check("5. Hierarchy stock conversion remains correct", () => {
+  const units = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { hierarchyQty: 4 },
+    shareStock: true,
+    units: hydrateHierarchyQty([piece(), pack(6), box(60)]),
+  });
+  assert(units.find((row) => row.id === "pack")?.conversionQty === 6, "pack pieces");
+  assert(units.find((row) => row.id === "box")?.conversionQty === 24, "box = 4 packs * 6");
+  assert(requiredBaseQty(1, 1) === 1, "piece base");
+  assert(requiredBaseQty(1, 6) === 6, "pack base");
+  assert(requiredBaseQty(1, 24) === 24, "box base");
+  assert(requiredBaseQty(2, 24) === 48, "2 boxes");
+  assert(posRepo.includes("baseQuantity: quantity * conversionQty"), "POS sale conversion");
 });
 
-check("Pack: 12 → blank → 24 = 24", () => {
-  const typed = simulateQtyClearThenType(12, "24");
-  assert(typed.blank === "" && typed.committed === 24, JSON.stringify(typed));
-  const next = applyUnitPricingPatch({ editedUnitId: "pack", patch: { conversionQty: 24 }, shareStock: true, units: [piece(), pack(12), box(60)] });
-  assert(next.find((row) => row.id === "pack")?.conversionQty === 24, "pack 24");
-  assert(next.find((row) => row.id === "box")?.conversionQty === 60, "box unchanged");
+check("6. Rounding = ROUND UP / CEILING (Owner-confirmed final rule)", () => {
+  const ceil = (costPriceLak: number, roundingLak: number) => sellingPriceFromCost({
+    costPriceLak,
+    markupPercent: 0,
+    pricingMode: "cost_plus_percent",
+    roundingLak,
+  });
+  // Round up to 500
+  assert(ceil(12000, 500) === 12000, "500: 12000 -> 12000");
+  assert(ceil(12100, 500) === 12500, "500: 12100 -> 12500");
+  assert(ceil(12500, 500) === 12500, "500: 12500 -> 12500");
+  assert(ceil(12501, 500) === 13000, "500: 12501 -> 13000");
+  // Round up to 1,000
+  assert(ceil(12000, 1000) === 12000, "1000: 12000 -> 12000");
+  assert(ceil(12100, 1000) === 13000, "1000: 12100 -> 13000");
+  assert(ceil(12999, 1000) === 13000, "1000: 12999 -> 13000");
+  assert(ceil(13000, 1000) === 13000, "1000: 13000 -> 13000");
 });
 
-check("Box: 60 → blank → 120 = 120", () => {
-  const typed = simulateQtyClearThenType(60, "120");
-  assert(typed.blank === "" && typed.committed === 120, JSON.stringify(typed));
-  const next = applyUnitPricingPatch({ editedUnitId: "box", patch: { conversionQty: 120 }, shareStock: true, units: trio() });
-  assert(next.find((row) => row.id === "box")?.conversionQty === 120, "box 120");
+check("6b. Rounding copy uses 'Round up' terminology, not 'nearest', in Product form", () => {
+  assert(productForm.includes('t("noRounding")'), "None option present");
+  assert(productForm.includes('t("roundUp500")'), "Round up 500 option present");
+  assert(productForm.includes('t("roundUp1000")'), "Round up 1000 option present");
+  assert(!productForm.includes('t("round500")') && !productForm.includes('t("round1000")'), "no 'nearest'-worded rounding keys used in Product form");
 });
 
-check("Active unit Qty 0: Save blocked", () => {
-  const next = applyUnitPricingPatch({ editedUnitId: "piece", patch: { conversionQty: 0 }, shareStock: true, units: trio() });
-  assert(next.find((row) => row.id === "piece")?.conversionQty === 0, "state keeps 0");
-  assert(isActiveUnitQtyInvalid(next.find((row) => row.id === "piece")!), "save blocked");
-  assert(parseIntegerQty("0") === 0, "0 is visible integer");
-  assert(parsePositiveIntQty(0) === null, "0 is not a valid save qty");
+check("7. Disabled Pack/Box has no active pricing/cost controls", () => {
+  assert(productForm.includes("disabled={!enabled}"), "enabled gate present");
+  assert(productForm.includes('disabled={!enabled || (unit.pricingMode ?? "manual") !== "manual"}'), "selling gate");
+  assert(productForm.includes('disabled={!enabled || (unit.pricingMode ?? "manual") !== "cost_plus_percent"}'), "markup gate");
+  assert(productForm.includes('disabled={!enabled || (unit.pricingMode ?? "manual") !== "cost_plus_amount"}'), "amount gate");
+  const disabled = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { status: "inactive" },
+    shareStock: true,
+    units: trio(),
+  });
+  assert(!isUnitEnabled(disabled.find((row) => row.id === "box")!), "box inactive");
+  assert(posCart.includes('item.status !== "inactive"'), "pos-cart filters inactive");
+  assert(posClient.includes('unit.status !== "inactive"'), "POS client filters inactive");
 });
 
-check("Active unit blank: Save blocked", () => {
-  const blank = onQtyInputChange(onQtyInputFocus(qtyInputFromCommitted(1)), "");
-  assert(qtyInputDisplay(blank) === "" && blank.committed === null, JSON.stringify(blank));
-  const next = applyUnitPricingPatch({ editedUnitId: "pack", patch: { conversionQty: Number.NaN }, shareStock: true, units: trio() });
-  assert(Number.isNaN(next.find((row) => row.id === "pack")?.conversionQty as number), "blank stays NaN");
-  assert(isActiveUnitQtyInvalid(next.find((row) => row.id === "pack")!), "save blocked");
+check("8. Re-enable unit restores safely without corrupting other units", () => {
+  const disabled = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { status: "inactive" },
+    shareStock: true,
+    units: hydrateHierarchyQty(trio()),
+  });
+  const boxDisabled = disabled.find((row) => row.id === "box")!;
+  assert(boxDisabled.conversionQty === 60 && boxDisabled.costPriceLak === 250000, "retained");
+  const enabled = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { status: "active" },
+    shareStock: true,
+    units: disabled,
+  });
+  assert(enabled.find((row) => row.id === "box")?.conversionQty === 60, "restored qty");
+  assert(enabled.find((row) => row.id === "pack")?.conversionQty === 6, "pack untouched");
+  assert(enabled.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece cost untouched");
 });
 
-check("Inactive unit blank/0 is not save-blocked", () => {
-  const disabled = applyUnitPricingPatch({ editedUnitId: "box", patch: { status: "inactive" }, shareStock: true, units: trio() });
-  const zeroed = applyUnitPricingPatch({ editedUnitId: "box", patch: { conversionQty: 0 }, shareStock: true, units: disabled });
-  assert(!isActiveUnitQtyInvalid(zeroed.find((row) => row.id === "box")!), "inactive 0 allowed");
-  assert(zeroed.find((row) => row.id === "box")?.conversionQty === 0, "inactive keeps 0");
+check("9. Independent cost remains independent", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "piece",
+    patch: { costPriceLak: 8000 },
+    shareStock: true,
+    units: trio(),
+  });
+  assert(next.find((row) => row.id === "piece")?.costPriceLak === 8000, "piece cost");
+  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack not overwritten");
+  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box not overwritten");
+  const qtyOnly = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { hierarchyQty: 10 },
+    shareStock: true,
+    units: next,
+  });
+  assert(qtyOnly.find((row) => row.id === "pack")?.costPriceLak === 28000, "qty change keeps pack cost");
+  assert(qtyOnly.find((row) => row.id === "piece")?.costPriceLak === 8000, "piece cost kept");
 });
 
-check("Changing Qty does not change Cost", () => {
-  const next = applyUnitPricingPatch({ editedUnitId: "pack", patch: { conversionQty: 10 }, shareStock: true, units: trio() });
-  assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece cost");
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost");
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost");
+check("Pack editor: 1 Pack = N Pieces", () => {
+  const units = hydrateHierarchyQty([piece(), pack(6)]);
+  const packUnit = units.find((row) => row.id === "pack")!;
+  assert(hierarchyRelationText(packUnit, units) === "1 Pack = 6 Pieces", hierarchyRelationText(packUnit, units));
+  assert(hierarchyQtyEditor(packUnit, units).suffix === "Pieces", "pack suffix");
+});
+
+check("Toggle Pack updates Box relationship", () => {
+  const withPack = hydrateHierarchyQty([piece(), pack(6), box(24)]);
+  assert(hierarchyRelationText(withPack.find((row) => row.id === "box")!, withPack) === "1 Box = 4 Packs", "with pack");
+  const noPack = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { status: "inactive" },
+    shareStock: true,
+    units: withPack,
+  });
+  assert(hierarchyRelationText(noPack.find((row) => row.id === "box")!, noPack) === "1 Box = 24 Pieces", "without pack");
+  const restored = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { status: "active" },
+    shareStock: true,
+    units: noPack,
+  });
+  assert(hierarchyRelationText(restored.find((row) => row.id === "box")!, restored) === "1 Box = 4 Packs", "pack restored");
+  assert(restored.find((row) => row.id === "box")?.conversionQty === 24, "stock unchanged across toggle");
 });
 
 check("Changing Qty does not change Selling Price", () => {
-  const next = applyUnitPricingPatch({ editedUnitId: "box", patch: { conversionQty: 120 }, shareStock: true, units: trio() });
+  const next = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { hierarchyQty: 5 },
+    shareStock: true,
+    units: hydrateHierarchyQty(trio()),
+  });
   assert(next.find((row) => row.id === "piece")?.sellingPriceLak === 7000, "piece selling");
   assert(next.find((row) => row.id === "pack")?.sellingPriceLak === 30000, "pack selling");
   assert(next.find((row) => row.id === "box")?.sellingPriceLak === 260000, "box selling");
 });
 
-check("Pack Cost manual", () => {
-  const next = applyUnitPricingPatch({ editedUnitId: "pack", patch: { costPriceLak: 28000 }, shareStock: true, units: trio() });
+check("Pack/Box Cost manual", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { costPriceLak: 28000 },
+    shareStock: true,
+    units: trio(),
+  });
   assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack cost");
   assert(next.find((row) => row.id === "piece")?.costPriceLak === 5000, "piece not derived");
-});
-
-check("Box Cost manual", () => {
-  const next = applyUnitPricingPatch({ editedUnitId: "box", patch: { costPriceLak: 250000 }, shareStock: true, units: trio() });
-  assert(next.find((row) => row.id === "box")?.costPriceLak === 250000, "box cost");
-  assert(next.find((row) => row.id === "pack")?.costPriceLak === 28000, "pack not derived");
 });
 
 check("Piece/Pack/Box pricing uses own cost", () => {
@@ -187,30 +273,32 @@ check("Piece/Pack/Box pricing uses own cost", () => {
   assert(sellingPriceFromCost({ costPriceLak: 250000, pricingMode: "cost_plus_percent", markupPercent: 0 }) === 250000, "box");
 });
 
-check("Disabled Pack/Box not offered in POS", () => {
-  assert(posCart.includes('item.status !== "inactive"'), "pos-cart filters inactive");
-  assert(posClient.includes('unit.status !== "inactive"'), "POS client filters inactive");
-  const next = applyUnitPricingPatch({ editedUnitId: "box", patch: { status: "inactive" }, shareStock: true, units: trio() });
-  assert(!isUnitEnabled(next.find((row) => row.id === "box")!), "box inactive");
+check("Active Pack blank/0 blocked; inactive allowed", () => {
+  const blank = onQtyInputChange(onQtyInputFocus(qtyInputFromCommitted(6)), "");
+  assert(qtyInputDisplay(blank) === "" && blank.committed === null, JSON.stringify(blank));
+  const zeroPack = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { hierarchyQty: 0 },
+    shareStock: true,
+    units: trio(),
+  });
+  assert(isActiveUnitQtyInvalid(zeroPack.find((row) => row.id === "pack")!), "pack 0 blocked");
+  const disabled = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { status: "inactive" },
+    shareStock: true,
+    units: trio(),
+  });
+  const zeroed = applyUnitPricingPatch({
+    editedUnitId: "box",
+    patch: { conversionQty: 0 },
+    shareStock: true,
+    units: disabled,
+  });
+  assert(!isActiveUnitQtyInvalid(zeroed.find((row) => row.id === "box")!), "inactive 0 allowed");
 });
 
-check("Disabled unit data retained and restore", () => {
-  const disabled = applyUnitPricingPatch({ editedUnitId: "box", patch: { status: "inactive" }, shareStock: true, units: trio() });
-  const boxDisabled = disabled.find((row) => row.id === "box")!;
-  assert(boxDisabled.conversionQty === 60 && boxDisabled.costPriceLak === 250000, "retained");
-  const enabled = applyUnitPricingPatch({ editedUnitId: "box", patch: { status: "active" }, shareStock: true, units: disabled });
-  assert(enabled.find((row) => row.id === "box")?.conversionQty === 60, "restored");
-});
-
-check("POS stock formula unchanged", () => {
-  assert(requiredBaseQty(1, 1) === 1, "piece");
-  assert(requiredBaseQty(1, 6) === 6, "pack");
-  assert(requiredBaseQty(1, 60) === 60, "box");
-  assert(requiredBaseQty(2, 60) === 120, "2 boxes");
-  assert(posRepo.includes("baseQuantity: quantity * conversionQty"), "POS sale conversion");
-});
-
-check("Existing product 1/6/60 loads unchanged", () => {
+check("Existing product 1/6/60 loads with Pack-aware Box editor", () => {
   const stored = hydrateHierarchyQty([
     unit("piece", "Piece", 1, { costPriceLak: 8000, isBaseUnit: true }),
     unit("pack", "Pack", 6, { costPriceLak: 28000 }),
@@ -219,11 +307,7 @@ check("Existing product 1/6/60 loads unchanged", () => {
   assert(stored.find((row) => row.id === "piece")?.conversionQty === 1, "piece 1");
   assert(stored.find((row) => row.id === "pack")?.conversionQty === 6, "pack 6");
   assert(stored.find((row) => row.id === "box")?.conversionQty === 60, "box 60");
-});
-
-check("Hydrate does not rewrite Piece 5 to 1", () => {
-  const stored = hydrateHierarchyQty([piece(5), pack(6), box(60)]);
-  assert(stored.find((row) => row.id === "piece")?.conversionQty === 5, "piece stays 5");
+  assert(stored.find((row) => row.id === "box")?.hierarchyQty === 10, "box 10 packs");
 });
 
 check("Edit-open does not rewrite costs", () => {
@@ -244,9 +328,15 @@ check("Replace conversion draft never coalesces to 1", () => {
   assert(zero.draft === "0" && zero.committed === 0, JSON.stringify(zero));
 });
 
-check("No DB migration required", () => {
+check("No DB migration / no legacy 12/24 reseed", () => {
   assert(!productForm.includes("prisma migrate"), "form must not migrate");
-  assert(posCart.includes("requiredBaseQty"), "POS already uses conversionQty");
+  assert(!hierarchy.includes("conversionQty: 12") && !hierarchy.includes("conversionQty: 24"), "no 12/24 force");
+  assert(productForm.includes("conversionQty: 6") && productForm.includes("conversionQty: 60"), "defaults 6/60");
+});
+
+check("Cost + Amount still present", () => {
+  assert(productForm.includes('value="cost_plus_amount"'), "cost_plus_amount option");
+  assert(productForm.includes('t("costPlusAmount")'), "copy key");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

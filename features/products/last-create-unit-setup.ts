@@ -48,7 +48,7 @@ export function parseLastCreateUnitSetup(value: unknown): LastCreateUnitSetup | 
     units: {
       piece: {
         enabled: pieceRow.enabled !== false,
-        conversionQty: normalizeQty(pieceRow.conversionQty, 1),
+        conversionQty: 1,
       },
       pack: {
         enabled: packRow.enabled !== false,
@@ -93,7 +93,7 @@ export function extractLastCreateUnitSetupFromUnits(
     const fallbackQty = FALLBACK_LAST_CREATE_UNIT_SETUP.units[role].conversionQty;
     next.units[role] = {
       enabled: isUnitEnabled(unit),
-      conversionQty: normalizeQty(unit.conversionQty, fallbackQty),
+      conversionQty: role === "piece" ? 1 : normalizeQty(unit.conversionQty, fallbackQty),
     };
   }
   return next;
@@ -111,7 +111,7 @@ export function applyLastCreateUnitSetupToDefaults<T extends {
     const slot = setup.units[role];
     return {
       ...unit,
-      conversionQty: slot.conversionQty,
+      conversionQty: role === "piece" ? 1 : slot.conversionQty,
       status: slot.enabled ? "active" : "inactive",
     };
   });

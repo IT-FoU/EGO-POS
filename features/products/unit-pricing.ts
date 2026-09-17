@@ -1,7 +1,9 @@
 import type { UnitPricingMode } from "@/features/products/types";
 import {
   applyHierarchyConversions,
+  isHierarchyQtyLocked,
   isUnitEnabled,
+  unitRole,
   type HierarchyUnit,
 } from "@/features/products/unit-hierarchy";
 import { toLakInteger } from "@/features/products/unit-pricing-math";
@@ -97,12 +99,39 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
     }
   }
 
+  if (isHierarchyQtyLocked(current, input.units)) {
+    delete patch.conversionQty;
+    delete patch.hierarchyQty;
+  }
+
   if (patch.conversionQty !== undefined && typeof patch.conversionQty !== "number") {
     return input.units;
   }
+  if (patch.hierarchyQty !== undefined && typeof patch.hierarchyQty !== "number") {
+    return input.units;
+  }
 
-  const nextUnits = input.units.map((unit) => unit.id === input.editedUnitId ? { ...unit, ...patch } : unit);
-  const normalized = applyHierarchyConversions(nextUnits);
+  const packWasEnabled = input.units.some((unit) => unitRole(unit.unitName) === "pack" && isUnitEnabled(unit));
+  const nextUnits = input.units.map((unit) => {
+    if (unit.id !== input.editedUnitId) return unit;
+    const merged = { ...unit, ...patch };
+    // conversionQty-only edits must re-derive hierarchyQty from base pieces.
+    if (Object.prototype.hasOwnProperty.call(input.patch, "conversionQty")
+      && !Object.prototype.hasOwnProperty.call(input.patch, "hierarchyQty")) {
+      const { hierarchyQty: _dropped, ...rest } = merged;
+      return rest as T;
+    }
+    return merged;
+  });
+  const packIsEnabled = nextUnits.some((unit) => unitRole(unit.unitName) === "pack" && isUnitEnabled(unit));
+  const packToggleCleared = packWasEnabled === packIsEnabled
+    ? nextUnits
+    : nextUnits.map((unit) => {
+      if (unitRole(unit.unitName) !== "box") return unit;
+      const { hierarchyQty: _dropped, ...rest } = unit;
+      return rest as T;
+    });
+  const normalized = applyHierarchyConversions(packToggleCleared);
   const pricingChanged = [
     "addAmountLak",
     "costPriceLak",

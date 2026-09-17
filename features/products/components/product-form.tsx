@@ -27,7 +27,7 @@ import { ProductSmallModal } from "@/features/products/components/product-small-
 import { ThemedSelect } from "@/features/products/components/themed-select";
 import { BraveImageSearchBrowser } from "@/features/products/components/brave-image-search-browser";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
-import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
+import { applyHierarchyConversions, hierarchyQtyEditor, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isHierarchyQtyLocked, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
 import {
   formatMoneyDigits,
@@ -2049,49 +2049,75 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
           </tr>
         </thead>
         <tbody>
-          {units.map((unit) => (
-            <tr className="border-b border-border last:border-b-0" key={unit.id}>
+          {units.map((unit) => {
+            const enabled = isUnitEnabled(unit);
+            const qtyEditor = hierarchyQtyEditor(unit, units);
+            return (
+            <tr className="border-b border-border last:border-b-0" key={unit.id} data-unit-enabled={enabled ? "true" : "false"}>
               <td className="px-3 py-3">
-                <input aria-label={fillProductsCopy(t("enableNamedUnit"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={isUnitEnabled(unit)} onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
+                <input aria-label={fillProductsCopy(t("enableNamedUnit"), { name: unit.unitName ? displayProductUnitName(unit.unitName) : t("unit") })} type="checkbox" checked={enabled} onChange={(event) => updateUnit(unit.id, { status: event.target.checked ? "active" : "inactive" })}/>
               </td>
               <td className="px-3 py-3">
-                <input className="field-input h-10 min-w-32" value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
+                <input className="field-input h-10 min-w-32" disabled={!enabled} value={unit.unitName} onChange={(event) => updateUnit(unit.id, { unitName: event.target.value })}/>
               </td>
               <td className="px-3 py-3">
-                <HierarchyQtyField
-                  ariaLabel={t("qtyInBase")}
-                  committed={Number.isFinite(unit.conversionQty) ? unit.conversionQty : null}
-                  invalid={isActiveUnitQtyInvalid(unit)}
-                  onCommit={(qty) => updateUnit(unit.id, { conversionQty: qty })}
-                />
+                {qtyEditor.locked || isHierarchyQtyLocked(unit, units) ? (
+                  <div className="flex flex-col gap-1" data-field="qty-in-base-locked">
+                    <input
+                      aria-label={t("qtyInBase")}
+                      className="field-input h-10 w-24"
+                      data-field="qty-in-base"
+                      disabled
+                      readOnly
+                      type="text"
+                      value={1}
+                    />
+                    <span className="text-[11px] font-medium text-muted-foreground">{hierarchyRelationText(unit, units)}</span>
+                  </div>
+                ) : (
+                  <div className="flex min-w-40 flex-col gap-1">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                      <span>{qtyEditor.prefix === "1 Pack =" ? t("onePackEquals") : qtyEditor.prefix === "1 Box =" ? t("oneBoxEquals") : t("qtyInBase")}</span>
+                      <HierarchyQtyField
+                        ariaLabel={t("qtyInBase")}
+                        committed={qtyEditor.value}
+                        disabled={!enabled}
+                        invalid={isActiveUnitQtyInvalid(unit)}
+                        onCommit={(qty) => updateUnit(unit.id, { hierarchyQty: qty })}
+                      />
+                      <span>{qtyEditor.suffix === "Pieces" ? t("piecesWord") : qtyEditor.suffix === "Packs" ? t("packsWord") : null}</span>
+                    </div>
+                    <span className="text-[11px] font-medium text-muted-foreground">{hierarchyRelationText(unit, units)}</span>
+                  </div>
+                )}
               </td>
               <td className="px-3 py-3">
                 <div className="flex min-w-56 items-center gap-2">
-                  <input className="field-input h-10 min-w-36 font-mono" data-field="unit-barcode" value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
-                  <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary" type="button" onClick={() => onOpenAlias(unit.id)}>
+                  <input className="field-input h-10 min-w-36 font-mono" data-field="unit-barcode" disabled={!enabled} value={unit.barcode} onBlur={() => onCheckBarcode?.(unit.id, unit.barcode)} onChange={(event) => updateUnit(unit.id, { barcode: event.target.value })} placeholder={t("mainBarcodeShort")}/>
+                  <button className="inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border px-3 text-xs font-semibold transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-40" type="button" disabled={!enabled} onClick={() => onOpenAlias(unit.id)}>
                     {t("plusAlias")}
                   </button>
                   {(barcodeAliases[unit.id]?.length ?? 0) > 0 ? (<span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{(barcodeAliases[unit.id]?.length ?? 0) === 1 ? t("aliasCountOne") : fillProductsCopy(t("aliasCountMany"), { count: barcodeAliases[unit.id]?.length ?? 0 })}</span>) : null}
                 </div>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
+                <MoneyInput className="h-10 min-w-28" disabled={!enabled} value={unit.costPriceLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { costPriceLak: value })}/>
               </td>
               <td className="px-3 py-3">
-                <select className="field-input h-10 min-w-40" value={unit.pricingMode ?? "manual"} onChange={(event) => updateUnit(unit.id, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
+                <select className="field-input h-10 min-w-40" disabled={!enabled} value={unit.pricingMode ?? "manual"} onChange={(event) => updateUnit(unit.id, { pricingMode: event.target.value as ProductUnit["pricingMode"] })}>
                   <option value="manual">{t("manual")}</option>
                   <option value="cost_plus_percent">{t("costPlusPercent")}</option>
                   <option value="cost_plus_amount">{t("costPlusAmount")}</option>
                 </select>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-24" value={unit.markupPercent ?? 0} onValueChange={(value) => updateUnit(unit.id, { markupPercent: value })}/>
+                <MoneyInput className="h-10 min-w-24" disabled={!enabled || (unit.pricingMode ?? "manual") !== "cost_plus_percent"} value={unit.markupPercent ?? 0} onValueChange={(value) => updateUnit(unit.id, { markupPercent: value })}/>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" value={unit.addAmountLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { addAmountLak: value })}/>
+                <MoneyInput className="h-10 min-w-28" disabled={!enabled || (unit.pricingMode ?? "manual") !== "cost_plus_amount"} value={unit.addAmountLak ?? 0} onValueChange={(value) => updateUnit(unit.id, { addAmountLak: value })}/>
               </td>
               <td className="px-3 py-3">
-                <select className="field-input h-10 min-w-28" value={unit.roundingLak ?? 0} onChange={(event) => updateUnit(unit.id, { roundingLak: Number(event.target.value) })}>
+                <select className="field-input h-10 min-w-28" disabled={!enabled} value={unit.roundingLak ?? 0} onChange={(event) => updateUnit(unit.id, { roundingLak: Number(event.target.value) })}>
                   <option value={0}>{t("noRounding")}</option>
                   <option value={500}>{t("roundUp500")}</option>
                   <option value={1000}>{t("roundUp1000")}</option>
@@ -2099,11 +2125,10 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 </select>
               </td>
               <td className="px-3 py-3">
-                <MoneyInput className="h-10 min-w-28" disabled={(unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
+                <MoneyInput className="h-10 min-w-28" disabled={!enabled || (unit.pricingMode ?? "manual") !== "manual"} value={unit.sellingPriceLak} onValueChange={(value) => updateUnit(unit.id, { sellingPriceLak: value })}/>
               </td>
               <td className="px-3 py-3">
                 {(() => {
-                  const enabled = isUnitEnabled(unit);
                   const display = resolveUnitImageDisplay(unit, productImages, mainImage, {
                     allowMainFallback: false,
                     hideDisabledAssignment: true,
@@ -2138,16 +2163,16 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 })()}
               </td>
               <td className="px-3 py-3">
-                <input type="radio" checked={Boolean(unit.isBaseUnit)} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
+                <input type="radio" checked={Boolean(unit.isBaseUnit)} disabled={!enabled} onChange={() => updateUnit(unit.id, { isBaseUnit: true, isPurchaseUnit: true })} name="baseUnit"/>
               </td>
               <td className="px-3 py-3">
-                <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
+                <input type="radio" checked={Boolean(unit.isDefaultSaleUnit)} disabled={!enabled} onChange={() => updateUnit(unit.id, { isDefaultSaleUnit: true })} name="defaultSaleUnit"/>
               </td>
               <td className="px-3 py-3">
-                <input type="checkbox" checked={Boolean(unit.isPurchaseUnit)} onChange={(event) => updateUnit(unit.id, { isPurchaseUnit: event.target.checked })}/>
+                <input type="checkbox" checked={Boolean(unit.isPurchaseUnit)} disabled={!enabled} onChange={(event) => updateUnit(unit.id, { isPurchaseUnit: event.target.checked })}/>
               </td>
               <td className="px-3 py-3">
-                <input type="checkbox" checked={unit.allowManualUnitSelect ?? true} onChange={(event) => updateUnit(unit.id, { allowManualUnitSelect: event.target.checked })}/>
+                <input type="checkbox" checked={unit.allowManualUnitSelect ?? true} disabled={!enabled} onChange={(event) => updateUnit(unit.id, { allowManualUnitSelect: event.target.checked })}/>
               </td>
               <td className="px-3 py-3">
                 <select className="field-input h-10 min-w-28" value={unit.status ?? "active"} onChange={(event) => updateUnit(unit.id, { status: event.target.value as ProductUnit["status"] })}>
@@ -2161,7 +2186,8 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
                 </button>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
