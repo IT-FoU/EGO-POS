@@ -150,12 +150,16 @@ check(
   frame.includes(largeOverlay) &&
     frame.includes("lg:left-72") &&
     !frame.includes("fixed inset-0") &&
-    posClient.includes("return <PosWorkspaceModal onClose={onClose} title={title}>{children}</PosWorkspaceModal>;") &&
-    posClient.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>') &&
-    posClient.includes('<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title={t("ui.receipt.preview")}>') &&
+    posClient.includes("return <PosWorkspaceModal") &&
+    posClient.includes("title={title}>{children}</PosWorkspaceModal>;") &&
+    posClient.includes('title={t("ui.recent.sales")}') &&
+    posClient.includes('headerClassName="print:hidden"') &&
+    posClient.includes('title={t("ui.receipt.preview")}') &&
     ownShift.includes("<PosWorkspaceModal") &&
-    cashInOut.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.cash.in.cash.out")}>') &&
-    returnExchange.includes("<PosWorkspaceModal onClose={onClose} title={tPos(\"ui.return.exchange.void\")}>"),
+    cashInOut.includes('title={t("ui.cash.in.cash.out")}') &&
+    cashInOut.includes("<PosWorkspaceModal") &&
+    returnExchange.includes('title={tPos("ui.return.exchange.void")}') &&
+    returnExchange.includes("<PosWorkspaceModal"),
 );
 
 console.log("\nphase-ui-11-pos-small-modal-geometry-check: PASS");

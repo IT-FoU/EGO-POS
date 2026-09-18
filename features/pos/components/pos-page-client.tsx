@@ -1369,10 +1369,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }
     function openReturnExchange(tab: ReturnExchangeTab, sale?: DemoSaleRecord) {
         setRecentSalesOpen(false);
-        setMoreMenuOpen(false);
         setReturnExchangeTab(tab);
         setReturnExchangeSaleId(sale?.id);
         setReturnExchangeOpen(true);
+    }
+    function backFromMoreChild(closeChild: () => void) {
+        closeChild();
+        setMoreMenuOpen(true);
+    }
+    function closeMoreChild(closeChild: () => void) {
+        closeChild();
+        setMoreMenuOpen(false);
     }
     function refundSale(sale: DemoSaleRecord) {
         if (!demoMode && sale.id) {
@@ -2049,29 +2056,23 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             if (enforcePosAction("view_recent_sales")) {
                 refreshRecentSales();
                 setRecentSalesOpen(true);
-                setMoreMenuOpen(false);
             }
         }}/>
           <MoreMenuButton label={t("ui.hold.bills.resume.bills")} onClick={() => {
             void refreshHeldBillsFromServer();
             setHeldBillsOpen(true);
-            setMoreMenuOpen(false);
         }}/>
           <MoreMenuButton label={t("ui.unit.display")} onClick={() => {
             setUnitDisplayOpen(true);
-            setMoreMenuOpen(false);
         }}/>
           <MoreMenuButton label={t("ui.cash.shift.count")} onClick={() => {
             setCashShiftCountOpen(true);
-            setMoreMenuOpen(false);
         }}/>
           <MoreMenuButton label={t("ui.own.shift.report")} onClick={() => {
             setOwnShiftReportOpen(true);
-            setMoreMenuOpen(false);
         }}/>
           <MoreMenuButton label={t("ui.member.search")} onClick={() => {
             setMemberSearchOpen(true);
-            setMoreMenuOpen(false);
         }}/>
           <MoreMenuButton label={t("ui.refund.void")} onClick={() => {
             if (enforcePosAction("view_recent_sales")) {
@@ -2080,7 +2081,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }}/>
           <MoreMenuButton label={t("ui.cash.in.cash.out")} onClick={() => {
             setCashInOutOpen(true);
-            setMoreMenuOpen(false);
             void fetchCurrentCashSession().then(setActiveCashSession).catch(() => undefined);
         }}/>
           <MoreMenuButton label={t("ui.print.reprint.receipt")} onClick={() => {
@@ -2092,12 +2092,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 refreshRecentSales();
                 setRecentSalesOpen(true);
             }
-            setMoreMenuOpen(false);
         }}/>
         </div>
       </PosModal>) : null}
 
-      {unitDisplayOpen ? (<PosModal title={t("ui.unit.display")} onClose={() => setUnitDisplayOpen(false)}>
+      {unitDisplayOpen ? (<PosModal title={t("ui.unit.display")} onBack={() => backFromMoreChild(() => setUnitDisplayOpen(false))} onClose={() => closeMoreChild(() => setUnitDisplayOpen(false))}>
         <p className="text-sm text-muted-foreground">{t("ui.unit.display.hint")}</p>
         <div className="mt-4 grid gap-3" data-testid="pos-unit-display-mode">
           <button
@@ -2153,7 +2152,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         </div>)}
       </PosModal>) : null}
 
-      {heldBillsOpen ? (<PosModal title={t("ui.hold.bills.resume.bills")} onClose={() => setHeldBillsOpen(false)}>
+      {heldBillsOpen ? (<PosModal title={t("ui.hold.bills.resume.bills")} onBack={() => backFromMoreChild(() => setHeldBillsOpen(false))} onClose={() => closeMoreChild(() => setHeldBillsOpen(false))}>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <ActionButton icon={RotateCcw} label={heldBillsBusy ? t("ui.loading") : t("ui.resume.bills")} onClick={() => {
@@ -2194,7 +2193,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         </div>
       </PosModal>) : null}
 
-      {memberSearchOpen ? (<PosModal title={t("ui.member.search")} onClose={() => setMemberSearchOpen(false)}>
+      {memberSearchOpen ? (<PosModal title={t("ui.member.search")} onBack={() => backFromMoreChild(() => setMemberSearchOpen(false))} onClose={() => closeMoreChild(() => setMemberSearchOpen(false))}>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <input className="field-input h-11 text-sm" placeholder={t("ui.phone.name.or.member.no")} value={membershipQuery} onChange={(event) => setMembershipQuery(event.target.value)} onKeyDown={(event) => {
@@ -2219,7 +2218,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         </div>
       </PosModal>) : null}
 
-      {cashShiftCountOpen ? (<PosModal title={t("ui.cash.shift.count")} onClose={() => setCashShiftCountOpen(false)}>
+      {cashShiftCountOpen ? (<PosModal title={t("ui.cash.shift.count")} onBack={() => backFromMoreChild(() => setCashShiftCountOpen(false))} onClose={() => closeMoreChild(() => setCashShiftCountOpen(false))}>
         <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
       </PosModal>) : null}
 
@@ -2253,7 +2252,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setSaleCompletedReceipt(null);
         }}/>) : null}
 
-      {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onClose={() => setRecentSalesOpen(false)} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onExchange={(sale) => openReturnExchange("exchange", sale)} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
+      {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onBack={() => backFromMoreChild(() => setRecentSalesOpen(false))} onClose={() => closeMoreChild(() => setRecentSalesOpen(false))} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onExchange={(sale) => openReturnExchange("exchange", sale)} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
       {saleFieldPrompt ? (<div className="fixed inset-0 z-[70]">
         <PosSmallModal closeAriaLabel={t("ui.close")} closeOnBackdrop={false} closeOnEscape={true} footer={<div className="flex justify-end gap-2">
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSaleFieldPrompt(null)}>{t("ui.cancel")}</button>
@@ -2274,7 +2273,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           </Field>
         </PosSmallModal>
       </div>) : null}
-      {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onClose={() => setReturnExchangeOpen(false)} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
+      {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
       {cashInOutOpen ? (
@@ -2282,17 +2281,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           expectedCashLak={activeCashSession.status === "open" ? activeCashSession.expectedCashLak : 0}
           sessionOpen={activeCashSession.status === "open" && Boolean(activeCashSession.sessionId)}
           submitting={cashInOutBusy}
+          onBack={() => backFromMoreChild(() => setCashInOutOpen(false))}
           onClose={() => {
-            if (!cashInOutBusy) setCashInOutOpen(false);
+            if (!cashInOutBusy) closeMoreChild(() => setCashInOutOpen(false));
           }}
           onSubmit={(input) => submitCashMovement(input)}
         />
       ) : null}
-      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} onClose={() => setOwnShiftReportOpen(false)} /> : null}
+      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} onBack={() => backFromMoreChild(() => setOwnShiftReportOpen(false))} onClose={() => closeMoreChild(() => setOwnShiftReportOpen(false))} /> : null}
 
-      {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onClose={() => {
+      {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onBack={moreMenuOpen && !recentSalesOpen ? () => backFromMoreChild(() => { setReceiptOpen(false); setReceiptAutoPrint(false); }) : undefined} onClose={() => {
             setReceiptOpen(false);
             setReceiptAutoPrint(false);
+            if (!recentSalesOpen) setMoreMenuOpen(false);
         }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
     </div>);
 }
@@ -2303,12 +2304,14 @@ function Panel({ children, className, ref }: {
 }) {
     return <section ref={ref} className={cn("min-w-0 rounded-lg border border-border bg-card", className)}>{children}</section>;
 }
-function PosModal({ children, onClose, title }: {
+function PosModal({ children, headerActions, onBack, onClose, title }: {
     children: React.ReactNode;
+    headerActions?: React.ReactNode;
+    onBack?: () => void;
     onClose: () => void;
     title: string;
 }) {
-    return <PosWorkspaceModal onClose={onClose} title={title}>{children}</PosWorkspaceModal>;
+    return <PosWorkspaceModal headerActions={headerActions} onBack={onBack} onClose={onClose} title={title}>{children}</PosWorkspaceModal>;
 }
 function MoreMenuButton({ label, onClick }: {
     label: string;
@@ -3128,11 +3131,12 @@ function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, on
       </div>
     </PosModal>);
 }
-function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onExchange, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
+function RecentSalesModal({ currentRole, customEnd, customStart, filter, onBack, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onExchange, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
     currentRole: string;
     customEnd: string;
     customStart: string;
     filter: "today" | "yesterday" | "week" | "month" | "custom";
+    onBack?: () => void;
     onClose: () => void;
     onCustomEnd: (value: string) => void;
     onCustomStart: (value: string) => void;
@@ -3163,7 +3167,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
         { label: t("ui.this.month"), value: "month" },
         { label: t("ui.custom"), value: "custom" },
     ];
-    return (<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>
+    return (<PosWorkspaceModal onBack={onBack} onClose={onClose} title={t("ui.recent.sales")}>
         <p className="text-sm text-muted-foreground">{t("ui.search.or.select.sale")}</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
           <label className="relative block">
@@ -3243,7 +3247,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onClose
         </div>
     </PosWorkspaceModal>);
 }
-function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, onBack, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
     autoPrint?: boolean;
     branchName: string;
     cashierName: string;
@@ -3252,6 +3256,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     createdAt: string;
     customerName: string;
     discountTotal: number;
+    onBack?: () => void;
     onClose: () => void;
     onReprint: () => boolean;
     paidAmount: number;
@@ -3278,7 +3283,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     }, [autoPrint, autoPrintStarted, onReprint]);
     const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
     const receiptFooter = receiptSettings.receiptFooter || t("ui.thank.you");
-    return (<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title={t("ui.receipt.preview")}>
+    return (<PosWorkspaceModal headerClassName="print:hidden" onBack={onBack} onClose={onClose} title={t("ui.receipt.preview")}>
         <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
           <div className="text-center">
             <div className="text-lg font-bold">{receiptTitle}</div>

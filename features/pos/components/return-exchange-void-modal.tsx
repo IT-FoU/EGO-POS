@@ -22,6 +22,7 @@ export type ReturnExchangeTab = "return" | "exchange" | "void";
 type ReturnExchangeVoidModalProps = {
   initialSaleId?: string;
   initialTab?: ReturnExchangeTab;
+  onBack?: () => void;
   onClose: () => void;
   onCompleted: (message: string) => void;
 };
@@ -66,7 +67,7 @@ function emptyDraft(item: ReturnableSaleItem): DraftLine {
   };
 }
 
-export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", onClose, onCompleted }: ReturnExchangeVoidModalProps) {
+export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", onBack, onClose, onCompleted }: ReturnExchangeVoidModalProps) {
   const [tab, setTab] = useState<ReturnExchangeTab>(initialTab);
   const [search, setSearch] = useState("");
   const [sales, setSales] = useState<ReturnableSaleSnapshot[]>([]);
@@ -227,7 +228,7 @@ export function ReturnExchangeVoidModal({ initialSaleId, initialTab = "return", 
   }
 
   return (
-    <PosWorkspaceModal onClose={onClose} title={tPos("ui.return.exchange.void")}>
+    <PosWorkspaceModal onBack={onBack} onClose={onClose} title={tPos("ui.return.exchange.void")}>
       {receipt ? (
         <ReturnReceiptView receipt={receipt} onClose={onClose} />
       ) : (
