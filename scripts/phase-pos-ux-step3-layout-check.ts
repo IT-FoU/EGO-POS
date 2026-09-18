@@ -36,21 +36,24 @@ check("product grid width is independent of cartCollapsed", () => {
   )?.[1];
   assert(gridSection, "product grid section class not found");
   assert(!gridSection.includes("cartCollapsed"), "product grid must not branch on cartCollapsed");
-  assert(!gridSection.includes("xl:col-span-2"), "product grid must not span cart column");
+  assert(gridSection.includes("xl:col-span-2"), "product grid spans full width under toolbar row");
 });
 
-check("cart no longer reserves two-column product grid", () => {
+check("product grid spans full width on desktop", () => {
+  assert(client.includes("xl:col-span-2 xl:row-start-2"), "full-width product grid row");
   assert(
-    !client.includes("xl:grid-cols-[minmax(0,1fr)_420px]"),
-    "removed reserved cart column grid",
+    client.includes("xl:grid-cols-[minmax(0,1fr)_420px] xl:grid-rows-[auto_minmax(0,1fr)]"),
+    "toolbar/cart anchor row only",
   );
-  assert(!client.includes("xl:col-start-2 xl:row-start-1"), "removed cart grid placement hooks");
-  assert(!client.includes('productGridVisible && cartCollapsed ? "contents"'), "removed contents main hack");
 });
 
-check("cart uses desktop overlay positioning", () => {
-  assert(client.includes("xl:fixed"), "cart should use xl:fixed overlay");
-  assert(client.includes("xl:z-40"), "cart overlay z-index below modals");
+check("cart anchor stays in-flow (entire aside not fixed)", () => {
+  assert(!client.includes("xl:fixed"), "entire cart aside must not use xl:fixed");
+  assert(client.includes("xl:col-start-2 xl:row-start-1"), "cart anchor remains in layout grid");
+});
+
+check("expanded cart body uses overlay positioning on desktop", () => {
+  assert(client.includes("xl:absolute xl:top-full xl:right-0 xl:z-40"), "expanded body overlays products");
   assert(client.includes("xl:w-[420px]"), "xl cart width preserved");
   assert(client.includes("2xl:w-[460px]"), "2xl cart width preserved");
 });
@@ -61,6 +64,14 @@ check("product grid height stable when cart toggles", () => {
   )?.[1];
   assert(gridSection?.includes("max-h-[812px]"), "stable product grid max height expected");
   assert(!gridSection?.includes("max-h-[610px]"), "cart-dependent grid height removed");
+});
+
+check("six-column card price and stock remain visible", () => {
+  assert(client.includes("posCardFloatingPriceClass"), "price class present");
+  assert(client.includes("whitespace-nowrap"), "price keeps full LAK");
+  assert(client.includes("<StockBadge className=\"shrink-0\""), "stock badge stays on card row");
+  assert(client.includes("xl:text-[14px]"), "six-column price tuning");
+  assert(client.includes("xl:text-[10px]"), "six-column stock tuning");
 });
 
 check("STEP 2 ProductGridItem styling preserved", () => {
