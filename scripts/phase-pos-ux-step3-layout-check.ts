@@ -58,6 +58,34 @@ check("expanded cart body uses overlay positioning on desktop", () => {
   assert(client.includes("2xl:w-[460px]"), "2xl cart width preserved");
 });
 
+check("expanded cart overlay uses tall viewport-based height", () => {
+  assert(
+    client.includes("xl:h-[min(calc(100dvh-14rem),820px)]"),
+    "expanded body should keep original tall proportions within viewport",
+  );
+});
+
+check("dedicated cart item-list area exists and scrolls", () => {
+  assert(
+    client.includes('<div className={cn("min-h-0 flex-1 overflow-y-auto p-4"'),
+    "item-list region must be flex-1 min-h-0 overflow-y-auto",
+  );
+  assert(client.includes("max-xl:max-h-[360px]"), "tablet item-list keeps bounded scroll height");
+});
+
+check("empty cart shows large empty-state panel", () => {
+  assert(
+    client.includes('grid h-full min-h-64 place-items-center rounded-xl border border-dashed border-primary/30'),
+    "empty-state panel must fill item-list area",
+  );
+  assert(client.includes("ui.scan.or.search.product.to.start.sale"), "empty-state message preserved");
+});
+
+check("payment section sits outside item-list scroll and pay reachable", () => {
+  assert(client.includes('<div className="shrink-0 border-t border-border p-4">'), "payment section shrink-0 below list");
+  assert(client.includes('onClick={completeSale} disabled={isPending}'), "pay footer reachable");
+});
+
 check("product grid height stable when cart toggles", () => {
   const gridSection = client.match(
     /productGridVisible \? \(<section className="([^"]+)"/,
