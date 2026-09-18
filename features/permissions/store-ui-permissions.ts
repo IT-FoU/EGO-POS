@@ -25,6 +25,23 @@ export function canUseStoreAction(roleInput: StoreRoleInput, action: StoreAction
   return hasStorePermission(resolveStoreUiRole(roleInput), action);
 }
 
+/** True when cashier lacks elevated Return/Exchange/Void store actions and needs Manager/Owner PIN. */
+export function needsPostSaleManagerPin(
+  roleInput: StoreRoleInput,
+  action: "return" | "exchange" | "void",
+) {
+  if (resolveStoreUiRole(roleInput) !== STORE_ROLES.CASHIER) {
+    return false;
+  }
+  if (action === "void") {
+    return !canUseStoreAction(roleInput, STORE_ACTIONS.SALE_VOID);
+  }
+  return !(
+    canUseStoreAction(roleInput, STORE_ACTIONS.SALE_REFUND) &&
+    canUseStoreAction(roleInput, STORE_ACTIONS.PAYMENT_REFUND)
+  );
+}
+
 export function canUseAnyStoreAction(roleInput: StoreRoleInput, actions: StoreAction[]) {
   return actions.some((action) => canUseStoreAction(roleInput, action));
 }

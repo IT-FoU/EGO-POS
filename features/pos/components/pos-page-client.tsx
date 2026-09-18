@@ -2237,7 +2237,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         onViewReceipt={(sale) => openReceiptForSale(sale)}
         onVoid={voidSale}
       />) : null}
-      {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer({ append: false }); }}/>) : null}
+      {returnExchangeOpen ? (<ReturnExchangeVoidModal currentRole={posPermissionPolicy.role} initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer({ append: false }); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
       {cashInOutOpen ? (
