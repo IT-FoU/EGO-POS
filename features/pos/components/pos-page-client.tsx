@@ -71,6 +71,14 @@ import {
 import { CashInOutModal } from "@/features/pos/components/cash-in-out-modal";
 import { claimCashMovementSubmit, type CashMovementType } from "@/features/pos/cash-movement";
 import {
+  CASH_DENOMINATIONS_LAK,
+  denominationLineSubtotal,
+  emptyDenominationCounts,
+  sumDenominationCounts,
+  varianceKind,
+} from "@/features/cash-sessions/denominations";
+import { calculateVariance } from "@/features/cash-sessions/cash-session-calculator";
+import {
   fetchRecentSales,
   fetchSaleReceipt,
   type PostSaleManagerApprovalPayload,
@@ -109,7 +117,6 @@ import {
 } from "@/features/pos/permissions";
 import { STORE_ACTIONS, STORE_ROLES } from "@/features/permissions/store-permissions";
 import { canUseStoreAction, resolveStoreUiRole } from "@/features/permissions/store-ui-permissions";
-const OPENING_CASH_DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500] as const;
 const HYDRATION_SAFE_TIME = "--:--";
 const HYDRATION_SAFE_BUSINESS_DATE = "--";
 const HYDRATION_SAFE_REFERENCE_DATE = new Date("2026-06-20T00:00:00");
@@ -225,6 +232,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [cashInOutOpen, setCashInOutOpen] = useState(false);
     const [cashInOutBusy, setCashInOutBusy] = useState(false);
     const cashInOutInFlightRef = useRef(false);
+    const cashCloseInFlightRef = useRef(false);
     const [ownShiftReportEpoch, setOwnShiftReportEpoch] = useState(0);
     const [heldBillsOpen, setHeldBillsOpen] = useState(false);
     const [memberSearchOpen, setMemberSearchOpen] = useState(false);
@@ -252,19 +260,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [selectedHeldSaleId, setSelectedHeldSaleId] = useState("");
     const [heldBillsBusy, setHeldBillsBusy] = useState(false);
     const [heldBillConflict, setHeldBillConflict] = useState<HeldSale | null>(null);
-    const [selectedStaffName, setSelectedStaffName] = useState(cashierName || "Current User");
     const [activeCashSession, setActiveCashSession] = useState<PosCashSessionContext>(cashSession);
-    const [staffStatus, setStaffStatus] = useState(cashSession.status === "open" ? "Working" : "Not Started");
     const [staffControlExpanded, setStaffControlExpanded] = useState(true);
-    const [workStartedAt, setWorkStartedAt] = useState<Date | null>(
-        cashSession.status === "open" && cashSession.openedAt ? new Date(cashSession.openedAt) : null,
-    );
-    const [workEndedAt, setWorkEndedAt] = useState<Date | null>(null);
-    const [otStartedAt, setOtStartedAt] = useState<Date | null>(null);
-    const [otEndedAt, setOtEndedAt] = useState<Date | null>(null);
-    const [actualClosingCash, setActualClosingCash] = useState(0);
+    const [cashCloseBusy, setCashCloseBusy] = useState(false);
     const [closingSummaryVisible, setClosingSummaryVisible] = useState(false);
-    const [openingCashCounts, setOpeningCashCounts] = useState<Record<number, number>>(() => Object.fromEntries(OPENING_CASH_DENOMINATIONS.map((denomination) => [denomination, 0])));
+    const [lastCloseSummary, setLastCloseSummary] = useState<{
+        countedCashLak: number;
+        expectedCashLak: number;
+        varianceLak: number;
+    } | null>(null);
+    const [openingCashCounts, setOpeningCashCounts] = useState<Record<number, number>>(emptyDenominationCounts);
+    const [closingCashCounts, setClosingCashCounts] = useState<Record<number, number>>(emptyDenominationCounts);
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [lastReceipt, setLastReceipt] = useState<ReceiptSnapshot | null>(null);
     const [receiptAutoPrint, setReceiptAutoPrint] = useState(false);
@@ -331,10 +337,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setActiveCashSession(cashSession);
         if (cashSession.status === "open") {
-            setStaffStatus("Working");
-            setWorkStartedAt(cashSession.openedAt ? new Date(cashSession.openedAt) : null);
-            setWorkEndedAt(null);
             setClosingSummaryVisible(false);
+            setLastCloseSummary(null);
         }
     }, [cashSession]);
     useEffect(() => {
@@ -468,6 +472,22 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
     }, []);
     useEffect(() => {
+        if (!cashShiftCountOpen || demoMode) {
+            return;
+        }
+        let cancelled = false;
+        fetchCurrentCashSession()
+            .then((session) => {
+                if (!cancelled) {
+                    setActiveCashSession(session);
+                }
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, [cashShiftCountOpen, demoMode]);
+    useEffect(() => {
         const stored = window.localStorage.getItem(POS_PRODUCT_GRID_VISIBILITY_KEY);
         if (stored === "hidden") {
             setProductGridVisible(false);
@@ -498,11 +518,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         [productQuery, selectedCategory, unitDisplayMode, visibleProducts],
     );
     const selectedQrBank = availableQrBanks.find((bank) => bank.id === selectedQrBankId) ?? null;
-    const staffOptions = useMemo(() => Array.from(new Set([cashierName || "Cashier 1", "Manager", "Cashier 1", "Cashier 2", "Owner"])), [cashierName]);
     const activeCustomer = isMembershipActive(selectedCustomer) ? selectedCustomer : null;
-    const openingCashTotal = OPENING_CASH_DENOMINATIONS.reduce((total, denomination) => total + denomination * (openingCashCounts[denomination] ?? 0), 0);
-    const workHours = calculateHours(workStartedAt, workEndedAt);
-    const otHours = calculateHours(otStartedAt, otEndedAt);
+    const openingCashTotal = sumDenominationCounts(openingCashCounts);
+    const countedClosingCash = sumDenominationCounts(closingCashCounts);
     const subtotal = cartSubtotal(cartItems);
     const membershipSavings = cartItems.reduce((total, item) => total + Math.max(item.retailPriceLak - item.priceLak, 0) * item.quantity, 0);
     const promotionDiscountTotal = useMemo(() => {
@@ -568,10 +586,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const changeAmount = Math.max(paidAmount - totalAmount, 0);
     const dueAmount = Math.max(totalAmount - paidAmount, 0);
     const cashSales = activeCashSession.status === "open" ? activeCashSession.cashSalesLak : 0;
+    const cashInLak = activeCashSession.status === "open" ? activeCashSession.cashInLak : 0;
+    const cashOutLak = activeCashSession.status === "open" ? activeCashSession.cashOutLak : 0;
     const qrTransferSales = activeCashSession.status === "open" ? activeCashSession.nonCashSalesLak : qrAmount + transferAmount;
     const effectiveOpeningCash = activeCashSession.status === "open" ? activeCashSession.openingCashLak : openingCashTotal;
-    const expectedCash = activeCashSession.status === "open" ? activeCashSession.expectedCashLak : openingCashTotal;
-    const cashDifference = actualClosingCash - (activeCashSession.status === "open" ? activeCashSession.expectedCashLak : expectedCash);
+    const expectedCash = activeCashSession.status === "open"
+        ? activeCashSession.expectedCashLak
+        : lastCloseSummary?.expectedCashLak ?? openingCashTotal;
+    const actualClosingCash = activeCashSession.status === "open"
+        ? countedClosingCash
+        : lastCloseSummary?.countedCashLak ?? countedClosingCash;
+    const cashDifference = activeCashSession.status === "open"
+        ? calculateVariance(countedClosingCash, activeCashSession.expectedCashLak)
+        : lastCloseSummary?.varianceLak ?? calculateVariance(countedClosingCash, expectedCash);
     const appliedPromotions = useMemo(() => {
         const labels = cartItems
             .map((item) => item.pricingNote)
@@ -1599,25 +1626,37 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     function updateOpeningCashCount(denomination: number, quantity: number) {
         setOpeningCashCounts((current) => ({ ...current, [denomination]: Math.max(0, Math.floor(quantity)) }));
     }
-    function recordStartWork() {
+    function updateClosingCashCount(denomination: number, quantity: number) {
+        setClosingCashCounts((current) => ({ ...current, [denomination]: Math.max(0, Math.floor(quantity)) }));
+    }
+    function openCashShiftSession() {
         if (!enforcePosAction("cash_in", { amountLak: openingCashTotal, newValue: `${formatLak(openingCashTotal)} LAK` })) {
             return;
         }
         if (demoMode) {
-            setWorkStartedAt(new Date());
-            setWorkEndedAt(null);
-            setStaffStatus("Working");
             setClosingSummaryVisible(false);
+            setLastCloseSummary(null);
+            setActiveCashSession({
+                cashInLak: 0,
+                cashOutLak: 0,
+                cashSalesLak: 0,
+                expectedCashLak: openingCashTotal,
+                nonCashSalesLak: 0,
+                openedAt: new Date().toISOString(),
+                openingCashLak: openingCashTotal,
+                sessionId: "demo-cash-session",
+                status: "open",
+            });
+            setMessage(t("ui.cash.session.opened"));
             return;
         }
         startTransition(async () => {
             try {
                 const session = await openCashSessionRequest(openingCashTotal);
                 setActiveCashSession(session);
-                setWorkStartedAt(session.openedAt ? new Date(session.openedAt) : new Date());
-                setWorkEndedAt(null);
-                setStaffStatus("Working");
                 setClosingSummaryVisible(false);
+                setLastCloseSummary(null);
+                setClosingCashCounts(emptyDenominationCounts());
                 setMessage(t("ui.cash.session.opened"));
                 router.refresh();
             } catch (error) {
@@ -1625,33 +1664,54 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }
         });
     }
-    function recordEndWork() {
-        if (!enforcePosAction("cash_out", { amountLak: actualClosingCash, newValue: `${formatLak(actualClosingCash)} LAK` })) {
+    async function confirmClosingSummary() {
+        if (!claimCashMovementSubmit(cashCloseInFlightRef)) {
             return;
         }
-        if (!activeCashSession.sessionId) {
-            setMessage("No open cash session to close.");
-            return;
-        }
-        if (demoMode) {
-            setWorkEndedAt(new Date());
-            setStaffStatus("Closed");
-            setClosingSummaryVisible(true);
-            return;
-        }
-        startTransition(async () => {
-            try {
-                const session = await closeCashSessionRequest(activeCashSession.sessionId!, actualClosingCash);
-                setActiveCashSession(session);
-                setWorkEndedAt(new Date());
-                setStaffStatus("Closed");
-                setClosingSummaryVisible(true);
-                setMessage(fillPosCopy(t("ui.shift.closed"), { amount: formatLak(session.expectedCashLak - actualClosingCash) }));
-                router.refresh();
-            } catch (error) {
-                setMessage(error instanceof Error ? error.message : t("ui.cash.session.close.failed"));
+        setCashCloseBusy(true);
+        try {
+            if (!enforcePosAction("cash_out", { amountLak: countedClosingCash, newValue: `${formatLak(countedClosingCash)} LAK` })) {
+                return;
             }
-        });
+            if (!activeCashSession.sessionId || activeCashSession.status !== "open") {
+                setMessage(t("ui.no.open.cash.session.to.close"));
+                return;
+            }
+            if (demoMode) {
+                const varianceLak = calculateVariance(countedClosingCash, activeCashSession.expectedCashLak);
+                setLastCloseSummary({
+                    countedCashLak: countedClosingCash,
+                    expectedCashLak: activeCashSession.expectedCashLak,
+                    varianceLak,
+                });
+                setActiveCashSession({
+                    ...activeCashSession,
+                    sessionId: null,
+                    status: "closed",
+                });
+                setClosingSummaryVisible(true);
+                setMessage(fillPosCopy(t("ui.shift.closed"), { amount: formatLak(varianceLak) }));
+                return;
+            }
+            const sessionId = activeCashSession.sessionId;
+            const closed = await closeCashSessionRequest(sessionId, countedClosingCash);
+            setActiveCashSession(closed);
+            setLastCloseSummary({
+                countedCashLak: closed.countedCashLak,
+                expectedCashLak: closed.expectedCashLak,
+                varianceLak: closed.varianceLak,
+            });
+            setClosingSummaryVisible(true);
+            setOwnShiftReportEpoch((current) => current + 1);
+            setMessage(fillPosCopy(t("ui.shift.closed"), { amount: formatLak(closed.varianceLak) }));
+            router.refresh();
+        } catch (error) {
+            setMessage(error instanceof Error ? error.message : t("ui.cash.session.close.failed"));
+            await fetchCurrentCashSession().then(setActiveCashSession).catch(() => undefined);
+        } finally {
+            cashCloseInFlightRef.current = false;
+            setCashCloseBusy(false);
+        }
     }
     async function submitCashMovement(input: { amountLak: number; reason: string; type: CashMovementType }) {
         if (!claimCashMovementSubmit(cashInOutInFlightRef)) {
@@ -1689,15 +1749,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             cashInOutInFlightRef.current = false;
             setCashInOutBusy(false);
         }
-    }
-    function recordStartOt() {
-        setOtStartedAt(new Date());
-        setOtEndedAt(null);
-        setStaffStatus("OT");
-    }
-    function recordEndOt() {
-        setOtEndedAt(new Date());
-        setStaffStatus(workEndedAt ? "Closed" : "Working");
     }
     function selectPaymentMode(nextMode: PaymentMode) {
         if (nextMode === "mixed" && !enforcePosAction("split_payment")) {
@@ -1813,16 +1864,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         if (action === "cash_in") {
-            setWorkStartedAt(new Date());
-            setWorkEndedAt(null);
-            setStaffStatus("Working");
             setClosingSummaryVisible(false);
             setMessage(`Cash in recorded${suffix}.`);
             return;
         }
         if (action === "cash_out") {
-            setWorkEndedAt(new Date());
-            setStaffStatus("Closed");
             setClosingSummaryVisible(true);
             setMessage(`Cash out recorded${suffix}.`);
             return;
@@ -2219,7 +2265,28 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       </PosModal>) : null}
 
       {cashShiftCountOpen ? (<PosModal title={t("ui.cash.shift.count")} onBack={() => backFromMoreChild(() => setCashShiftCountOpen(false))} onClose={() => closeMoreChild(() => setCashShiftCountOpen(false))}>
-        <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
+        <StaffControl
+          businessDate={businessDate}
+          cashCloseBusy={cashCloseBusy}
+          cashDifference={cashDifference}
+          cashInLak={cashInLak}
+          cashOutLak={cashOutLak}
+          cashSales={cashSales}
+          closingCashCounts={closingCashCounts}
+          closingSummaryVisible={closingSummaryVisible}
+          countedCash={actualClosingCash}
+          expanded={staffControlExpanded}
+          expectedCash={expectedCash}
+          openingCashCounts={openingCashCounts}
+          openingCashTotal={effectiveOpeningCash}
+          qrTransferSales={qrTransferSales}
+          sessionStatus={activeCashSession.status}
+          onConfirmClosing={confirmClosingSummary}
+          onOpenSession={openCashShiftSession}
+          onToggleExpanded={() => setStaffControlExpanded((current) => !current)}
+          onUpdateClosingCashCount={updateClosingCashCount}
+          onUpdateOpeningCashCount={updateOpeningCashCount}
+        />
       </PosModal>) : null}
 
       {unitSelectionProduct ? (<UnitSelectorModal overlayClassName={favoritesOpen ? "z-[70]" : undefined} product={unitSelectionProduct} onClose={() => {
@@ -2659,39 +2726,62 @@ function Metric({ label, value }: {
       <dd className="mt-1 text-sm font-semibold">{value}</dd>
     </div>);
 }
-function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSales, closingSummaryVisible, expanded, expectedCash, openingCashCounts, openingCashTotal, onEndOt, onEndWork, onSetActualClosingCash, onSelectStaff, onStartOt, onStartWork, onToggleExpanded, onUpdateOpeningCashCount, otEndedAt, otHours, otStartedAt, selectedStaffName, staffOptions, staffStatus, workEndedAt, workHours, workStartedAt, qrTransferSales, }: {
-    actualClosingCash: number;
-    businessDate: string;
-    cashDifference: number;
-    cashSales: number;
-    closingSummaryVisible: boolean;
-    expanded: boolean;
-    expectedCash: number;
-    openingCashCounts: Record<number, number>;
-    openingCashTotal: number;
-    otEndedAt: Date | null;
-    otHours: number;
-    otStartedAt: Date | null;
-    selectedStaffName: string;
-    staffOptions: string[];
-    staffStatus: string;
-    workEndedAt: Date | null;
-    workHours: number;
-    workStartedAt: Date | null;
-    onEndOt: () => void;
-    onEndWork: () => void;
-    onSetActualClosingCash: (value: number) => void;
-    onSelectStaff: (staffName: string) => void;
-    onStartOt: () => void;
-    onStartWork: () => void;
-    onToggleExpanded: () => void;
-    onUpdateOpeningCashCount: (denomination: number, quantity: number) => void;
-    qrTransferSales: number;
+function StaffControl({
+  businessDate,
+  cashCloseBusy,
+  cashDifference,
+  cashInLak,
+  cashOutLak,
+  cashSales,
+  closingCashCounts,
+  closingSummaryVisible,
+  countedCash,
+  expanded,
+  expectedCash,
+  openingCashCounts,
+  openingCashTotal,
+  onConfirmClosing,
+  onOpenSession,
+  onToggleExpanded,
+  onUpdateClosingCashCount,
+  onUpdateOpeningCashCount,
+  qrTransferSales,
+  sessionStatus,
+}: {
+  businessDate: string;
+  cashCloseBusy: boolean;
+  cashDifference: number;
+  cashInLak: number;
+  cashOutLak: number;
+  cashSales: number;
+  closingCashCounts: Record<number, number>;
+  closingSummaryVisible: boolean;
+  countedCash: number;
+  expanded: boolean;
+  expectedCash: number;
+  openingCashCounts: Record<number, number>;
+  openingCashTotal: number;
+  onConfirmClosing: () => void;
+  onOpenSession: () => void;
+  onToggleExpanded: () => void;
+  onUpdateClosingCashCount: (denomination: number, quantity: number) => void;
+  onUpdateOpeningCashCount: (denomination: number, quantity: number) => void;
+  qrTransferSales: number;
+  sessionStatus: "closed" | "not_started" | "open";
 }) {
-    const CollapseIcon = expanded ? ChevronUp : ChevronDown;
-    const isWorking = staffStatus === "Working";
-    const isOt = staffStatus === "OT";
-    return (<section className="min-w-0 scroll-mt-24 rounded-lg border border-border bg-card p-3" id="staff-control">
+  const CollapseIcon = expanded ? ChevronUp : ChevronDown;
+  const sessionOpen = sessionStatus === "open";
+  const variance = varianceKind(cashDifference);
+  const varianceLabel =
+    variance === "exact" ? t("ui.exact") : variance === "over" ? t("ui.over") : t("ui.short");
+  const statusLabel =
+    sessionStatus === "open"
+      ? t("ui.session.open")
+      : sessionStatus === "closed"
+        ? t("ui.session.closed")
+        : t("ui.staff.not.started");
+  return (
+    <section className="min-w-0 scroll-mt-24 rounded-lg border border-border bg-card p-3" data-testid="cash-shift-count" id="staff-control">
       <button className="flex w-full items-center justify-between gap-3 text-left" type="button" onClick={onToggleExpanded} aria-expanded={expanded}>
         <div className="flex min-w-0 items-center gap-2">
           <CalendarDays className="size-4 shrink-0 text-primary" aria-hidden="true"/>
@@ -2700,108 +2790,123 @@ function StaffControl({ actualClosingCash, businessDate, cashDifference, cashSal
               <h3 className="text-sm font-semibold">{t("ui.cash.shift.count")}</h3>
               <span className="text-muted-foreground">|</span>
               <span className="text-muted-foreground">{businessDate}</span>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", staffStatusClassName(staffStatus))}>{staffStatusLabel(staffStatus)}</span>
-            </div>
-            <div className="mt-1 text-[11px] font-semibold text-muted-foreground">
-              {fillPosCopy(t("ui.work.ot"), { work: workHours.toFixed(2), ot: otHours.toFixed(2) })}
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", sessionStatusClassName(sessionStatus))}>{statusLabel}</span>
             </div>
           </div>
         </div>
         <CollapseIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
       </button>
 
-      {!expanded ? null : (<>
+      {!expanded ? null : (
+        <>
           <div className="mt-3 rounded-md border border-[#FFD700]/35 bg-[#FFD700]/10 p-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#FFD700]">Opening Cash Total</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#FFD700]">{t("ui.opening.cash.total")}</div>
             <div className="mt-1 text-2xl font-black leading-none text-[#FFD700]">{formatLak(openingCashTotal)} LAK</div>
           </div>
 
-          <label className="mt-3 grid gap-1 text-xs font-semibold">
-            {t("ui.staff")}
-            <select className="field-input h-9 text-xs" value={selectedStaffName} onChange={(event) => onSelectStaff(event.target.value)}>
-              {staffOptions.map((staffName) => (<option key={staffName} value={staffName}>
-                  {staffName}
-                </option>))}
-            </select>
-          </label>
-
-          <div className="mt-2 grid grid-cols-2 gap-1">
-            <StaffButton active={isWorking} tone="success" label={t("ui.start.work")} onClick={onStartWork}/>
-            <StaffButton label={t("ui.end.work")} onClick={onEndWork}/>
-            <StaffButton active={isOt} tone="warning" label={t("ui.start.ot")} onClick={onStartOt}/>
-            <StaffButton label={t("ui.end.ot")} onClick={onEndOt}/>
-          </div>
-
-          <div className="mt-2 grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-2 text-[11px]">
-            <StaffTime label={t("ui.start.work")} value={formatStaffTime(workStartedAt)}/>
-            <StaffTime label={t("ui.end.work")} value={formatStaffTime(workEndedAt)}/>
-            <StaffTime label={t("ui.start.ot")} value={formatStaffTime(otStartedAt)}/>
-            <StaffTime label={t("ui.end.ot")} value={formatStaffTime(otEndedAt)}/>
-            <StaffTime label={t("ui.work.hours")} value={workHours.toFixed(2)} strong/>
-            <StaffTime label={t("ui.ot.hours")} value={otHours.toFixed(2)} strong/>
-          </div>
-
-          <div className="mt-2 rounded-md border border-border bg-background p-2">
-            <div className="mb-2 text-xs font-semibold">
-              <span>{t("ui.opening.cash.count")}</span>
+          {!sessionOpen ? (
+            <>
+              <div className="mt-2 rounded-md border border-border bg-background p-2">
+                <div className="mb-2 text-xs font-semibold">{t("ui.opening.cash.count")}</div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {CASH_DENOMINATIONS_LAK.map((denomination) => {
+                    const qty = openingCashCounts[denomination] ?? 0;
+                    const line = denominationLineSubtotal(denomination, qty);
+                    return (
+                      <label className="grid grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-2 text-[11px]" key={`open-${denomination}`}>
+                        <span className="font-semibold">{formatLak(denomination)}</span>
+                        <PosNumberInput
+                          className="h-8 min-w-0 rounded-md border border-border bg-card px-1 text-center text-[11px] font-semibold outline-none transition focus:border-primary"
+                          data-testid={`opening-denom-${denomination}`}
+                          min={0}
+                          value={qty}
+                          onValueChange={(value) => onUpdateOpeningCashCount(denomination, value)}
+                        />
+                        <span className="min-w-[4.5rem] text-right font-semibold text-muted-foreground">{formatLak(line)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                className="mt-2 h-9 w-full rounded-md border border-success/40 bg-success/10 text-xs font-semibold text-success transition hover:bg-success hover:text-white disabled:opacity-50"
+                data-testid="open-cash-session"
+                type="button"
+                onClick={onOpenSession}
+              >
+                {t("ui.start.work")}
+              </button>
+            </>
+          ) : (
+            <div className="mt-2 rounded-md border border-border bg-background p-2">
+              <div className="mb-2 text-xs font-semibold">{t("ui.closing.cash.count")}</div>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {CASH_DENOMINATIONS_LAK.map((denomination) => {
+                  const qty = closingCashCounts[denomination] ?? 0;
+                  const line = denominationLineSubtotal(denomination, qty);
+                  return (
+                    <label className="grid grid-cols-[58px_minmax(0,1fr)_auto] items-center gap-2 text-[11px]" key={`close-${denomination}`}>
+                      <span className="font-semibold">{formatLak(denomination)}</span>
+                      <PosNumberInput
+                        className="h-8 min-w-0 rounded-md border border-border bg-card px-1 text-center text-[11px] font-semibold outline-none transition focus:border-primary"
+                        data-testid={`closing-denom-${denomination}`}
+                        min={0}
+                        value={qty}
+                        onValueChange={(value) => onUpdateClosingCashCount(denomination, value)}
+                      />
+                      <span className="min-w-[4.5rem] text-right font-semibold text-muted-foreground">{formatLak(line)}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-              {OPENING_CASH_DENOMINATIONS.map((denomination) => (<label className="grid grid-cols-[58px_minmax(0,1fr)] items-center gap-2 text-[11px]" key={denomination}>
-                  <span className="font-semibold">{formatLak(denomination)}</span>
-                  <PosNumberInput className="h-8 min-w-0 rounded-md border border-border bg-card px-1 text-center text-[11px] font-semibold outline-none transition focus:border-primary" min={0} value={openingCashCounts[denomination] ?? 0} onValueChange={(value) => onUpdateOpeningCashCount(denomination, value)}/>
-                </label>))}
-            </div>
-          </div>
+          )}
 
           <div className="mt-2 rounded-md border border-border bg-background p-2">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="text-xs font-semibold">{t("ui.closing.summary")}</div>
-              {closingSummaryVisible ? (<span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">{t("ui.confirm.required")}</span>) : null}
+              {closingSummaryVisible && sessionStatus === "closed" ? (
+                <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">{t("ui.cash.session.closed")}</span>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <SettlementValue label={t("ui.cash.sales")} value={`${formatLak(cashSales)} LAK`}/>
               <SettlementValue label={t("ui.qr.transfer")} value={`${formatLak(qrTransferSales)} LAK`}/>
+              <SettlementValue label={t("ui.cash.in")} value={`${formatLak(cashInLak)} LAK`}/>
+              <SettlementValue label={t("ui.cash.out")} value={`${formatLak(cashOutLak)} LAK`}/>
               <SettlementValue label={t("ui.expected.cash")} value={`${formatLak(expectedCash)} LAK`} strong/>
-              <label className="grid gap-1">
-                <span className="text-muted-foreground">{t("ui.actual.cash")}</span>
-                <PosNumberInput className="h-9 rounded-md border border-border bg-card px-2 text-xs font-semibold outline-none transition focus:border-primary" value={actualClosingCash} onValueChange={onSetActualClosingCash}/>
-              </label>
+              <SettlementValue label={t("ui.counted.cash")} value={`${formatLak(countedCash)} LAK`} strong/>
             </div>
-            <div className={cn("mt-2 rounded-md border px-2 py-2 text-xs font-semibold", cashDifference === 0
-                ? "border-success/30 bg-success/10 text-success"
-                : "border-danger/40 bg-danger/10 text-danger")}>
-              {fillPosCopy(t("ui.cash.difference.amount"), { amount: formatLak(cashDifference) })}
+            <div
+              className={cn(
+                "mt-2 rounded-md border px-2 py-2 text-xs font-semibold",
+                variance === "exact"
+                  ? "border-success/30 bg-success/10 text-success"
+                  : variance === "over"
+                    ? "border-warning/40 bg-warning/10 text-warning"
+                    : "border-danger/40 bg-danger/10 text-danger",
+              )}
+              data-testid="cash-variance"
+            >
+              <div>{varianceLabel}</div>
+              <div>{fillPosCopy(t("ui.cash.difference.amount"), { amount: formatLak(cashDifference) })}</div>
             </div>
-            {closingSummaryVisible ? (<button className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground" type="button">
-                {t("ui.confirm.closing.summary")}
-              </button>) : null}
+            {sessionOpen ? (
+              <button
+                className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="confirm-closing-summary"
+                disabled={cashCloseBusy}
+                type="button"
+                onClick={onConfirmClosing}
+              >
+                {cashCloseBusy ? t("ui.confirming") : t("ui.confirm.closing.summary")}
+              </button>
+            ) : null}
           </div>
-        </>)}
-    </section>);
-}
-function StaffTime({ label, strong = false, value }: {
-    label: string;
-    strong?: boolean;
-    value: string;
-}) {
-    return (<div>
-      <div className="text-muted-foreground">{label}</div>
-      <div className={cn("font-semibold", strong && "text-primary")}>{value}</div>
-    </div>);
-}
-function StaffButton({ active = false, label, onClick, tone = "neutral" }: {
-    active?: boolean;
-    label: string;
-    onClick: () => void;
-    tone?: "neutral" | "success" | "warning";
-}) {
-    return (<button className={cn("h-8 rounded-md border px-2 text-[11px] font-semibold transition hover:border-primary", active && tone === "success"
-            ? "border-success bg-success text-white shadow-sm"
-            : active && tone === "warning"
-                ? "border-warning bg-warning text-black shadow-sm"
-                : "border-border bg-card")} type="button" onClick={onClick}>
-      {label}
-    </button>);
+        </>
+      )}
+    </section>
+  );
 }
 function SettlementValue({ label, strong = false, value }: {
     label: string;
@@ -2813,13 +2918,9 @@ function SettlementValue({ label, strong = false, value }: {
       <div className={cn("font-semibold", strong && t("ui.text.ffd700"))}>{value}</div>
     </div>);
 }
-function staffStatusClassName(status: string) {
-    if (status === "Working")
-        return "bg-success/15 text-success";
-    if (status === "OT")
-        return "bg-warning/15 text-warning";
-    if (status === "Closed")
-        return "bg-danger/15 text-danger";
+function sessionStatusClassName(status: "closed" | "not_started" | "open") {
+    if (status === "open") return "bg-success/15 text-success";
+    if (status === "closed") return "bg-danger/15 text-danger";
     return "bg-muted text-muted-foreground";
 }
 function PosNumberInput({ className, "data-testid": dataTestId, max, min = 0, onValueChange, value, }: {
@@ -3479,13 +3580,6 @@ function getStockWarning(product: PosProduct, referenceDate: Date): PosCartItem[
     }
     return undefined;
 }
-function staffStatusLabel(status: string) {
-    if (status === "Working") return t("ui.staff.working");
-    if (status === "OT") return t("ui.staff.ot");
-    if (status === "Closed") return t("ui.staff.closed");
-    if (status === "Not Started") return t("ui.staff.not.started");
-    return status;
-}
 function stockWarningLabel(tone: "orange" | "yellow" | "red") {
     if (tone === "red") return t("ui.expired");
     if (tone === "yellow") return t("ui.near.expiry");
@@ -3526,12 +3620,4 @@ function formatBusinessDate(date: Date) {
         month: "short",
         year: "numeric",
     }).format(date);
-}
-function formatStaffTime(date: Date | null) {
-    return date ? formatPosTime(date) : "-";
-}
-function calculateHours(start: Date | null, end: Date | null) {
-    if (!start || !end)
-        return 0;
-    return Math.max(0, (end.getTime() - start.getTime()) / 3600000);
 }

@@ -90,6 +90,7 @@ function totalsFromLoadedSessionRows(
     nonCashSalesLak: paymentTotals.nonCashSalesLak,
     openingCashLak: amount(session.openingCash),
     refundLak,
+    // Limitation: void cash impact is not attributed yet (always 0).
     voidCashLak: 0,
   });
 }

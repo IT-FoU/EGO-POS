@@ -39,6 +39,13 @@ export function calculateVariance(countedCashLak: number, expectedCashLak: numbe
   return Math.round(countedCashLak - expectedCashLak);
 }
 
+/** Reconciliation label only — does not mutate accounting. */
+export function varianceStatus(varianceLak: number): "exact" | "over" | "short" {
+  if (varianceLak === 0) return "exact";
+  if (varianceLak > 0) return "over";
+  return "short";
+}
+
 export function sumCashTransactions(
   transactions: Array<{ amount: unknown; transactionType: string }>,
   type: "cash_in" | "cash_out",
