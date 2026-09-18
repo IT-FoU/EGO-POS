@@ -16,6 +16,12 @@ import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
 import { PosSmallModal } from "@/features/pos/components/pos-small-modal";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
+import {
+  EMPTY_SALE_OPTIONS,
+  SaleOptionsDrawer,
+  SaleOptionsSummaryChip,
+  type SaleOptionsDraft,
+} from "@/features/pos/components/sale-options-drawer";
 import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/components/return-exchange-void-modal";
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
@@ -278,6 +284,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [managerApprovalPin, setManagerApprovalPin] = useState("");
     const [managerApprovalReason, setManagerApprovalReason] = useState("");
     const [mixedPaymentOpen, setMixedPaymentOpen] = useState(false);
+    const [saleOptionsOpen, setSaleOptionsOpen] = useState(false);
+    const [saleOptionsCommitted, setSaleOptionsCommitted] = useState<SaleOptionsDraft>(EMPTY_SALE_OPTIONS);
+    const [saleOptionsDraft, setSaleOptionsDraft] = useState<SaleOptionsDraft>(EMPTY_SALE_OPTIONS);
     const [message, setMessage] = useState<string | null>(null);
     const [pendingApprovals, setPendingApprovals] = useState<PosPendingApprovalRequest[]>([]);
     const [auditEntries, setAuditEntries] = useState<PosAuditEntry[]>([]);
@@ -1679,6 +1688,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         setMixedPaymentOpen(true);
     }
+    function openSaleOptions() {
+        setSaleOptionsDraft(saleOptionsCommitted);
+        setSaleOptionsOpen(true);
+    }
+    function cancelSaleOptions() {
+        setSaleOptionsDraft(saleOptionsCommitted);
+        setSaleOptionsOpen(false);
+    }
+    function applySaleOptions() {
+        // STEP 2: shells only — commit draft UI state; placeholders must not alter totals/cart.
+        setSaleOptionsCommitted(saleOptionsDraft);
+        setSaleOptionsOpen(false);
+    }
     function runControlledPosAction(action: PosPermissionAction) {
         const context = buildPosActionContext(action);
         if (enforcePosAction(action, context)) {
@@ -1911,6 +1933,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     </div>))}
                 </div>)}
             </div>
+            <div className="border-t border-border px-4 pt-3">
+              <SaleOptionsSummaryChip options={saleOptionsCommitted} />
+              <button
+                className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-background text-sm font-bold text-foreground transition hover:border-primary hover:text-primary"
+                type="button"
+                onClick={openSaleOptions}
+              >
+                <BadgePercent className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                {t("ui.sale.options")}
+              </button>
+            </div>
             <div className="border-t border-border p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-black">{t("ui.payment")}</h2>
@@ -1958,6 +1991,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       </section>
 
       {mixedPaymentOpen ? (<MixedPaymentModal cardAmount={cardAmount} cashAmount={cashAmount} onClose={() => setMixedPaymentOpen(false)} onExact={(method) => applyExactPayment(method)} qrAmount={qrAmount} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setPaymentMode={setPaymentMode} setQrAmount={setQrAmount} setTransferAmount={setTransferAmount} totalAmount={totalAmount} transferAmount={transferAmount}/>) : null}
+
+      {saleOptionsOpen ? (
+        <SaleOptionsDrawer
+          billContext={billNo || receiptSettings.receiptPrefix}
+          customerName={selectedCustomer?.name ?? t("ui.guest")}
+          draft={saleOptionsDraft}
+          onApply={applySaleOptions}
+          onCancel={cancelSaleOptions}
+          onDraftChange={setSaleOptionsDraft}
+        />
+      ) : null}
 
       {moreMenuOpen ? (<PosModal title={t("ui.more")} onClose={() => setMoreMenuOpen(false)}>
         <div className="grid gap-2 sm:grid-cols-2">

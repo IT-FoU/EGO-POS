@@ -8,13 +8,14 @@ import { cn } from "@/lib/utils";
 
 type PosWorkspaceModalProps = {
   children: React.ReactNode;
+  footer?: React.ReactNode;
   headerActions?: React.ReactNode;
   headerClassName?: string;
   onClose: () => void;
   title: string;
 };
 
-export function PosWorkspaceModal({ children, headerActions, headerClassName, onClose, title }: PosWorkspaceModalProps) {
+export function PosWorkspaceModal({ children, footer, headerActions, headerClassName, onClose, title }: PosWorkspaceModalProps) {
   const titleId = useId();
 
   useEffect(() => {
@@ -49,6 +50,11 @@ export function PosWorkspaceModal({ children, headerActions, headerClassName, on
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {children}
         </div>
+        {footer ? (
+          <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-5 py-4">
+            {footer}
+          </footer>
+        ) : null}
       </section>
     </div>
   );
