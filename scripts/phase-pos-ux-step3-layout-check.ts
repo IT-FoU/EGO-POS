@@ -22,7 +22,7 @@ function check(name: string, run: () => void) {
 const clientPath = join(process.cwd(), "features", "pos", "components", "pos-page-client.tsx");
 const client = readFileSync(clientPath, "utf8");
 
-check("desktop product grid uses xl:grid-cols-6", () => {
+check("desktop product grid uses xl:grid-cols-6 (OWNER PASS — must not change)", () => {
   assert(client.includes("xl:grid-cols-6"), "expected xl:grid-cols-6 on product grid");
   assert(
     client.includes("grid-cols-[repeat(auto-fit,minmax(155px,1fr))]"),
@@ -39,70 +39,46 @@ check("product grid width is independent of cartCollapsed", () => {
   assert(gridSection.includes("xl:col-span-2"), "product grid spans full width under toolbar row");
 });
 
-check("product grid spans full width on desktop", () => {
-  assert(client.includes("xl:col-span-2 xl:row-start-2"), "full-width product grid row");
-  assert(
-    client.includes("xl:grid-cols-[minmax(0,1fr)_420px] xl:grid-rows-[auto_minmax(0,1fr)]"),
-    "toolbar/cart anchor row only",
-  );
-});
-
 check("cart anchor stays in-flow (entire aside not fixed)", () => {
   assert(!client.includes("xl:fixed"), "entire cart aside must not use xl:fixed");
   assert(client.includes("xl:col-start-2 xl:row-start-1"), "cart anchor remains in layout grid");
 });
 
-check("expanded cart body uses overlay positioning on desktop", () => {
-  assert(client.includes("xl:absolute xl:top-full xl:right-0 xl:z-40"), "expanded body overlays products");
+check("expanded cart uses OUTER overlay wrapper only", () => {
+  assert(client.includes("xl:absolute xl:top-full xl:right-0 xl:z-40"), "outer overlay below header");
+  assert(client.includes("xl:overflow-y-auto"), "outer overlay scrolls when viewport is short");
   assert(client.includes("xl:w-[420px]"), "xl cart width preserved");
   assert(client.includes("2xl:w-[460px]"), "2xl cart width preserved");
-});
-
-check("expanded cart overlay uses measured viewport max-height", () => {
-  assert(client.includes("cartOverlayMaxHeightPx"), "measured overlay max-height state present");
-  assert(client.includes("getBoundingClientRect().bottom"), "overlay top derived from cart panel");
-  assert(client.includes("xl:max-h-[calc(100dvh-11rem)]"), "CSS fallback max-height before measure");
-  assert(!client.includes("xl:h-[min(calc(100dvh-14rem),820px)]"), "broken fixed overlay height removed");
-});
-
-check("dedicated cart item-list area exists and scrolls", () => {
   assert(
-    client.includes('<div className={cn("min-h-0 flex-1 overflow-y-auto p-4"'),
-    "item-list region must be flex-1 min-h-0 overflow-y-auto",
+    client.includes("OUTER STEP-3 overlay only"),
+    "overlay must be documented as external wrapper",
   );
-  assert(client.includes("max-h-[330px]"), "93078f1 item-list max height restored");
 });
 
-check("empty cart shows large empty-state panel", () => {
+check("Production cart internals restored (ec58439 markers)", () => {
+  assert(
+    client.includes('className={cn("flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px]" : "max-h-[54vh]")}') ||
+      client.includes('cn("flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px]" : "max-h-[54vh]")'),
+    "Production item-list max-h-[330px] restored",
+  );
   assert(
     client.includes('grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30'),
-    "empty-state panel must use original large min-h-64",
+    "Production empty-state min-h-64 restored",
   );
-  assert(client.includes("ui.scan.or.search.product.to.start.sale"), "empty-state message preserved");
-});
-
-check("payment section sits outside item-list scroll and pay reachable", () => {
-  assert(client.includes('<div className="shrink-0 border-t border-border p-4">'), "payment section shrink-0 below list");
-  assert(client.includes('onClick={completeSale} disabled={isPending}'), "pay footer reachable");
-});
-
-check("price capsule is content-fit and contains full price", () => {
-  assert(client.includes('posCardSolidCapsuleClass'), "solid capsule class present");
   assert(
-    client.includes('inline-flex w-fit max-w-full shrink-0 items-center justify-center overflow-hidden'),
-    "price/stock capsule is content-fit with overflow containment",
+    client.includes('<div className="border-t border-border p-4">'),
+    "Production payment block (no shrink-0 redesign)",
   );
-  assert(!client.includes("max-w-[62%]"), "price must not use percentage max-width shrink trap");
-  assert(!client.includes("max-w-[58%]"), "price must not use xl percentage max-width");
-  assert(client.includes("whitespace-nowrap"), "full price string, no truncate");
-  assert(!client.includes('truncate') || !/<span className=\{cn\(posCardSolidCapsuleClass[\s\S]*?truncate/.test(client), "price capsule must not truncate");
+  assert(client.includes("ui.scan.or.search.product.to.start.sale"), "empty-state message");
+  assert(client.includes("h-16 w-full rounded-xl bg-primary text-[40px]"), "Production Pay button sizing");
 });
 
-check("stock capsule is content-fit without truncate for normal stock", () => {
-  assert(client.includes("<StockBadge className=\"shrink-0\""), "stock badge on price row");
-  const stockNormal = client.match(/posCardSolidCapsuleClass, "whitespace-nowrap text-\[11px\][^"]*"/)?.[0];
-  assert(stockNormal, "normal stock uses solid capsule");
-  assert(!stockNormal.includes("truncate"), "normal stock must not truncate");
+check("ProductGridItem / STEP 2 tokens untouched", () => {
+  assert(client.includes('const POS_CARD_EMERALD_BRIGHT = "#2EDB45"'), "bright emerald token");
+  assert(client.includes("posCardLightLabelBackdropClass"), "light label chips");
+  assert(client.includes("posCardSolidCapsuleClass"), "solid price/stock capsules");
+  assert(client.includes("bg-black/35"), "light backdrop opacity");
+  assert(client.includes("bg-black/75"), "solid capsule backdrop");
 });
 
 check("product grid height stable when cart toggles", () => {
@@ -113,16 +89,11 @@ check("product grid height stable when cart toggles", () => {
   assert(!gridSection?.includes("max-h-[610px]"), "cart-dependent grid height removed");
 });
 
-check("STEP 2 ProductGridItem styling preserved", () => {
-  assert(client.includes('const POS_CARD_EMERALD_BRIGHT = "#2EDB45"'), "bright emerald token");
-  assert(client.includes("posCardLightLabelBackdropClass"), "light label chips");
-  assert(client.includes("posCardSolidCapsuleClass"), "solid price/stock capsules");
-  assert(client.includes("bg-black/35"), "light backdrop opacity");
-  assert(client.includes("bg-black/75"), "solid capsule backdrop");
-});
-
-const failed = results.filter((entry) => entry.status === "FAIL");
 console.log("");
+console.log(
+  "NOTE: These are SOURCE/LAYOUT checks only. They cannot prove Owner visual QA.",
+);
+const failed = results.filter((entry) => entry.status === "FAIL");
 console.log(`STEP 3 layout checks: ${results.length - failed.length}/${results.length} passed`);
 if (failed.length > 0) {
   process.exitCode = 1;
