@@ -1,5 +1,9 @@
 "use client";
 
+import {
+    applyExactPaymentToMethod,
+    type ExactPaymentMethod,
+} from "@/features/pos/exact-payment";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
@@ -1654,6 +1658,21 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMixedPaymentOpen(true);
         }
     }
+    function applyExactPayment(method: ExactPaymentMethod) {
+        const next = applyExactPaymentToMethod(method, totalAmount, {
+            cashAmount,
+            qrAmount,
+            transferAmount,
+            cardAmount,
+        });
+        if (!next) {
+            return;
+        }
+        setCashAmount(next.cashAmount);
+        setQrAmount(next.qrAmount);
+        setTransferAmount(next.transferAmount);
+        setCardAmount(next.cardAmount);
+    }
     function openMixedPayment() {
         if (!enforcePosAction("split_payment")) {
             return;
@@ -1809,13 +1828,17 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             ) : filteredProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => selectProductForSale(product)} onToggleFavorite={() => void toggleFavorite(product)}/>))}
           </section>) : null}
 
-        <aside className={cn("order-3 flex min-w-0 flex-col gap-3", productGridVisible && "xl:order-none xl:col-start-2 xl:row-start-1 xl:self-start")}>
+        <aside className={cn(
+          "order-3 flex min-w-0 flex-col gap-3",
+          productGridVisible && "xl:order-none xl:col-start-2 xl:row-start-1",
+          productGridVisible && (cartCollapsed ? "xl:h-full xl:self-stretch" : "xl:self-start"),
+        )}>
           <Panel
             ref={cartPanelRef}
             className={cn(
               "relative flex flex-col shadow-lg",
               cartCollapsed ? "overflow-hidden" : "overflow-visible",
-              productGridVisible && cartCollapsed && "min-h-[96px]",
+              productGridVisible && cartCollapsed && "h-full min-h-[96px]",
               !productGridVisible && (cartCollapsed ? "min-h-0 overflow-hidden" : "min-h-[420px] overflow-hidden"),
             )}
           >
@@ -1911,7 +1934,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
             {paymentMode === "mixed" ? (<div className="mt-3 rounded-xl border border-success/30 bg-success/10 p-3 text-sm font-semibold text-success">
               {t("ui.mixed.payment.configured")} - {formatLak(paidAmount)} LAK
-            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} heldBillCount={heldSales.length} heldBillsLoaded={heldBillsLoaded} holdDisabled={cartItems.length === 0} mode={paymentMode} onHoldBill={holdSale} onResumeBills={() => {
+            </div>) : (<PaymentFields availableQrBanks={availableQrBanks} cardAmount={cardAmount} cashAmount={cashAmount} dueAmount={dueAmount} heldBillCount={heldSales.length} heldBillsLoaded={heldBillsLoaded} holdDisabled={cartItems.length === 0} mode={paymentMode} onExact={(method) => applyExactPayment(method)} onHoldBill={holdSale} onResumeBills={() => {
                 void refreshHeldBillsFromServer();
                 setHeldBillsOpen(true);
             }} qrAmount={qrAmount} selectedQrBankId={selectedQrBankId} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setQrAmount={setQrAmount} setSelectedQrBankId={setSelectedQrBankId} setTransferAmount={setTransferAmount} transferAmount={transferAmount}/>) }
@@ -1934,7 +1957,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         </aside>
       </section>
 
-      {mixedPaymentOpen ? (<MixedPaymentModal cardAmount={cardAmount} cashAmount={cashAmount} onClose={() => setMixedPaymentOpen(false)} qrAmount={qrAmount} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setPaymentMode={setPaymentMode} setQrAmount={setQrAmount} setTransferAmount={setTransferAmount} totalAmount={totalAmount} transferAmount={transferAmount}/>) : null}
+      {mixedPaymentOpen ? (<MixedPaymentModal cardAmount={cardAmount} cashAmount={cashAmount} onClose={() => setMixedPaymentOpen(false)} onExact={(method) => applyExactPayment(method)} qrAmount={qrAmount} setCardAmount={setCardAmount} setCashAmount={setCashAmount} setPaymentMode={setPaymentMode} setQrAmount={setQrAmount} setTransferAmount={setTransferAmount} totalAmount={totalAmount} transferAmount={transferAmount}/>) : null}
 
       {moreMenuOpen ? (<PosModal title={t("ui.more")} onClose={() => setMoreMenuOpen(false)}>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -2390,14 +2413,29 @@ function Field({ children, label }: {
       {children}
     </label>);
 }
-function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount, heldBillsLoaded, holdDisabled, mode, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
+function ExactPaymentButton({ disabled, onClick }: {
+    disabled: boolean;
+    onClick: () => void;
+}) {
+    return (<button
+      className="h-11 shrink-0 rounded-md border border-primary/30 bg-primary/10 px-3 text-sm font-semibold text-primary transition hover:border-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:bg-muted"
+      disabled={disabled}
+      type="button"
+      onClick={onClick}
+    >
+      {t("ui.exact")}
+    </button>);
+}
+function PaymentFields({ availableQrBanks, cardAmount, cashAmount, dueAmount, heldBillCount, heldBillsLoaded, holdDisabled, mode, onExact, onHoldBill, onResumeBills, qrAmount, selectedQrBankId, setCardAmount, setCashAmount, setQrAmount, setSelectedQrBankId, setTransferAmount, transferAmount, }: {
     availableQrBanks: QrBank[];
     cardAmount: number;
     cashAmount: number;
+    dueAmount: number;
     heldBillCount: number;
     heldBillsLoaded: boolean;
     holdDisabled: boolean;
     mode: PaymentMode;
+    onExact: (method: ExactPaymentMethod) => void;
     onHoldBill: () => void;
     onResumeBills: () => void;
     qrAmount: number;
@@ -2409,11 +2447,13 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount
     setTransferAmount: (value: number) => void;
     transferAmount: number;
 }) {
+    const exactDisabled = dueAmount <= 0;
     return (<div className="mt-3 grid gap-2 sm:grid-cols-2">
       {(mode === "cash" || mode === "mixed") ? (<div className="grid gap-1 text-xs font-semibold sm:col-span-2">
           <span>{t("ui.cash.amount")}</span>
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
             <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
+            <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("cash")}/>
             <button className="h-11 rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-border disabled:hover:text-muted-foreground" type="button" onClick={onHoldBill} disabled={holdDisabled}>
               {t("ui.hold.bill")}
             </button>
@@ -2429,14 +2469,23 @@ function PaymentFields({ availableQrBanks, cardAmount, cashAmount, heldBillCount
             </select>
           </Field>
           <Field label={t("ui.qr.amount")}>
-            <PosNumberInput className="field-input" value={qrAmount} onValueChange={setQrAmount}/>
+            <div className="flex gap-2">
+              <PosNumberInput className="field-input min-w-0 flex-1" value={qrAmount} onValueChange={setQrAmount}/>
+              <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("qr")}/>
+            </div>
           </Field>
         </>) : null}
       {(mode === "transfer" || mode === "mixed") ? (<Field label={t("ui.bank.transfer")}>
-          <PosNumberInput className="field-input" value={transferAmount} onValueChange={setTransferAmount}/>
+          <div className="flex gap-2">
+            <PosNumberInput className="field-input min-w-0 flex-1" value={transferAmount} onValueChange={setTransferAmount}/>
+            <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("transfer")}/>
+          </div>
         </Field>) : null}
       {(mode === "card" || mode === "mixed") ? (<Field label={t("ui.card.amount")}>
-          <PosNumberInput className="field-input" value={cardAmount} onValueChange={setCardAmount}/>
+          <div className="flex gap-2">
+            <PosNumberInput className="field-input min-w-0 flex-1" value={cardAmount} onValueChange={setCardAmount}/>
+            <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("card")}/>
+          </div>
         </Field>) : null}
     </div>);
 }
@@ -2793,10 +2842,11 @@ function ActionButton({ icon: Icon, label, onClick }: {
       {label}
     </button>);
 }
-function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardAmount, setCashAmount, setPaymentMode, setQrAmount, setTransferAmount, totalAmount, transferAmount, }: {
+function MixedPaymentModal({ cardAmount, cashAmount, onClose, onExact, qrAmount, setCardAmount, setCashAmount, setPaymentMode, setQrAmount, setTransferAmount, totalAmount, transferAmount, }: {
     cardAmount: number;
     cashAmount: number;
     onClose: () => void;
+    onExact: (method: ExactPaymentMethod) => void;
     qrAmount: number;
     setCardAmount: (value: number) => void;
     setCashAmount: (value: number) => void;
@@ -2807,22 +2857,36 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, qrAmount, setCardA
     transferAmount: number;
 }) {
     const paid = cashAmount + qrAmount + cardAmount + transferAmount;
+    const due = Math.max(totalAmount - paid, 0);
     const valid = paid >= totalAmount;
+    const exactDisabled = due <= 0;
     return (<PosSmallModal closeOnBackdrop={false} closeOnEscape={false} footer={<button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
           {t("ui.apply.mixed.payment")}
         </button>} onClose={onClose} size="md" title={t("ui.mixed.payment")}>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("ui.cash.amount")}>
-            <PosNumberInput className="field-input" value={cashAmount} onValueChange={setCashAmount}/>
+            <div className="flex gap-2">
+              <PosNumberInput className="field-input min-w-0 flex-1" value={cashAmount} onValueChange={setCashAmount}/>
+              <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("cash")}/>
+            </div>
           </Field>
           <Field label={t("ui.qr.amount")}>
-            <PosNumberInput className="field-input" value={qrAmount} onValueChange={setQrAmount}/>
+            <div className="flex gap-2">
+              <PosNumberInput className="field-input min-w-0 flex-1" value={qrAmount} onValueChange={setQrAmount}/>
+              <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("qr")}/>
+            </div>
           </Field>
           <Field label={t("ui.card.amount")}>
-            <PosNumberInput className="field-input" value={cardAmount} onValueChange={setCardAmount}/>
+            <div className="flex gap-2">
+              <PosNumberInput className="field-input min-w-0 flex-1" value={cardAmount} onValueChange={setCardAmount}/>
+              <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("card")}/>
+            </div>
           </Field>
           <Field label={t("ui.transfer.amount")}>
-            <PosNumberInput className="field-input" value={transferAmount} onValueChange={setTransferAmount}/>
+            <div className="flex gap-2">
+              <PosNumberInput className="field-input min-w-0 flex-1" value={transferAmount} onValueChange={setTransferAmount}/>
+              <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("transfer")}/>
+            </div>
           </Field>
         </div>
         <div className={cn("mt-4 rounded-md border p-3 text-sm font-semibold", valid ? "border-success/40 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning")}>
