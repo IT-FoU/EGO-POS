@@ -1810,7 +1810,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           </section>) : null}
 
         <aside className={cn("order-3 flex min-w-0 flex-col gap-3", productGridVisible && "xl:order-none xl:col-start-2 xl:row-start-1 xl:self-start")}>
-          <Panel ref={cartPanelRef} className={cn("relative flex flex-col shadow-lg", cartCollapsed ? "overflow-hidden" : "overflow-visible", productGridVisible && cartCollapsed && "min-h-[96px]", !productGridVisible && (cartCollapsed ? "min-h-0" : "min-h-[420px] overflow-hidden"))}>
+          <Panel
+            ref={cartPanelRef}
+            className={cn(
+              "relative flex flex-col shadow-lg",
+              cartCollapsed ? "overflow-hidden" : "overflow-visible",
+              productGridVisible && cartCollapsed && "min-h-[96px]",
+              !productGridVisible && (cartCollapsed ? "min-h-0 overflow-hidden" : "min-h-[420px] overflow-hidden"),
+            )}
+          >
             {cartCollapsed ? (<div className="flex h-full min-h-[84px] items-center justify-between gap-3 bg-primary/5 p-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-muted-foreground">
                 <h2 className="max-w-full truncate text-lg font-black tracking-tight text-foreground">{t("ui.shopping.cart")}</h2>
@@ -1823,7 +1831,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 <ChevronDown className="size-5" aria-hidden="true"/>
               </button>
             </div>) : (<>
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-primary/5 p-4">
+            <div className="flex items-center justify-between gap-3 border-b border-border bg-primary/5 p-4">
               <div className="min-w-0">
                 <h2 className="text-2xl font-black tracking-tight">{t("ui.shopping.cart")}</h2>
                 <p className="mt-1 text-sm font-semibold text-muted-foreground">{cartItems.length} {t("ui.items")} - {formatLak(totalAmount)} LAK</p>
@@ -1835,17 +1843,23 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 </button>
               </div>
             </div>
+            {/* OUTER STEP-3 overlay only — Production cart internals below remain unmodified */}
             <div
-              className={cn("flex min-h-0 flex-col bg-card", productGridVisible ? "max-xl:overflow-hidden xl:absolute xl:top-full xl:right-0 xl:z-40 xl:flex xl:max-h-[calc(100dvh-11rem)] xl:w-[420px] xl:flex-col xl:overflow-hidden xl:rounded-b-xl xl:border xl:border-t-0 xl:border-border xl:shadow-2xl 2xl:w-[460px]" : "flex-1 overflow-hidden")}
-              style={productGridVisible && !cartCollapsed && cartOverlayMaxHeightPx != null ? { maxHeight: cartOverlayMaxHeightPx } : undefined}
+              className={cn(
+                "bg-card",
+                productGridVisible
+                  ? "max-xl:contents xl:absolute xl:top-full xl:right-0 xl:z-40 xl:max-h-[calc(100dvh-11rem)] xl:w-[420px] xl:overflow-y-auto xl:rounded-b-xl xl:border xl:border-t-0 xl:border-border xl:shadow-2xl 2xl:w-[460px]"
+                  : "contents",
+              )}
+              style={productGridVisible && cartOverlayMaxHeightPx != null ? { maxHeight: cartOverlayMaxHeightPx } : undefined}
             >
-            <div className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-xs">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-xs">
               <CartMeta label={t("ui.bill.no")} value={billNo || receiptSettings.receiptPrefix}/>
               <CartMeta label={t("ui.customer")} value={selectedCustomer?.name ?? t("ui.guest")}/>
               <CartMeta label={t("ui.cashier")} value={cashierName || t("ui.current.user")}/>
               <CartMeta label={t("ui.time")} value={currentTime}/>
             </div>
-            <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px] xl:max-h-none" : "max-h-[54vh]")}>
+            <div className={cn("flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px]" : "max-h-[54vh]")}>
               {cartItems.length === 0 ? (<div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
                   {cartItems.map((item, index) => (<div className="rounded-xl border border-border bg-background p-3 shadow-sm" key={cartLineKey(item, index)}>
                       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -1874,7 +1888,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     </div>))}
                 </div>)}
             </div>
-            <div className="shrink-0 border-t border-border p-4">
+            <div className="border-t border-border p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-black">{t("ui.payment")}</h2>
               <button className="text-xs font-semibold text-primary" type="button" onClick={openMixedPayment}>
