@@ -3,7 +3,7 @@
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -215,6 +215,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [heldBillsOpen, setHeldBillsOpen] = useState(false);
     const [memberSearchOpen, setMemberSearchOpen] = useState(false);
     const [cartCollapsed, setCartCollapsed] = useState(false);
+    const cartPanelRef = useRef<HTMLElement>(null);
+    const [cartOverlayMaxHeightPx, setCartOverlayMaxHeightPx] = useState<number | null>(null);
     const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
     const cartItemsRef = useRef<PosCartItem[]>([]);
     cartItemsRef.current = cartItems;
@@ -288,6 +290,26 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setBillNo(nextSaleNo);
     }, [nextSaleNo]);
+    useLayoutEffect(() => {
+        if (cartCollapsed || !productGridVisible) {
+            setCartOverlayMaxHeightPx(null);
+            return;
+        }
+        const updateOverlayMaxHeight = () => {
+            if (typeof window === "undefined" || window.innerWidth < 1280) {
+                setCartOverlayMaxHeightPx(null);
+                return;
+            }
+            const panel = cartPanelRef.current;
+            if (!panel) return;
+            const overlayTop = panel.getBoundingClientRect().bottom;
+            const available = Math.floor(window.innerHeight - overlayTop - 16);
+            setCartOverlayMaxHeightPx(Math.max(280, available));
+        };
+        updateOverlayMaxHeight();
+        window.addEventListener("resize", updateOverlayMaxHeight);
+        return () => window.removeEventListener("resize", updateOverlayMaxHeight);
+    }, [cartCollapsed, productGridVisible, cartItems.length]);
     useEffect(() => {
         setActiveCashSession(cashSession);
         if (cashSession.status === "open") {
@@ -1788,7 +1810,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           </section>) : null}
 
         <aside className={cn("order-3 flex min-w-0 flex-col gap-3", productGridVisible && "xl:order-none xl:col-start-2 xl:row-start-1 xl:self-start")}>
-          <Panel className={cn("relative flex flex-col shadow-lg", cartCollapsed ? "overflow-hidden" : "overflow-visible", productGridVisible && cartCollapsed && "min-h-[96px]", !productGridVisible && (cartCollapsed ? "min-h-0" : "min-h-[420px] overflow-hidden"))}>
+          <Panel ref={cartPanelRef} className={cn("relative flex flex-col shadow-lg", cartCollapsed ? "overflow-hidden" : "overflow-visible", productGridVisible && cartCollapsed && "min-h-[96px]", !productGridVisible && (cartCollapsed ? "min-h-0" : "min-h-[420px] overflow-hidden"))}>
             {cartCollapsed ? (<div className="flex h-full min-h-[84px] items-center justify-between gap-3 bg-primary/5 p-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-muted-foreground">
                 <h2 className="max-w-full truncate text-lg font-black tracking-tight text-foreground">{t("ui.shopping.cart")}</h2>
@@ -1813,15 +1835,18 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 </button>
               </div>
             </div>
-            <div className={cn("flex min-h-0 flex-col bg-card", productGridVisible ? "max-xl:overflow-hidden xl:absolute xl:top-full xl:right-0 xl:z-40 xl:h-[min(calc(100dvh-14rem),820px)] xl:w-[420px] xl:overflow-hidden xl:rounded-b-xl xl:border xl:border-t-0 xl:border-border xl:shadow-2xl 2xl:w-[460px]" : "flex-1 overflow-hidden")}>
+            <div
+              className={cn("flex min-h-0 flex-col bg-card", productGridVisible ? "max-xl:overflow-hidden xl:absolute xl:top-full xl:right-0 xl:z-40 xl:flex xl:max-h-[calc(100dvh-11rem)] xl:w-[420px] xl:flex-col xl:overflow-hidden xl:rounded-b-xl xl:border xl:border-t-0 xl:border-border xl:shadow-2xl 2xl:w-[460px]" : "flex-1 overflow-hidden")}
+              style={productGridVisible && !cartCollapsed && cartOverlayMaxHeightPx != null ? { maxHeight: cartOverlayMaxHeightPx } : undefined}
+            >
             <div className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-xs">
               <CartMeta label={t("ui.bill.no")} value={billNo || receiptSettings.receiptPrefix}/>
               <CartMeta label={t("ui.customer")} value={selectedCustomer?.name ?? t("ui.guest")}/>
               <CartMeta label={t("ui.cashier")} value={cashierName || t("ui.current.user")}/>
               <CartMeta label={t("ui.time")} value={currentTime}/>
             </div>
-            <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", productGridVisible ? "max-xl:max-h-[360px]" : "max-h-[54vh]")}>
-              {cartItems.length === 0 ? (<div className="grid h-full min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
+            <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px] xl:max-h-none" : "max-h-[54vh]")}>
+              {cartItems.length === 0 ? (<div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
                   {cartItems.map((item, index) => (<div className="rounded-xl border border-border bg-background p-3 shadow-sm" key={cartLineKey(item, index)}>
                       <div className="flex min-w-0 items-start justify-between gap-3">
                         <div className="size-14 shrink-0 overflow-hidden rounded-xl border border-border bg-background/70">
@@ -2134,11 +2159,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
     </div>);
 }
-function Panel({ children, className }: {
+function Panel({ children, className, ref }: {
     children: React.ReactNode;
     className?: string;
+    ref?: React.Ref<HTMLElement>;
 }) {
-    return <section className={cn("min-w-0 rounded-lg border border-border bg-card", className)}>{children}</section>;
+    return <section ref={ref} className={cn("min-w-0 rounded-lg border border-border bg-card", className)}>{children}</section>;
 }
 function PosModal({ children, onClose, title }: {
     children: React.ReactNode;
@@ -2226,10 +2252,10 @@ function InfoLine({ label, muted = false, strike = false, value }: {
 const POS_CARD_EMERALD_BRIGHT = "#2EDB45";
 /** Name / Unit / SKU — light translucent, text-hugging (not solid). */
 const posCardLightLabelBackdropClass =
-  "inline-flex w-fit max-w-full rounded px-1 py-0.5 bg-black/35 shadow-[0_1px_2px_rgba(0,0,0,0.18)] ring-1 ring-black/15 xl:px-0.5 xl:py-px";
-/** Price / normal stock — darker semi-solid capsule (distinct from light chips). */
+  "inline-flex w-fit max-w-full rounded px-1 py-0.5 bg-black/35 shadow-[0_1px_2px_rgba(0,0,0,0.18)] ring-1 ring-black/15 xl:px-0.5 xl:py-0.5";
+/** Price / normal stock — darker semi-solid capsule (distinct from light chips). Content-fit; text must stay inside. */
 const posCardSolidCapsuleClass =
-  "inline-flex w-fit max-w-full shrink-0 items-center rounded-full border border-black/45 bg-black/75 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.35)] ring-1 ring-black/30 xl:px-1.5 xl:py-px";
+  "inline-flex w-fit max-w-full shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/45 bg-black/75 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.35)] ring-1 ring-black/30 xl:px-1 xl:py-0.5";
 const posCardFloatingNameClass =
   "block text-white [paint-order:stroke_fill] [-webkit-text-stroke:0.4px_rgba(0,0,0,0.65)] [text-shadow:0_1px_2px_rgba(0,0,0,0.85),0_0_1px_rgba(0,0,0,0.9)]";
 const posCardFloatingUnitClass =
@@ -2237,7 +2263,7 @@ const posCardFloatingUnitClass =
 const posCardFloatingSkuClass =
   "block font-mono text-[10px] font-semibold text-white/90 [paint-order:stroke_fill] [-webkit-text-stroke:0.25px_rgba(0,0,0,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.75)] xl:text-[9px]";
 const posCardFloatingPriceClass =
-  "whitespace-nowrap text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.45px_rgba(0,0,0,0.72)] [text-shadow:0_1px_3px_rgba(0,0,0,0.88),0_0_1px_rgba(255,255,255,0.35)] xl:text-[14px]";
+  "block whitespace-nowrap text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.3px_rgba(0,0,0,0.72)] [text-shadow:0_1px_2px_rgba(0,0,0,0.88)] xl:text-[12px]";
 
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
@@ -2279,8 +2305,8 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
                 <span className={cn("max-w-[min(100%,11rem)] truncate xl:max-w-full", posCardFloatingSkuClass)} title={product.sku}>{product.sku}</span>
               </span>
             </div>
-            <div className="flex w-full min-w-0 items-end justify-between gap-1 pt-0.5 xl:gap-0.5">
-              <span className={cn(posCardSolidCapsuleClass, "min-w-0 max-w-[62%] shrink xl:max-w-[58%]")} title={`${formatLak(product.priceLak)} LAK`}>
+            <div className="flex w-full min-w-0 items-end justify-between gap-1 pt-0.5">
+              <span className={posCardSolidCapsuleClass} title={`${formatLak(product.priceLak)} LAK`}>
                 <span
                   className={posCardFloatingPriceClass}
                   style={{ color: POS_CARD_EMERALD_BRIGHT }}
@@ -2314,12 +2340,12 @@ function StockBadge({ className, product, sellableQty, stockReferenceDate, }: {
     const available = sellableQty ?? maxSellQty(product.stockQty, product.conversionQty ?? 1);
     const label = warning ? stockWarningLabel(warning.tone) : fillPosCopy(t("ui.stock.left"), { qty: available });
     if (warning) {
-      return (<span className={cn("max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm xl:max-w-none xl:px-1.5 xl:py-0.5 xl:text-[9px]", warningBadgeClass(warning.tone), className)} title={`${label} (${product.unitName})`}>
+      return (<span className={cn("inline-flex w-fit max-w-full shrink-0 items-center overflow-hidden whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold shadow-sm xl:px-1.5 xl:py-0.5 xl:text-[9px]", warningBadgeClass(warning.tone), className)} title={`${label} (${product.unitName})`}>
         {label}
       </span>);
     }
     return (<span
-      className={cn(posCardSolidCapsuleClass, "whitespace-nowrap text-[11px] font-bold xl:text-[10px]", className)}
+      className={cn(posCardSolidCapsuleClass, "whitespace-nowrap text-[11px] font-bold leading-none xl:text-[8px]", className)}
       style={{ color: POS_CARD_EMERALD_BRIGHT }}
       title={`${label} (${product.unitName})`}
     >
