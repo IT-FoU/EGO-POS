@@ -1813,15 +1813,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 </button>
               </div>
             </div>
-            <div className={cn("flex min-h-0 flex-col bg-card", productGridVisible ? "max-xl:overflow-hidden xl:absolute xl:top-full xl:right-0 xl:z-40 xl:max-h-[min(calc(100dvh-7rem),780px)] xl:w-[420px] xl:overflow-hidden xl:rounded-b-xl xl:border xl:border-t-0 xl:border-border xl:shadow-2xl 2xl:w-[460px]" : "flex-1 overflow-hidden")}>
+            <div className={cn("flex min-h-0 flex-col bg-card", productGridVisible ? "max-xl:overflow-hidden xl:absolute xl:top-full xl:right-0 xl:z-40 xl:h-[min(calc(100dvh-14rem),820px)] xl:w-[420px] xl:overflow-hidden xl:rounded-b-xl xl:border xl:border-t-0 xl:border-border xl:shadow-2xl 2xl:w-[460px]" : "flex-1 overflow-hidden")}>
             <div className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 border-b border-border bg-background/60 px-4 py-2 text-xs">
               <CartMeta label={t("ui.bill.no")} value={billNo || receiptSettings.receiptPrefix}/>
               <CartMeta label={t("ui.customer")} value={selectedCustomer?.name ?? t("ui.guest")}/>
               <CartMeta label={t("ui.cashier")} value={cashierName || t("ui.current.user")}/>
               <CartMeta label={t("ui.time")} value={currentTime}/>
             </div>
-            <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", !productGridVisible && "max-h-[54vh]")}>
-              {cartItems.length === 0 ? (<div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
+            <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", productGridVisible ? "max-xl:max-h-[360px]" : "max-h-[54vh]")}>
+              {cartItems.length === 0 ? (<div className="grid h-full min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
                   {cartItems.map((item, index) => (<div className="rounded-xl border border-border bg-background p-3 shadow-sm" key={cartLineKey(item, index)}>
                       <div className="flex min-w-0 items-start justify-between gap-3">
                         <div className="size-14 shrink-0 overflow-hidden rounded-xl border border-border bg-background/70">
