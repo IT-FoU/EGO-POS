@@ -67,13 +67,28 @@ export async function openCashSessionRequest(openingCashLak: number, note?: stri
   return mapToPosContext(await readJson(response));
 }
 
-export async function closeCashSessionRequest(sessionId: string, countedCashLak: number, note?: string) {
+export type CloseCashSessionResult = PosCashSessionContext & {
+  countedCashLak: number;
+  varianceLak: number;
+};
+
+export async function closeCashSessionRequest(
+  sessionId: string,
+  countedCashLak: number,
+  note?: string,
+): Promise<CloseCashSessionResult> {
   const response = await fetch("/api/pos/cash-sessions/close", {
     body: JSON.stringify({ countedCashLak, note, sessionId }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
-  return mapToPosContext(await readJson(response));
+  const summary = await readJson(response);
+  return {
+    ...mapToPosContext(summary),
+    countedCashLak: Number(summary.countedCashLak ?? countedCashLak),
+    expectedCashLak: Number(summary.expectedCashLak ?? 0),
+    varianceLak: Number(summary.varianceLak ?? 0),
+  };
 }
 
 export async function cashInRequest(sessionId: string, amountLak: number, reason?: string) {
