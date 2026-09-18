@@ -2705,8 +2705,9 @@ function staffStatusClassName(status: string) {
         return "bg-danger/15 text-danger";
     return "bg-muted text-muted-foreground";
 }
-function PosNumberInput({ className, max, min = 0, onValueChange, value, }: {
+function PosNumberInput({ className, "data-testid": dataTestId, max, min = 0, onValueChange, value, }: {
     className?: string;
+    "data-testid"?: string;
     max?: number;
     min?: number;
     value: number;
@@ -2729,7 +2730,7 @@ function PosNumberInput({ className, max, min = 0, onValueChange, value, }: {
         onValueChange(clampedValue);
         setDraft(String(clampedValue));
     }
-    return (<input className={className} inputMode="numeric" type="text" value={draft} onBlur={() => commit(draft)} onChange={(event) => {
+    return (<input className={className} data-testid={dataTestId} inputMode="numeric" type="text" value={draft} onBlur={() => commit(draft)} onChange={(event) => {
             const normalized = normalize(event.target.value);
             setDraft(normalized);
             onValueChange(normalized ? Number(normalized) : 0);
@@ -2907,28 +2908,28 @@ function MixedPaymentModal({ cardAmount, cashAmount, onClose, onExact, qrAmount,
     return (<PosSmallModal closeOnBackdrop={false} closeOnEscape={false} footer={<button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-primary-foreground" type="button" onClick={() => { setPaymentMode("mixed"); onClose(); }}>
           {t("ui.apply.mixed.payment")}
         </button>} onClose={onClose} size="md" title={t("ui.mixed.payment")}>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2" data-testid="mixed-payment-amounts">
           <Field label={t("ui.cash.amount")}>
-            <div className="flex gap-2">
-              <PosNumberInput className="field-input min-w-0 flex-1" value={cashAmount} onValueChange={setCashAmount}/>
+            <div className="flex gap-2" data-mixed-method="cash">
+              <PosNumberInput className="field-input min-w-0 flex-1" data-testid="mixed-amount-cash" value={cashAmount} onValueChange={setCashAmount}/>
               <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("cash")}/>
             </div>
           </Field>
           <Field label={t("ui.qr.amount")}>
-            <div className="flex gap-2">
-              <PosNumberInput className="field-input min-w-0 flex-1" value={qrAmount} onValueChange={setQrAmount}/>
+            <div className="flex gap-2" data-mixed-method="qr">
+              <PosNumberInput className="field-input min-w-0 flex-1" data-testid="mixed-amount-qr" value={qrAmount} onValueChange={setQrAmount}/>
               <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("qr")}/>
             </div>
           </Field>
           <Field label={t("ui.card.amount")}>
-            <div className="flex gap-2">
-              <PosNumberInput className="field-input min-w-0 flex-1" value={cardAmount} onValueChange={setCardAmount}/>
+            <div className="flex gap-2" data-mixed-method="card">
+              <PosNumberInput className="field-input min-w-0 flex-1" data-testid="mixed-amount-card" value={cardAmount} onValueChange={setCardAmount}/>
               <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("card")}/>
             </div>
           </Field>
           <Field label={t("ui.transfer.amount")}>
-            <div className="flex gap-2">
-              <PosNumberInput className="field-input min-w-0 flex-1" value={transferAmount} onValueChange={setTransferAmount}/>
+            <div className="flex gap-2" data-mixed-method="transfer">
+              <PosNumberInput className="field-input min-w-0 flex-1" data-testid="mixed-amount-transfer" value={transferAmount} onValueChange={setTransferAmount}/>
               <ExactPaymentButton disabled={exactDisabled} onClick={() => onExact("transfer")}/>
             </div>
           </Field>

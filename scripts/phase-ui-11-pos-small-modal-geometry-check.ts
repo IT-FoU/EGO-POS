@@ -83,7 +83,7 @@ check(
     unitSelector.includes("closeOnEscape={true}") &&
     unitSelector.includes("onClose={onClose}") &&
     unitSelector.includes("closeAriaLabel={t(\"ui.close.unit.selector\")}") &&
-    shell.includes("onClick={closeOnBackdrop ? onClose : undefined}") &&
+    shell.includes("onClick={closeOnBackdrop ? () => onCloseRef.current() : undefined}") &&
     shell.includes("event.key === \"Escape\" && closeOnEscape"),
 );
 
@@ -91,7 +91,7 @@ check(
   "4. Mixed Payment backdrop does not close",
   mixedPayment.includes("closeOnBackdrop={false}") &&
     mixedPayment.includes("onClose={onClose}") &&
-    shell.includes("onClick={closeOnBackdrop ? onClose : undefined}"),
+    shell.includes("onClick={closeOnBackdrop ? () => onCloseRef.current() : undefined}"),
 );
 
 check(
