@@ -1740,9 +1740,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           {message}
         </div>) : null}
 
-      <section className={cn("min-w-0 gap-4", productGridVisible ? "grid xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_460px]" : "flex flex-col")}>
-        <main className={cn("min-w-0", productGridVisible && cartCollapsed ? "contents" : "flex flex-col gap-3")}>
-          <Panel className={cn("overflow-hidden p-3 shadow-sm", productGridVisible && cartCollapsed && "xl:col-start-1 xl:row-start-1")}>
+      <section className="relative flex min-w-0 flex-col gap-4">
+        <main className="flex min-w-0 flex-col gap-3">
+          <Panel className="overflow-hidden p-3 shadow-sm">
             <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <label className="relative">
                 <Barcode className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary" aria-hidden="true"/>
@@ -1780,7 +1780,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             </div>
           </Panel>
 
-          {productGridVisible ? (<section className={cn("grid min-w-0 gap-3 overflow-x-hidden overflow-y-auto pr-1 [scrollbar-width:thin]", cartCollapsed ? "max-h-[812px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))] xl:col-span-2 xl:row-start-2" : "max-h-[610px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))]")}>
+          {productGridVisible ? (<section className="grid min-w-0 max-h-[812px] grid-cols-[repeat(auto-fit,minmax(155px,1fr))] gap-3 overflow-x-hidden overflow-y-auto pr-1 [scrollbar-width:thin] xl:grid-cols-6">
             {filteredProducts.length === 0 ? (
               <div className="col-span-full rounded-xl border border-dashed border-border p-6 text-center text-sm font-semibold text-muted-foreground">
                 {productQuery ? t("ui.no.search.results") : t("ui.no.products")}
@@ -1789,8 +1789,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           </section>) : null}
         </main>
 
-        <aside className={cn("flex min-w-0 flex-col gap-3", productGridVisible && cartCollapsed && "self-stretch xl:col-start-2 xl:row-start-1")}>
-          <Panel className={cn("flex flex-col overflow-hidden shadow-lg", productGridVisible && cartCollapsed ? "h-full min-h-[96px]" : productGridVisible ? "h-full min-h-[420px]" : cartCollapsed ? "min-h-0" : "min-h-[420px]")}>
+        <aside className={cn("flex min-w-0 flex-col gap-3", productGridVisible && "xl:fixed xl:z-40 xl:right-4 xl:top-28 xl:w-[420px] xl:max-h-[calc(100dvh-7rem)] 2xl:right-8 2xl:w-[460px]")}>
+          <Panel className={cn("flex flex-col overflow-hidden shadow-lg", productGridVisible && cartCollapsed && "xl:min-h-[96px]", productGridVisible && !cartCollapsed && "min-h-[420px] xl:h-full xl:max-h-[calc(100dvh-7rem)]", !productGridVisible && (cartCollapsed ? "min-h-0" : "min-h-[420px]"))}>
             {cartCollapsed ? (<div className="flex h-full min-h-[84px] items-center justify-between gap-3 bg-primary/5 p-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-muted-foreground">
                 <h2 className="max-w-full truncate text-lg font-black tracking-tight text-foreground">{t("ui.shopping.cart")}</h2>
@@ -1821,7 +1821,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               <CartMeta label={t("ui.cashier")} value={cashierName || t("ui.current.user")}/>
               <CartMeta label={t("ui.time")} value={currentTime}/>
             </div>
-            <div className={cn("flex-1 overflow-y-auto p-4", productGridVisible ? "max-h-[330px]" : "max-h-[54vh]")}>
+            <div className={cn("min-h-0 flex-1 overflow-y-auto p-4", productGridVisible ? "max-xl:max-h-[330px]" : "max-h-[54vh]")}>
               {cartItems.length === 0 ? (<div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30 bg-primary/5 px-6 text-center text-base font-semibold text-muted-foreground">{t("ui.scan.or.search.product.to.start.sale")}</div>) : (<div className="flex flex-col gap-3">
                   {cartItems.map((item, index) => (<div className="rounded-xl border border-border bg-background p-3 shadow-sm" key={cartLineKey(item, index)}>
                       <div className="flex min-w-0 items-start justify-between gap-3">
