@@ -36,7 +36,12 @@ export function PosSmallModal({
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // Focus the dialog shell once on mount. Do NOT depend on `onClose` — Mixed Payment
+  // (and other parents) pass inline lambdas that change every keystroke and would steal
+  // focus from amount inputs after each digit.
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
@@ -45,7 +50,7 @@ export function PosSmallModal({
       if (event.key === "Escape" && closeOnEscape) {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     }
 
@@ -54,12 +59,12 @@ export function PosSmallModal({
       window.removeEventListener("keydown", handleKeyDown);
       previous?.focus();
     };
-  }, [closeOnEscape, onClose]);
+  }, [closeOnEscape]);
 
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"
-      onClick={closeOnBackdrop ? onClose : undefined}
+      onClick={closeOnBackdrop ? () => onCloseRef.current() : undefined}
     >
       <section
         ref={dialogRef}
