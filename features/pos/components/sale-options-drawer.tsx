@@ -1,7 +1,7 @@
 "use client";
 
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
-import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
+import { tPos as t } from "@/lib/i18n/pos-copy";
 import { cn } from "@/lib/utils";
 
 export type SaleOptionsDraft = {
@@ -102,8 +102,8 @@ export function SaleOptionsDrawer({
       }
       headerActions={
         <div className="hidden min-w-0 max-w-[18rem] text-right text-xs font-semibold text-muted-foreground sm:block">
-          <div className="truncate">{fillPosCopy(t("ui.bill.label"), {})} {billContext}</div>
-          <div className="truncate">{fillPosCopy(t("ui.customer.label"), {})} {customerName}</div>
+          <div className="truncate">{t("ui.bill.label")} {billContext}</div>
+          <div className="truncate">{t("ui.customer.label")} {customerName}</div>
         </div>
       }
       onClose={onCancel}

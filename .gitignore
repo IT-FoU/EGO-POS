@@ -19,6 +19,9 @@ coverage
 *.log
 dev-server*.log
 
+# QA Worker config (local deploy only — do not commit Hyperdrive/env bindings)
+wrangler.qa.jsonc
+
 # Screenshot & browser-profile automation artifacts
 .tmp-*/
 screenshots/
