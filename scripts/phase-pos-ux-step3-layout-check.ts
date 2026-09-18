@@ -58,11 +58,11 @@ check("expanded cart body uses overlay positioning on desktop", () => {
   assert(client.includes("2xl:w-[460px]"), "2xl cart width preserved");
 });
 
-check("expanded cart overlay uses tall viewport-based height", () => {
-  assert(
-    client.includes("xl:h-[min(calc(100dvh-14rem),820px)]"),
-    "expanded body should keep original tall proportions within viewport",
-  );
+check("expanded cart overlay uses measured viewport max-height", () => {
+  assert(client.includes("cartOverlayMaxHeightPx"), "measured overlay max-height state present");
+  assert(client.includes("getBoundingClientRect().bottom"), "overlay top derived from cart panel");
+  assert(client.includes("xl:max-h-[calc(100dvh-11rem)]"), "CSS fallback max-height before measure");
+  assert(!client.includes("xl:h-[min(calc(100dvh-14rem),820px)]"), "broken fixed overlay height removed");
 });
 
 check("dedicated cart item-list area exists and scrolls", () => {
@@ -70,13 +70,13 @@ check("dedicated cart item-list area exists and scrolls", () => {
     client.includes('<div className={cn("min-h-0 flex-1 overflow-y-auto p-4"'),
     "item-list region must be flex-1 min-h-0 overflow-y-auto",
   );
-  assert(client.includes("max-xl:max-h-[360px]"), "tablet item-list keeps bounded scroll height");
+  assert(client.includes("max-h-[330px]"), "93078f1 item-list max height restored");
 });
 
 check("empty cart shows large empty-state panel", () => {
   assert(
-    client.includes('grid h-full min-h-64 place-items-center rounded-xl border border-dashed border-primary/30'),
-    "empty-state panel must fill item-list area",
+    client.includes('grid min-h-64 place-items-center rounded-xl border border-dashed border-primary/30'),
+    "empty-state panel must use original large min-h-64",
   );
   assert(client.includes("ui.scan.or.search.product.to.start.sale"), "empty-state message preserved");
 });
@@ -86,20 +86,31 @@ check("payment section sits outside item-list scroll and pay reachable", () => {
   assert(client.includes('onClick={completeSale} disabled={isPending}'), "pay footer reachable");
 });
 
+check("price capsule is content-fit and contains full price", () => {
+  assert(client.includes('posCardSolidCapsuleClass'), "solid capsule class present");
+  assert(
+    client.includes('inline-flex w-fit max-w-full shrink-0 items-center justify-center overflow-hidden'),
+    "price/stock capsule is content-fit with overflow containment",
+  );
+  assert(!client.includes("max-w-[62%]"), "price must not use percentage max-width shrink trap");
+  assert(!client.includes("max-w-[58%]"), "price must not use xl percentage max-width");
+  assert(client.includes("whitespace-nowrap"), "full price string, no truncate");
+  assert(!client.includes('truncate') || !/<span className=\{cn\(posCardSolidCapsuleClass[\s\S]*?truncate/.test(client), "price capsule must not truncate");
+});
+
+check("stock capsule is content-fit without truncate for normal stock", () => {
+  assert(client.includes("<StockBadge className=\"shrink-0\""), "stock badge on price row");
+  const stockNormal = client.match(/posCardSolidCapsuleClass, "whitespace-nowrap text-\[11px\][^"]*"/)?.[0];
+  assert(stockNormal, "normal stock uses solid capsule");
+  assert(!stockNormal.includes("truncate"), "normal stock must not truncate");
+});
+
 check("product grid height stable when cart toggles", () => {
   const gridSection = client.match(
     /productGridVisible \? \(<section className="([^"]+)"/,
   )?.[1];
   assert(gridSection?.includes("max-h-[812px]"), "stable product grid max height expected");
   assert(!gridSection?.includes("max-h-[610px]"), "cart-dependent grid height removed");
-});
-
-check("six-column card price and stock remain visible", () => {
-  assert(client.includes("posCardFloatingPriceClass"), "price class present");
-  assert(client.includes("whitespace-nowrap"), "price keeps full LAK");
-  assert(client.includes("<StockBadge className=\"shrink-0\""), "stock badge stays on card row");
-  assert(client.includes("xl:text-[14px]"), "six-column price tuning");
-  assert(client.includes("xl:text-[10px]"), "six-column stock tuning");
 });
 
 check("STEP 2 ProductGridItem styling preserved", () => {
