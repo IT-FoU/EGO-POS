@@ -2221,20 +2221,19 @@ function InfoLine({ label, muted = false, strike = false, value }: {
       <div className={cn("truncate font-semibold", muted && "text-muted-foreground", strike && "line-through decoration-muted-foreground/70")}>{value}</div>
     </div>);
 }
-/** Owner STEP 2 — floating labels + localized dark backdrops (CSS only). */
-const POS_CARD_EMERALD = "#028A0F";
-const posCardInfoBackdropClass =
-  "max-w-[calc(100%-0.5rem)] rounded-lg bg-black/60 px-2 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.35)] ring-1 ring-black/35";
-const posCardPriceBackdropClass =
-  "inline-block max-w-full rounded-md bg-black/60 px-2 py-1 shadow-[0_2px_8px_rgba(0,0,0,0.35)] ring-1 ring-black/35";
+/** Owner STEP 2 — per-line floating labels (CSS only). */
+/** Brighter emerald than #028A0F for price/stock legibility on photos. */
+const POS_CARD_EMERALD_BRIGHT = "#2EDB45";
+const posCardLineBackdropClass =
+  "inline-block w-fit max-w-full rounded px-1.5 py-0.5 bg-black/40 shadow-[0_1px_3px_rgba(0,0,0,0.22)] ring-1 ring-black/20";
 const posCardFloatingNameClass =
-  "text-white [paint-order:stroke_fill] [-webkit-text-stroke:0.45px_rgba(0,0,0,0.72)] [text-shadow:0_1px_3px_rgba(0,0,0,0.92),0_0_2px_rgba(0,0,0,0.95)]";
+  "block text-white [paint-order:stroke_fill] [-webkit-text-stroke:0.4px_rgba(0,0,0,0.65)] [text-shadow:0_1px_2px_rgba(0,0,0,0.85),0_0_1px_rgba(0,0,0,0.9)]";
 const posCardFloatingUnitClass =
-  "text-white font-extrabold uppercase tracking-wide [paint-order:stroke_fill] [-webkit-text-stroke:0.4px_rgba(0,0,0,0.65)] [text-shadow:0_1px_3px_rgba(0,0,0,0.88),0_0_1px_rgba(0,0,0,0.9)]";
+  "block text-white text-[11px] font-extrabold uppercase tracking-wide [paint-order:stroke_fill] [-webkit-text-stroke:0.35px_rgba(0,0,0,0.55)] [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]";
 const posCardFloatingSkuClass =
-  "text-white/90 [paint-order:stroke_fill] [-webkit-text-stroke:0.3px_rgba(0,0,0,0.55)] [text-shadow:0_1px_2px_rgba(0,0,0,0.82),0_0_1px_rgba(0,0,0,0.85)]";
+  "block font-mono text-[10px] font-semibold text-white/90 [paint-order:stroke_fill] [-webkit-text-stroke:0.25px_rgba(0,0,0,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.75)]";
 const posCardFloatingPriceClass =
-  "truncate text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.5px_rgba(0,0,0,0.78)] [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_2px_rgba(0,0,0,0.7)]";
+  "min-w-0 truncate text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.45px_rgba(0,0,0,0.72)] [text-shadow:0_1px_3px_rgba(0,0,0,0.88),0_0_1px_rgba(255,255,255,0.35)]";
 
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
@@ -2264,21 +2263,25 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
         </button>
         <button className="relative min-h-[190px] w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15" type="button" onClick={onClick} title={`${localizedProductName(product)} — ${product.unitName} / ${product.sku}`}>
           <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex min-w-0 flex-col items-start gap-1.5 p-2.5">
-            <div className={posCardInfoBackdropClass}>
-              <div className={cn("line-clamp-2 max-w-full overflow-hidden break-words text-[12px] font-black leading-snug", posCardFloatingNameClass)} title={localizedProductName(product)}>{localizedProductName(product)}</div>
-              <div className={cn("mt-0.5 max-w-full truncate text-[11px]", posCardFloatingUnitClass)} title={product.unitName}>{product.unitName}</div>
-              <div className={cn("mt-0.5 max-w-full truncate font-mono text-[10px] font-semibold", posCardFloatingSkuClass)} title={product.sku}>{product.sku}</div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex min-w-0 flex-col items-start gap-1 p-2.5">
+            <div className="flex max-w-[calc(100%-0.25rem)] flex-col items-start gap-1">
+              <span className={posCardLineBackdropClass}>
+                <span className={cn("line-clamp-2 max-w-[min(100%,14rem)] break-words text-[12px] font-black leading-snug", posCardFloatingNameClass)} title={localizedProductName(product)}>{localizedProductName(product)}</span>
+              </span>
+              <span className={posCardLineBackdropClass}>
+                <span className={cn("max-w-[min(100%,10rem)] truncate", posCardFloatingUnitClass)} title={product.unitName}>{product.unitName}</span>
+              </span>
+              <span className={posCardLineBackdropClass}>
+                <span className={cn("max-w-[min(100%,11rem)] truncate", posCardFloatingSkuClass)} title={product.sku}>{product.sku}</span>
+              </span>
             </div>
-            <div className="flex w-full min-w-0 items-end justify-between gap-2">
-              <div className={posCardPriceBackdropClass}>
-                <div
-                  className={posCardFloatingPriceClass}
-                  style={{ color: POS_CARD_EMERALD }}
-                  title={`${formatLak(product.priceLak)} LAK`}
-                >
-                  {formatLak(product.priceLak)} LAK
-                </div>
+            <div className="flex w-full min-w-0 items-end justify-between gap-2 pt-0.5">
+              <div
+                className={posCardFloatingPriceClass}
+                style={{ color: POS_CARD_EMERALD_BRIGHT }}
+                title={`${formatLak(product.priceLak)} LAK`}
+              >
+                {formatLak(product.priceLak)} LAK
               </div>
               <StockBadge product={product} sellableQty={sellableQty} stockReferenceDate={stockReferenceDate}/>
             </div>
@@ -2310,8 +2313,8 @@ function StockBadge({ product, sellableQty, stockReferenceDate, }: {
       </span>);
     }
     return (<span
-      className="max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full border border-black/40 bg-black/60 px-2 py-0.5 text-[10px] font-bold shadow-[0_2px_6px_rgba(0,0,0,0.35)] ring-1 ring-white/10"
-      style={{ color: POS_CARD_EMERALD }}
+      className="max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full border border-black/25 bg-black/40 px-2 py-0.5 text-[11px] font-bold shadow-[0_1px_3px_rgba(0,0,0,0.2)] ring-1 ring-black/15"
+      style={{ color: POS_CARD_EMERALD_BRIGHT }}
       title={`${label} (${product.unitName})`}
     >
       {label}
