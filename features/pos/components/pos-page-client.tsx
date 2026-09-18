@@ -75,6 +75,7 @@ import {
   denominationLineSubtotal,
   emptyDenominationCounts,
   sumDenominationCounts,
+  toDenominationCountMap,
   varianceKind,
 } from "@/features/cash-sessions/denominations";
 import { calculateVariance } from "@/features/cash-sessions/cash-session-calculator";
@@ -1652,7 +1653,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         startTransition(async () => {
             try {
-                const session = await openCashSessionRequest(openingCashTotal);
+                const session = await openCashSessionRequest(openingCashTotal, {
+                    countBreakdown: { opening: toDenominationCountMap(openingCashCounts) },
+                });
                 setActiveCashSession(session);
                 setClosingSummaryVisible(false);
                 setLastCloseSummary(null);
@@ -1694,7 +1697,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 return;
             }
             const sessionId = activeCashSession.sessionId;
-            const closed = await closeCashSessionRequest(sessionId, countedClosingCash);
+            const closed = await closeCashSessionRequest(sessionId, countedClosingCash, {
+                countBreakdown: { closing: toDenominationCountMap(closingCashCounts) },
+            });
             setActiveCashSession(closed);
             setLastCloseSummary({
                 countedCashLak: closed.countedCashLak,

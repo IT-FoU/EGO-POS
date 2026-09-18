@@ -1,4 +1,6 @@
 import { computeCashRefundLak } from "@/features/cash-sessions/cash-session-calculator";
+import { parseCashSessionCountBreakdown } from "@/features/cash-sessions/denominations";
+import type { CashSessionCountBreakdown } from "@/features/cash-sessions/types";
 import { prisma } from "@/lib/db/prisma";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -21,6 +23,7 @@ export type OwnShiftReport = {
     cashInLak: number;
     cashOutLak: number;
     closingCashLak: number | null;
+    countBreakdown: CashSessionCountBreakdown | null;
     expectedCashLak: number;
     openingCashLak: number;
     varianceLak: number | null;
@@ -217,6 +220,13 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
       cashInLak,
       cashOutLak,
       closingCashLak,
+      countBreakdown: (() => {
+        try {
+          return parseCashSessionCountBreakdown(session.countBreakdown);
+        } catch {
+          return null;
+        }
+      })(),
       expectedCashLak,
       openingCashLak,
       varianceLak,

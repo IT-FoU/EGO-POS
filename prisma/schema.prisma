@@ -1325,6 +1325,8 @@ model CashSession {
   closingCash    Decimal?  @map("closing_cash") @db.Decimal(18, 2)
   expectedCash   Decimal?  @map("expected_cash") @db.Decimal(18, 2)
   cashDifference Decimal?  @map("cash_difference") @db.Decimal(18, 2)
+  /// Audit-only denomination qty map. Authoritative totals remain opening/closing/expected/difference columns.
+  countBreakdown Json?     @map("count_breakdown")
   openedAt       DateTime  @default(now()) @map("opened_at")
   closedAt       DateTime? @map("closed_at")
   company        Company   @relation(fields: [companyId], references: [id])

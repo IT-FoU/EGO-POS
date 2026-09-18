@@ -58,9 +58,16 @@ async function readJson(response: Response) {
   return payload.data as CashSessionSummary;
 }
 
-export async function openCashSessionRequest(openingCashLak: number, note?: string) {
+export async function openCashSessionRequest(
+  openingCashLak: number,
+  options?: { countBreakdown?: { opening: Record<string, number> }; note?: string },
+) {
   const response = await fetch("/api/pos/cash-sessions/open", {
-    body: JSON.stringify({ note, openingCashLak }),
+    body: JSON.stringify({
+      countBreakdown: options?.countBreakdown,
+      note: options?.note,
+      openingCashLak,
+    }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
@@ -68,6 +75,7 @@ export async function openCashSessionRequest(openingCashLak: number, note?: stri
 }
 
 export type CloseCashSessionResult = PosCashSessionContext & {
+  countBreakdown: CashSessionSummary["countBreakdown"];
   countedCashLak: number;
   varianceLak: number;
 };
@@ -75,16 +83,22 @@ export type CloseCashSessionResult = PosCashSessionContext & {
 export async function closeCashSessionRequest(
   sessionId: string,
   countedCashLak: number,
-  note?: string,
+  options?: { countBreakdown?: { closing: Record<string, number> }; note?: string },
 ): Promise<CloseCashSessionResult> {
   const response = await fetch("/api/pos/cash-sessions/close", {
-    body: JSON.stringify({ countedCashLak, note, sessionId }),
+    body: JSON.stringify({
+      countBreakdown: options?.countBreakdown,
+      countedCashLak,
+      note: options?.note,
+      sessionId,
+    }),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
   const summary = await readJson(response);
   return {
     ...mapToPosContext(summary),
+    countBreakdown: summary.countBreakdown ?? null,
     countedCashLak: Number(summary.countedCashLak ?? countedCashLak),
     expectedCashLak: Number(summary.expectedCashLak ?? 0),
     varianceLak: Number(summary.varianceLak ?? 0),
