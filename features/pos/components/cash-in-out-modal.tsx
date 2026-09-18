@@ -18,12 +18,14 @@ type CashInOutModalProps = {
   expectedCashLak: number;
   sessionOpen: boolean;
   submitting: boolean;
+  onBack?: () => void;
   onClose: () => void;
   onSubmit: (input: { amountLak: number; reason: string; type: CashMovementType }) => Promise<void>;
 };
 
 export function CashInOutModal({
   expectedCashLak,
+  onBack,
   onClose,
   onSubmit,
   sessionOpen,
@@ -67,7 +69,7 @@ export function CashInOutModal({
   }
 
   return (
-    <PosWorkspaceModal onClose={onClose} title={t("ui.cash.in.cash.out")}>
+    <PosWorkspaceModal onBack={onBack} onClose={onClose} title={t("ui.cash.in.cash.out")}>
       <div className="mx-auto grid max-w-xl gap-4">
         {!sessionOpen ? (
           <div className="rounded-md border border-danger/30 bg-danger/10 p-4 text-sm text-danger">

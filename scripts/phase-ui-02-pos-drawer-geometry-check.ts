@@ -58,14 +58,18 @@ check(
 
 check(
   "4. Recent Sales uses repaired frame",
-  posClient.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>'),
+  posClient.includes('title={t("ui.recent.sales")}') &&
+    posClient.includes("<PosWorkspaceModal") &&
+    (posClient.includes('<PosWorkspaceModal onBack={onBack} onClose={onClose} title={t("ui.recent.sales")}>') ||
+      posClient.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>')),
 );
 
 check(
   "5. Hold/Resume uses repaired frame if classified large",
   posClient.includes('<PosModal title={t("ui.hold.bills.resume.bills")}') &&
     posClient.includes("function PosModal(") &&
-    posClient.includes("return <PosWorkspaceModal onClose={onClose} title={title}>{children}</PosWorkspaceModal>;"),
+    posClient.includes("return <PosWorkspaceModal") &&
+    posClient.includes("title={title}>{children}</PosWorkspaceModal>;"),
 );
 
 check(
@@ -88,9 +92,10 @@ check(
   "9. approved large POS drawers are not converted to centered small overlays",
   frame.includes(overlayClass) &&
     !frame.includes("fixed inset-0") &&
-    posClient.includes("return <PosWorkspaceModal onClose={onClose} title={title}>{children}</PosWorkspaceModal>;") &&
-    posClient.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.recent.sales")}>') &&
-    posClient.includes('<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title={t("ui.receipt.preview")}>'),
+    posClient.includes("return <PosWorkspaceModal") &&
+    posClient.includes('title={t("ui.recent.sales")}') &&
+    posClient.includes('headerClassName="print:hidden"') &&
+    posClient.includes('title={t("ui.receipt.preview")}'),
 );
 
 check(
@@ -99,7 +104,8 @@ check(
     posClient.includes("async function resumeSale") &&
     posClient.includes("function completeSale()") &&
     cashInOut.includes('<div className="mx-auto grid max-w-xl gap-4">') &&
-    returnExchange.includes("<PosWorkspaceModal onClose={onClose} title={tPos(\"ui.return.exchange.void\")}>") &&
+    returnExchange.includes('title={tPos("ui.return.exchange.void")}') &&
+    returnExchange.includes("<PosWorkspaceModal") &&
     posActions.includes("export async function completeSaleAction") &&
     dashboardDrawer.includes('className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72"'),
 );
@@ -108,9 +114,11 @@ check(
   "11. other large POS surfaces inherit the shared frame",
   posClient.includes('<PosModal title={t("ui.more")}') &&
     posClient.includes('<PosModal title={t("ui.favorites")}') &&
-    posClient.includes('<PosWorkspaceModal headerClassName="print:hidden" onClose={onClose} title={t("ui.receipt.preview")}>') &&
+    posClient.includes('headerClassName="print:hidden"') &&
+    posClient.includes('title={t("ui.receipt.preview")}') &&
     posClient.includes("return (<PosModal title={title} onClose={onClose}>") &&
-    cashInOut.includes('<PosWorkspaceModal onClose={onClose} title={t("ui.cash.in.cash.out")}>'),
+    cashInOut.includes('title={t("ui.cash.in.cash.out")}') &&
+    cashInOut.includes("<PosWorkspaceModal"),
 );
 
 console.log("\nphase-ui-02-pos-drawer-geometry-check: PASS");

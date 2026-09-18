@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 type OwnShiftReportDrawerProps = {
   locale?: string;
+  onBack?: () => void;
   onClose: () => void;
 };
 
@@ -176,7 +177,7 @@ function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
   );
 }
 
-export function OwnShiftReportModal({ locale, onClose }: OwnShiftReportDrawerProps) {
+export function OwnShiftReportModal({ locale, onBack, onClose }: OwnShiftReportDrawerProps) {
   const detectedLocale = useAppLocale(locale);
   const c = copy(detectedLocale);
   const [report, setReport] = useState<OwnShiftReport | null>(null);
@@ -214,6 +215,7 @@ export function OwnShiftReportModal({ locale, onClose }: OwnShiftReportDrawerPro
           <RefreshCw className={cn("size-4", isLoading && "animate-spin")} aria-hidden="true" />
         </button>
       )}
+      onBack={onBack}
       onClose={onClose}
       title={c.ownShiftReport}
     >
