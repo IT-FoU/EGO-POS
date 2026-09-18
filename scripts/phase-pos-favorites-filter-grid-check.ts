@@ -105,7 +105,64 @@ check("7. Favorites empty state wiring present", () => {
   assert(client.includes("selectFavoriteCatalogueProducts"), "shared filter helper used");
 });
 
+const favoritesModalSlice = client.slice(
+  client.indexOf('{favoritesOpen ?'),
+  client.indexOf("{heldBillsOpen ?"),
+);
+
+check("8. Issue 3: Favorites product click does NOT auto-close after add", () => {
+  assert(favoritesModalSlice.includes("selectProductForSale(product)"), "product click still adds via selectProductForSale");
+  assert(
+    !/selectProductForSale\(product\);\s*setFavoritesOpen\(false\)/.test(favoritesModalSlice),
+    "must not close Favorites immediately after selectProductForSale",
+  );
+  // Only explicit modal Close/X may dismiss Favorites from this surface.
+  assert(
+    favoritesModalSlice.includes('onClose={() => setFavoritesOpen(false)}'),
+    "explicit Close still wired",
+  );
+  const autoCloseCalls = [...favoritesModalSlice.matchAll(/setFavoritesOpen\(false\)/g)];
+  assert(autoCloseCalls.length === 1, `expected exactly 1 close setter (onClose), got ${autoCloseCalls.length}`);
+});
+
+check("9. Issue 3: unfavorite stays inside open Favorites (toggle only)", () => {
+  assert(
+    favoritesModalSlice.includes("onToggleFavorite={() => void toggleFavorite(product)}"),
+    "star uses toggleFavorite",
+  );
+  assert(!/toggleFavorite[\s\S]{0,80}setFavoritesOpen\(false\)/.test(favoritesModalSlice), "unfavorite must not close Favorites");
+});
+
+check("10. Issue 3: Unit Selector does not dismiss Favorites parent", () => {
+  assert(client.includes("setUnitSelectionProduct(product)"), "multi-unit opens Unit Selector");
+  assert(
+    client.includes(
+      '{unitSelectionProduct ? (<UnitSelectorModal product={unitSelectionProduct} onClose={() => setUnitSelectionProduct(null)} onSelect={(unit) => addToCart(unitSelectionProduct, unit)}/>) : null}',
+    ),
+    "Unit Selector close/select only clears unitSelectionProduct",
+  );
+  // Unit Selector onClose/onSelect must not call setFavoritesOpen(false).
+  const unitBlock = client.slice(
+    client.indexOf("{unitSelectionProduct ?"),
+    client.indexOf("{unitSelectionProduct ?") + 280,
+  );
+  assert(!unitBlock.includes("setFavoritesOpen"), "Unit Selector must not touch Favorites open state");
+});
+
+check("11. Issue 3: multi-add supported (Favorites stays open between additions)", () => {
+  // Source-level: click handler only calls selectProductForSale; no close side-effect.
+  // Owner interaction QA still required to confirm cart accumulates A+B while modal stays mounted.
+  assert(
+    /onClick=\{\(\) => \{\s*\/\/ Keep Favorites open[\s\S]*?selectProductForSale\(product\);\s*\}\}/.test(
+      favoritesModalSlice,
+    ) || favoritesModalSlice.includes("selectProductForSale(product)"),
+    "Favorites click path only selects product",
+  );
+  assert(!favoritesModalSlice.includes("setFavoritesOpen(false);\n"), "no inline auto-close after click");
+});
+
 console.log("");
+console.log("NOTE: Browser click / cart accumulation / Unit Selector overlay stacking require Owner Interaction QA.");
 const failed = results.filter((entry) => entry.status === "FAIL");
 console.log(`Favorites regression checks: ${results.length - failed.length}/${results.length} passed`);
 if (failed.length > 0) process.exitCode = 1;

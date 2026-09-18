@@ -2107,8 +2107,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       {favoritesOpen ? (<PosModal title={t("ui.favorites")} onClose={() => setFavoritesOpen(false)}>
         {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground" data-testid="pos-favorites-empty">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid grid-cols-[repeat(auto-fit,minmax(155px,1fr))] gap-3 xl:grid-cols-6" data-testid="pos-favorites-grid">
           {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => {
+            // Keep Favorites open so cashiers can add multiple items without reopening.
             selectProductForSale(product);
-            setFavoritesOpen(false);
         }} onToggleFavorite={() => void toggleFavorite(product)}/>))}
         </div>)}
       </PosModal>) : null}
