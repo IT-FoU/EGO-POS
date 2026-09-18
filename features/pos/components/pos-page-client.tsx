@@ -48,7 +48,10 @@ import {
 } from "@/features/pos/pos-unit-display-settings";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
-import { setPosFavorite, selectFavoriteCatalogueProducts } from "@/features/pos/favorites-client";
+import {
+  setPosFavorite,
+  selectFavoriteCatalogueProducts,
+} from "@/features/pos/favorites-client";
 import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
 import {
   applyPosCatalogueRefresh,
@@ -478,6 +481,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         // Never fall back to the full catalogue when favorites are sparse.
         return projectPosCatalogueCards(selectFavoriteCatalogueProducts(visibleProducts), unitDisplayMode);
     }, [unitDisplayMode, visibleProducts]);
+    const favoriteCartQtyByProductId = useMemo(() => {
+        const totals = new Map<string, number>();
+        for (const item of cartItems) {
+            totals.set(item.id, (totals.get(item.id) ?? 0) + item.quantity);
+        }
+        return totals;
+    }, [cartItems]);
     const filteredProducts = useMemo(
         () => projectPosCatalogueCards(
             filterPosCatalogue(visibleProducts, productQuery, selectedCategory),
@@ -2106,7 +2116,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       {favoritesOpen ? (<PosModal title={t("ui.favorites")} onClose={() => setFavoritesOpen(false)}>
         {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground" data-testid="pos-favorites-empty">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid grid-cols-[repeat(auto-fit,minmax(155px,1fr))] gap-3 xl:grid-cols-6" data-testid="pos-favorites-grid">
-          {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => {
+          {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} cartQuantity={favoriteCartQtyByProductId.get(product.id) ?? 0} onClick={() => {
             // Keep Favorites open so cashiers can add multiple items without reopening.
             selectProductForSale(product);
         }} onToggleFavorite={() => void toggleFavorite(product)}/>))}
@@ -2346,7 +2356,9 @@ const posCardFloatingSkuClass =
 const posCardFloatingPriceClass =
   "block whitespace-nowrap text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.3px_rgba(0,0,0,0.72)] [text-shadow:0_1px_2px_rgba(0,0,0,0.88)] xl:text-[12px]";
 
-function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
+function ProductGridItem({ cartQuantity, onClick, onToggleFavorite, product, stockReferenceDate, }: {
+    /** Favorites-only: sell-unit cart quantity badge (hidden when 0 / omitted). */
+    cartQuantity?: number;
     onClick: () => void;
     onToggleFavorite: () => void;
     product: PosProduct;
@@ -2354,8 +2366,18 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
 }) {
     const sellableQty = maxSellQty(product.stockQty, product.conversionQty ?? 1);
     const isFavorite = Boolean(product.isFavorite);
+    const badgeQty = typeof cartQuantity === "number" && cartQuantity > 0 ? cartQuantity : 0;
     return (
       <div className="group relative min-h-[190px] min-w-0">
+        {badgeQty > 0 ? (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-2 top-2 z-20 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-900/90 px-1.5 text-[11px] font-bold tabular-nums leading-none text-white shadow-sm"
+            data-testid="pos-favorites-cart-qty-badge"
+          >
+            {badgeQty}
+          </span>
+        ) : null}
         <button
           aria-label={isFavorite ? t("ui.remove.from.favorites") : t("ui.add.to.favorites")}
           aria-pressed={isFavorite}
