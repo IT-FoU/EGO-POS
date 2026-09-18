@@ -89,6 +89,23 @@ check("product grid height stable when cart toggles", () => {
   assert(!gridSection?.includes("max-h-[610px]"), "cart-dependent grid height removed");
 });
 
+check("collapsed cart stretches to match left toolbar row height", () => {
+  assert(
+    client.includes('cartCollapsed ? "xl:h-full xl:self-stretch" : "xl:self-start"'),
+    "collapsed cart must stretch to top-row peer height",
+  );
+  assert(
+    client.includes('productGridVisible && cartCollapsed && "h-full min-h-[96px]"'),
+    "collapsed panel fills stretched aside",
+  );
+});
+
+check("Exact payment shortcut is wired without redesigning Payment", () => {
+  assert(client.includes('t("ui.exact")'), "Exact label present");
+  assert(client.includes("applyExactPaymentToMethod"), "Exact helper used");
+  assert(client.includes("dueAmount <= 0"), "Exact disabled when Due=0");
+});
+
 console.log("");
 console.log(
   "NOTE: These are SOURCE/LAYOUT checks only. They cannot prove Owner visual QA.",
