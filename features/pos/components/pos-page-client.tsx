@@ -1845,7 +1845,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
         setMessage(`${formatPosPermissionAction(action)} completed${suffix}.`);
     }
-    return (<div className="flex min-w-0 flex-col gap-3">
+    return (<div className="flex min-w-0 flex-col gap-3" data-pos-ui="">
       {message ? (<div className="rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary">
           {message}
         </div>) : null}

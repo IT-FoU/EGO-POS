@@ -65,7 +65,7 @@ export function PosWorkspaceModal({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {onBack ? (
               <button
-                className="grid size-10 shrink-0 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="grid size-10 shrink-0 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 data-testid="pos-workspace-back"
                 type="button"
                 onClick={onBack}
@@ -78,7 +78,7 @@ export function PosWorkspaceModal({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {headerActions}
-            <button className="grid size-10 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" type="button" onClick={onClose} aria-label={tPos("ui.close")}>
+            <button className="grid size-10 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" type="button" onClick={onClose} aria-label={tPos("ui.close")}>
               <X className="size-4" aria-hidden="true" />
             </button>
           </div>

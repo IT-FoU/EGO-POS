@@ -38,7 +38,7 @@ const overlayClassWithOptionalLayer =
 const cardClass =
   '"flex w-full max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl"';
 const closeClass =
-  'className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground"';
+  'className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"';
 const largeOverlay =
   'className="fixed inset-y-0 left-0 right-0 z-[60] overflow-x-hidden bg-black/70 lg:left-72"';
 
