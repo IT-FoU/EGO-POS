@@ -2221,11 +2221,15 @@ function InfoLine({ label, muted = false, strike = false, value }: {
       <div className={cn("truncate font-semibold", muted && "text-muted-foreground", strike && "line-through decoration-muted-foreground/70")}>{value}</div>
     </div>);
 }
-/** Owner STEP 2 — per-line floating labels (CSS only). */
+/** Owner STEP 2 — floating labels (CSS only). Two backdrop families: light chips vs solid capsules. */
 /** Brighter emerald than #028A0F for price/stock legibility on photos. */
 const POS_CARD_EMERALD_BRIGHT = "#2EDB45";
-const posCardLineBackdropClass =
-  "inline-block w-fit max-w-full rounded px-1.5 py-0.5 bg-black/40 shadow-[0_1px_3px_rgba(0,0,0,0.22)] ring-1 ring-black/20";
+/** Name / Unit / SKU — light translucent, text-hugging (not solid). */
+const posCardLightLabelBackdropClass =
+  "inline-flex w-fit max-w-full rounded px-1 py-0.5 bg-black/35 shadow-[0_1px_2px_rgba(0,0,0,0.18)] ring-1 ring-black/15";
+/** Price / normal stock — darker semi-solid capsule (distinct from light chips). */
+const posCardSolidCapsuleClass =
+  "inline-flex w-fit max-w-full shrink-0 items-center rounded-full border border-black/45 bg-black/75 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.35)] ring-1 ring-black/30";
 const posCardFloatingNameClass =
   "block text-white [paint-order:stroke_fill] [-webkit-text-stroke:0.4px_rgba(0,0,0,0.65)] [text-shadow:0_1px_2px_rgba(0,0,0,0.85),0_0_1px_rgba(0,0,0,0.9)]";
 const posCardFloatingUnitClass =
@@ -2233,7 +2237,7 @@ const posCardFloatingUnitClass =
 const posCardFloatingSkuClass =
   "block font-mono text-[10px] font-semibold text-white/90 [paint-order:stroke_fill] [-webkit-text-stroke:0.25px_rgba(0,0,0,0.45)] [text-shadow:0_1px_2px_rgba(0,0,0,0.75)]";
 const posCardFloatingPriceClass =
-  "min-w-0 truncate text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.45px_rgba(0,0,0,0.72)] [text-shadow:0_1px_3px_rgba(0,0,0,0.88),0_0_1px_rgba(255,255,255,0.35)]";
+  "whitespace-nowrap text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.45px_rgba(0,0,0,0.72)] [text-shadow:0_1px_3px_rgba(0,0,0,0.88),0_0_1px_rgba(255,255,255,0.35)]";
 
 function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDate, }: {
     onClick: () => void;
@@ -2265,24 +2269,25 @@ function ProductGridItem({ onClick, onToggleFavorite, product, stockReferenceDat
           <PosProductImage className="absolute inset-0 size-full rounded-none border-0" imageClassName="object-cover" imageKey={product.imageKey} imageUrl={product.unitImageUrl} label={localizedProductName(product)}/>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex min-w-0 flex-col items-start gap-1 p-2.5">
             <div className="flex max-w-[calc(100%-0.25rem)] flex-col items-start gap-1">
-              <span className={posCardLineBackdropClass}>
+              <span className={posCardLightLabelBackdropClass}>
                 <span className={cn("line-clamp-2 max-w-[min(100%,14rem)] break-words text-[12px] font-black leading-snug", posCardFloatingNameClass)} title={localizedProductName(product)}>{localizedProductName(product)}</span>
               </span>
-              <span className={posCardLineBackdropClass}>
+              <span className={posCardLightLabelBackdropClass}>
                 <span className={cn("max-w-[min(100%,10rem)] truncate", posCardFloatingUnitClass)} title={product.unitName}>{product.unitName}</span>
               </span>
-              <span className={posCardLineBackdropClass}>
+              <span className={posCardLightLabelBackdropClass}>
                 <span className={cn("max-w-[min(100%,11rem)] truncate", posCardFloatingSkuClass)} title={product.sku}>{product.sku}</span>
               </span>
             </div>
             <div className="flex w-full min-w-0 items-end justify-between gap-2 pt-0.5">
-              <div
-                className={posCardFloatingPriceClass}
-                style={{ color: POS_CARD_EMERALD_BRIGHT }}
-                title={`${formatLak(product.priceLak)} LAK`}
-              >
-                {formatLak(product.priceLak)} LAK
-              </div>
+              <span className={posCardSolidCapsuleClass} title={`${formatLak(product.priceLak)} LAK`}>
+                <span
+                  className={posCardFloatingPriceClass}
+                  style={{ color: POS_CARD_EMERALD_BRIGHT }}
+                >
+                  {formatLak(product.priceLak)} LAK
+                </span>
+              </span>
               <StockBadge product={product} sellableQty={sellableQty} stockReferenceDate={stockReferenceDate}/>
             </div>
           </div>
@@ -2313,7 +2318,7 @@ function StockBadge({ product, sellableQty, stockReferenceDate, }: {
       </span>);
     }
     return (<span
-      className="max-w-[6.5rem] shrink-0 truncate whitespace-nowrap rounded-full border border-black/25 bg-black/40 px-2 py-0.5 text-[11px] font-bold shadow-[0_1px_3px_rgba(0,0,0,0.2)] ring-1 ring-black/15"
+      className={cn(posCardSolidCapsuleClass, "whitespace-nowrap text-[11px] font-bold")}
       style={{ color: POS_CARD_EMERALD_BRIGHT }}
       title={`${label} (${product.unitName})`}
     >
