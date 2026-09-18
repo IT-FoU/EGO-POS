@@ -3,8 +3,14 @@ import { join } from "node:path";
 
 import {
   CASH_DENOMINATIONS_LAK,
+  assertDenominationTotalMatches,
   denominationLineSubtotal,
+  mergeClosingCountBreakdown,
+  parseCashSessionCountBreakdown,
+  parseDenominationCountMap,
   sumDenominationCounts,
+  sumParsedDenominationCounts,
+  toDenominationCountMap,
   varianceKind,
 } from "../features/cash-sessions/denominations";
 import {
@@ -17,6 +23,17 @@ import { STORE_ACTIONS, STORE_ROLES, canPerformStoreAction } from "../features/p
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function expectThrow(name: string, run: () => void) {
+  try {
+    run();
+    throw new Error(`${name}: expected throw`);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith(`${name}: expected throw`)) {
+      throw error;
+    }
+  }
 }
 
 const results: Array<{ name: string; status: "FAIL" | "PASS"; detail?: string }> = [];
@@ -41,8 +58,13 @@ const openRoute = readFileSync(join(root, "app/api/pos/cash-sessions/open/route.
 const repo = readFileSync(join(root, "features/cash-sessions/prisma-repository.ts"), "utf8");
 const calculator = readFileSync(join(root, "features/cash-sessions/cash-session-calculator.ts"), "utf8");
 const schema = readFileSync(join(root, "prisma/schema.prisma"), "utf8");
+const migration = readFileSync(
+  join(root, "prisma/migrations/20260918_cash_session_count_breakdown/migration.sql"),
+  "utf8",
+);
 const ownShift = readFileSync(join(root, "features/reports/own-shift-report-service.ts"), "utf8");
 const moreNav = readFileSync(join(root, "scripts/phase-pos-more-back-navigation-check.ts"), "utf8");
+const ownShiftDrawer = readFileSync(join(root, "features/pos/components/own-shift-report-drawer.tsx"), "utf8");
 
 // --- DENOMINATIONS ---
 check("1. denomination line subtotal correct", () => {
@@ -196,7 +218,7 @@ check("17. unauthorized direct close rejected (policy)", () => {
 
 check("18. allowed role succeeds (SHIFT_CLOSE + open path)", () => {
   assert(openRoute.includes("STORE_ACTIONS.SHIFT_OPEN"), "open action");
-  assert(client.includes("openCashSessionRequest(openingCashTotal)"), "open uses denom total");
+  assert(client.includes("openCashSessionRequest(openingCashTotal,"), "open uses denom total + breakdown");
 });
 
 // --- STATE safety (source) ---
@@ -248,15 +270,102 @@ check("25. fake staff/OT UI removed from Cash Shift Count", () => {
   assert(staffSlice.includes("closingCashCounts"), "closing denoms");
 });
 
-check("26. denomination breakdown not faked in localStorage / no schema field", () => {
-  assert(!schema.includes("denomination"), "no denom column yet");
+check("26. denomination breakdown persisted via DB JSON, not localStorage", () => {
+  assert(schema.includes('countBreakdown Json?     @map("count_breakdown")') || schema.includes('countBreakdown Json?'), "schema field");
+  assert(migration.includes('ADD COLUMN "count_breakdown" JSONB'), "migration SQL");
+  assert(!migration.toLowerCase().includes("drop "), "no drop");
   const closeFn = client.slice(client.indexOf("async function confirmClosingSummary"), client.indexOf("async function submitCashMovement"));
   assert(!closeFn.includes("localStorage"), "no localStorage fake persist");
+  assert(client.includes("toDenominationCountMap(openingCashCounts)"), "open sends breakdown");
+  assert(client.includes("toDenominationCountMap(closingCashCounts)"), "close sends breakdown");
 });
 
 check("27. authoritative expected from session accounting", () => {
   assert(client.includes("activeCashSession.expectedCashLak"), "uses session expected");
   assert(calculator.includes("calculateExpectedCash"), "server formula");
+});
+
+// --- DENOMINATION PERSISTENCE / VALIDATION ---
+check("P1. opening breakdown persists (open path)", () => {
+  assert(repo.includes("countBreakdown: { opening: openingBreakdown }"), "open write");
+  assert(openRoute.includes("readOpeningCountBreakdown"), "open route");
+  assert(cashClient.includes("countBreakdown: options?.countBreakdown"), "client open payload");
+});
+
+check("P2. closing breakdown persists (close path)", () => {
+  assert(repo.includes("mergeClosingCountBreakdown"), "merge on close");
+  assert(closeRoute.includes("readClosingCountBreakdown"), "close route");
+  assert(cashClient.includes("countBreakdown: options?.countBreakdown"), "client close payload");
+});
+
+check("P3. closing preserves opening breakdown", () => {
+  const merged = mergeClosingCountBreakdown(
+    { opening: { "50000": 2 } },
+    { "20000": 1 },
+  );
+  assert(merged.opening?.["50000"] === 2, "opening kept");
+  assert(merged.closing?.["20000"] === 1, "closing set");
+});
+
+check("P4. valid denomination total matches submitted total", () => {
+  const counts = parseDenominationCountMap({ "50000": 3, "20000": 2 }, "Opening");
+  assert(sumParsedDenominationCounts(counts) === 190_000, "sum");
+  assertDenominationTotalMatches(counts, 190_000, "Opening");
+});
+
+check("P5. invalid denomination rejected", () => {
+  expectThrow("unknown denom", () => parseDenominationCountMap({ "100": 1 }, "Opening"));
+});
+
+check("P6. negative quantity rejected", () => {
+  expectThrow("negative", () => parseDenominationCountMap({ "50000": -1 }, "Opening"));
+});
+
+check("P7. float quantity rejected", () => {
+  expectThrow("float", () => parseDenominationCountMap({ "50000": 1.5 }, "Closing"));
+});
+
+check("P8. total mismatch rejected", () => {
+  const counts = parseDenominationCountMap({ "50000": 1 }, "Closing");
+  expectThrow("mismatch", () => assertDenominationTotalMatches(counts, 40_000, "Closing"));
+});
+
+check("P9. already-closed session cannot rewrite breakdown", () => {
+  assert(repo.includes("Cash session is already closed."), "already closed blocks update");
+  assert(repo.includes("getScopedSession(tx, tenant, sessionId)"), "scoped before update");
+});
+
+check("P10. existing sessions with NULL breakdown remain readable", () => {
+  assert(parseCashSessionCountBreakdown(null) === null, "null → null");
+  assert(repo.includes("readCountBreakdown(session.countBreakdown)"), "summary maps null-safe");
+  assert(ownShift.includes("countBreakdown:"), "own shift exposes field");
+  assert(!ownShiftDrawer.includes("countBreakdown"), "report UI not redesigned");
+});
+
+check("P11. expected cash calculation unchanged", () => {
+  const expected = calculateExpectedCash({
+    openingCashLak: 500_000,
+    cashSalesLak: 300_000,
+    cashInLak: 100_000,
+    cashOutLak: 50_000,
+    refundLak: 20_000,
+    voidCashLak: 0,
+  });
+  assert(expected === 830_000, `expected=${expected}`);
+  assert(!calculator.includes("countBreakdown"), "calculator ignores breakdown");
+});
+
+check("P12. Cash In/Out accounting unchanged", () => {
+  assert(calculator.includes("input.cashInLak"), "cash in");
+  assert(calculator.includes("input.cashOutLak"), "cash out");
+  assert(repo.includes('transactionType: type'), "movement rows");
+});
+
+check("P13. variance calculation unchanged", () => {
+  assert(calculateVariance(825_000, 830_000) === -5_000, "short");
+  assert(varianceStatus(0) === "exact", "exact");
+  assert(toDenominationCountMap({ 50000: 1, 20000: 0 })["50000"] === 1, "omit zeros");
+  assert(toDenominationCountMap({ 50000: 1, 20000: 0 })["20000"] === undefined, "no zero key");
 });
 
 const failed = results.filter((row) => row.status === "FAIL");

@@ -11,9 +11,17 @@ export type CashSessionTotals = {
   voidCashLak: number;
 };
 
+export type DenominationCountMap = Record<string, number>;
+
+export type CashSessionCountBreakdown = {
+  closing?: DenominationCountMap;
+  opening?: DenominationCountMap;
+};
+
 export type CashSessionSummary = CashSessionTotals & {
   cashierId: string;
   closedAt: string | null;
+  countBreakdown: CashSessionCountBreakdown | null;
   countedCashLak: number | null;
   id: string;
   openedAt: string;
@@ -22,6 +30,9 @@ export type CashSessionSummary = CashSessionTotals & {
 };
 
 export type OpenCashSessionInput = {
+  countBreakdown?: {
+    opening: DenominationCountMap;
+  };
   openingCashLak: number;
   note?: string;
 };
@@ -32,6 +43,9 @@ export type CashMovementInput = {
 };
 
 export type CloseCashSessionInput = {
+  countBreakdown?: {
+    closing: DenominationCountMap;
+  };
   countedCashLak: number;
   note?: string;
 };

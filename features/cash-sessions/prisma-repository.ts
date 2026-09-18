@@ -9,8 +9,15 @@ import {
   summarizeSalePayments,
 } from "@/features/cash-sessions/cash-session-calculator";
 import { CASH_SESSION_SALE_STATUSES } from "@/features/pos/post-sale-shared";
+import {
+  assertDenominationTotalMatches,
+  mergeClosingCountBreakdown,
+  parseCashSessionCountBreakdown,
+  parseDenominationCountMap,
+} from "@/features/cash-sessions/denominations";
 import type {
   CashMovementInput,
+  CashSessionCountBreakdown,
   CashSessionSummary,
   CloseCashSessionInput,
   OpenCashSessionInput,
@@ -31,6 +38,14 @@ async function lockCashSessionLedger(tx: Record<string, any>, sessionId: string)
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cashSessionLedgerLockKey(sessionId)}))`;
 }
 
+function readCountBreakdown(raw: unknown): CashSessionCountBreakdown | null {
+  try {
+    return parseCashSessionCountBreakdown(raw);
+  } catch {
+    return null;
+  }
+}
+
 function mapSessionSummary(
   session: Record<string, any>,
   totals: ReturnType<typeof buildCashSessionTotals>,
@@ -48,6 +63,7 @@ function mapSessionSummary(
     ...totals,
     cashierId: session.cashierId,
     closedAt: session.closedAt ? new Date(session.closedAt).toISOString() : null,
+    countBreakdown: readCountBreakdown(session.countBreakdown),
     countedCashLak,
     expectedCashLak,
     id: session.id,
@@ -335,6 +351,12 @@ export async function openCashSession(input: OpenCashSessionInput, tenant: Tenan
     throw new Error("Opening cash cannot be negative.");
   }
 
+  let openingBreakdown: ReturnType<typeof parseDenominationCountMap> | undefined;
+  if (input.countBreakdown?.opening !== undefined) {
+    openingBreakdown = parseDenominationCountMap(input.countBreakdown.opening, "Opening");
+    assertDenominationTotalMatches(openingBreakdown, openingCashLak, "Opening");
+  }
+
   return withTenantTransaction({
     action: "open",
     module: "cash_sessions",
@@ -360,6 +382,9 @@ export async function openCashSession(input: OpenCashSessionInput, tenant: Tenan
           branchId: scope.branchId,
           cashierId: tenant.userId,
           companyId: tenant.companyId,
+          ...(openingBreakdown
+            ? { countBreakdown: { opening: openingBreakdown } }
+            : {}),
           openingCash: openingCashLak,
         },
         include: { transactions: true },
@@ -429,6 +454,12 @@ export async function closeCashSession(
     throw new Error("Counted cash cannot be negative.");
   }
 
+  let closingBreakdown: ReturnType<typeof parseDenominationCountMap> | undefined;
+  if (input.countBreakdown?.closing !== undefined) {
+    closingBreakdown = parseDenominationCountMap(input.countBreakdown.closing, "Closing");
+    assertDenominationTotalMatches(closingBreakdown, countedCashLak, "Closing");
+  }
+
   return withTenantTransaction({
     action: "close",
     module: "cash_sessions",
@@ -441,11 +472,17 @@ export async function closeCashSession(
       const expectedCashLak = calculateExpectedCash(totals);
       const varianceLak = calculateVariance(countedCashLak, expectedCashLak);
 
+      const countBreakdown =
+        closingBreakdown !== undefined
+          ? mergeClosingCountBreakdown(session.countBreakdown, closingBreakdown)
+          : undefined;
+
       const closed = await tx.cashSession.update({
         data: {
           cashDifference: varianceLak,
           closedAt,
           closingCash: countedCashLak,
+          ...(countBreakdown ? { countBreakdown } : {}),
           expectedCash: expectedCashLak,
         },
         include: { transactions: true },
