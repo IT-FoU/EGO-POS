@@ -94,7 +94,7 @@ export function PosSmallModal({
             ) : null}
           </div>
           <button
-            className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground"
+            className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             type="button"
             onClick={onClose}
             aria-label={closeAriaLabel ?? tPos("ui.close")}
