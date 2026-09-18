@@ -63,6 +63,11 @@ export type HeldSale = {
   totalLak: number;
   items: PosCartItem[];
   snapshot?: HeldBillCartSnapshot;
+  cashierId?: string;
+  cashierName?: string;
+  status?: string;
+  reserved?: boolean;
+  resumedAt?: string | null;
 };
 
 export type HeldBillCartSnapshot = {

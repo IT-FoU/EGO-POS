@@ -16,6 +16,12 @@ import {
   primaryLotMovementFields,
 } from "@/features/inventory/lot-reconciliation";
 import { assertPosActionAllowed, buildPosPolicyForTenant } from "@/features/pos/pos-permission-guard";
+import { consumeHeldBillReservationsForCheckout } from "@/features/pos/held-checkout";
+import {
+  availableBaseQty,
+  lockProductsDeterministically,
+  sumActiveReservedByProduct,
+} from "@/features/pos/stock-reservation";
 import {
   getNextPosSaleNoFromExisting,
   normalizeReceiptPrefix,
@@ -130,7 +136,21 @@ export async function listSellablePosProducts(tenant: TenantContext, client: any
       isActive: true,
     },
   });
-  return attachPosProductImageDelivery(products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId)));
+  const mapped = await attachPosProductImageDelivery(
+    products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId)),
+  );
+  if (!scope.warehouseId || mapped.length === 0) {
+    return mapped;
+  }
+  const reserved = await sumActiveReservedByProduct(client, {
+    companyId: scope.companyId,
+    productIds: mapped.map((product) => product.id),
+    warehouseId: scope.warehouseId,
+  });
+  return mapped.map((product) => ({
+    ...product,
+    stockQty: Math.max(0, Number(product.stockQty ?? 0) - (reserved.get(String(product.id)) ?? 0)),
+  }));
 }
 
 function posLoadTimingEnabled() {
@@ -228,6 +248,25 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     console.info(`[pos-load] total ${Date.now() - started}ms`);
   }
 
+  const mappedProducts = await attachPosProductImageDelivery(
+    products.map((product: Record<string, any>) => ({
+      ...mapPrismaPosProduct(product, scope.warehouseId),
+      isFavorite: favoriteIdSet.has(String(product.id)),
+    })),
+  );
+  const reservedByProduct =
+    scope.warehouseId && mappedProducts.length > 0
+      ? await sumActiveReservedByProduct(db, {
+          companyId: scope.companyId,
+          productIds: mappedProducts.map((product) => product.id),
+          warehouseId: scope.warehouseId,
+        })
+      : new Map<string, number>();
+  const productsWithAvailable = mappedProducts.map((product) => ({
+    ...product,
+    stockQty: Math.max(0, Number(product.stockQty ?? 0) - (reservedByProduct.get(String(product.id)) ?? 0)),
+  }));
+
   return {
     branchId: scope.branchId,
     branchName: scope.branchName,
@@ -268,12 +307,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       id: String(level.id),
       name: String(level.name),
     })),
-    products: await attachPosProductImageDelivery(
-      products.map((product: Record<string, any>) => ({
-        ...mapPrismaPosProduct(product, scope.warehouseId),
-        isFavorite: favoriteIdSet.has(String(product.id)),
-      })),
-    ),
+    products: productsWithAvailable,
     promotionBanners: promotions
       .map((promotion: Record<string, unknown>) => String(promotion.promotionName || promotion.description || ""))
       .filter(Boolean),
@@ -327,6 +361,8 @@ export type CompletePrismaSaleInput = {
   customerId?: string;
   discountAmount: number;
   discountPercent: number;
+  /** When set, checkout consumes that Hold's ACTIVE reservations (own reserve not blocking). */
+  heldFromId?: string | null;
   items: Array<{ conversionQty?: number; costPrice?: number; productId: string; promotionDiscount?: number; promotionId?: string; quantity: number; sellingPrice: number; unitId?: string }>;
   paymentMode: PaymentMode;
   promotionCodes?: string[];
@@ -550,6 +586,34 @@ export async function writeCompletePrismaSale(
         return totals;
       }, new Map());
       const saleItemCreateData = saleItems.map(({ baseQuantity: _baseQuantity, ...item }) => item);
+      const heldFromId = stringValue(input.heldFromId) || null;
+
+      await lockProductsDeterministically(tx, tenant.companyId, input.warehouseId, quantityByProduct.keys());
+
+      for (const [productId, requestedQty] of quantityByProduct) {
+        const available = await availableBaseQty(tx, {
+          companyId: tenant.companyId,
+          excludeHoldBillId: heldFromId,
+          productId,
+          warehouseId: input.warehouseId,
+        });
+        if (requestedQty > available + 1e-9) {
+          throw new Error(
+            `Insufficient available stock for product ${productId}. Available ${available}, requested ${requestedQty}.`,
+          );
+        }
+      }
+
+      if (heldFromId) {
+        // Validate Hold + consume path readiness before creating the Sale.
+        await consumeHeldBillReservationsForCheckout(tx, {
+          branchId: input.branchId,
+          companyId: tenant.companyId,
+          holdBillId: heldFromId,
+          quantityByProduct,
+          warehouseId: input.warehouseId,
+        });
+      }
 
       const sale = await tx.sale.create({
         data: {
@@ -560,6 +624,7 @@ export async function writeCompletePrismaSale(
           customerId: input.customerId,
           discountPercent: subtotal > 0 ? discountAmount / subtotal * 100 : requestedDiscountPercent,
           discountAmount,
+          heldFromId,
           items: { create: saleItemCreateData },
           payments: {
             create: mapPaymentModeToSalePayments({
