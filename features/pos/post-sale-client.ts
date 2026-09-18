@@ -22,7 +22,23 @@ export type PostSaleManagerApprovalPayload = {
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error?.message ?? payload.message ?? "Post-sale request failed.");
+    if (response.status === 403) {
+      throw new Error(
+        typeof payload.message === "string" && payload.message.trim()
+          ? payload.message.trim()
+          : "You do not have permission to perform this action.",
+      );
+    }
+    const nested =
+      typeof payload.error === "object" && payload.error && "message" in payload.error
+        ? String((payload.error as { message?: unknown }).message ?? "")
+        : "";
+    throw new Error(
+      nested ||
+        (typeof payload.error === "string" ? payload.error : "") ||
+        (typeof payload.message === "string" ? payload.message : "") ||
+        "Post-sale request failed.",
+    );
   }
   return payload.data as T;
 }

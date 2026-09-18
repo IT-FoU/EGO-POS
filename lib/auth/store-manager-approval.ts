@@ -224,15 +224,17 @@ export async function requireStoreActionPermissionsOrManagerPinApproval({
   tenant: TenantContext;
 }): Promise<StoreManagerPinApprovalResult | null> {
   const currentStoreUser = currentStoreUserFromSession(session, tenant);
-  const directAllowed = actions.every((action) => canPerformStoreAction(currentStoreUser, action, context));
-  if (directAllowed) {
+  // Only denied actions drive PIN eligibility. Cashier-allowed companions
+  // (e.g. sale.complete on exchange) must not block the override path.
+  const deniedActions = actions.filter((action) => !canPerformStoreAction(currentStoreUser, action, context));
+  if (deniedActions.length === 0) {
     return null;
   }
 
-  const firstDeniedAction = actions.find((action) => !canPerformStoreAction(currentStoreUser, action, context)) ?? actions[0];
+  const firstDeniedAction = deniedActions[0] ?? actions[0];
   const role = normalizeStoreRole(currentStoreUser.role);
 
-  if (role !== STORE_ROLES.CASHIER || !isManagerPinApprovalEligible(actions)) {
+  if (role !== STORE_ROLES.CASHIER || !isManagerPinApprovalEligible(deniedActions)) {
     await requireStoreActionPermissions({ actions, context, session, tenant });
     return null;
   }
@@ -246,7 +248,7 @@ export async function requireStoreActionPermissionsOrManagerPinApproval({
   }
 
   const approver = await findApproverCandidate({
-    actions,
+    actions: deniedActions,
     approval: approval ?? {},
     currentStoreUser,
     tenant,

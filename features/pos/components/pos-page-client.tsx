@@ -2273,7 +2273,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           </Field>
         </PosSmallModal>
       </div>) : null}
-      {returnExchangeOpen ? (<ReturnExchangeVoidModal initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
+      {returnExchangeOpen ? (<ReturnExchangeVoidModal currentRole={posPermissionPolicy.role} initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
       {cashInOutOpen ? (

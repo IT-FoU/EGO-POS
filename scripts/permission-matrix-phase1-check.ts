@@ -66,6 +66,15 @@ check("cashier manager PIN override eligible for product.price_change", isManage
 check("cashier manager PIN override eligible for product.delete", isManagerPinApprovalEligible([STORE_ACTIONS.PRODUCT_DELETE]));
 check("cashier manager PIN override eligible for customer credit", isManagerPinApprovalEligible([STORE_ACTIONS.PAYMENT_RECEIVE, STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE]));
 check("cashier manager PIN override not eligible for reports", !isManagerPinApprovalEligible([STORE_ACTIONS.REPORTS_VIEW_FULL]));
+check(
+  "exchange full action list is not raw-eligible (SALE_COMPLETE companion); denied subset is",
+  !isManagerPinApprovalEligible([
+    STORE_ACTIONS.SALE_REFUND,
+    STORE_ACTIONS.PAYMENT_REFUND,
+    STORE_ACTIONS.SALE_COMPLETE,
+    STORE_ACTIONS.PAYMENT_RECEIVE,
+  ]) && isManagerPinApprovalEligible([STORE_ACTIONS.SALE_REFUND, STORE_ACTIONS.PAYMENT_REFUND]),
+);
 const approvalMetadata = managerApprovalMetadata({
   approvedById: "manager_1",
   approvedByName: "Manager",
