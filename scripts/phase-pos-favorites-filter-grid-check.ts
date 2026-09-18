@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { selectFavoriteCatalogueProducts } from "../features/pos/favorites-client";
+import {
+  selectFavoriteCatalogueProducts,
+  sumCartQuantityForProduct,
+} from "../features/pos/favorites-client";
 import { projectPosCatalogueCards } from "../features/pos/pos-cart";
 import type { PosProduct } from "../features/pos/types";
 
@@ -161,8 +164,67 @@ check("11. Issue 3: multi-add supported (Favorites stays open between additions)
   assert(!favoritesModalSlice.includes("setFavoritesOpen(false);\n"), "no inline auto-close after click");
 });
 
+check("12. Cart badge: product absent from cart → quantity 0 (hidden)", () => {
+  assert(sumCartQuantityForProduct([], "pepsi") === 0, "empty cart");
+  assert(
+    sumCartQuantityForProduct([{ id: "other", quantity: 2 }], "pepsi") === 0,
+    "other product must not count",
+  );
+});
+
+check("13. Cart badge: product qty 1 → badge 1", () => {
+  assert(sumCartQuantityForProduct([{ id: "pepsi", quantity: 1 }], "pepsi") === 1, "qty 1");
+});
+
+check("14. Cart badge: product qty 3 → badge 3", () => {
+  assert(sumCartQuantityForProduct([{ id: "pepsi", quantity: 3 }], "pepsi") === 3, "qty 3");
+});
+
+check("15. Cart badge: Piece 2 + Pack 1 → badge 3 (no conversion)", () => {
+  const cart = [
+    { id: "pepsi", quantity: 2 },
+    { id: "pepsi", quantity: 1 },
+  ];
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 3, "sum sell-unit qtys");
+});
+
+check("16. Cart badge: quantity decrease / remove updates", () => {
+  let cart = [
+    { id: "pepsi", quantity: 3 },
+    { id: "water", quantity: 1 },
+  ];
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 3, "start at 3");
+  cart = [{ id: "pepsi", quantity: 1 }, { id: "water", quantity: 1 }];
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 1, "decreased to 1");
+  cart = [{ id: "water", quantity: 1 }];
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 0, "removed → hidden");
+});
+
+check("17. Cart badge: Favorites-only wiring (main grid unchanged)", () => {
+  assert(favoritesModalSlice.includes("cartQuantity="), "Favorites passes cartQuantity");
+  assert(
+    favoritesModalSlice.includes("favoriteCartQtyByProductId.get(product.id)"),
+    "badge qty derived from cart map",
+  );
+  assert(client.includes('data-testid="pos-favorites-cart-qty-badge"'), "badge marker");
+  assert(client.includes("absolute left-2 top-2"), "badge top-left");
+  assert(client.includes("pointer-events-none absolute left-2 top-2"), "badge does not intercept star");
+  // Main product grid ProductGridItem call must not pass cartQuantity.
+  const mainGridSlice = client.slice(
+    client.indexOf("{productGridVisible ?"),
+    client.indexOf("{favoritesOpen ?"),
+  );
+  assert(mainGridSlice.includes("<ProductGridItem"), "main grid still uses ProductGridItem");
+  assert(!mainGridSlice.includes("cartQuantity"), "main Product Grid has no quantity badge prop");
+});
+
+check("18. Favorite star remains independent of cart badge", () => {
+  assert(favoritesModalSlice.includes("onToggleFavorite={() => void toggleFavorite(product)}"), "star toggle intact");
+  assert(client.includes("absolute right-2 top-2 z-20 grid size-9"), "star stays top-right");
+});
+
 console.log("");
-console.log("NOTE: Browser click / cart accumulation / Unit Selector overlay stacking require Owner Interaction QA.");
+console.log("NOTE: Browser click / cart accumulation / Unit Selector overlay stacking / badge visuals require Owner Visual QA.");
 const failed = results.filter((entry) => entry.status === "FAIL");
 console.log(`Favorites regression checks: ${results.length - failed.length}/${results.length} passed`);
 if (failed.length > 0) process.exitCode = 1;
