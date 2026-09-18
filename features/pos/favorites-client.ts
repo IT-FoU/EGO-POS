@@ -1,3 +1,9 @@
+export function selectFavoriteCatalogueProducts<T extends { id: string; isFavorite?: boolean }>(
+  products: T[],
+): T[] {
+  return products.filter((product) => Boolean(product.isFavorite));
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) {

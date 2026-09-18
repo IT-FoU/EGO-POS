@@ -48,7 +48,7 @@ import {
 } from "@/features/pos/pos-unit-display-settings";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
-import { setPosFavorite } from "@/features/pos/favorites-client";
+import { setPosFavorite, selectFavoriteCatalogueProducts } from "@/features/pos/favorites-client";
 import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
 import {
   applyPosCatalogueRefresh,
@@ -474,9 +474,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }, []);
     const categories = useMemo(() => ["All", ...Array.from(new Set(visibleProducts.map((product) => product.categoryName)))], [visibleProducts]);
     const favoriteProducts = useMemo(() => {
-        const favorites = visibleProducts.filter((product) => product.isFavorite).slice(0, 16);
-        const base = favorites.length >= 12 ? favorites : visibleProducts.slice(0, 16);
-        return projectPosCatalogueCards(base, unitDisplayMode);
+        // Authoritative: only products flagged from branch_favorite_products (isFavorite).
+        // Never fall back to the full catalogue when favorites are sparse.
+        return projectPosCatalogueCards(selectFavoriteCatalogueProducts(visibleProducts), unitDisplayMode);
     }, [unitDisplayMode, visibleProducts]);
     const filteredProducts = useMemo(
         () => projectPosCatalogueCards(
@@ -2105,7 +2105,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       </PosModal>) : null}
 
       {favoritesOpen ? (<PosModal title={t("ui.favorites")} onClose={() => setFavoritesOpen(false)}>
-        {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground" data-testid="pos-favorites-empty">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid grid-cols-[repeat(auto-fit,minmax(155px,1fr))] gap-3 xl:grid-cols-6" data-testid="pos-favorites-grid">
           {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} onClick={() => {
             selectProductForSale(product);
             setFavoritesOpen(false);
