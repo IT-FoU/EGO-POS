@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  resolveFavoriteQtyAdjustTarget,
   selectFavoriteCatalogueProducts,
   sumCartQuantityForProduct,
 } from "../features/pos/favorites-client";
-import { projectPosCatalogueCards } from "../features/pos/pos-cart";
-import type { PosProduct } from "../features/pos/types";
+import { projectPosCatalogueCards, removePosCartLine, updatePosCartQuantity } from "../features/pos/pos-cart";
+import type { PosCartItem, PosProduct } from "../features/pos/types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -25,7 +26,7 @@ function check(name: string, run: () => void) {
   }
 }
 
-function product(id: string, isFavorite?: boolean): PosProduct {
+function product(id: string, isFavorite?: boolean, unitId?: string): PosProduct {
   return {
     id,
     name: `Product ${id}`,
@@ -36,14 +37,41 @@ function product(id: string, isFavorite?: boolean): PosProduct {
     retailPriceLak: 1000,
     stockQty: 10,
     unitName: "Piece",
-    unitId: `unit-${id}`,
+    unitId: unitId ?? `unit-${id}`,
     conversionQty: 1,
     isFavorite,
   } as PosProduct;
 }
 
+function cartLine(id: string, quantity: number, unitId: string, stockQty = 100): PosCartItem {
+  return {
+    id,
+    quantity,
+    unitId,
+    stockQty,
+    conversionQty: 1,
+    nameEn: id,
+    nameLo: id,
+    sku: id,
+    barcode: "",
+    categoryName: "General",
+    imageKey: "",
+    unitName: unitId,
+    priceLak: 1000,
+    retailPriceLak: 1000,
+  } as PosCartItem;
+}
+
 const client = readFileSync(
   join(process.cwd(), "features", "pos", "components", "pos-page-client.tsx"),
+  "utf8",
+);
+const smallModal = readFileSync(
+  join(process.cwd(), "features", "pos", "components", "pos-small-modal.tsx"),
+  "utf8",
+);
+const workspaceModal = readFileSync(
+  join(process.cwd(), "features", "pos", "components", "pos-workspace-modal.tsx"),
   "utf8",
 );
 
@@ -119,7 +147,6 @@ check("8. Issue 3: Favorites product click does NOT auto-close after add", () =>
     !/selectProductForSale\(product\);\s*setFavoritesOpen\(false\)/.test(favoritesModalSlice),
     "must not close Favorites immediately after selectProductForSale",
   );
-  // Only explicit modal Close/X may dismiss Favorites from this surface.
   assert(
     favoritesModalSlice.includes('onClose={() => setFavoritesOpen(false)}'),
     "explicit Close still wired",
@@ -138,27 +165,16 @@ check("9. Issue 3: unfavorite stays inside open Favorites (toggle only)", () => 
 
 check("10. Issue 3: Unit Selector does not dismiss Favorites parent", () => {
   assert(client.includes("setUnitSelectionProduct(product)"), "multi-unit opens Unit Selector");
-  assert(
-    client.includes(
-      '{unitSelectionProduct ? (<UnitSelectorModal product={unitSelectionProduct} onClose={() => setUnitSelectionProduct(null)} onSelect={(unit) => addToCart(unitSelectionProduct, unit)}/>) : null}',
-    ),
-    "Unit Selector close/select only clears unitSelectionProduct",
-  );
-  // Unit Selector onClose/onSelect must not call setFavoritesOpen(false).
-  const unitBlock = client.slice(
-    client.indexOf("{unitSelectionProduct ?"),
-    client.indexOf("{unitSelectionProduct ?") + 280,
-  );
+  assert(client.includes("unitSelectionIntent"), "unit selection intent for add/decrement");
+  const unitBlockStart = client.indexOf("{unitSelectionProduct ?");
+  const unitBlock = client.slice(unitBlockStart, unitBlockStart + 900);
+  assert(unitBlock.includes("<UnitSelectorModal"), "Unit Selector modal used");
   assert(!unitBlock.includes("setFavoritesOpen"), "Unit Selector must not touch Favorites open state");
 });
 
 check("11. Issue 3: multi-add supported (Favorites stays open between additions)", () => {
-  // Source-level: click handler only calls selectProductForSale; no close side-effect.
-  // Owner interaction QA still required to confirm cart accumulates A+B while modal stays mounted.
   assert(
-    /onClick=\{\(\) => \{\s*\/\/ Keep Favorites open[\s\S]*?selectProductForSale\(product\);\s*\}\}/.test(
-      favoritesModalSlice,
-    ) || favoritesModalSlice.includes("selectProductForSale(product)"),
+    favoritesModalSlice.includes("selectProductForSale(product)"),
     "Favorites click path only selects product",
   );
   assert(!favoritesModalSlice.includes("setFavoritesOpen(false);\n"), "no inline auto-close after click");
@@ -202,20 +218,21 @@ check("16. Cart badge: quantity decrease / remove updates", () => {
 
 check("17. Cart badge: Favorites-only wiring (main grid unchanged)", () => {
   assert(favoritesModalSlice.includes("cartQuantity="), "Favorites passes cartQuantity");
+  assert(favoritesModalSlice.includes("onCartQuantityDelta="), "Favorites passes qty stepper handler");
   assert(
     favoritesModalSlice.includes("favoriteCartQtyByProductId.get(product.id)"),
     "badge qty derived from cart map",
   );
+  assert(client.includes('data-testid="pos-favorites-cart-qty-stepper"'), "stepper marker");
   assert(client.includes('data-testid="pos-favorites-cart-qty-badge"'), "badge marker");
-  assert(client.includes("absolute left-2 top-2"), "badge top-left");
-  assert(client.includes("pointer-events-none absolute left-2 top-2"), "badge does not intercept star");
-  // Main product grid ProductGridItem call must not pass cartQuantity.
+  assert(client.includes("absolute left-2 top-2"), "control top-left");
   const mainGridSlice = client.slice(
     client.indexOf("{productGridVisible ?"),
     client.indexOf("{favoritesOpen ?"),
   );
   assert(mainGridSlice.includes("<ProductGridItem"), "main grid still uses ProductGridItem");
   assert(!mainGridSlice.includes("cartQuantity"), "main Product Grid has no quantity badge prop");
+  assert(!mainGridSlice.includes("onCartQuantityDelta"), "main Product Grid has no stepper");
 });
 
 check("18. Favorite star remains independent of cart badge", () => {
@@ -223,8 +240,80 @@ check("18. Favorite star remains independent of cart badge", () => {
   assert(client.includes("absolute right-2 top-2 z-20 grid size-9"), "star stays top-right");
 });
 
+check("19. Qty stepper: single-line qty 1 minus → removed / hidden", () => {
+  let cart: PosCartItem[] = [cartLine("pepsi", 1, "piece")];
+  const target = resolveFavoriteQtyAdjustTarget(cart, { id: "pepsi" });
+  assert(target.type === "line", "single line target");
+  if (target.type === "line") {
+    cart = removePosCartLine(cart, target.line.id, target.line.unitId);
+  }
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 0, "line removed");
+});
+
+check("20. Qty stepper: single-line qty 2 minus → 1", () => {
+  let cart: PosCartItem[] = [cartLine("pepsi", 2, "piece")];
+  const target = resolveFavoriteQtyAdjustTarget(cart, { id: "pepsi" });
+  assert(target.type === "line", "single line");
+  if (target.type === "line") {
+    cart = updatePosCartQuantity(cart, target.line.id, target.line.quantity - 1, target.line.unitId);
+  }
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 1, "qty 1");
+});
+
+check("21. Qty stepper: plus increases single-line quantity", () => {
+  let cart: PosCartItem[] = [cartLine("pepsi", 1, "piece")];
+  const target = resolveFavoriteQtyAdjustTarget(cart, { id: "pepsi" });
+  assert(target.type === "line", "single line");
+  if (target.type === "line") {
+    cart = updatePosCartQuantity(cart, target.line.id, target.line.quantity + 1, target.line.unitId);
+  }
+  assert(sumCartQuantityForProduct(cart, "pepsi") === 2, "qty 2");
+});
+
+check("22. Qty stepper: +/- stopPropagation wiring present", () => {
+  assert(client.includes('data-testid="pos-favorites-cart-qty-minus"'), "minus button");
+  assert(client.includes('data-testid="pos-favorites-cart-qty-plus"'), "plus button");
+  assert(client.includes("onCartQuantityDelta(-1)"), "minus delta");
+  assert(client.includes("onCartQuantityDelta(1)"), "plus delta");
+  assert(client.includes("event.stopPropagation()"), "stopPropagation used");
+  assert(client.includes("adjustFavoriteCartQuantity"), "favorites adjust handler");
+});
+
+check("23. Qty stepper: Favorites stays open during adjustments", () => {
+  assert(client.includes("function adjustFavoriteCartQuantity"), "adjust helper");
+  assert(!/adjustFavoriteCartQuantity[\s\S]{0,400}setFavoritesOpen\(false\)/.test(client), "adjust must not close Favorites");
+});
+
+check("24. Unit Selector nested above Favorites (z-[70] over z-[60])", () => {
+  assert(workspaceModal.includes("z-[60]"), "Favorites/workspace layer z-[60]");
+  assert(smallModal.includes('className={cn("fixed inset-0 z-50 grid place-items-center p-4 bg-black/60", overlayClassName)}'), "default z-50 + overlayClassName");
+  assert(client.includes('overlayClassName={favoritesOpen ? "z-[70]" : undefined}'), "elevated Unit Selector when Favorites open");
+  assert(smallModal.includes("stopImmediatePropagation"), "nested Escape closes Unit Selector first");
+  assert(smallModal.includes('addEventListener("keydown", handleKeyDown, true)'), "Escape capture listener");
+});
+
+check("25. Unit selection closes selector only; Favorites intent preserved", () => {
+  assert(client.includes('unitSelectionIntent === "decrement"'), "decrement path via unit pick");
+  assert(client.includes('setUnitSelectionIntent("add")'), "intent reset after close/select");
+  const unitBlockStart = client.indexOf("{unitSelectionProduct ?");
+  const unitBlock = client.slice(unitBlockStart, unitBlockStart + 900);
+  assert(!unitBlock.includes("setFavoritesOpen"), "unit select does not close Favorites");
+});
+
+check("26. Multi-unit decrement does not guess unit identity", () => {
+  const cart = [cartLine("pepsi", 2, "piece"), cartLine("pepsi", 1, "pack")];
+  const target = resolveFavoriteQtyAdjustTarget(cart, { id: "pepsi" });
+  assert(target.type === "multi", "multi-unit requires explicit unit pick");
+  const withCardUnit = resolveFavoriteQtyAdjustTarget(cart, { id: "pepsi", unitId: "pack" });
+  assert(withCardUnit.type === "line", "card unitId pins the line");
+  if (withCardUnit.type === "line") {
+    assert(withCardUnit.line.unitId === "pack", "pack line retained");
+    assert(withCardUnit.line.quantity === 1, "pack qty intact");
+  }
+});
+
 console.log("");
-console.log("NOTE: Browser click / cart accumulation / Unit Selector overlay stacking / badge visuals require Owner Visual QA.");
+console.log("NOTE: Browser click / Unit Selector overlay stacking / stepper visuals require Owner Interaction QA.");
 const failed = results.filter((entry) => entry.status === "FAIL");
 console.log(`Favorites regression checks: ${results.length - failed.length}/${results.length} passed`);
 if (failed.length > 0) process.exitCode = 1;

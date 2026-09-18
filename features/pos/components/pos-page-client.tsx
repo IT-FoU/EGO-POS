@@ -51,6 +51,7 @@ import { cn } from "@/lib/utils";
 import {
   setPosFavorite,
   selectFavoriteCatalogueProducts,
+  resolveFavoriteQtyAdjustTarget,
 } from "@/features/pos/favorites-client";
 import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
 import {
@@ -234,6 +235,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const cartItemsRef = useRef<PosCartItem[]>([]);
     cartItemsRef.current = cartItems;
     const [unitSelectionProduct, setUnitSelectionProduct] = useState<PosProduct | null>(null);
+    const [unitSelectionIntent, setUnitSelectionIntent] = useState<"add" | "decrement">("add");
     const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(null);
     const [discountAmount, setDiscountAmount] = useState(0);
     const [discountPercent, setDiscountPercent] = useState(0);
@@ -763,7 +765,35 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMessage(fillPosCopy(t("ui.stock.insufficient"), { name: localizedProductName(product), available: product.stockQty, requested: 1 }));
             return;
         }
+        setUnitSelectionIntent("add");
         setUnitSelectionProduct(product);
+    }
+    function adjustFavoriteCartQuantity(product: PosProduct, delta: -1 | 1) {
+        const target = resolveFavoriteQtyAdjustTarget(cartItemsRef.current, product);
+        if (delta === 1) {
+            if (target.type === "line") {
+                updateQuantity(target.line.id, target.line.quantity + 1, target.line.unitId);
+                return;
+            }
+            // Multi-unit or not yet in cart: reuse unit-aware add path (may open Unit Selector).
+            selectProductForSale(product);
+            return;
+        }
+        if (target.type === "line") {
+            const nextQty = target.line.quantity - 1;
+            if (nextQty <= 0) {
+                removeItem(target.line.id, target.line.unitId);
+            }
+            else {
+                updateQuantity(target.line.id, nextQty, target.line.unitId);
+            }
+            return;
+        }
+        if (target.type === "multi") {
+            // Do not guess Piece vs Pack vs Box — ask which unit line to decrease.
+            setUnitSelectionIntent("decrement");
+            setUnitSelectionProduct(product);
+        }
     }
     async function toggleFavorite(product: PosProduct) {
         const nextFavorite = !Boolean(product.isFavorite);
@@ -2116,7 +2146,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       {favoritesOpen ? (<PosModal title={t("ui.favorites")} onClose={() => setFavoritesOpen(false)}>
         {favoriteProducts.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground" data-testid="pos-favorites-empty">{t("ui.no.favorite.products.yet")}</div>) : (<div className="grid grid-cols-[repeat(auto-fit,minmax(155px,1fr))] gap-3 xl:grid-cols-6" data-testid="pos-favorites-grid">
-          {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} cartQuantity={favoriteCartQtyByProductId.get(product.id) ?? 0} onClick={() => {
+          {favoriteProducts.map((product, index) => (<ProductGridItem key={productKey(product, index)} product={product} stockReferenceDate={stockReferenceDate} cartQuantity={favoriteCartQtyByProductId.get(product.id) ?? 0} onCartQuantityDelta={(delta) => adjustFavoriteCartQuantity(product, delta)} onClick={() => {
             // Keep Favorites open so cashiers can add multiple items without reopening.
             selectProductForSale(product);
         }} onToggleFavorite={() => void toggleFavorite(product)}/>))}
@@ -2193,7 +2223,23 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         <StaffControl businessDate={businessDate} expanded={staffControlExpanded} actualClosingCash={actualClosingCash} cashDifference={cashDifference} cashSales={cashSales} closingSummaryVisible={closingSummaryVisible} expectedCash={expectedCash} openingCashCounts={openingCashCounts} openingCashTotal={effectiveOpeningCash} otEndedAt={otEndedAt} otHours={otHours} otStartedAt={otStartedAt} selectedStaffName={selectedStaffName} staffOptions={staffOptions} staffStatus={staffStatus} workEndedAt={workEndedAt} workHours={workHours} workStartedAt={workStartedAt} onEndOt={recordEndOt} onEndWork={recordEndWork} onSetActualClosingCash={setActualClosingCash} onSelectStaff={setSelectedStaffName} onStartOt={recordStartOt} onStartWork={recordStartWork} onToggleExpanded={() => setStaffControlExpanded((current) => !current)} onUpdateOpeningCashCount={updateOpeningCashCount} qrTransferSales={qrTransferSales}/>
       </PosModal>) : null}
 
-      {unitSelectionProduct ? (<UnitSelectorModal product={unitSelectionProduct} onClose={() => setUnitSelectionProduct(null)} onSelect={(unit) => addToCart(unitSelectionProduct, unit)}/>) : null}
+      {unitSelectionProduct ? (<UnitSelectorModal overlayClassName={favoritesOpen ? "z-[70]" : undefined} product={unitSelectionProduct} onClose={() => {
+        setUnitSelectionProduct(null);
+        setUnitSelectionIntent("add");
+      }} onSelect={(unit) => {
+        const selectedProduct = unitSelectionProduct;
+        if (unitSelectionIntent === "decrement") {
+            const line = cartItemsRef.current.find((item) => item.id === selectedProduct.id && item.unitId === unit.id);
+            if (line) {
+                if (line.quantity <= 1) removeItem(line.id, line.unitId);
+                else updateQuantity(line.id, line.quantity - 1, line.unitId);
+            }
+            setUnitSelectionProduct(null);
+            setUnitSelectionIntent("add");
+            return;
+        }
+        addToCart(selectedProduct, unit);
+      }}/>) : null}
 
       {saleCompletedReceipt ? (<SaleCompletedModal receipt={saleCompletedReceipt} printMode={receiptPrintMode} onClose={() => setSaleCompletedReceipt(null)} onNewSale={() => setSaleCompletedReceipt(null)} onPrint={() => {
             setLastReceipt(saleCompletedReceipt);
@@ -2356,9 +2402,11 @@ const posCardFloatingSkuClass =
 const posCardFloatingPriceClass =
   "block whitespace-nowrap text-[18px] font-black leading-none [paint-order:stroke_fill] [-webkit-text-stroke:0.3px_rgba(0,0,0,0.72)] [text-shadow:0_1px_2px_rgba(0,0,0,0.88)] xl:text-[12px]";
 
-function ProductGridItem({ cartQuantity, onClick, onToggleFavorite, product, stockReferenceDate, }: {
-    /** Favorites-only: sell-unit cart quantity badge (hidden when 0 / omitted). */
+function ProductGridItem({ cartQuantity, onCartQuantityDelta, onClick, onToggleFavorite, product, stockReferenceDate, }: {
+    /** Favorites-only: sell-unit cart quantity badge / mini-stepper (hidden when 0 / omitted). */
     cartQuantity?: number;
+    /** Favorites-only: +/- adjust without triggering card add click. */
+    onCartQuantityDelta?: (delta: -1 | 1) => void;
     onClick: () => void;
     onToggleFavorite: () => void;
     product: PosProduct;
@@ -2370,13 +2418,57 @@ function ProductGridItem({ cartQuantity, onClick, onToggleFavorite, product, sto
     return (
       <div className="group relative min-h-[190px] min-w-0">
         {badgeQty > 0 ? (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute left-2 top-2 z-20 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-900/90 px-1.5 text-[11px] font-bold tabular-nums leading-none text-white shadow-sm"
-            data-testid="pos-favorites-cart-qty-badge"
-          >
-            {badgeQty}
-          </span>
+          onCartQuantityDelta ? (
+            <div
+              className="absolute left-2 top-2 z-20 inline-flex h-7 items-center overflow-hidden rounded-full border border-white/30 bg-slate-900/90 text-white shadow-sm"
+              data-testid="pos-favorites-cart-qty-stepper"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
+              <button
+                aria-label={t("ui.decrease.qty")}
+                className="grid h-7 w-7 place-items-center text-[14px] font-bold leading-none transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                data-testid="pos-favorites-cart-qty-minus"
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onCartQuantityDelta(-1);
+                }}
+              >
+                −
+              </button>
+              <span
+                className="min-w-5 px-0.5 text-center text-[11px] font-bold tabular-nums leading-none"
+                data-testid="pos-favorites-cart-qty-badge"
+              >
+                {badgeQty}
+              </span>
+              <button
+                aria-label={t("ui.increase.qty")}
+                className="grid h-7 w-7 place-items-center text-[14px] font-bold leading-none transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                data-testid="pos-favorites-cart-qty-plus"
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onCartQuantityDelta(1);
+                }}
+              >
+                +
+              </button>
+            </div>
+          ) : (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2 top-2 z-20 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-900/90 px-1.5 text-[11px] font-bold tabular-nums leading-none text-white shadow-sm"
+              data-testid="pos-favorites-cart-qty-badge"
+            >
+              {badgeQty}
+            </span>
+          )
         ) : null}
         <button
           aria-label={isFavorite ? t("ui.remove.from.favorites") : t("ui.add.to.favorites")}
@@ -2879,13 +2971,15 @@ function ActionSummary({ actions, title }: {
       </div>
     </div>);
 }
-function UnitSelectorModal({ onClose, onSelect, product, }: {
+function UnitSelectorModal({ onClose, onSelect, overlayClassName, product, }: {
     onClose: () => void;
     onSelect: (unit: PosProductUnit) => void;
+    /** Elevated overlay when nested above Favorites (workspace z-[60]). */
+    overlayClassName?: string;
     product: PosProduct;
 }) {
     const units = resolvePosSaleUnits(product);
-    return (<PosSmallModal closeAriaLabel={t("ui.close.unit.selector")} closeOnBackdrop={true} closeOnEscape={true} description={localizedProductName(product)} onClose={onClose} size="md" title={t("ui.select.sale.unit")}>
+    return (<PosSmallModal closeAriaLabel={t("ui.close.unit.selector")} closeOnBackdrop={true} closeOnEscape={true} description={localizedProductName(product)} onClose={onClose} overlayClassName={overlayClassName} size="md" title={t("ui.select.sale.unit")}>
         <div className="grid gap-2">
           {units.map((unit) => (<button className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3 text-left transition hover:border-primary" key={unit.id} type="button" onClick={() => onSelect(unit)}>
               <span>

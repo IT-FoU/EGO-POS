@@ -17,6 +17,8 @@ type PosSmallModalProps = {
   description?: string;
   footer?: React.ReactNode;
   onClose: () => void;
+  /** Optional overlay class merge (e.g. nested `z-[70]` above workspace Favorites). Default remains z-50. */
+  overlayClassName?: string;
   size: PosSmallModalSize;
   title: string;
 };
@@ -30,6 +32,7 @@ export function PosSmallModal({
   description,
   footer,
   onClose,
+  overlayClassName,
   size,
   title,
 }: PosSmallModalProps) {
@@ -49,21 +52,24 @@ export function PosSmallModal({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && closeOnEscape) {
         event.preventDefault();
+        // Capture + stopImmediate so nested Unit Selector closes without also dismissing
+        // an underlying PosWorkspaceModal (Favorites) that listens on the same window.
         event.stopPropagation();
+        event.stopImmediatePropagation();
         onCloseRef.current();
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, true);
       previous?.focus();
     };
   }, [closeOnEscape]);
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"
+      className={cn("fixed inset-0 z-50 grid place-items-center p-4 bg-black/60", overlayClassName)}
       onClick={closeOnBackdrop ? () => onCloseRef.current() : undefined}
     >
       <section

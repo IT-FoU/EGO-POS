@@ -33,6 +33,8 @@ const returnExchange = read("features/pos/components/return-exchange-void-modal.
 const posActions = read("features/pos/actions.ts");
 
 const overlayClass = 'className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"';
+const overlayClassWithOptionalLayer =
+  'className={cn("fixed inset-0 z-50 grid place-items-center p-4 bg-black/60", overlayClassName)}';
 const cardClass =
   '"flex w-full max-h-[85vh] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl"';
 const closeClass =
@@ -44,6 +46,9 @@ const unitSelector = sliceBetween(posClient, "function UnitSelectorModal(", "fun
 const mixedPayment = sliceBetween(posClient, "function MixedPaymentModal(", "function SaleCompletedModal(");
 const saleCompleted = sliceBetween(posClient, "function SaleCompletedModal(", "function ManagerApprovalModal(");
 
+const shellUsesCenteredOverlay =
+  shell.includes(overlayClass) || shell.includes(overlayClassWithOptionalLayer);
+
 check(
   "1. all three remain centered",
   posClient.includes('import { PosSmallModal } from "@/features/pos/components/pos-small-modal"') &&
@@ -53,7 +58,7 @@ check(
     unitSelector.includes('size="md"') &&
     mixedPayment.includes('size="md"') &&
     saleCompleted.includes('size="sm"') &&
-    shell.includes(overlayClass) &&
+    shellUsesCenteredOverlay &&
     shell.includes("place-items-center") &&
     !unitSelector.includes("lg:left-72") &&
     !mixedPayment.includes("lg:left-72") &&
@@ -62,7 +67,7 @@ check(
 
 check(
   "2. shared visual standard unchanged",
-  shell.includes(overlayClass) &&
+  shellUsesCenteredOverlay &&
     shell.includes(cardClass) &&
     shell.includes(closeClass) &&
     shell.includes("bg-black/60") &&
