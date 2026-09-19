@@ -102,21 +102,19 @@ check("10. reduced-motion handled", () => {
 });
 
 check("11. Return submit still single execution", () => {
-  // R1 keeps Production busy-guard (6062865 submitLockRef/requestAction PIN path is R2).
+  assert(returnModal.includes("submitLockRef"), "lock");
+  assert(returnModal.includes('requestAction("return")'), "return action");
   assert(returnModal.includes("disabled={busy}"), "busy disable");
-  assert(returnModal.includes("if (!sale || busy) return"), "busy guard");
-  assert(returnModal.includes("submitReturn"), "return action");
 });
 
 check("12. Exchange submit still single execution", () => {
-  assert(returnModal.includes("submitExchange"), "exchange action");
-  assert(returnModal.includes("disabled={busy}"), "busy disable");
-  assert(returnModal.includes("setBusy(true)"), "busy lock on execute");
+  assert(returnModal.includes('requestAction("exchange")'), "exchange action");
+  assert(returnModal.includes("submitLockRef.current = true"), "lock on execute");
 });
 
 check("13. Void submit still single execution", () => {
-  assert(returnModal.includes("submitVoid"), "void action");
-  assert(returnModal.includes("if (!sale || busy) return"), "guard");
+  assert(returnModal.includes('requestAction("void")'), "void action");
+  assert(returnModal.includes("if (!sale || submitLockRef.current) return"), "guard");
 });
 
 check("14. More Back navigation unchanged", () => {
@@ -133,7 +131,8 @@ check("15. Favorites controls unchanged", () => {
 check("16. Return/Exchange/Void workflow has no generic Apply primary", () => {
   const cancelIdx = returnModal.indexOf('{tPos("ui.cancel")}');
   assert(cancelIdx >= 0, "cancel present");
-  const primarySlice = returnModal.slice(cancelIdx, cancelIdx + 800);
+  const approvalIdx = returnModal.indexOf("approvalOpen");
+  const primarySlice = returnModal.slice(cancelIdx, approvalIdx > cancelIdx ? approvalIdx : cancelIdx + 800);
   assert(!primarySlice.includes('tPos("ui.apply")'), "no ui.apply in confirm row");
   assert(enValue("ui.confirm.return").toLowerCase().includes("return"), "en return contextual");
   assert(enValue("ui.confirm.exchange").toLowerCase().includes("exchange"), "en exchange contextual");
