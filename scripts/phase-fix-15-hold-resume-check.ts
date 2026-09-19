@@ -241,12 +241,13 @@ check("old empty-server restore reproduces the Production failure", () => {
   assert(fixed.length === 1 && heldCartSummary(fixed).totalLak === 11000, "new path restores from local hold");
 });
 
-check("repository still consumes a hold exactly once", () => {
-  assert(repoSrc.includes('status: "held"'), "resume targets held status");
-  assert(repoSrc.includes('status: "resumed"'), "marks resumed");
-  assert(repoSrc.includes("updated.count !== 1"), "double-resume rejected");
+check("repository keeps Hold reserving after Resume (not terminal)", () => {
+  assert(repoSrc.includes('status: { in: [...HOLD_RESERVING_STATUSES] }') || repoSrc.includes("HOLD_RESERVING_STATUSES"), "resume targets reserving statuses");
+  assert(repoSrc.includes("resumedAt: new Date()"), "records resume interaction");
+  assert(!repoSrc.includes('status: "resumed"'), "Resume must not terminal-status the Hold");
+  assert(repoSrc.includes("stockReservation.create") || repoSrc.includes("stockReservation"), "creates reservations");
   assert(repoSrc.includes("slimHeldSnapshot"), "resume DTO is slimmed");
-  assert(repoSrc.includes("This held bill has already been resumed or cancelled."), "conflict message kept");
+  assert(repoSrc.includes("You can only access your own held bills."), "ownership enforced");
 });
 
 check("client commits restored cart through ref + setCartItems", () => {

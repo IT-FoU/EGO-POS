@@ -255,6 +255,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [heldBillsLoaded, setHeldBillsLoaded] = useState(false);
     const [recentSalesLoaded, setRecentSalesLoaded] = useState(false);
     const [selectedHeldSaleId, setSelectedHeldSaleId] = useState("");
+    const [activeHeldBillId, setActiveHeldBillId] = useState<string | null>(null);
     const [heldBillsBusy, setHeldBillsBusy] = useState(false);
     const [heldBillConflict, setHeldBillConflict] = useState<HeldSale | null>(null);
     const [activeCashSession, setActiveCashSession] = useState<PosCashSessionContext>(cashSession);
@@ -989,6 +990,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 totalLak: totalAmount,
             };
             setHeldSales((current) => [heldSale, ...current]);
+            setActiveHeldBillId(null);
             clearSale();
             setSelectedCustomer(null);
             setMessage(fillPosCopy(t("ui.bill.held"), { saleNo: heldSale.saleNo }));
@@ -998,6 +1000,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         try {
             const heldSale = await createHeldBill(buildHeldBillSnapshot(), activeCashSession.sessionId);
             setHeldSales((current) => [heldSale, ...current]);
+            setActiveHeldBillId(null);
             clearSale();
             setSelectedCustomer(null);
             setMessage(fillPosCopy(t("ui.bill.held"), { saleNo: heldSale.saleNo }));
@@ -1029,8 +1032,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     async function resumeHeldBillToCart(heldSale: HeldSale) {
         if (demoMode) {
             restoreHeldBill(heldSale);
-            setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
-            setSelectedHeldSaleId("");
+            setActiveHeldBillId(heldSale.id);
+            setSelectedHeldSaleId(heldSale.id);
             setMessage(fillPosCopy(t("ui.bill.resumed"), { saleNo: heldSale.saleNo }));
             return true;
         }
@@ -1043,8 +1046,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 return false;
             }
             restoreHeldBill(restorable);
-            setHeldSales((current) => current.filter((sale) => sale.id !== heldSale.id));
-            setSelectedHeldSaleId("");
+            // Keep Hold discoverable + reservation ACTIVE until checkout/cancel.
+            setHeldSales((current) => current.map((sale) => (sale.id === restorable.id ? { ...sale, ...restorable, reserved: true } : sale)));
+            setActiveHeldBillId(restorable.id);
+            setSelectedHeldSaleId(restorable.id);
             setMessage(result.availabilityWarnings.length > 0
                 ? `${heldSale.saleNo} resumed with stock warnings: ${result.availabilityWarnings.join(" ")}`
                 : fillPosCopy(t("ui.bill.resumed"), { saleNo: heldSale.saleNo }));
@@ -1070,7 +1075,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         }
     }
     async function deleteHeldSale() {
-        if (!enforcePosAction("void_bill")) {
+        if (!enforcePosAction("resume_bill")) {
             return false;
         }
         if (!selectedHeldSaleId) {
@@ -1082,6 +1087,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         if (demoMode) {
             setHeldSales((current) => current.filter((item) => item.id !== selectedHeldSaleId));
             setSelectedHeldSaleId("");
+            if (activeHeldBillId === sale.id) {
+                setActiveHeldBillId(null);
+            }
             setMessage(fillPosCopy(t("ui.bill.cancelled"), { saleNo: sale.saleNo }));
             return true;
         }
@@ -1090,6 +1098,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             await cancelHeldBill(sale.id);
             setHeldSales((current) => current.filter((item) => item.id !== sale.id));
             setSelectedHeldSaleId("");
+            if (activeHeldBillId === sale.id) {
+                setActiveHeldBillId(null);
+            }
             setMessage(fillPosCopy(t("ui.bill.cancelled"), { saleNo: sale.saleNo }));
             return true;
         }
@@ -1200,6 +1211,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 customerId: selectedCustomer?.id,
                 discountAmount,
                 discountPercent,
+                heldFromId: activeHeldBillId,
                 items: cartItems.map((item) => ({
                     costPrice: item.costPriceLak,
                     conversionQty: item.conversionQty ?? 1,
@@ -1221,6 +1233,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             if (!result.ok) {
                 setMessage(result.error ?? t("ui.sale.completion.failed"));
                 return;
+            }
+            if (activeHeldBillId) {
+                setHeldSales((current) => current.filter((sale) => sale.id !== activeHeldBillId));
+                setActiveHeldBillId(null);
+                setSelectedHeldSaleId("");
             }
             const assignedSaleNo = result.data?.saleNo ?? saleNo;
             const receipt = result.data
@@ -2188,7 +2205,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           <select className="field-input h-11 text-sm" value={selectedHeldSaleId} onChange={(event) => setSelectedHeldSaleId(event.target.value)}>
             <option value="">{t("ui.held.bills")}</option>
             {heldSales.map((sale) => (<option key={sale.id} value={sale.id}>
-                {sale.saleNo} - {formatLak(sale.totalLak)} LAK - {sale.itemCount} items
+                {sale.saleNo} · {formatLak(sale.totalLak)} LAK · {sale.itemCount} · {sale.cashierName || sale.cashierId || "—"} · {new Date(sale.createdAt).toLocaleString()}{sale.reserved ? " · reserved" : ""}{activeHeldBillId === sale.id ? " · in cart" : ""}
               </option>))}
           </select>
           <button className="h-11 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={heldBillsBusy || !selectedHeldSaleId} onClick={() => void deleteHeldSale()}>

@@ -217,6 +217,12 @@ enum LoyaltyPointType {
   expire
 }
 
+enum StockReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+}
+
 model Company {
   id                  String         @id @default(cuid())
   name                String
@@ -1196,33 +1202,34 @@ model SalePayment {
 }
 
 model HoldBill {
-  id                 String         @id @default(cuid())
-  companyId          String         @map("company_id")
-  branchId           String?        @map("branch_id")
-  warehouseId        String?        @map("warehouse_id")
-  cashierId          String         @map("cashier_id")
-  cashSessionId      String?        @map("cash_session_id")
-  holdNo             String         @map("hold_no")
-  customerId         String?        @map("customer_id")
-  memberId           String?        @map("member_id")
+  id                 String             @id @default(cuid())
+  companyId          String             @map("company_id")
+  branchId           String?            @map("branch_id")
+  warehouseId        String?            @map("warehouse_id")
+  cashierId          String             @map("cashier_id")
+  cashSessionId      String?            @map("cash_session_id")
+  holdNo             String             @map("hold_no")
+  customerId         String?            @map("customer_id")
+  memberId           String?            @map("member_id")
   note               String?
-  currency           String         @default("LAK")
-  exchangeRate       Decimal        @default(1) @map("exchange_rate") @db.Decimal(18, 6)
-  subtotal           Decimal        @default(0) @db.Decimal(18, 2)
-  discountTotal      Decimal        @default(0) @map("discount_total") @db.Decimal(18, 2)
-  taxTotal           Decimal        @default(0) @map("tax_total") @db.Decimal(18, 2)
-  grandTotal         Decimal        @default(0) @map("grand_total") @db.Decimal(18, 2)
-  status             String         @default("held")
-  cartSnapshot       Json?          @map("cart_snapshot")
-  resumedAt          DateTime?      @map("resumed_at")
-  resumedByUserId    String?        @map("resumed_by_user_id")
-  cancelledAt        DateTime?      @map("cancelled_at")
-  cancelledByUserId  String?        @map("cancelled_by_user_id")
-  cancelReason       String?        @map("cancel_reason")
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @updatedAt @map("updated_at")
-  customer           Customer?      @relation(fields: [customerId], references: [id])
+  currency           String             @default("LAK")
+  exchangeRate       Decimal            @default(1) @map("exchange_rate") @db.Decimal(18, 6)
+  subtotal           Decimal            @default(0) @db.Decimal(18, 2)
+  discountTotal      Decimal            @default(0) @map("discount_total") @db.Decimal(18, 2)
+  taxTotal           Decimal            @default(0) @map("tax_total") @db.Decimal(18, 2)
+  grandTotal         Decimal            @default(0) @map("grand_total") @db.Decimal(18, 2)
+  status             String             @default("held")
+  cartSnapshot       Json?              @map("cart_snapshot")
+  resumedAt          DateTime?          @map("resumed_at")
+  resumedByUserId    String?            @map("resumed_by_user_id")
+  cancelledAt        DateTime?          @map("cancelled_at")
+  cancelledByUserId  String?            @map("cancelled_by_user_id")
+  cancelReason       String?            @map("cancel_reason")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  customer           Customer?          @relation(fields: [customerId], references: [id])
   items              HoldBillItem[]
+  reservations       StockReservation[]
 
   @@unique([companyId, holdNo])
   @@index([companyId, cashierId, createdAt])
@@ -1231,22 +1238,48 @@ model HoldBill {
 }
 
 model HoldBillItem {
-  id             String   @id @default(cuid())
-  holdBillId     String   @map("hold_bill_id")
-  productId      String   @map("product_id")
-  productUnitId  String?  @map("product_unit_id")
-  quantity       Decimal  @db.Decimal(18, 3)
-  unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(18, 2)
-  sellingPrice   Decimal  @map("selling_price") @db.Decimal(18, 2)
-  discountAmount Decimal  @default(0) @map("discount_amount") @db.Decimal(18, 2)
-  taxAmount      Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 2)
-  lineTotal      Decimal  @default(0) @map("line_total") @db.Decimal(18, 2)
-  cartMetadata   Json?    @map("cart_metadata")
-  holdBill       HoldBill @relation(fields: [holdBillId], references: [id], onDelete: Cascade)
+  id               String            @id @default(cuid())
+  holdBillId       String            @map("hold_bill_id")
+  productId        String            @map("product_id")
+  productUnitId    String?           @map("product_unit_id")
+  quantity         Decimal           @db.Decimal(18, 3)
+  unitPrice        Decimal           @default(0) @map("unit_price") @db.Decimal(18, 2)
+  sellingPrice     Decimal           @map("selling_price") @db.Decimal(18, 2)
+  discountAmount   Decimal           @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxAmount        Decimal           @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  lineTotal        Decimal           @default(0) @map("line_total") @db.Decimal(18, 2)
+  cartMetadata     Json?             @map("cart_metadata")
+  holdBill         HoldBill          @relation(fields: [holdBillId], references: [id], onDelete: Cascade)
+  stockReservation StockReservation?
 
   @@index([holdBillId])
   @@index([productId])
   @@map("hold_bill_items")
+}
+
+/// Availability protection for Held Bills. Does NOT move physical On Hand.
+/// Available = OnHand - SUM(ACTIVE baseQuantity). Consumed on held checkout; released on cancel.
+model StockReservation {
+  id             String                 @id @default(cuid())
+  companyId      String                 @map("company_id")
+  branchId       String                 @map("branch_id")
+  warehouseId    String                 @map("warehouse_id")
+  holdBillId     String                 @map("hold_bill_id")
+  holdBillItemId String                 @unique @map("hold_bill_item_id")
+  productId      String                 @map("product_id")
+  productUnitId  String?                @map("product_unit_id")
+  baseQuantity   Decimal                @map("base_quantity") @db.Decimal(18, 3)
+  status         StockReservationStatus @default(ACTIVE)
+  createdAt      DateTime               @default(now()) @map("created_at")
+  releasedAt     DateTime?              @map("released_at")
+  consumedAt     DateTime?              @map("consumed_at")
+  holdBill       HoldBill               @relation(fields: [holdBillId], references: [id], onDelete: Cascade)
+  holdBillItem   HoldBillItem           @relation(fields: [holdBillItemId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, warehouseId, productId, status])
+  @@index([holdBillId, status])
+  @@index([branchId, status])
+  @@map("stock_reservations")
 }
 
 model Refund {
