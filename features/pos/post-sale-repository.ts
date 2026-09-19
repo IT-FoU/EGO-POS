@@ -177,6 +177,7 @@ export async function getPrismaSaleReceipt(
     customerName: sale.customerName,
     discountTotal: sale.discountAmount,
     paidAmount: sale.paidAmount,
+    paymentBreakdown: sale.paymentBreakdown ?? [],
     paymentMode: sale.paymentMode,
     receiptNo: sale.receiptNo,
     saleNo: sale.saleNo,

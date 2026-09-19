@@ -79,6 +79,8 @@ export type PosReceiptSnapshot = {
   customerName: string;
   discountTotal: number;
   paidAmount: number;
+  /** STEP 8: persisted payment rows for Mixed split on receipt. */
+  paymentBreakdown?: PosSalePaymentBreakdown[];
   paymentMode: PaymentMode;
   receiptNo: string;
   saleNo: string;

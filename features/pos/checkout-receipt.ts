@@ -85,6 +85,10 @@ export function receiptSnapshotFromPersistedSale(
     customerName: context.customerName || sale.customer?.fullName || "Guest",
     discountTotal: money(sale.discountAmount),
     paidAmount,
+    paymentBreakdown: payments.map((payment) => ({
+      amountLak: money(payment.amount),
+      method: String(payment.paymentMethod ?? "cash"),
+    })),
     paymentMode,
     receiptNo: sale.receiptNo || `RCPT-${sale.saleNo}`,
     saleNo: sale.saleNo,

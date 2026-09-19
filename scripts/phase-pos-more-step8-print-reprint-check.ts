@@ -70,6 +70,15 @@ check("6. More Print/Reprint uses canonical reprintSaleReceipt", () => {
   );
   assert(moreBlock.includes("reprintSaleReceipt(saleId)"), "calls reprint API");
   assert(moreBlock.includes("fetchSaleReceipt(saleId)"), "fetches authoritative receipt");
+  assert(moreBlock.includes("setReceiptAutoPrint(true)"), "auto-print after audit (no duplicate on open)");
+});
+
+check("6b. Receipt carries paymentBreakdown for Mixed split", () => {
+  assert(page.includes("paymentBreakdown"), "client receipt snapshot");
+  const types = read("features/pos/post-sale-types.ts");
+  assert(types.includes("paymentBreakdown?: PosSalePaymentBreakdown[]") || types.includes("paymentBreakdown?"), "receipt type");
+  const repo = read("features/pos/post-sale-repository.ts");
+  assert(repo.includes("paymentBreakdown: sale.paymentBreakdown"), "server receipt includes breakdown");
 });
 
 check("7. More Print/Reprint removes unaudited lastReceipt-only bypass", () => {
@@ -84,7 +93,7 @@ check("7. More Print/Reprint removes unaudited lastReceipt-only bypass", () => {
 check("8. More Print/Reprint falls back to Recent Sales when no saleId", () => {
   const moreBlock = page.slice(
     page.indexOf('label={t("ui.print.reprint.receipt")}'),
-    page.indexOf('label={t("ui.print.reprint.receipt")}') + 2000,
+    page.indexOf('label={t("ui.print.reprint.receipt")}') + 3200,
   );
   assert(moreBlock.includes("setRecentSalesOpen(true)"), "falls back to Recent Sales");
 });

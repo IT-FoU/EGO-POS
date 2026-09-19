@@ -125,6 +125,7 @@ type ReceiptSnapshot = {
     customerName: string;
     discountTotal: number;
     paidAmount: number;
+    paymentBreakdown?: Array<{ amountLak: number; method: string }>;
     paymentMode: PaymentMode;
     receiptNo: string;
     /** STEP 8: persisted DB sale id for canonical audited reprint. Absent in demo mode. */
@@ -1300,6 +1301,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             customerName: sale.customerName,
             discountTotal: sale.discountAmount + Math.round(sale.subtotal * (sale.discountPercent / 100)),
             paidAmount: sale.paidAmount,
+            paymentBreakdown: sale.paymentBreakdown,
             paymentMode: sale.paymentMode,
             receiptNo: sale.receiptNo,
             saleNo: sale.saleNo,
@@ -2044,7 +2046,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                         };
                         setLastReceipt(receipt);
                         setReceiptIsFirstPrint(false);
-                        setReceiptAutoPrint(false);
+                        // Match Recent Sales reprint: audit already recorded; auto-print as transport only.
+                        setReceiptAutoPrint(true);
                         setReceiptOpen(true);
                     } catch (error) {
                         setMessage(error instanceof Error ? error.message : t("ui.receipt.load.failed"));
@@ -2255,7 +2258,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setReceiptOpen(false);
             setReceiptAutoPrint(false);
             if (!recentSalesOpen) setMoreMenuOpen(false);
-        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleId={lastReceipt.saleId} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
+        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentBreakdown={lastReceipt.paymentBreakdown} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleId={lastReceipt.saleId} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
     </div>);
 }
 function Panel({ children, className, ref }: {
@@ -3170,7 +3173,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
         </div>
     </PosWorkspaceModal>);
 }
-function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, isFirstPrint = false, onBack, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleId, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, isFirstPrint = false, onBack, onClose, onReprint, paidAmount, paymentBreakdown, paymentMode, receiptNo, receiptSettings, saleId, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
     autoPrint?: boolean;
     branchName: string;
     cashierName: string;
@@ -3185,6 +3188,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     onClose: () => void;
     onReprint: () => boolean;
     paidAmount: number;
+    paymentBreakdown?: Array<{ amountLak: number; method: string }>;
     paymentMode: PaymentMode;
     receiptNo: string;
     receiptSettings: PosReceiptSettings;
@@ -3244,7 +3248,11 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
           <ReceiptRow label="Discount" value={-discountTotal}/>
           {showTaxOnReceipt ? <ReceiptRow label="Tax" value={taxAmount}/> : null}
           <ReceiptRow label="Total" value={totalAmount} strong/>
-          <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>
+          {(paymentBreakdown?.length ?? 0) > 1
+            ? paymentBreakdown!.map((row) => (
+                <ReceiptRow key={`${row.method}-${row.amountLak}`} label={`Paid ${String(row.method).toUpperCase()}`} value={row.amountLak}/>
+              ))
+            : <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>}
           <ReceiptRow label="Change" value={changeAmount}/>
           <div className="my-4 border-t border-dashed border-border"/>
           <div className="text-center">{receiptFooter}</div>
