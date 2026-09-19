@@ -112,6 +112,7 @@ export function SaleOptionsDrawer({
       <div className="grid gap-3">
         <p className="text-sm font-semibold text-muted-foreground">{t("ui.sale.options.intro")}</p>
 
+        {/* Future: reuse MemberSearchPanel + fetchMemberSearch (/api/pos/members/search). STEP 7. */}
         <SaleOptionsSection description={t("ui.sale.options.subscriber.hint")} title={t("ui.subscriber")}>
           <PlaceholderState>{t("ui.no.subscriber.selected")}</PlaceholderState>
           <p className="mt-2 text-[11px] font-semibold text-muted-foreground">{t("ui.sale.options.subscriber.cashier.note")}</p>
