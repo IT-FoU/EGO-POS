@@ -48,6 +48,7 @@ check("owner can sale.refund", hasStorePermission("owner", STORE_ACTIONS.SALE_RE
 check("manager can sale.refund", hasStorePermission("manager", STORE_ACTIONS.SALE_REFUND));
 check("manager can inventory.adjust", hasStorePermission("manager", STORE_ACTIONS.INVENTORY_ADJUST));
 check("manager can reports.view_full", hasStorePermission("manager", STORE_ACTIONS.REPORTS_VIEW_FULL));
+check("manager can reports.view_own_shift", hasStorePermission("manager", STORE_ACTIONS.REPORTS_VIEW_OWN_SHIFT));
 check("owner can store activity logs own store", hasStorePermission("owner", STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE));
 check("manager can store activity logs own store", hasStorePermission("manager", STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE));
 check("cashier can reports.view_own_shift", hasStorePermission("cashier", STORE_ACTIONS.REPORTS_VIEW_OWN_SHIFT));

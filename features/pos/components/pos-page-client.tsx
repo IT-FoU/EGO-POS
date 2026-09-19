@@ -2377,7 +2377,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           onSubmit={(input) => submitCashMovement(input)}
         />
       ) : null}
-      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} onBack={() => backFromMoreChild(() => setOwnShiftReportOpen(false))} onClose={() => closeMoreChild(() => setOwnShiftReportOpen(false))} /> : null}
+      {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} storeRole={posPermissionPolicy.role} onBack={() => backFromMoreChild(() => setOwnShiftReportOpen(false))} onClose={() => closeMoreChild(() => setOwnShiftReportOpen(false))} /> : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onBack={moreMenuOpen && !recentSalesOpen ? () => backFromMoreChild(() => { setReceiptOpen(false); setReceiptAutoPrint(false); }) : undefined} onClose={() => {
             setReceiptOpen(false);

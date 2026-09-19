@@ -1,11 +1,22 @@
+import { PermissionMatrixDeniedError } from "@/features/permissions/platform-permissions";
+import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { computeCashRefundLak } from "@/features/cash-sessions/cash-session-calculator";
 import { parseCashSessionCountBreakdown } from "@/features/cash-sessions/denominations";
 import type { CashSessionCountBreakdown } from "@/features/cash-sessions/types";
+import { resolveStoreRoleFromTenant } from "@/lib/auth/store-permission-guard";
 import { prisma } from "@/lib/db/prisma";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
+import {
+  OWN_SHIFT_VOID_CASH_LIMITATION,
+  canAccessOwnShiftReport,
+  canViewBranchShiftReports,
+} from "@/features/reports/own-shift-report-access";
 
 const db = prisma as any;
+
+/** Bounded recent branch history — do not load unlimited sessions. */
+export const BRANCH_SHIFT_LIST_LIMIT = 40;
 
 export type OwnShiftRecentBill = {
   amountLak: number;
@@ -18,10 +29,12 @@ export type OwnShiftRecentBill = {
 
 export type OwnShiftReport = {
   branchName: string | null;
+  cashierId: string;
   cashierName: string;
   cashDrawer: {
     cashInLak: number;
     cashOutLak: number;
+    /** Counted / closing cash from Cash Shift Count. */
     closingCashLak: number | null;
     countBreakdown: CashSessionCountBreakdown | null;
     expectedCashLak: number;
@@ -35,18 +48,45 @@ export type OwnShiftReport = {
   paymentBreakdown: {
     cardLak: number;
     cashLak: number;
+    nonCashLak: number;
     qrLak: number;
     transferLak: number;
   };
   promotionUsageCount: number;
   recentBills: OwnShiftRecentBill[];
+  /** Cash portion of refunds used in expected-cash formula. */
+  refundCashLak: number;
   refundTotalLak: number;
   shiftId: string;
   status: "open" | "closed";
   terminalName: string | null;
   totalBills: number;
   totalSalesLak: number;
+  /**
+   * Display-only void sales total. Not subtracted from Expected Cash yet
+   * (voidCashLak remains 0 until STEP 9).
+   */
   voidTotalLak: number;
+  /** Explicit STEP 5 → STEP 9 limitation note. */
+  voidCashLimitation: string;
+};
+
+export type BranchShiftSessionRow = {
+  cashierId: string;
+  cashierName: string;
+  closedAt: string | null;
+  closingCashLak: number | null;
+  expectedCashLak: number | null;
+  id: string;
+  openedAt: string;
+  openingCashLak: number;
+  status: "open" | "closed";
+  varianceLak: number | null;
+};
+
+export type OwnShiftCapabilities = {
+  canViewBranch: boolean;
+  voidCashLimitation: string;
 };
 
 function amount(value: unknown) {
@@ -70,37 +110,22 @@ function saleStatus(status: string): OwnShiftRecentBill["status"] {
   return "paid";
 }
 
-export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftId?: string } = {}) {
-  const scope = await resolveTenantScope(tenant);
-  const include = {
-      branch: { select: { name: true } },
-      transactions: true,
-    };
-  const baseWhere = {
-      cashierId: tenant.userId,
-      companyId: tenant.companyId,
-      ...branchOwnedWhere(scope),
-    };
-  const session = filters.shiftId
-    ? await db.cashSession.findFirst({
-        include,
-        where: { ...baseWhere, id: filters.shiftId },
-      })
-    : (await db.cashSession.findFirst({
-        include,
-        orderBy: { openedAt: "desc" },
-        where: { ...baseWhere, closedAt: null },
-      })) ??
-      (await db.cashSession.findFirst({
-        include,
-        orderBy: { openedAt: "desc" },
-        where: baseWhere,
-      }));
-
-  if (!session) {
-    return null;
+async function requireOwnShiftAccess(tenant: TenantContext) {
+  const role = await resolveStoreRoleFromTenant(tenant);
+  if (!canAccessOwnShiftReport(role)) {
+    throw new PermissionMatrixDeniedError(role, STORE_ACTIONS.REPORTS_VIEW_OWN_SHIFT);
   }
+  return {
+    canViewBranch: canViewBranchShiftReports(role),
+    role,
+  };
+}
 
+async function buildReportFromSession(
+  tenant: TenantContext,
+  session: Record<string, any>,
+): Promise<OwnShiftReport> {
+  const cashierId = String(session.cashierId);
   const openedAt = new Date(session.openedAt);
   const closedAt = session.closedAt ? new Date(session.closedAt) : null;
   const endAt = closedAt ?? new Date();
@@ -108,13 +133,13 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
     branchId: session.branchId,
     companyId: tenant.companyId,
     createdAt: { gte: openedAt, lte: endAt },
-    createdBy: tenant.userId,
+    createdBy: cashierId,
   };
 
   const [cashier, sales, refunds] = await Promise.all([
     db.user.findFirst({
       select: { fullName: true, username: true },
-      where: { id: tenant.userId },
+      where: { id: cashierId },
     }),
     db.sale.findMany({
       include: {
@@ -136,7 +161,7 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
       where: {
         companyId: tenant.companyId,
         createdAt: { gte: openedAt, lte: endAt },
-        createdBy: tenant.userId,
+        createdBy: cashierId,
       },
     }),
   ]);
@@ -183,7 +208,9 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
     }
   }
 
-  const refundTotalLak = Math.round(refunds.reduce((total: number, refund: Record<string, any>) => total + amount(refund.totalAmount), 0));
+  const refundTotalLak = Math.round(
+    refunds.reduce((total: number, refund: Record<string, any>) => total + amount(refund.totalAmount), 0),
+  );
   const refundCashLak = Math.round(
     refunds.reduce((total: number, refund: Record<string, any>) => {
       const sale = refund.sale ?? {};
@@ -201,6 +228,7 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
       .reduce((total: number, transaction: Record<string, any>) => total + amount(transaction.amount), 0),
   );
   const openingCashLak = amount(session.openingCash);
+  // Current formula: voidCashLak remains 0 until STEP 9 (do not subtract void here).
   const expectedCashLak =
     session.expectedCash == null
       ? Math.round(openingCashLak + cashLak + cashInLak - cashOutLak - refundCashLak)
@@ -213,8 +241,11 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
         : Math.round(closingCashLak - expectedCashLak)
       : amount(session.cashDifference);
 
+  const nonCashLak = Math.round(transferLak + qrLak + cardLak);
+
   return {
     branchName: session.branch?.name ?? null,
+    cashierId,
     cashierName: cashier?.fullName ?? cashier?.username ?? "Cashier",
     cashDrawer: {
       cashInLak,
@@ -238,6 +269,7 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
     paymentBreakdown: {
       cardLak: Math.round(cardLak),
       cashLak: Math.round(cashLak),
+      nonCashLak,
       qrLak: Math.round(qrLak),
       transferLak: Math.round(transferLak),
     },
@@ -250,12 +282,140 @@ export async function getOwnShiftReport(tenant: TenantContext, filters: { shiftI
       status: saleStatus(String(sale.saleStatus)),
       time: new Date(sale.createdAt).toISOString(),
     })),
+    refundCashLak,
     refundTotalLak,
     shiftId: session.id,
-    status: closedAt ? "closed" as const : "open" as const,
+    status: closedAt ? ("closed" as const) : ("open" as const),
     terminalName: null,
     totalBills,
     totalSalesLak: Math.round(totalSalesLak),
+    voidCashLimitation: OWN_SHIFT_VOID_CASH_LIMITATION,
     voidTotalLak: Math.round(voidTotalLak),
   } satisfies OwnShiftReport;
+}
+
+const sessionInclude = {
+  branch: { select: { name: true } },
+  transactions: true,
+};
+
+/**
+ * MY SHIFT: current open session for the actor, else most recent closed own session.
+ * Optional shiftId: own session always; other cashier only when canViewBranch.
+ */
+export async function getOwnShiftReport(
+  tenant: TenantContext,
+  filters: { shiftId?: string } = {},
+): Promise<OwnShiftReport | null> {
+  const access = await requireOwnShiftAccess(tenant);
+  const scope = await resolveTenantScope(tenant);
+
+  const session = filters.shiftId
+    ? await db.cashSession.findFirst({
+        include: sessionInclude,
+        where: {
+          companyId: tenant.companyId,
+          id: filters.shiftId,
+          ...branchOwnedWhere(scope),
+          ...(access.canViewBranch ? {} : { cashierId: tenant.userId }),
+        },
+      })
+    : (await db.cashSession.findFirst({
+        include: sessionInclude,
+        orderBy: { openedAt: "desc" },
+        where: {
+          cashierId: tenant.userId,
+          closedAt: null,
+          companyId: tenant.companyId,
+          ...branchOwnedWhere(scope),
+        },
+      })) ??
+      (await db.cashSession.findFirst({
+        include: sessionInclude,
+        orderBy: { openedAt: "desc" },
+        where: {
+          cashierId: tenant.userId,
+          companyId: tenant.companyId,
+          ...branchOwnedWhere(scope),
+        },
+      }));
+
+  if (!session) {
+    return null;
+  }
+
+  if (!access.canViewBranch && String(session.cashierId) !== String(tenant.userId)) {
+    throw new PermissionMatrixDeniedError(access.role, STORE_ACTIONS.REPORTS_VIEW_FULL);
+  }
+
+  return buildReportFromSession(tenant, session);
+}
+
+/** BRANCH SHIFTS list — Manager/Owner branch (or Owner company) scope, bounded. */
+export async function listBranchShiftSessions(
+  tenant: TenantContext,
+): Promise<{ capabilities: OwnShiftCapabilities; sessions: BranchShiftSessionRow[] }> {
+  const access = await requireOwnShiftAccess(tenant);
+  if (!access.canViewBranch) {
+    throw new PermissionMatrixDeniedError(access.role, STORE_ACTIONS.REPORTS_VIEW_FULL);
+  }
+
+  const scope = await resolveTenantScope(tenant);
+  const rows = await db.cashSession.findMany({
+    include: {
+      // CashSession has no cashier relation in schema — resolve names separately.
+    },
+    orderBy: { openedAt: "desc" },
+    take: BRANCH_SHIFT_LIST_LIMIT,
+    where: {
+      companyId: tenant.companyId,
+      ...branchOwnedWhere(scope),
+    },
+  });
+
+  const cashierIds = [...new Set(rows.map((row: { cashierId: string }) => String(row.cashierId)))];
+  const cashiers = cashierIds.length
+    ? await db.user.findMany({
+        select: { fullName: true, id: true, username: true },
+        where: { id: { in: cashierIds } },
+      })
+    : [];
+  const cashierNameById = new Map(
+    cashiers.map((user: { fullName?: string | null; id: string; username?: string | null }) => [
+      String(user.id),
+      user.fullName ?? user.username ?? "Cashier",
+    ]),
+  );
+
+  const sessions: BranchShiftSessionRow[] = rows.map((row: Record<string, any>) => {
+    const closedAt = row.closedAt ? new Date(row.closedAt) : null;
+    return {
+      cashierId: String(row.cashierId),
+      cashierName: cashierNameById.get(String(row.cashierId)) ?? "Cashier",
+      closedAt: iso(closedAt),
+      closingCashLak: row.closingCash == null ? null : amount(row.closingCash),
+      expectedCashLak: row.expectedCash == null ? null : amount(row.expectedCash),
+      id: String(row.id),
+      openedAt: new Date(row.openedAt).toISOString(),
+      openingCashLak: amount(row.openingCash),
+      status: closedAt ? ("closed" as const) : ("open" as const),
+      varianceLak: row.cashDifference == null ? null : amount(row.cashDifference),
+    };
+  });
+
+  return {
+    capabilities: {
+      canViewBranch: true,
+      voidCashLimitation: OWN_SHIFT_VOID_CASH_LIMITATION,
+    },
+    sessions,
+  };
+}
+
+export async function getOwnShiftCapabilities(tenant: TenantContext): Promise<OwnShiftCapabilities> {
+  const access = await requireOwnShiftAccess(tenant);
+  return {
+    canViewBranch: access.canViewBranch,
+    voidCashLimitation: OWN_SHIFT_VOID_CASH_LIMITATION,
+  };
 }
