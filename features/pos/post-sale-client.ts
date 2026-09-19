@@ -1,11 +1,5 @@
-import {
-  getPrismaSaleReceipt,
-  listPrismaRecentSales,
-  logPrismaReceiptReprint,
-  refundPrismaSale,
-  voidPrismaSale,
-} from "@/features/pos/post-sale-repository";
-import type { PosRecentSaleRecord, PosReceiptSnapshot, PostSaleMutationResult } from "@/features/pos/post-sale-types";
+import type { PosRecentSaleRecord, PosRecentSalesPage, PosReceiptSnapshot, PostSaleMutationResult } from "@/features/pos/post-sale-types";
+import type { RecentSalesDatePreset } from "@/features/pos/recent-sales-query";
 import type {
   ExchangeSaleInput,
   ReturnMutationResult,
@@ -19,6 +13,15 @@ export type PostSaleManagerApprovalPayload = {
   reason: string;
 };
 
+export type FetchRecentSalesParams = {
+  cursor?: string | null;
+  customEnd?: string;
+  customStart?: string;
+  datePreset?: RecentSalesDatePreset;
+  limit?: number;
+  search?: string;
+};
+
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok === false) {
@@ -27,13 +30,36 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload.data as T;
 }
 
-export async function fetchRecentSales(search = ""): Promise<PosRecentSaleRecord[]> {
-  const params = new URLSearchParams();
-  if (search.trim()) {
-    params.set("search", search.trim());
+export async function fetchRecentSales(params: FetchRecentSalesParams | string = {}): Promise<PosRecentSalesPage> {
+  const normalized: FetchRecentSalesParams =
+    typeof params === "string" ? { search: params } : params ?? {};
+  const query = new URLSearchParams();
+  if (normalized.search?.trim()) {
+    query.set("search", normalized.search.trim());
   }
-  const response = await fetch(`/api/pos/sales?${params.toString()}`);
-  return readJson<PosRecentSaleRecord[]>(response);
+  if (normalized.cursor) {
+    query.set("cursor", normalized.cursor);
+  }
+  if (normalized.limit) {
+    query.set("limit", String(normalized.limit));
+  }
+  if (normalized.datePreset) {
+    query.set("datePreset", normalized.datePreset);
+  }
+  if (normalized.customStart?.trim()) {
+    query.set("dateFrom", normalized.customStart.trim());
+  }
+  if (normalized.customEnd?.trim()) {
+    query.set("dateTo", normalized.customEnd.trim());
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await fetch(`/api/pos/sales${suffix}`);
+  return readJson<PosRecentSalesPage>(response);
+}
+
+export async function fetchSaleDetail(saleId: string): Promise<PosRecentSaleRecord> {
+  const response = await fetch(`/api/pos/sales/${saleId}`);
+  return readJson<PosRecentSaleRecord>(response);
 }
 
 export async function fetchSaleReceipt(saleId: string): Promise<PosReceiptSnapshot> {

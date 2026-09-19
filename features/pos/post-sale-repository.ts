@@ -10,6 +10,7 @@ import {
 } from "@/features/inventory/lot-reconciliation";
 import type {
   PosRecentSaleRecord,
+  PosRecentSalesPage,
   PosReceiptSnapshot,
   PostSaleMutationResult,
 } from "@/features/pos/post-sale-types";
@@ -30,6 +31,14 @@ import {
   RECENT_SALE_STATUSES,
   resolveCashierName,
 } from "@/features/pos/post-sale-shared";
+import {
+  clampRecentSalesLimit,
+  decodeRecentSalesCursor,
+  encodeRecentSalesCursor,
+  resolveRecentSalesDateRange,
+  type RecentSalesDatePreset,
+  type RecentSalesListFilters,
+} from "@/features/pos/recent-sales-query";
 import { prisma } from "@/lib/db/prisma";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
@@ -37,56 +46,113 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { withTenantTransaction } from "@/lib/db/write-context";
 
 export { getPrismaSaleById, loadMutableSale, lockSaleForUpdate, mapSaleRow } from "@/features/pos/post-sale-shared";
+export {
+  RECENT_SALES_DEFAULT_LIMIT,
+  RECENT_SALES_MAX_LIMIT,
+  clampRecentSalesLimit,
+} from "@/features/pos/recent-sales-query";
 
 const db = prisma as any;
 const saleInclude = postSaleInclude;
 
+/**
+ * Recent Sales scope (documented STEP 6 policy):
+ * - Cashier / Manager / Owner with view_recent_sales: company + branchOwnedWhere
+ * - Owner: all company branches (branchOwnedWhere empty)
+ * - Manager / Cashier: active assigned branch only
+ * - Not restricted to own cashierId (branch recent sales permitted by current store policy)
+ */
 export async function listPrismaRecentSales(
   tenant: TenantContext,
-  filters: { limit?: number; search?: string } = {},
-) {
+  filters: RecentSalesListFilters = {},
+): Promise<PosRecentSalesPage> {
   const policy = await buildPosPolicyForTenant(tenant);
   assertPosActionAllowed(policy, "view_recent_sales");
 
   const scope = await resolveTenantScope(tenant);
-  const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
-  const search = String(filters.search ?? "").trim().toLowerCase();
+  const limit = clampRecentSalesLimit(filters.limit);
+  const search = String(filters.search ?? "").trim();
+  const cursor = decodeRecentSalesCursor(filters.cursor);
+  const dateRange = resolveRecentSalesDateRange(
+    (filters.datePreset as RecentSalesDatePreset | null | undefined) ?? null,
+    filters.dateFrom,
+    filters.dateTo,
+  );
+
+  const where: Record<string, unknown> = {
+    companyId: tenant.companyId,
+    saleStatus: { in: [...RECENT_SALE_STATUSES] },
+    ...branchOwnedWhere(scope),
+  };
+
+  if (dateRange.from || dateRange.to) {
+    where.createdAt = {
+      ...(dateRange.from ? { gte: dateRange.from } : {}),
+      ...(dateRange.to ? { lte: dateRange.to } : {}),
+    };
+  }
+
+  if (cursor) {
+    const cursorDate = new Date(cursor.createdAt);
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      {
+        OR: [
+          { createdAt: { lt: cursorDate } },
+          { AND: [{ createdAt: cursorDate }, { id: { lt: cursor.id } }] },
+        ],
+      },
+    ];
+  }
+
+  if (search) {
+    where.OR = [
+      { saleNo: { contains: search, mode: "insensitive" } },
+      { receiptNo: { contains: search, mode: "insensitive" } },
+      { customer: { fullName: { contains: search, mode: "insensitive" } } },
+      { customer: { phone: { contains: search, mode: "insensitive" } } },
+      {
+        items: {
+          some: {
+            product: {
+              OR: [
+                { nameEn: { contains: search, mode: "insensitive" } },
+                { nameLo: { contains: search, mode: "insensitive" } },
+                { barcode: { contains: search, mode: "insensitive" } },
+                { sku: { contains: search, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      },
+    ];
+  }
 
   const sales = await db.sale.findMany({
     include: saleInclude,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    where: {
-      companyId: tenant.companyId,
-      saleStatus: { in: [...RECENT_SALE_STATUSES] },
-      ...branchOwnedWhere(scope),
-    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    where,
   });
 
-  const rows: PosRecentSaleRecord[] = [];
-  for (const sale of sales) {
+  const pageRows = sales.slice(0, limit);
+  const hasMore = sales.length > limit;
+  const items: PosRecentSaleRecord[] = [];
+  for (const sale of pageRows) {
     const cashierName = await resolveCashierName(db, sale.createdBy);
-    const record = mapSaleRow(sale, cashierName);
-    if (search) {
-      const haystack = [
-        record.saleNo,
-        record.receiptNo,
-        record.customerName,
-        record.customerPhone,
-        record.cashierName,
-        record.paymentMode,
-        ...record.items.map((item) => item.nameEn),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(search)) {
-        continue;
-      }
-    }
-    rows.push(record);
+    items.push(mapSaleRow(sale, cashierName));
   }
-  return rows;
+
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && last
+      ? encodeRecentSalesCursor({
+          createdAt: new Date(last.createdAt).toISOString(),
+          id: String(last.id),
+        })
+      : null;
+
+  return { hasMore, items, limit, nextCursor };
 }
 
 export async function getPrismaSaleReceipt(

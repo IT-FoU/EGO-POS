@@ -705,8 +705,8 @@ await logPrismaReceiptReprint(ownerTenant, normalSale.id);
 const reprintStatusAfter = (await getPrismaSaleById(ownerTenant, normalSale.id))?.status;
 check("12. Recent Sales", "Reprint does not change status", reprintStatusBefore === reprintStatusAfter, `before=${reprintStatusBefore} after=${reprintStatusAfter}`);
 
-const recent = await listPrismaRecentSales(ownerTenant, { limit: 200 });
-const byId = new Map(recent.map((row) => [row.id, row.status]));
+const recent = await listPrismaRecentSales(ownerTenant, { limit: 50 });
+const byId = new Map(recent.items.map((row) => [row.id, row.status]));
 check("12. Recent Sales", "Completed persisted", byId.get(normalSale.id) === "completed" || byId.get(holdCheckout.id) === "completed");
 check("12. Recent Sales", "Partial Refund persisted", partialMapped?.status === "partial_refunded", `observed=${partialMapped?.status}`);
 check("12. Recent Sales", "Refunded persisted", byId.get(refundSale.id) === "refunded" || byId.get(memberSale.id) === "refunded", `refund=${byId.get(refundSale.id)} member=${byId.get(memberSale.id)}`);

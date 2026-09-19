@@ -20,12 +20,18 @@ export type PosRecentSaleTimelineEvent = {
 export type PosRecentSaleItem = {
   conversionQty?: number;
   id: string;
+  lineDiscountLak?: number;
   nameEn: string;
   nameLo: string;
   priceLak: number;
   quantity: number;
   unitId?: string;
   unitName?: string;
+};
+
+export type PosSalePaymentBreakdown = {
+  amountLak: number;
+  method: string;
 };
 
 export type PosRecentSaleRecord = {
@@ -39,9 +45,11 @@ export type PosRecentSaleRecord = {
   discountAmount: number;
   discountPercent: number;
   id: string;
+  itemCount: number;
   items: PosRecentSaleItem[];
   note?: string;
   paidAmount: number;
+  paymentBreakdown: PosSalePaymentBreakdown[];
   paymentMode: PaymentMode;
   receiptNo: string;
   remainingRefundableLak?: number;
@@ -53,6 +61,13 @@ export type PosRecentSaleRecord = {
   timeline: PosRecentSaleTimelineEvent[];
   totalAmount: number;
   warehouseId: string;
+};
+
+export type PosRecentSalesPage = {
+  hasMore: boolean;
+  items: PosRecentSaleRecord[];
+  limit: number;
+  nextCursor: string | null;
 };
 
 export type PosReceiptSnapshot = {
