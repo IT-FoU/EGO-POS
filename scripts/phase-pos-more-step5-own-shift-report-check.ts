@@ -28,7 +28,8 @@ const client = read("features/pos/components/pos-page-client.tsx");
 const permissions = read("features/permissions/store-permissions.ts");
 const cashRepo = read("features/cash-sessions/prisma-repository.ts");
 const moreNav = read("scripts/phase-pos-more-back-navigation-check.ts");
-const step4 = read("scripts/phase-pos-more-step4-hold-reservation-check.ts");
+/** R2 Finance: do not require R3 Hold reservation harness. */
+const step9 = read("scripts/phase-pos-more-step9-void-cash-accounting-check.ts");
 const step3 = read("scripts/phase-pos-more-step3-cash-shift-count-check.ts");
 const step2 = read("scripts/phase-pos-more-step2-refund-auth-check.ts");
 
@@ -207,8 +208,8 @@ check("29. Authoritative DB service — no localStorage totals", () => {
   assert(drawer.includes("/api/pos/own-shift-report"), "server fetch");
 });
 
-check("30. Untouched STEP 2/3/4 markers", () => {
-  assert(step4.includes("StockReservation"), "STEP4 harness present");
+check("30. Untouched R2 Finance STEP 2/3/9 markers", () => {
+  assert(step9.includes("voidCash") || step9.includes("void cash") || step9.includes("STEP 9"), "STEP9 harness present");
   assert(step3.includes("countBreakdown"), "STEP3 harness present");
   assert(step2.includes("approval"), "STEP2 harness present");
   assert(!client.includes("voidCashLak:"), "client does not invent void cash");
