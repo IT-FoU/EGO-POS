@@ -339,7 +339,11 @@ check("P10. existing sessions with NULL breakdown remain readable", () => {
   assert(parseCashSessionCountBreakdown(null) === null, "null → null");
   assert(repo.includes("readCountBreakdown(session.countBreakdown)"), "summary maps null-safe");
   assert(ownShift.includes("countBreakdown:"), "own shift exposes field");
-  assert(!ownShiftDrawer.includes("countBreakdown"), "report UI not redesigned");
+  // STEP 5 Own Shift Report may render breakdown when present; NULL must stay safe.
+  assert(
+    ownShift.includes("parseCashSessionCountBreakdown") || ownShiftDrawer.includes("noBreakdown"),
+    "NULL breakdown remains readable / safe in report",
+  );
 });
 
 check("P11. expected cash calculation unchanged", () => {
