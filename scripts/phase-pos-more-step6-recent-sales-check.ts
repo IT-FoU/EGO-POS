@@ -27,10 +27,10 @@ const detailRoute = read("app/api/pos/sales/[id]/route.ts");
 const page = read("features/pos/components/pos-page-client.tsx");
 const query = read("features/pos/recent-sales-query.ts");
 const returnModal = read("features/pos/components/return-exchange-void-modal.tsx");
-const step5 = read("scripts/phase-pos-more-step5-own-shift-report-check.ts");
-const step4 = read("scripts/phase-pos-more-step4-hold-reservation-check.ts");
-const step3 = read("scripts/phase-pos-more-step3-cash-shift-count-check.ts");
-const step2 = read("scripts/phase-pos-more-step2-refund-auth-check.ts");
+/** R1-safe markers only — do not require R2/R3 step scripts (PIN/Hold/Cash Shift/Own Shift repair). */
+const favoritesCheck = read("scripts/phase-pos-favorites-filter-grid-check.ts");
+const exactCheck = read("scripts/phase-pos-exact-payment-check.ts");
+const saleOptionsCheck = read("scripts/phase-pos-ux-step2-sale-options-check.ts");
 const moreNav = read("scripts/phase-pos-more-back-navigation-check.ts");
 
 let passed = 0;
@@ -240,11 +240,11 @@ check("27. server result not dependent on local state", () => {
   assert(today.to instanceof Date);
 });
 
-check("28. STEP 2–5 markers untouched", () => {
-  assert(step2.includes("STEP 2") || step2.includes("refund"), "step2");
-  assert(step3.includes("cash") || step3.includes("STEP 3"), "step3");
-  assert(step4.includes("hold") || step4.includes("STEP 4"), "step4");
-  assert(step5.includes("own-shift") || step5.includes("STEP 5"), "step5");
+check("28. R1 UX markers untouched", () => {
+  assert(favoritesCheck.includes("Favorites") || favoritesCheck.includes("favorite"), "favorites");
+  assert(exactCheck.includes("Exact") || exactCheck.includes("exact"), "exact");
+  assert(saleOptionsCheck.includes("Sale Options") || saleOptionsCheck.includes("sale.options"), "sale options");
+  assert(moreNav.includes("Back") || moreNav.includes("backFromMoreChild"), "more nav");
 });
 
 if (process.exitCode && process.exitCode !== 0) {

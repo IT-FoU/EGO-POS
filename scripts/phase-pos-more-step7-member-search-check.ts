@@ -29,10 +29,10 @@ const saleOptions = read("features/pos/components/sale-options-drawer.tsx");
 const loyalty = read("features/loyalty/loyalty-service.ts");
 const heldRepo = read("features/pos/held-bills-repository.ts");
 const step6 = read("scripts/phase-pos-more-step6-recent-sales-check.ts");
-const step5 = read("scripts/phase-pos-more-step5-own-shift-report-check.ts");
-const step4 = read("scripts/phase-pos-more-step4-hold-reservation-check.ts");
-const step3 = read("scripts/phase-pos-more-step3-cash-shift-count-check.ts");
-const step2 = read("scripts/phase-pos-more-step2-refund-auth-check.ts");
+/** R1-safe markers only — do not require R2/R3 step scripts (PIN/Hold/Cash Shift/Own Shift repair). */
+const favoritesCheck = read("scripts/phase-pos-favorites-filter-grid-check.ts");
+const exactCheck = read("scripts/phase-pos-exact-payment-check.ts");
+const saleOptionsCheck = read("scripts/phase-pos-ux-step2-sale-options-check.ts");
 const moreNav = read("scripts/phase-pos-more-back-navigation-check.ts");
 
 let passed = 0;
@@ -220,12 +220,12 @@ check("debounce + idle/loading UX", () => {
   assert(query.includes("MEMBER_SEARCH_DEBOUNCE_MS"), "query export");
 });
 
-check("STEP 2–6 markers untouched", () => {
-  assert(step2.includes("RESULT  PASS") || step2.includes("PASS"), "step2");
-  assert(step3.includes("Cash Shift Count") || step3.includes("denomination"), "step3");
-  assert(step4.includes("StockReservation"), "step4");
-  assert(step5.includes("own shift"), "step5");
-  assert(step6.includes("recent sales") || step6.includes("Recent Sales"), "step6");
+check("R1 UX + STEP 6 markers untouched", () => {
+  assert(favoritesCheck.includes("Favorites") || favoritesCheck.includes("favorite"), "favorites");
+  assert(exactCheck.includes("Exact") || exactCheck.includes("exact"), "exact");
+  assert(saleOptionsCheck.includes("Sale Options") || saleOptionsCheck.includes("sale.options"), "sale options");
+  assert(moreNav.includes("Back") || moreNav.includes("backFromMoreChild"), "more nav");
+  assert(step6.includes("recent sales") || step6.includes("Recent Sales") || step6.includes("STEP6"), "step6");
 });
 
 if (process.exitCode && process.exitCode !== 0) {

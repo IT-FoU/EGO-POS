@@ -21,7 +21,8 @@ const repository = read("features/pos/post-sale-repository.ts");
 const checkoutReceipt = read("features/pos/checkout-receipt.ts");
 const permissions = read("features/pos/permissions.ts");
 const step6 = read("scripts/phase-pos-more-step6-recent-sales-check.ts");
-const step2 = read("scripts/phase-pos-more-step2-refund-auth-check.ts");
+const step7 = read("scripts/phase-pos-more-step7-member-search-check.ts");
+const moreNav = read("scripts/phase-pos-more-back-navigation-check.ts");
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -200,9 +201,10 @@ check("21. Back/X navigation preserved for receipt preview", () => {
 
 /* ── Guards ── */
 
-check("22. STEP 2–7 markers untouched", () => {
-  assert(step2.includes("STEP 2") || step2.includes("refund"), "step2");
-  assert(step6.includes("STEP6") || step6.includes("recent sales"), "step6");
+check("22. R1 STEP 6–7 markers untouched", () => {
+  assert(step6.includes("STEP6") || step6.includes("recent sales") || step6.includes("Recent Sales"), "step6");
+  assert(step7.includes("Member Search") || step7.includes("member search") || step7.includes("STEP7"), "step7");
+  assert(moreNav.includes("Back") || moreNav.includes("backFromMoreChild"), "more nav");
 });
 
 if (process.exitCode && process.exitCode !== 0) {
