@@ -87,6 +87,7 @@ import {
   reprintSaleReceipt,
   voidSaleRequest,
 } from "@/features/pos/post-sale-client";
+import { RECENT_SALES_DEFAULT_LIMIT } from "@/features/pos/recent-sales-query";
 import { cancelHeldBill, createHeldBill, fetchHeldBills, resumeHeldBill } from "@/features/pos/held-bills-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
@@ -158,9 +159,11 @@ type DemoSaleRecord = {
     discountAmount: number;
     discountPercent: number;
     id?: string;
+    itemCount?: number;
     items: PosCartItem[];
     note?: string;
     paidAmount: number;
+    paymentBreakdown?: Array<{ amountLak: number; method: string }>;
     paymentMode: PaymentMode;
     receiptNo: string;
     saleNo: string;
@@ -170,16 +173,6 @@ type DemoSaleRecord = {
     timeline: DemoSaleTimelineEvent[];
     totalAmount: number;
     warehouseId: string;
-};
-type SaleFieldPrompt = {
-    field: "note" | "customerName" | "paymentMode";
-    label: string;
-    sale: DemoSaleRecord;
-    value: string;
-};
-type SaleDeletePrompt = {
-    reason: string;
-    sale: DemoSaleRecord;
 };
 
 type ManagerApprovalRequest = {
@@ -281,17 +274,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     );
     const [saleCompletedReceipt, setSaleCompletedReceipt] = useState<ReceiptSnapshot | null>(null);
     const [recentSalesOpen, setRecentSalesOpen] = useState(false);
-    const [saleFieldPrompt, setSaleFieldPrompt] = useState<SaleFieldPrompt | null>(null);
-    const [saleDeletePrompt, setSaleDeletePrompt] = useState<SaleDeletePrompt | null>(null);
     const [returnExchangeOpen, setReturnExchangeOpen] = useState(false);
     const [returnExchangeTab, setReturnExchangeTab] = useState<ReturnExchangeTab>("return");
     const [returnExchangeSaleId, setReturnExchangeSaleId] = useState<string | undefined>();
     const [recentSales, setRecentSales] = useState<DemoSaleRecord[]>([]);
     const [recentSalesFilter, setRecentSalesFilter] = useState<"today" | "yesterday" | "week" | "month" | "custom">("today");
     const [recentSalesSearch, setRecentSalesSearch] = useState("");
-    const [recentSalesShowDeleted, setRecentSalesShowDeleted] = useState(false);
     const [recentSalesCustomStart, setRecentSalesCustomStart] = useState("");
     const [recentSalesCustomEnd, setRecentSalesCustomEnd] = useState("");
+    const [recentSalesCursor, setRecentSalesCursor] = useState<string | null>(null);
+    const [recentSalesHasMore, setRecentSalesHasMore] = useState(false);
+    const [recentSalesLoading, setRecentSalesLoading] = useState(false);
+    const [recentSalesError, setRecentSalesError] = useState<string | null>(null);
+    const recentSalesRequestId = useRef(0);
     const [ownShiftReportOpen, setOwnShiftReportOpen] = useState(false);
     const [managerApprovalRequest, setManagerApprovalRequest] = useState<ManagerApprovalRequest | null>(null);
     const [managerApprovalPin, setManagerApprovalPin] = useState("");
@@ -613,47 +608,74 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             labels.push(promotionBanners[0]);
         return Array.from(new Set(labels)).slice(0, 4);
     }, [cartItems, manualDiscountTotal, promotionBanners, promotionDiscountTotal]);
-    const filteredRecentSales = useMemo(() => {
-        const query = recentSalesSearch.trim().toLowerCase();
-        return recentSales
-            .filter((sale) => {
-            if (!recentSalesShowDeleted && sale.status === "deleted")
-                return false;
-            return isSaleInDateFilter(sale.createdAt, recentSalesFilter, recentSalesCustomStart, recentSalesCustomEnd);
-        })
-            .filter((sale) => {
-            if (!query)
-                return true;
-            return [
-                sale.saleNo,
-                sale.receiptNo,
-                sale.customerName,
-                sale.customerPhone,
-                sale.cashierName,
-                sale.paymentMode,
-                ...sale.items.map((item) => item.nameEn),
-            ]
-                .filter(Boolean)
-                .some((value) => String(value).toLowerCase().includes(query));
-        });
-    }, [recentSales, recentSalesCustomEnd, recentSalesCustomStart, recentSalesFilter, recentSalesSearch, recentSalesShowDeleted]);
-    async function refreshRecentSalesFromServer() {
+    const filteredRecentSales = recentSales;
+    async function refreshRecentSalesFromServer(options: { append?: boolean } = {}) {
+        const append = Boolean(options.append);
         if (demoMode) {
             setRecentSales(demoSalesRepository.listSales<DemoSaleRecord>());
             setRecentSalesLoaded(true);
+            setRecentSalesHasMore(false);
+            setRecentSalesCursor(null);
+            setRecentSalesError(null);
             return;
         }
+        if (append && (!recentSalesHasMore || !recentSalesCursor || recentSalesLoading)) {
+            return;
+        }
+        const requestId = ++recentSalesRequestId.current;
+        setRecentSalesLoading(true);
+        if (!append) {
+            setRecentSalesError(null);
+        }
         try {
-            const sales = await fetchRecentSales();
-            setRecentSales(sales as DemoSaleRecord[]);
+            const page = await fetchRecentSales({
+                cursor: append ? recentSalesCursor : null,
+                customEnd: recentSalesCustomEnd,
+                customStart: recentSalesCustomStart,
+                datePreset: recentSalesFilter,
+                limit: RECENT_SALES_DEFAULT_LIMIT,
+                search: recentSalesSearch,
+            });
+            if (requestId !== recentSalesRequestId.current) {
+                return;
+            }
+            const mapped = page.items as DemoSaleRecord[];
+            setRecentSales((current) => (append ? [...current, ...mapped] : mapped));
+            setRecentSalesCursor(page.nextCursor);
+            setRecentSalesHasMore(page.hasMore);
             setRecentSalesLoaded(true);
-        } catch {
-            // Keep the current list when the server read fails.
+            setRecentSalesError(null);
+        } catch (error) {
+            if (requestId !== recentSalesRequestId.current) {
+                return;
+            }
+            setRecentSalesError(error instanceof Error ? error.message : t("ui.recent.sales.load.failed"));
+            if (!append) {
+                setRecentSalesLoaded(true);
+            }
+        } finally {
+            if (requestId === recentSalesRequestId.current) {
+                setRecentSalesLoading(false);
+            }
         }
     }
     function refreshRecentSales() {
-        void refreshRecentSalesFromServer();
+        setRecentSalesCursor(null);
+        setRecentSalesHasMore(false);
+        void refreshRecentSalesFromServer({ append: false });
     }
+    useEffect(() => {
+        if (!recentSalesOpen || demoMode) {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            setRecentSalesCursor(null);
+            void refreshRecentSalesFromServer({ append: false });
+        }, recentSalesSearch.trim() ? 300 : 0);
+        return () => window.clearTimeout(timer);
+        // Reload when filters/search change while modal is open.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recentSalesOpen, recentSalesSearch, recentSalesFilter, recentSalesCustomStart, recentSalesCustomEnd, demoMode]);
     function recordPosAudit(action: PosPermissionAction, result: PosAuditEntry["result"], approvalStatus: PosAuditEntry["approvalStatus"], details: string) {
         const entry: PosAuditEntry = {
             action,
@@ -1525,61 +1547,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMessage(error instanceof Error ? error.message : t("ui.manager.approval.failed"));
         }
     }
-    function editSaleField(sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") {
-        const action = field === "note" ? "edit_sale_note" : field === "customerName" ? "edit_sale_customer" : "edit_sale_payment";
-        if (!enforcePosAction(action)) {
-            return;
-        }
-        const label = field === "note" ? "Note" : field === "customerName" ? "Customer" : "Payment method";
-        setSaleFieldPrompt({ field, label, sale, value: String(sale[field] ?? "") });
-    }
-    function saveSaleFieldPrompt() {
-        if (!saleFieldPrompt) {
-            return;
-        }
-        const { field, label, sale, value } = saleFieldPrompt;
-        const action = field === "note" ? "edit_sale_note" : field === "customerName" ? "edit_sale_customer" : "edit_sale_payment";
-        const nextValue = field === "paymentMode" && !isPaymentMode(value) ? sale.paymentMode : value.trim();
-        const now = new Date().toISOString();
-        const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(sale.saleNo, (currentSale) => ({
-            ...currentSale,
-            [field]: nextValue,
-            timeline: [...(currentSale.timeline ?? []), { at: now, label: `${label} edited`, user: posPermissionPolicy.displayName }],
-        }));
-        setRecentSales(nextSales);
-        recordPosAudit(action, "allowed", "not_required", `${sale.saleNo} ${label.toLowerCase()} updated.`);
-        setMessage(`${sale.saleNo} updated.`);
-        setSaleFieldPrompt(null);
-    }
-    function softDeleteSale(sale: DemoSaleRecord) {
-        if (!enforcePosAction("delete_sale")) {
-            return;
-        }
-        setSaleDeletePrompt({ reason: "", sale });
-    }
-    function confirmSoftDeleteSale() {
-        if (!saleDeletePrompt) {
-            return;
-        }
-        const { reason, sale } = saleDeletePrompt;
-        if (!reason?.trim()) {
-            setMessage("Delete reason is required.");
-            return;
-        }
-        const now = new Date().toISOString();
-        const nextSales = demoSalesRepository.updateSale<DemoSaleRecord>(sale.saleNo, (currentSale) => ({
-            ...currentSale,
-            deletedAt: now,
-            deletedBy: posPermissionPolicy.displayName,
-            deleteReason: reason.trim(),
-            status: "deleted",
-            timeline: [...(currentSale.timeline ?? []), { at: now, label: "Deleted", user: posPermissionPolicy.displayName }],
-        }));
-        setRecentSales(nextSales);
-        recordPosAudit("delete_sale", "allowed", "not_required", `${sale.saleNo} soft deleted.`);
-        setMessage(`${sale.saleNo} soft deleted.`);
-        setSaleDeletePrompt(null);
-    }
     function duplicateSaleToCart(sale: DemoSaleRecord) {
         if (!enforcePosAction("duplicate_sale")) {
             return;
@@ -2122,10 +2089,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         <div className="grid gap-2 sm:grid-cols-2">
           <MoreMenuButton label={t("ui.recent.sales")} onClick={() => {
             if (enforcePosAction("view_recent_sales")) {
-                refreshRecentSales();
                 setRecentSalesOpen(true);
             }
-        }}/>
+          }}/>
           <MoreMenuButton label={t("ui.hold.bills.resume.bills")} onClick={() => {
             void refreshHeldBillsFromServer();
             setHeldBillsOpen(true);
@@ -2157,7 +2123,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 setReceiptOpen(true);
             }
             else if (enforcePosAction("view_recent_sales")) {
-                refreshRecentSales();
                 setRecentSalesOpen(true);
             }
         }}/>
@@ -2341,28 +2306,32 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setSaleCompletedReceipt(null);
         }}/>) : null}
 
-      {recentSalesOpen ? (<RecentSalesModal currentRole={posPermissionPolicy.role} filter={recentSalesFilter} sales={filteredRecentSales} search={recentSalesSearch} showDeleted={recentSalesShowDeleted} customEnd={recentSalesCustomEnd} customStart={recentSalesCustomStart} onBack={() => backFromMoreChild(() => setRecentSalesOpen(false))} onClose={() => closeMoreChild(() => setRecentSalesOpen(false))} onCustomEnd={setRecentSalesCustomEnd} onCustomStart={setRecentSalesCustomStart} onDuplicate={duplicateSaleToCart} onEditField={editSaleField} onExchange={(sale) => openReturnExchange("exchange", sale)} onFilter={setRecentSalesFilter} onRefund={refundSale} onReprint={(sale) => openReceiptForSale(sale, true)} onSearch={setRecentSalesSearch} onShowDeleted={setRecentSalesShowDeleted} onSoftDelete={softDeleteSale} onViewReceipt={(sale) => openReceiptForSale(sale)} onVoid={voidSale}/>) : null}
-      {saleFieldPrompt ? (<div className="fixed inset-0 z-[70]">
-        <PosSmallModal closeAriaLabel={t("ui.close")} closeOnBackdrop={false} closeOnEscape={true} footer={<div className="flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSaleFieldPrompt(null)}>{t("ui.cancel")}</button>
-            <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={saveSaleFieldPrompt}>Save</button>
-          </div>} onClose={() => setSaleFieldPrompt(null)} size="md" title={`Update ${saleFieldPrompt.label}`}>
-          <Field label={saleFieldPrompt.label}>
-            <input className="field-input" value={saleFieldPrompt.value} autoFocus onChange={(event) => setSaleFieldPrompt({ ...saleFieldPrompt, value: event.target.value })}/>
-          </Field>
-        </PosSmallModal>
-      </div>) : null}
-      {saleDeletePrompt ? (<div className="fixed inset-0 z-[70]">
-        <PosSmallModal closeAriaLabel={t("ui.cancel")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
-            <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSaleDeletePrompt(null)}>{t("ui.cancel")}</button>
-            <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmSoftDeleteSale}>{t("ui.delete")}</button>
-          </div>} onClose={() => setSaleDeletePrompt(null)} size="md" title="Delete reason">
-          <Field label="Delete reason">
-            <input className="field-input" value={saleDeletePrompt.reason} autoFocus onChange={(event) => setSaleDeletePrompt({ ...saleDeletePrompt, reason: event.target.value })}/>
-          </Field>
-        </PosSmallModal>
-      </div>) : null}
-      {returnExchangeOpen ? (<ReturnExchangeVoidModal currentRole={posPermissionPolicy.role} initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer(); }}/>) : null}
+      {recentSalesOpen ? (<RecentSalesModal
+        currentRole={posPermissionPolicy.role}
+        customEnd={recentSalesCustomEnd}
+        customStart={recentSalesCustomStart}
+        error={recentSalesError}
+        filter={recentSalesFilter}
+        hasMore={recentSalesHasMore}
+        loading={recentSalesLoading}
+        sales={filteredRecentSales}
+        search={recentSalesSearch}
+        onBack={() => backFromMoreChild(() => setRecentSalesOpen(false))}
+        onClose={() => closeMoreChild(() => setRecentSalesOpen(false))}
+        onCustomEnd={setRecentSalesCustomEnd}
+        onCustomStart={setRecentSalesCustomStart}
+        onDuplicate={duplicateSaleToCart}
+        onExchange={(sale) => openReturnExchange("exchange", sale)}
+        onFilter={setRecentSalesFilter}
+        onLoadMore={() => void refreshRecentSalesFromServer({ append: true })}
+        onRefund={refundSale}
+        onReprint={(sale) => openReceiptForSale(sale, true)}
+        onRetry={() => void refreshRecentSalesFromServer({ append: false })}
+        onSearch={setRecentSalesSearch}
+        onViewReceipt={(sale) => openReceiptForSale(sale)}
+        onVoid={voidSale}
+      />) : null}
+      {returnExchangeOpen ? (<ReturnExchangeVoidModal currentRole={posPermissionPolicy.role} initialSaleId={returnExchangeSaleId} initialTab={returnExchangeTab} onBack={() => backFromMoreChild(() => setReturnExchangeOpen(false))} onClose={() => closeMoreChild(() => setReturnExchangeOpen(false))} onCompleted={(nextMessage) => { setMessage(nextMessage); void refreshRecentSalesFromServer({ append: false }); }}/>) : null}
 
       {managerApprovalRequest ? (<ManagerApprovalModal action={managerApprovalRequest.action} pin={managerApprovalPin} reason={managerApprovalReason} sale={managerApprovalRequest.sale} onClose={closeManagerApprovalRequest} onPinChange={setManagerApprovalPin} onReasonChange={setManagerApprovalReason} onSubmit={submitManagerApprovalRequest}/>) : null}
       {cashInOutOpen ? (
@@ -3254,35 +3223,35 @@ function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, on
       </div>
     </PosModal>);
 }
-function RecentSalesModal({ currentRole, customEnd, customStart, filter, onBack, onClose, onCustomEnd, onCustomStart, onDuplicate, onEditField, onExchange, onFilter, onRefund, onReprint, onSearch, onShowDeleted, onSoftDelete, onViewReceipt, onVoid, sales, search, showDeleted, }: {
+function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, hasMore, loading, onBack, onClose, onCustomEnd, onCustomStart, onDuplicate, onExchange, onFilter, onLoadMore, onRefund, onReprint, onRetry, onSearch, onViewReceipt, onVoid, sales, search }: {
     currentRole: string;
     customEnd: string;
     customStart: string;
+    error: string | null;
     filter: "today" | "yesterday" | "week" | "month" | "custom";
+    hasMore: boolean;
+    loading: boolean;
     onBack?: () => void;
     onClose: () => void;
     onCustomEnd: (value: string) => void;
     onCustomStart: (value: string) => void;
     onDuplicate: (sale: DemoSaleRecord) => void;
-    onEditField: (sale: DemoSaleRecord, field: "note" | "customerName" | "paymentMode") => void;
     onExchange: (sale: DemoSaleRecord) => void;
     onFilter: (filter: "today" | "yesterday" | "week" | "month" | "custom") => void;
+    onLoadMore: () => void;
     onRefund: (sale: DemoSaleRecord) => void;
     onReprint: (sale: DemoSaleRecord) => void;
+    onRetry: () => void;
     onSearch: (value: string) => void;
-    onShowDeleted: (value: boolean) => void;
-    onSoftDelete: (sale: DemoSaleRecord) => void;
     onViewReceipt: (sale: DemoSaleRecord) => void;
     onVoid: (sale: DemoSaleRecord) => void;
     sales: DemoSaleRecord[];
     search: string;
-    showDeleted: boolean;
 }) {
     const canRefundSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_REFUND)
       && canUseStoreAction(currentRole, STORE_ACTIONS.PAYMENT_REFUND);
     const canVoidSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_VOID);
     const canRequestManagerApproval = resolveStoreUiRole(currentRole) === STORE_ROLES.CASHIER;
-    const canDeleteSale = canVoidSale;
     const filterOptions: Array<{ label: string; value: "today" | "yesterday" | "week" | "month" | "custom" }> = [
         { label: t("ui.today"), value: "today" },
         { label: t("ui.yesterday"), value: "yesterday" },
@@ -3290,6 +3259,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onBack,
         { label: t("ui.this.month"), value: "month" },
         { label: t("ui.custom"), value: "custom" },
     ];
+    const emptyMessage = search.trim() ? t("ui.no.search.results") : t("ui.no.recent.sales");
     return (<PosWorkspaceModal onBack={onBack} onClose={onClose} title={t("ui.recent.sales")}>
         <p className="text-sm text-muted-foreground">{t("ui.search.or.select.sale")}</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -3307,15 +3277,25 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onBack,
             <input className="field-input" type="date" value={customStart} onChange={(event) => onCustomStart(event.target.value)}/>
             <input className="field-input" type="date" value={customEnd} onChange={(event) => onCustomEnd(event.target.value)}/>
           </div>) : null}
-        {currentRole === "Owner" ? (<label className="mt-3 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={showDeleted} onChange={(event) => onShowDeleted(event.target.checked)}/>
-            {t("ui.show.deleted.bills")}
-          </label>) : null}
+        {error ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
+            <span>{error}</span>
+            <button className="h-8 rounded-md border border-danger/40 px-3 text-xs font-semibold" type="button" onClick={onRetry}>{t("ui.retry")}</button>
+          </div>
+        ) : null}
         <div className="mt-4 grid gap-3">
-          {sales.length === 0 ? (<div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t("ui.no.recent.sales")}</div>) : sales.map((sale) => {
+          {loading && sales.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{t("ui.loading")}</div>
+          ) : !error && sales.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+          ) : sales.map((sale) => {
             const statusVisual = resolveSaleStatusVisual(sale.status);
+            const itemCount = sale.itemCount ?? (sale.items ?? []).length;
+            const paymentLabel = (sale.paymentBreakdown?.length ?? 0) > 1
+              ? sale.paymentBreakdown!.map((row) => `${row.method} ${formatLak(row.amountLak)}`).join(" · ")
+              : sale.paymentMode.toUpperCase();
             return (
-            <div className="overflow-hidden rounded-lg border border-border bg-background" key={sale.saleNo}>
+            <div className="overflow-hidden rounded-lg border border-border bg-background" key={sale.id ?? sale.saleNo}>
               <div className="flex min-w-0">
                 <SaleStatusIndicator status={sale.status} />
                 <div className="grid min-w-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -3328,9 +3308,11 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onBack,
                   <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-3">
                     <InfoLine label={t("ui.customer")} value={sale.customerName || t("ui.guest")}/>
                     <InfoLine label={t("ui.cashier")} value={sale.cashierName}/>
-                    <InfoLine label={t("ui.sale.items")} value={String((sale.items ?? []).length)}/>
+                    <InfoLine label={t("ui.sale.items")} value={String(itemCount)}/>
+                    <InfoLine label={t("ui.subtotal")} value={`${formatLak(sale.subtotal)} LAK`}/>
+                    <InfoLine label={t("ui.discount")} value={`${formatLak(sale.discountAmount)} LAK`}/>
                     <InfoLine label={t("ui.total")} value={`${formatLak(sale.totalAmount)} LAK`} muted={statusVisual.isVoided} strike={statusVisual.isVoided}/>
-                    <InfoLine label={t("ui.payment")} value={sale.paymentMode.toUpperCase()} muted={statusVisual.isVoided}/>
+                    <InfoLine label={t("ui.payment")} value={paymentLabel} muted={statusVisual.isVoided}/>
                   </div>
                   <details className="mt-2 text-xs text-muted-foreground">
                     <summary className="cursor-pointer font-semibold text-foreground">{t("ui.sale.timeline")}</summary>
@@ -3355,18 +3337,22 @@ function RecentSalesModal({ currentRole, customEnd, customStart, filter, onBack,
                     <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>{t("ui.void.sale")}</button>
                   ) : null}
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onDuplicate(sale)}>{t("ui.duplicate")}</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "note")}>{t("ui.edit.note")}</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "customerName")}>{t("ui.edit.customer")}</button>
-                  <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onEditField(sale, "paymentMode")}>{t("ui.edit.payment")}</button>
-                  {canDeleteSale ? (
-                    <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onSoftDelete(sale)}>{t("ui.delete")}</button>
-                  ) : null}
                 </div>
                 </div>
               </div>
             </div>
             );
           })}
+          {hasMore ? (
+            <button
+              className="h-11 rounded-md border border-border text-sm font-semibold disabled:opacity-60"
+              disabled={loading}
+              type="button"
+              onClick={onLoadMore}
+            >
+              {loading ? t("ui.loading") : t("ui.load.more")}
+            </button>
+          ) : null}
         </div>
     </PosWorkspaceModal>);
 }
@@ -3467,9 +3453,6 @@ function productKey(product: Pick<PosProduct, "id" | "sku" | "unitId">, index: n
 function cartLineKey(item: Pick<PosCartItem, "cartLineId" | "id" | "sku" | "unitId">, index: number) {
     return item.cartLineId ?? `${item.id || item.sku || "cart"}:${item.unitId ?? "default"}:${index}`;
 }
-function isPaymentMode(value: string): value is PaymentMode {
-    return ["cash", "qr", "transfer", "card", "mixed"].includes(value);
-}
 function formatReceiptDateTime(value: string) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
@@ -3482,38 +3465,6 @@ function formatReceiptDateTime(value: string) {
         month: "short",
         year: "numeric",
     });
-}
-function isSaleInDateFilter(createdAt: string, filter: "today" | "yesterday" | "week" | "month" | "custom", customStart: string, customEnd: string) {
-    const saleDate = new Date(createdAt);
-    if (Number.isNaN(saleDate.getTime())) {
-        return false;
-    }
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfSaleDay = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
-    if (filter === "today") {
-        return startOfSaleDay.getTime() === startOfToday.getTime();
-    }
-    if (filter === "yesterday") {
-        const yesterday = new Date(startOfToday);
-        yesterday.setDate(yesterday.getDate() - 1);
-        return startOfSaleDay.getTime() === yesterday.getTime();
-    }
-    if (filter === "week") {
-        const weekStart = new Date(startOfToday);
-        weekStart.setDate(weekStart.getDate() - 6);
-        return saleDate >= weekStart && saleDate <= now;
-    }
-    if (filter === "month") {
-        return saleDate.getFullYear() === now.getFullYear() && saleDate.getMonth() === now.getMonth();
-    }
-    const start = customStart ? new Date(`${customStart}T00:00:00`) : null;
-    const end = customEnd ? new Date(`${customEnd}T23:59:59`) : null;
-    if (start && saleDate < start)
-        return false;
-    if (end && saleDate > end)
-        return false;
-    return true;
 }
 function mapStoredProductToPosProduct(product: Record<string, any>): PosProduct {
     const activeUnits = Array.isArray(product.units) ? product.units.filter((unit: Record<string, any>) => unit.status !== "inactive") : [];

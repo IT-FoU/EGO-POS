@@ -174,7 +174,8 @@ await ensureFixtures();
 await ensureOpenSession(ownerTenant);
 
 const sale = await completeCashSale(ownerTenant, `B86-SALE-${Date.now()}`, CUSTOMER_ID);
-check("A. Recent sales reads DB sale", Boolean((await listPrismaRecentSales(ownerTenant)).some((row) => row.id === sale.id)), `saleId=${sale.id}`);
+const recent = await listPrismaRecentSales(ownerTenant, { limit: 50 });
+check("A. Recent sales reads DB sale", Boolean(recent.items.some((row) => row.id === sale.id)), `saleId=${sale.id}`);
 
 const receipt = await getPrismaSaleReceipt(ownerTenant, sale.id, {
   branchName: "Main Branch",

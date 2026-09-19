@@ -50,10 +50,11 @@ export async function resolveCashierName(tx: Record<string, any>, userId: string
 }
 
 export const postSaleInclude = {
+  _count: { select: { items: true } },
   customer: { select: { fullName: true, phone: true } },
   items: {
     include: {
-      product: { select: { nameEn: true, nameLo: true } },
+      product: { select: { barcode: true, nameEn: true, nameLo: true, sku: true } },
       unit: { select: { conversionQty: true, unitName: true } },
     },
   },
@@ -73,6 +74,17 @@ export function mapSaleRow(sale: Record<string, any>, cashierName: string): PosR
     (total: number, refund: Record<string, any>) => total + amount(refund.totalAmount),
     0,
   );
+  const items = (sale.items ?? []).map((item: Record<string, any>) => ({
+    conversionQty: amount(item.unit?.conversionQty) || 1,
+    id: String(item.productId),
+    lineDiscountLak: amount(item.discountAmount),
+    nameEn: String(item.product?.nameEn ?? item.product?.nameLo ?? "Item"),
+    nameLo: String(item.product?.nameLo ?? item.product?.nameEn ?? "Item"),
+    priceLak: amount(item.sellingPrice),
+    quantity: amount(item.quantity),
+    unitId: item.unitId ? String(item.unitId) : undefined,
+    unitName: item.unit?.unitName ? String(item.unit.unitName) : undefined,
+  }));
   const timeline = [
     { at: new Date(sale.createdAt).toISOString(), label: "Created", user: cashierName },
     ...(sale.refunds ?? []).map((refund: Record<string, any>) => ({
@@ -87,22 +99,18 @@ export function mapSaleRow(sale: Record<string, any>, cashierName: string): PosR
     changeAmount: amount(sale.changeAmount),
     createdAt: new Date(sale.createdAt).toISOString(),
     customerId: sale.customerId ? String(sale.customerId) : undefined,
-    customerName: sale.customer?.fullName || "Guest",
+    customerName: sale.customer?.fullName ? String(sale.customer.fullName) : "Guest",
     customerPhone: sale.customer?.phone ? String(sale.customer.phone) : undefined,
     discountAmount: amount(sale.discountAmount),
     discountPercent: amount(sale.discountPercent),
     id: String(sale.id),
-    items: (sale.items ?? []).map((item: Record<string, any>) => ({
-      conversionQty: amount(item.unit?.conversionQty) || 1,
-      id: String(item.productId),
-      nameEn: String(item.product?.nameEn ?? item.product?.nameLo ?? "Item"),
-      nameLo: String(item.product?.nameLo ?? item.product?.nameEn ?? "Item"),
-      priceLak: amount(item.sellingPrice),
-      quantity: amount(item.quantity),
-      unitId: item.unitId ? String(item.unitId) : undefined,
-      unitName: item.unit?.unitName ? String(item.unit.unitName) : undefined,
-    })),
+    itemCount: Number(sale._count?.items ?? items.length) || items.length,
+    items,
     paidAmount,
+    paymentBreakdown: payments.map((payment: Record<string, any>) => ({
+      amountLak: amount(payment.amount),
+      method: String(payment.paymentMethod ?? "cash"),
+    })),
     paymentMode: inferPaymentMode(payments),
     receiptNo: sale.receiptNo ? String(sale.receiptNo) : `RCPT-${sale.saleNo}`,
     remainingRefundableLak: Math.max(amount(sale.totalAmount) - refundedAmountLak, 0),
