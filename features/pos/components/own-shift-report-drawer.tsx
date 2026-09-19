@@ -53,6 +53,7 @@ function copy(locale?: string) {
     cashOut: t("ui.cash.out"),
     cashReceived: t("ui.cash.received"),
     cashRefunds: t("ui.shift.cash.refunds"),
+    cashVoids: t("ui.shift.cash.voids"),
     cashier: t("ui.cashier"),
     closedAt: t("ui.closed.at"),
     closedShift: tPos("ui.staff.closed", locale),
@@ -91,7 +92,6 @@ function copy(locale?: string) {
     totalSales: t("ui.total.sales"),
     transfer: t("ui.bank.transfer"),
     variance: t("ui.variance"),
-    voidLimitation: t("ui.shift.void.limitation"),
     voidTotal: t("ui.void.total"),
   };
 }
@@ -222,10 +222,6 @@ function BreakdownSections({
 function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
   return (
     <div className="grid gap-4">
-      <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-        {report.voidCashLimitation || c.voidLimitation}
-      </div>
-
       <Section title={c.shiftSummary}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label={c.status} value={report.status === "open" ? c.openShift : c.closedShift} />
@@ -254,6 +250,7 @@ function ReportContent({ c, report }: { c: Copy; report: OwnShiftReport }) {
           <Metric label={c.refundTotal} value={`${formatLak(report.refundTotalLak)} ${report.currency}`} />
           <Metric label={c.cashRefunds} value={`${formatLak(report.refundCashLak)} ${report.currency}`} />
           <Metric label={c.voidTotal} value={`${formatLak(report.voidTotalLak)} ${report.currency}`} />
+          <Metric label={c.cashVoids} value={`${formatLak(report.voidCashLak ?? 0)} ${report.currency}`} />
         </div>
       </Section>
 

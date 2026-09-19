@@ -246,7 +246,7 @@ check("22. Cash In/Out business logic unchanged (calculator)", () => {
   assert(calculator.includes("input.cashInLak"), "cash in");
   assert(calculator.includes("input.cashOutLak"), "cash out");
   assert(calculator.includes("input.refundLak"), "refund");
-  assert(repo.includes("voidCashLak: 0"), "void still 0");
+  assert(calculator.includes("input.voidCashLak"), "void cash in formula (STEP 9)");
 });
 
 check("23. Own Shift Report still reads counted/expected/variance", () => {

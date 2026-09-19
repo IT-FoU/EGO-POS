@@ -115,10 +115,9 @@ check("13. refunds included", () => {
 
 check("14. expected cash correct under current formula", () => {
   assert(
-    service.includes("openingCashLak + cashLak + cashInLak - cashOutLak - refundCashLak"),
-    "formula",
+    service.includes("openingCashLak + cashLak + voidCashLak + cashInLak - cashOutLak - refundCashLak - voidCashLak"),
+    "formula includes voidCashLak (STEP 9)",
   );
-  assert(service.includes("voidCashLak remains 0 until STEP 9"), "void note in formula comment");
 });
 
 check("15. counted cash correct", () => {
@@ -191,14 +190,11 @@ check("26. Branch list bounded", () => {
   assert(service.includes("take: BRANCH_SHIFT_LIST_LIMIT"), "bounded take");
 });
 
-check("27. Void limitation documented / unchanged", () => {
-  assert.equal(
-    OWN_SHIFT_VOID_CASH_LIMITATION.includes("STEP 9"),
-    true,
-  );
-  assert(cashRepo.includes("voidCashLak: 0"), "cash session still 0");
-  assert(service.includes("voidCashLimitation"), "exposed on report");
-  assert(drawer.includes("voidLimitation") || drawer.includes("voidCashLimitation"), "UI note");
+check("27. Void cash properly integrated (STEP 9 resolved)", () => {
+  assert.equal(OWN_SHIFT_VOID_CASH_LIMITATION, "", "limitation cleared after STEP 9 fix");
+  assert(!cashRepo.includes("voidCashLak: 0"), "voidCashLak no longer hardcoded 0");
+  assert(cashRepo.includes("voidCashLak"), "voidCashLak derived in session repo");
+  assert(service.includes("voidCashLak"), "voidCashLak on report");
 });
 
 check("28. No dedicated print redesign (STEP 8)", () => {

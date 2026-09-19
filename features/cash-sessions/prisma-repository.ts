@@ -77,8 +77,10 @@ function totalsFromLoadedSessionRows(
   session: Record<string, any>,
   payments: Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }>,
   refundRows: Array<Record<string, any>>,
+  voidedPayments: Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }> = [],
 ) {
   const paymentTotals = summarizeSalePayments(payments);
+  const voidCashLak = Math.round(summarizeSalePayments(voidedPayments).cashSalesLak);
   const cashInLak = sumCashTransactions(session.transactions ?? [], "cash_in");
   const cashOutLak = sumCashTransactions(session.transactions ?? [], "cash_out");
   let refundLak = 0;
@@ -102,12 +104,12 @@ function totalsFromLoadedSessionRows(
   return buildCashSessionTotals({
     cashInLak,
     cashOutLak,
-    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak),
+    // Gross cash: active sales + voided cash so formula can subtract voidCashLak explicitly.
+    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak) + voidCashLak,
     nonCashSalesLak: paymentTotals.nonCashSalesLak,
     openingCashLak: amount(session.openingCash),
     refundLak,
-    // Limitation: void cash impact is not attributed yet (always 0).
-    voidCashLak: 0,
+    voidCashLak,
   });
 }
 
@@ -128,7 +130,7 @@ async function loadSessionTotals(
     createdBy: session.cashierId,
   };
 
-  const [payments, refundRows] = await Promise.all([
+  const [payments, refundRows, voidedPayments] = await Promise.all([
     tx.salePayment.findMany({
       select: { amount: true, changeAmount: true, paymentMethod: true },
       where: {
@@ -146,9 +148,18 @@ async function loadSessionTotals(
         createdBy: session.cashierId,
       },
     }),
+    tx.salePayment.findMany({
+      select: { amount: true, changeAmount: true, paymentMethod: true },
+      where: {
+        sale: {
+          ...saleWindow,
+          saleStatus: "cancelled",
+        },
+      },
+    }),
   ]);
 
-  return totalsFromLoadedSessionRows(session, payments, refundRows as Array<Record<string, any>>);
+  return totalsFromLoadedSessionRows(session, payments, refundRows as Array<Record<string, any>>, voidedPayments);
 }
 
 export async function computeCashSessionTotalsForShifts(
@@ -211,7 +222,7 @@ export async function computeCashSessionTotalsForShifts(
       AND s.created_at >= ${minOpened}
       AND s.created_at <= ${maxEnd}
       AND s.created_by = ANY(${cashierIds})
-      AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted')
+      AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'cancelled')
     UNION ALL
     SELECT
       'refund' AS "rowKind",
@@ -237,13 +248,22 @@ export async function computeCashSessionTotalsForShifts(
   `;
 
   for (const window of windows) {
-    const payments = (rows as CashTotalRow[])
+    const windowPaymentRows = (rows as CashTotalRow[])
       .filter((row: CashTotalRow) => (
         row.rowKind === "payment"
         && String(row.saleCreatedBy ?? "") === window.cashierId
         && row.saleCreatedAt
         && inSessionWindow(new Date(row.saleCreatedAt), window.openedAt, window.endAt)
-      ))
+      ));
+    const payments = windowPaymentRows
+      .filter((row: CashTotalRow) => row.saleStatus !== "cancelled")
+      .map((row: CashTotalRow) => ({
+        amount: row.amount,
+        changeAmount: row.changeAmount,
+        paymentMethod: String(row.paymentMethod ?? "cash"),
+      }));
+    const voidedPayments = windowPaymentRows
+      .filter((row: CashTotalRow) => row.saleStatus === "cancelled")
       .map((row: CashTotalRow) => ({
         amount: row.amount,
         changeAmount: row.changeAmount,
@@ -264,7 +284,7 @@ export async function computeCashSessionTotalsForShifts(
         sale: { saleStatus: row.saleStatus },
         totalAmount: row.totalAmount,
       }));
-    totals.set(String(window.session.id), totalsFromLoadedSessionRows(window.session, payments, refundRows));
+    totals.set(String(window.session.id), totalsFromLoadedSessionRows(window.session, payments, refundRows, voidedPayments));
   }
 
   return totals;
