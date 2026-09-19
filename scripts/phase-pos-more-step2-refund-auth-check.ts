@@ -135,8 +135,9 @@ check("10. Error UX keys + unauthorized API 403 mapping", () => {
   assert(modal.includes("mapPostSaleError"), "friendly error mapper");
 });
 
-check("11. VOID expected-drawer linkage documented as currently zero", () => {
-  assert(cashSessionRepo.includes("voidCashLak: 0"), "voidCashLak hardcoded 0");
+check("11. VOID expected-drawer linkage properly derived (STEP 9)", () => {
+  assert(cashSessionRepo.includes("voidCashLak"), "voidCashLak present in session repo");
+  assert(!cashSessionRepo.includes("voidCashLak: 0"), "voidCashLak no longer hardcoded 0 (STEP 9 fixed)");
 });
 
 check("12. More navigation / Favorites / Exact surfaces untouched by this modal rewrite", () => {

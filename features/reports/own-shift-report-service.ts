@@ -8,7 +8,6 @@ import { prisma } from "@/lib/db/prisma";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
 import {
-  OWN_SHIFT_VOID_CASH_LIMITATION,
   canAccessOwnShiftReport,
   canViewBranchShiftReports,
 } from "@/features/reports/own-shift-report-access";
@@ -62,13 +61,9 @@ export type OwnShiftReport = {
   terminalName: string | null;
   totalBills: number;
   totalSalesLak: number;
-  /**
-   * Display-only void sales total. Not subtracted from Expected Cash yet
-   * (voidCashLak remains 0 until STEP 9).
-   */
+  /** Cash component of voided sales — subtracted from Expected Cash via gross cashSalesLak. */
+  voidCashLak: number;
   voidTotalLak: number;
-  /** Explicit STEP 5 → STEP 9 limitation note. */
-  voidCashLimitation: string;
 };
 
 export type BranchShiftSessionRow = {
@@ -86,7 +81,6 @@ export type BranchShiftSessionRow = {
 
 export type OwnShiftCapabilities = {
   canViewBranch: boolean;
-  voidCashLimitation: string;
 };
 
 function amount(value: unknown) {
@@ -171,6 +165,7 @@ async function buildReportFromSession(
   let discountsLak = 0;
   let promotionUsageCount = 0;
   let voidTotalLak = 0;
+  let voidCashLak = 0;
   let cashLak = 0;
   let transferLak = 0;
   let qrLak = 0;
@@ -183,6 +178,11 @@ async function buildReportFromSession(
 
     if (sale.saleStatus === "cancelled") {
       voidTotalLak += saleTotal;
+      for (const payment of sale.payments ?? []) {
+        if (payment.paymentMethod === "cash") {
+          voidCashLak += amount(payment.amount) - amount(payment.changeAmount);
+        }
+      }
       continue;
     }
 
@@ -208,6 +208,8 @@ async function buildReportFromSession(
     }
   }
 
+  voidCashLak = Math.round(voidCashLak);
+
   const refundTotalLak = Math.round(
     refunds.reduce((total: number, refund: Record<string, any>) => total + amount(refund.totalAmount), 0),
   );
@@ -228,10 +230,11 @@ async function buildReportFromSession(
       .reduce((total: number, transaction: Record<string, any>) => total + amount(transaction.amount), 0),
   );
   const openingCashLak = amount(session.openingCash);
-  // Current formula: voidCashLak remains 0 until STEP 9 (do not subtract void here).
+  // Formula: opening + grossCash + cashIn - cashOut - refundCash - voidCash
+  // grossCash = cashLak (active) + voidCashLak, so net = opening + cashLak + cashIn - cashOut - refundCash
   const expectedCashLak =
     session.expectedCash == null
-      ? Math.round(openingCashLak + cashLak + cashInLak - cashOutLak - refundCashLak)
+      ? Math.round(openingCashLak + cashLak + voidCashLak + cashInLak - cashOutLak - refundCashLak - voidCashLak)
       : amount(session.expectedCash);
   const closingCashLak = session.closingCash == null ? null : amount(session.closingCash);
   const varianceLak =
@@ -289,7 +292,7 @@ async function buildReportFromSession(
     terminalName: null,
     totalBills,
     totalSalesLak: Math.round(totalSalesLak),
-    voidCashLimitation: OWN_SHIFT_VOID_CASH_LIMITATION,
+    voidCashLak,
     voidTotalLak: Math.round(voidTotalLak),
   } satisfies OwnShiftReport;
 }
@@ -406,7 +409,6 @@ export async function listBranchShiftSessions(
   return {
     capabilities: {
       canViewBranch: true,
-      voidCashLimitation: OWN_SHIFT_VOID_CASH_LIMITATION,
     },
     sessions,
   };
@@ -416,6 +418,5 @@ export async function getOwnShiftCapabilities(tenant: TenantContext): Promise<Ow
   const access = await requireOwnShiftAccess(tenant);
   return {
     canViewBranch: access.canViewBranch,
-    voidCashLimitation: OWN_SHIFT_VOID_CASH_LIMITATION,
   };
 }
