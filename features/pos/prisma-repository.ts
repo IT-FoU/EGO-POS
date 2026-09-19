@@ -1,12 +1,13 @@
 import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
 import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
-import { mapPaymentModeToSalePayments, mapPrismaPosCustomer, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
+import { mapPaymentModeToSalePayments, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
+import type { PosCustomer } from "@/features/pos/types";
 import { getPrismaPosQrBanks } from "@/features/qr-payments/prisma-repository";
 import type { PaymentMode } from "@/features/pos/types";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, stringValue, withTenantTransaction } from "@/lib/db/write-context";
-import { assertBranchInScope, assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
+import { assertBranchInScope, assertWarehouseInScope, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { taxAndLoyaltyFromSettingsRow } from "@/features/settings/prisma-repository";
 import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
 import {
@@ -152,10 +153,11 @@ async function timedPosLoad<T>(label: string, fn: () => Promise<T>): Promise<T> 
 export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const started = posLoadTimingEnabled() ? Date.now() : 0;
   const scope = await timedPosLoad("scope", () => resolveTenantScope(tenant));
-  const branchWhere = branchOwnedWhere(scope);
   const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
   const now = new Date();
-  const [products, settings, customers, promotions, membershipLevels, openSession, qrBanks, favoriteProductIds] = await timedPosLoad(
+  // STEP 7: do not boot-load the full customer/member table into the POS client.
+  // Member Search uses /api/pos/members/search; Hold/Resume embeds customer in snapshot.
+  const [products, settings, promotions, membershipLevels, openSession, qrBanks, favoriteProductIds] = await timedPosLoad(
     "parallel-reads",
     () =>
       Promise.all([
@@ -173,18 +175,6 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
         }),
         db.companySetting.findUnique({
           where: { companyId: scope.companyId },
-        }),
-        db.customer.findMany({
-          include: {
-            membershipLevel: true,
-            subscriptions: {
-              orderBy: { endDate: "desc" },
-              take: 1,
-              where: { status: "active" },
-            },
-          },
-          orderBy: { fullName: "asc" },
-          where: { companyId: scope.companyId, status: "active", ...branchWhere },
         }),
         db.promotion.findMany({
           include: {
@@ -256,7 +246,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           status: "not_started" as const,
         },
     companyName: "Business",
-    customers: customers.map(mapPrismaPosCustomer),
+    customers: [] as PosCustomer[],
     loyaltySettings: {
       loyaltyEnabled: taxAndLoyalty.loyaltyEnabled,
       loyaltyMinRedeemPoints: taxAndLoyalty.loyaltyMinRedeemPoints,

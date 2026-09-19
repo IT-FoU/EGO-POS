@@ -9,7 +9,7 @@ import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, GraduationCap, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
+import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosPromotion, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
@@ -69,6 +69,7 @@ import {
   openCashSessionRequest,
 } from "@/features/pos/cash-session-client";
 import { CashInOutModal } from "@/features/pos/components/cash-in-out-modal";
+import { MemberSearchPanel } from "@/features/pos/components/member-search-panel";
 import { claimCashMovementSubmit, type CashMovementType } from "@/features/pos/cash-movement";
 import {
   fetchRecentSales,
@@ -181,7 +182,7 @@ type ResolvedPayment = {
 };
 const POS_PRODUCT_GRID_VISIBILITY_KEY = "ego.pos.productGridVisible";
 
-export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers: _bootCustomers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
     branchId: string;
     branchName: string;
     cashierName: string;
@@ -207,7 +208,6 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const checkoutInFlightRef = useRef(false);
     const postSaleInFlightRef = useRef(false);
     const [productQuery, setProductQuery] = useState("");
-    const [membershipQuery, setMembershipQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [productGridVisible, setProductGridVisible] = useState(true);
     const [unitDisplayMode, setUnitDisplayMode] = useState<PosUnitDisplayMode>(DEFAULT_POS_UNIT_DISPLAY_MODE);
@@ -859,57 +859,19 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setUnitDisplayMode(mode);
         writePosUnitDisplayMode(mode);
     }
-    function searchMembership() {
-        const rawQuery = membershipQuery.trim();
-        if (!rawQuery) {
-            setMessage(t("ui.no.customer.or.membership.found"));
-            return;
-        }
-        const query = rawQuery.toLowerCase();
-        const compactQuery = rawQuery.replace(/\s+/g, "");
-        const digitQuery = rawQuery.replace(/\D/g, "");
-        const exact = customers.filter((item) => {
-            const phoneDigits = item.phone.replace(/\D/g, "");
-            return item.phone.replace(/\s+/g, "") === compactQuery
-                || phoneDigits.length >= 6 && phoneDigits === digitQuery
-                || item.membershipNumber.toLowerCase() === query
-                || item.customerCode.toLowerCase() === query
-                || item.id.toLowerCase() === query;
-        });
-        if (exact.length > 1) {
-            setSelectedCustomer(null);
-            setMessage("Multiple members match this lookup. Enter the exact member code or phone.");
-            return;
-        }
-        if (exact.length === 1) {
-            const customer = exact[0];
-            setSelectedCustomer(customer);
-            setRedeemPoints(0);
-            setMessage(isMembershipActive(customer)
-                ? `${customer.name} membership active.`
-                : `${customer.name} membership expired. Retail pricing applies.`);
-            return;
-        }
-        const partial = customers.filter((item) => item.phone.toLowerCase().includes(query)
-            || item.name.toLowerCase().includes(query)
-            || item.membershipNumber.toLowerCase().includes(query)
-            || item.customerCode.toLowerCase().includes(query));
-        if (partial.length > 1) {
-            setSelectedCustomer(null);
-            setMessage("Multiple members match this lookup. Enter the exact member code or phone.");
-            return;
-        }
-        const customer = partial[0];
-        if (!customer) {
-            setSelectedCustomer(null);
-            setMessage(t("ui.no.customer.or.membership.found"));
-            return;
-        }
+    function selectMember(customer: PosCustomer) {
+        // Attach canonical customer ID only — do not reprice existing cart lines.
+        // New adds still use applyCustomerPricing via activeCustomer when membership is Active.
         setSelectedCustomer(customer);
         setRedeemPoints(0);
         setMessage(isMembershipActive(customer)
-            ? `${customer.name} membership active.`
-            : `${customer.name} membership expired. Retail pricing applies.`);
+            ? fillPosCopy(t("ui.membership.active"), { name: customer.name })
+            : fillPosCopy(t("ui.membership.expired"), { name: customer.name }));
+    }
+    function clearSelectedMember() {
+        setSelectedCustomer(null);
+        setRedeemPoints(0);
+        setMessage(t("ui.member.cleared"));
     }
     function updateQuantity(productId: string, quantity: number, unitId?: string) {
         setCartItems((current) => updatePosCartQuantity(current, productId, quantity, unitId));
@@ -954,9 +916,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }
     function restoreHeldBill(sale: HeldSale) {
         const snapshot = sale.snapshot;
-        const restoredCustomer = snapshot?.customer
-            ? customers.find((customer) => customer.id === snapshot.customer?.id) ?? snapshot.customer
-            : null;
+        // Prefer Hold snapshot identity (server-persisted). Boot-time customers list is no longer loaded.
+        const restoredCustomer = snapshot?.customer ?? null;
         const restored = restoreCartFromHeldSale(sale);
         cartItemsRef.current = restored;
         setCartItems(restored);
@@ -2159,28 +2120,18 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       </PosModal>) : null}
 
       {memberSearchOpen ? (<PosModal title={t("ui.member.search")} onBack={() => backFromMoreChild(() => setMemberSearchOpen(false))} onClose={() => closeMoreChild(() => setMemberSearchOpen(false))}>
-        <div className="grid gap-3">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <input className="field-input h-11 text-sm" placeholder={t("ui.phone.name.or.member.no")} value={membershipQuery} onChange={(event) => setMembershipQuery(event.target.value)} onKeyDown={(event) => {
-            if (event.key === "Enter") {
-                event.preventDefault();
-                searchMembership();
-            }
-        }}/>
-            <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={searchMembership}>
-              {t("ui.find.member")}
-            </button>
-          </div>
-          <CustomerCard
-            customer={selectedCustomer}
-            loyaltyEnabled={loyaltySettings.loyaltyEnabled}
-            maxRedeemPoints={maxRedeemablePoints}
-            minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints}
-            redeemPoints={effectiveRedeemPoints}
-            onRedeemPointsChange={setRedeemPoints}
-            redeemDiscountLak={loyaltyRedeemDiscount}
-          />
-        </div>
+        <MemberSearchPanel
+          demoMode={demoMode}
+          loyaltyEnabled={loyaltySettings.loyaltyEnabled}
+          maxRedeemPoints={maxRedeemablePoints}
+          minRedeemPoints={loyaltySettings.loyaltyMinRedeemPoints}
+          redeemDiscountLak={loyaltyRedeemDiscount}
+          redeemPoints={effectiveRedeemPoints}
+          selected={selectedCustomer}
+          onClear={clearSelectedMember}
+          onRedeemPointsChange={setRedeemPoints}
+          onSelect={selectMember}
+        />
       </PosModal>) : null}
 
       {cashShiftCountOpen ? (<PosModal title={t("ui.cash.shift.count")} onBack={() => backFromMoreChild(() => setCashShiftCountOpen(false))} onClose={() => closeMoreChild(() => setCashShiftCountOpen(false))}>
@@ -2289,61 +2240,6 @@ function MoreMenuButton({ label, onClick }: {
     return (<button className="flex min-h-14 w-full items-center rounded-xl border border-border bg-background px-4 text-left text-sm font-bold transition hover:border-primary hover:bg-primary/10 hover:text-primary" type="button" onClick={onClick}>
       {label}
     </button>);
-}
-function CustomerCard({ customer, loyaltyEnabled = false, maxRedeemPoints = 0, minRedeemPoints = 1, onRedeemPointsChange, redeemDiscountLak = 0, redeemPoints = 0, }: {
-    customer: PosCustomer | null;
-    loyaltyEnabled?: boolean;
-    maxRedeemPoints?: number;
-    minRedeemPoints?: number;
-    onRedeemPointsChange?: (value: number) => void;
-    redeemDiscountLak?: number;
-    redeemPoints?: number;
-}) {
-    if (!customer) {
-        return (<div className="mt-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground">{t("ui.guest.sale.search.for.member.pricing")}</div>);
-    }
-    const active = isMembershipActive(customer);
-    return (<div className="mt-2 rounded-md border border-border bg-background p-2 text-xs">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="font-semibold">{customer.name}</div>
-          <div className="text-[11px] text-muted-foreground">{customer.phone}</div>
-        </div>
-        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", active ? "bg-success/10 text-success" : "bg-danger/10 text-danger")}>
-          {customer.membershipStatus}
-        </span>
-      </div>
-      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-        <InfoLine label={t("ui.type")} value={customer.membershipType}/>
-        <InfoLine label={t("ui.member.no")} value={customer.membershipNumber}/>
-        <InfoLine label={t("ui.expiry")} value={customer.membershipExpiry}/>
-        <InfoLine label={t("ui.points")} value={String(customer.pointsBalance)}/>
-      </div>
-      {loyaltyEnabled && active && customer.pointsBalance >= minRedeemPoints ? (
-        <div className="mt-2 space-y-1 rounded-md border border-border p-2">
-          <label className="block text-[11px] font-semibold" htmlFor="redeem-points">
-            {fillPosCopy(t("ui.redeem.points"), { min: minRedeemPoints, max: maxRedeemPoints })}
-          </label>
-          <input
-            className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
-            id="redeem-points"
-            max={maxRedeemPoints}
-            min={0}
-            onChange={(event) => onRedeemPointsChange?.(Math.max(0, Number(event.target.value) || 0))}
-            type="number"
-            value={redeemPoints}
-          />
-          {redeemDiscountLak > 0 ? (
-            <div className="text-[11px] text-primary">{fillPosCopy(t("ui.redeem.discount"), { amount: formatLak(redeemDiscountLak) })}</div>
-          ) : null}
-        </div>
-      ) : null}
-      {customer.membershipType === "Student" ? (<div className="mt-1.5 rounded-md bg-primary/10 p-1.5 text-[11px] text-primary">
-          <div className="flex items-center gap-1 font-semibold"><GraduationCap className="size-4" aria-hidden="true"/> {t("ui.student.verified")}</div>
-          <div className="line-clamp-1">{customer.schoolName} - {customer.studentIdNumber}</div>
-          <div>{customer.studentCardUrl ? t("ui.card.upload.stored") : t("ui.card.upload.missing")}</div>
-        </div>) : null}
-    </div>);
 }
 function InfoLine({ label, muted = false, strike = false, value }: {
     label: string;
