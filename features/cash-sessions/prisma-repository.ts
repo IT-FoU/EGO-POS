@@ -525,9 +525,9 @@ export async function computeCashSessionTotalsForShift(
   return loadSessionTotals(client, session, endAt);
 }
 
-export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Record<string, any>) {
+async function findOpenCashSessionForCashier(tenant: TenantContext, tx: Record<string, any>) {
   const scope = await resolveTenantScope(tenant, tx);
-  const session = await tx.cashSession.findFirst({
+  return tx.cashSession.findFirst({
     where: {
       branchId: scope.branchId,
       cashierId: tenant.userId,
@@ -535,9 +535,34 @@ export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Re
       companyId: tenant.companyId,
     },
   });
+}
+
+export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Record<string, any>) {
+  const session = await findOpenCashSessionForCashier(tenant, tx);
 
   if (!session) {
     throw new Error("An open cash session is required before completing a sale.");
+  }
+
+  return session;
+}
+
+/** Cash refund / cash exchange drawer movement — never reuse the sale-completion message. */
+export async function assertOpenCashSessionForCashRefund(tenant: TenantContext, tx: Record<string, any>) {
+  const session = await findOpenCashSessionForCashier(tenant, tx);
+
+  if (!session) {
+    throw new Error("An open cash session is required before processing a cash refund.");
+  }
+
+  return session;
+}
+
+export async function assertOpenCashSessionForCashExchange(tenant: TenantContext, tx: Record<string, any>) {
+  const session = await findOpenCashSessionForCashier(tenant, tx);
+
+  if (!session) {
+    throw new Error("An open cash session is required before processing a cash exchange.");
   }
 
   return session;

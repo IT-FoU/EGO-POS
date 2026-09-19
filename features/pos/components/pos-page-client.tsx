@@ -3213,6 +3213,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
             <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{emptyMessage}</div>
           ) : sales.map((sale) => {
             const statusVisual = resolveSaleStatusVisual(sale.status);
+            const mutationBlocked = statusVisual.isVoided || statusVisual.tone === "refunded";
             const itemCount = sale.itemCount ?? (sale.items ?? []).length;
             const paymentLabel = (sale.paymentBreakdown?.length ?? 0) > 1
               ? sale.paymentBreakdown!.map((row) => `${row.method} ${formatLak(row.amountLak)}`).join(" · ")
@@ -3250,13 +3251,13 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
                 <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:max-w-[360px]">
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onViewReceipt(sale)}>{t("ui.view.receipt")}</button>
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onReprint(sale)}>{t("ui.reprint.receipt")}</button>
-                  {canRefundSale || canRequestManagerApproval ? (
+                  {!mutationBlocked && (canRefundSale || canRequestManagerApproval) ? (
                     <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onRefund(sale)}>{t("ui.return.refund")}</button>
                   ) : null}
-                  {canRefundSale || canRequestManagerApproval ? (
+                  {!mutationBlocked && (canRefundSale || canRequestManagerApproval) ? (
                     <button className="h-9 rounded-md border border-warning/50 px-2 font-semibold text-warning" type="button" onClick={() => onExchange(sale)}>{t("ui.exchange")}</button>
                   ) : null}
-                  {canVoidSale || canRequestManagerApproval ? (
+                  {!mutationBlocked && (canVoidSale || canRequestManagerApproval) ? (
                     <button className="h-9 rounded-md border border-danger/50 px-2 font-semibold text-danger" type="button" onClick={() => onVoid(sale)}>{t("ui.void.sale")}</button>
                   ) : null}
                   <button className="h-9 rounded-md border border-border px-2 font-semibold" type="button" onClick={() => onDuplicate(sale)}>{t("ui.duplicate")}</button>

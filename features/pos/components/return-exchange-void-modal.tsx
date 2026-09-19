@@ -88,6 +88,12 @@ function mapPostSaleError(error: unknown, fallback: string) {
   if (lower.includes("already") && (lower.includes("refund") || lower.includes("return"))) {
     return tPos("ui.sale.already.refunded");
   }
+  if (lower.includes("cash session") && lower.includes("cash refund")) {
+    return tPos("ui.cash.refund.requires.open.session");
+  }
+  if (lower.includes("cash session") && lower.includes("cash exchange")) {
+    return tPos("ui.cash.exchange.requires.open.session");
+  }
   if (lower.includes("exceed") || lower.includes("remaining") || lower.includes("returnable")) {
     return tPos("ui.quantity.exceeds.returnable");
   }

@@ -207,7 +207,7 @@ export async function logPrismaReceiptReprint(tenant: TenantContext, saleId: str
 
 function assertSaleVoidable(sale: Record<string, any>) {
   const status = String(sale.saleStatus);
-  if (status === "cancelled") {
+  if (status === "cancelled" || status === "voided") {
     throw new Error("Sale is already voided.");
   }
   if (status === "refunded") {

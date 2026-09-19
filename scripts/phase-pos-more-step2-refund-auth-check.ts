@@ -130,9 +130,23 @@ check("10. Error UX keys + unauthorized API 403 mapping", () => {
   assert(copy.includes('"ui.approval.required"'), "approval required copy");
   assert(copy.includes('"ui.permission.denied"'), "permission denied copy");
   assert(copy.includes('"ui.sale.already.voided"'), "already voided copy");
+  assert(copy.includes('"ui.cash.refund.requires.open.session"'), "cash refund session copy");
+  assert(copy.includes('"ui.cash.exchange.requires.open.session"'), "cash exchange session copy");
   assert(copy.includes('"ui.quantity.exceeds.returnable"'), "qty copy");
   assert(postSaleClient.includes("response.status === 403"), "403 mapped");
   assert(modal.includes("mapPostSaleError"), "friendly error mapper");
+  assert(modal.includes("ui.cash.refund.requires.open.session"), "modal maps cash refund session");
+});
+
+check("10b. Return/Exchange session + voided UI guards", () => {
+  assert(returnRepo.includes("resolveCashSessionIdForReturnOrExchange"), "payment-aware session resolver");
+  assert(returnRepo.includes("assertOpenCashSessionForCashRefund"), "cash refund session helper");
+  assert(!returnRepo.includes("assertOpenCashSessionForSale"), "no sale checkout session assert on return");
+  assert(cashSessionRepo.includes("processing a cash refund"), "contextual cash refund error");
+  assert(cashSessionRepo.includes("before completing a sale"), "sale checkout message retained");
+  assert(returnRepo.includes('saleStatus: { in: ["completed", "partial_refunded", "exchanged", "adjusted"] }'), "lookup excludes cancelled");
+  assert(client.includes("mutationBlocked"), "Recent Sales mutation gating");
+  assert(client.includes("statusVisual.isVoided"), "voided status used for gating");
 });
 
 check("11. VOID expected-drawer linkage properly derived (STEP 9)", () => {

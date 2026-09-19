@@ -248,6 +248,18 @@ async function expectFailure(tx: Tx, run: () => Promise<unknown>, pattern: RegEx
   }
 }
 
+async function closeOpenCashSessions(tx: Tx, tenant: TenantContext) {
+  await tx.cashSession.updateMany({
+    data: {
+      cashDifference: 0,
+      closedAt: new Date(),
+      closingCash: OPENING_CASH,
+      expectedCash: OPENING_CASH,
+    },
+    where: { closedAt: null, companyId: tenant.companyId },
+  });
+}
+
 async function seedCore(tx: Tx) {
   const ctx = await createIsolatedTenant(tx, "postsale");
   const { tenant, warehouseAId } = ctx;
@@ -377,6 +389,8 @@ function wiringPass() {
   assert(client.includes("postSaleInFlightRef"), "Recent Sales void in-flight guard missing");
   assert(ret.includes("writeReturnPrismaSale") && ret.includes("writeExchangePrismaSale"), "Return/exchange write cores missing");
   assert(post.includes("writeVoidPrismaSale") && post.includes("writeRefundPrismaSale"), "Void/refund write cores missing");
+  assert(ret.includes("resolveCashSessionIdForReturnOrExchange"), "Cash-refund session helper wiring");
+  assert(!ret.includes("assertOpenCashSessionForSale"), "Return must not reuse sale checkout session assert");
   assert(!ret.includes("IGO_DEMO_MODE") && !post.includes("completeDemoSale"), "Post-sale repository demo leakage");
 }
 
@@ -1213,6 +1227,227 @@ async function main() {
     assert((await tx.promotionUsage.count({ where: { saleId: sale.id } })) === 0, "No live promo recalc on historical refund");
   });
 
+  await isolated("41. Cash refund requires open session", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cashAmount: 10000, paymentMode: "cash", totalAmount: 10000 },
+    );
+    const beforeStock = await balanceOf(tx, fixture.productA.id, fixture.warehouseAId);
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await expectFailure(
+      tx,
+      () =>
+        writeReturnPrismaSale(tx, fixture.tenant, {
+          items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+          refundMethod: "cash",
+          saleId: sale.id,
+        }),
+      /cash refund/,
+      "Cash refund without session",
+    );
+    assert((await tx.refund.count({ where: { saleId: sale.id } })) === 0, "No refund without session");
+    assertClose(await balanceOf(tx, fixture.productA.id, fixture.warehouseAId), beforeStock, "Stock unchanged without session");
+  });
+
+  await isolated("42. QR refund without open session allowed", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { paymentMode: "qr", qrAmount: 10000, totalAmount: 10000 },
+    );
+    await closeOpenCashSessions(tx, fixture.tenant);
+    const result = await writeReturnPrismaSale(tx, fixture.tenant, {
+      items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+      refundMethod: "qr",
+      saleId: sale.id,
+    });
+    assert(result.status === "completed", "QR refund completed without session");
+    const refund = await tx.refund.findFirstOrThrow({ where: { saleId: sale.id } });
+    assert(refund.cashSessionId == null, "QR refund cashSessionId null");
+    assertClose(await balanceOf(tx, fixture.productA.id, fixture.warehouseAId), 30, "QR refund restored stock");
+  });
+
+  await isolated("43. Card refund without open session allowed", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cardAmount: 10000, paymentMode: "card", totalAmount: 10000 },
+    );
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await writeReturnPrismaSale(tx, fixture.tenant, {
+      items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+      refundMethod: "visa",
+      saleId: sale.id,
+    });
+    const refund = await tx.refund.findFirstOrThrow({ where: { saleId: sale.id } });
+    assert(refund.cashSessionId == null, "Card refund cashSessionId null");
+  });
+
+  await isolated("44. Transfer refund without open session allowed", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { paymentMode: "transfer", transferAmount: 10000, totalAmount: 10000 },
+    );
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await writeReturnPrismaSale(tx, fixture.tenant, {
+      items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+      refundMethod: "transfer",
+      saleId: sale.id,
+    });
+    const refund = await tx.refund.findFirstOrThrow({ where: { saleId: sale.id } });
+    assert(refund.cashSessionId == null, "Transfer refund cashSessionId null");
+  });
+
+  await isolated("45. Mixed sale cash refund requires session", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cashAmount: 4000, paymentMode: "mixed", qrAmount: 6000, totalAmount: 10000 },
+    );
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await expectFailure(
+      tx,
+      () =>
+        writeReturnPrismaSale(tx, fixture.tenant, {
+          items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+          refundMethod: "cash",
+          saleId: sale.id,
+        }),
+      /cash refund/,
+      "Mixed cash refund without session",
+    );
+  });
+
+  await isolated("46. Mixed sale non-cash refund without session", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cashAmount: 4000, paymentMode: "mixed", qrAmount: 6000, totalAmount: 10000 },
+    );
+    const beforeExpected = (await sessionImpact(tx, fixture.tenant)).expectedCashLak;
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await writeReturnPrismaSale(tx, fixture.tenant, {
+      items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+      refundMethod: "qr",
+      saleId: sale.id,
+    });
+    // Session closed: reopen check via refund row only.
+    const refund = await tx.refund.findFirstOrThrow({ where: { saleId: sale.id } });
+    assert(refund.cashSessionId == null, "Mixed QR refund has null session");
+    assert(String(refund.refundMethod) === "qr", "Chosen non-cash method preserved");
+    assertClose(beforeExpected, OPENING_CASH + 4000, "Baseline mixed cash portion before close");
+  });
+
+  await isolated("47. Voided sale refund rejected before session check", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cashAmount: 10000, paymentMode: "cash", totalAmount: 10000 },
+    );
+    await writeVoidPrismaSale(tx, fixture.tenant, { reason: "void first", saleId: sale.id });
+    const beforeStock = await balanceOf(tx, fixture.productA.id, fixture.warehouseAId);
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await expectFailure(
+      tx,
+      () =>
+        writeReturnPrismaSale(tx, fixture.tenant, {
+          items: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+          refundMethod: "cash",
+          saleId: sale.id,
+        }),
+      /already voided/,
+      "Voided before session",
+    );
+    assert((await tx.refund.count({ where: { saleId: sale.id } })) === 0, "No refund on voided sale");
+    assertClose(await balanceOf(tx, fixture.productA.id, fixture.warehouseAId), beforeStock, "No extra stock mutation");
+  });
+
+  await isolated("48. Voided sale exchange rejected", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cashAmount: 10000, paymentMode: "cash", totalAmount: 10000 },
+    );
+    await writeVoidPrismaSale(tx, fixture.tenant, { reason: "void first", saleId: sale.id });
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await expectFailure(
+      tx,
+      () =>
+        writeExchangePrismaSale(tx, fixture.tenant, {
+          paidAmountLak: 0,
+          refundMethod: "cash",
+          replacementItems: [{ productId: fixture.productA.id, quantity: 1, unitId: fixture.unitA.id }],
+          returnedItems: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+          saleId: sale.id,
+        }),
+      /already voided/,
+      "Voided exchange",
+    );
+  });
+
+  await isolated("49. Equal-value cash exchange without cash movement needs no session", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productA.id, quantity: 1, sellingPrice: 10000, unitId: fixture.unitA.id }],
+      { cashAmount: 10000, paymentMode: "cash", totalAmount: 10000 },
+    );
+    await closeOpenCashSessions(tx, fixture.tenant);
+    const result = await writeExchangePrismaSale(tx, fixture.tenant, {
+      paidAmountLak: 0,
+      refundMethod: "cash",
+      replacementItems: [{ productId: fixture.productA.id, quantity: 1, unitId: fixture.unitA.id }],
+      returnedItems: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productA.id).id }],
+      saleId: sale.id,
+    });
+    assertClose(result.differenceLak ?? 0, 0, "Equal exchange");
+    const refund = await tx.refund.findFirstOrThrow({ where: { saleId: sale.id } });
+    assert(refund.cashSessionId == null, "Equal cash exchange null session");
+  });
+
+  await isolated("50. Cash exchange difference requires open session", async (tx) => {
+    const fixture = await seedCore(tx);
+    const sale = await sell(
+      tx,
+      fixture.tenant,
+      [{ productId: fixture.productD.id, quantity: 1, sellingPrice: 15000, unitId: fixture.unitD.id }],
+      { cashAmount: 15000, paymentMode: "cash", totalAmount: 15000 },
+    );
+    await closeOpenCashSessions(tx, fixture.tenant);
+    await expectFailure(
+      tx,
+      () =>
+        writeExchangePrismaSale(tx, fixture.tenant, {
+          paidAmountLak: 0,
+          refundMethod: "cash",
+          replacementItems: [{ productId: fixture.productA.id, quantity: 1, unitId: fixture.unitA.id }],
+          returnedItems: [{ condition: "sellable", quantity: 1, saleItemId: lineOf(sale, fixture.productD.id).id }],
+          saleId: sale.id,
+        }),
+      /cash exchange/,
+      "Cash exchange refund difference without session",
+    );
+  });
+
   try {
     wiringPass();
   } catch (error) {
@@ -1254,7 +1489,7 @@ async function main() {
       2,
     ),
   );
-  if (failed.length || matrix.length !== 40) {
+  if (failed.length || matrix.length !== 50) {
     process.exit(1);
   }
 }

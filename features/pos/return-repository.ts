@@ -7,7 +7,10 @@ import {
   primaryLotMovementFields,
   restoreInventoryForReturn,
 } from "@/features/inventory/lot-reconciliation";
-import { assertOpenCashSessionForSale } from "@/features/cash-sessions/prisma-repository";
+import {
+  assertOpenCashSessionForCashExchange,
+  assertOpenCashSessionForCashRefund,
+} from "@/features/cash-sessions/prisma-repository";
 import {
   applyActivePromotions,
   assertPromotionProfitSafe,
@@ -128,8 +131,11 @@ export function nextLifecycleSaleStatus(sale: Record<string, any>, remainingQty:
 
 function assertSaleReturnable(sale: Record<string, any>) {
   const status = String(sale.saleStatus);
-  if (status === "cancelled") {
+  if (status === "cancelled" || status === "voided") {
     throw new Error("Sale is already voided.");
+  }
+  if (status === "refunded") {
+    throw new Error("Sale is already refunded.");
   }
   if (status === "held") {
     throw new Error("Held bills cannot be returned.");
@@ -137,6 +143,31 @@ function assertSaleReturnable(sale: Record<string, any>) {
   if (!["completed", "partial_refunded", "exchanged", "adjusted"].includes(status)) {
     throw new Error(`Sale cannot be returned while status is ${status}.`);
   }
+}
+
+/** Session only when refundMethod is cash and drawer cash actually moves. */
+async function resolveCashSessionIdForReturnOrExchange(
+  tenant: TenantContext,
+  tx: Record<string, any>,
+  input: {
+    kind: "refund" | "exchange";
+    paymentAmountLak: number;
+    refundAmountLak: number;
+    refundMethod: RefundPaymentMethod;
+  },
+): Promise<string | null> {
+  if (input.refundMethod !== "cash") {
+    return null;
+  }
+  const cashMovementLak = roundLak(Math.abs(input.refundAmountLak) + Math.abs(input.paymentAmountLak));
+  if (cashMovementLak <= 0.009) {
+    return null;
+  }
+  const session =
+    input.kind === "exchange"
+      ? await assertOpenCashSessionForCashExchange(tenant, tx)
+      : await assertOpenCashSessionForCashRefund(tenant, tx);
+  return String(session.id);
 }
 
 function movementTypeForCondition(condition: ReturnItemCondition) {
@@ -665,7 +696,7 @@ export async function lookupPrismaReturnableSale(tenant: TenantContext, query: s
     take: 25,
     where: {
       companyId: tenant.companyId,
-      saleStatus: { in: ["completed", "partial_refunded", "exchanged", "adjusted", "refunded", "cancelled"] },
+      saleStatus: { in: ["completed", "partial_refunded", "exchanged", "adjusted"] },
       ...branchOwnedWhere(scope),
       ...(search
         ? {
@@ -969,12 +1000,19 @@ export async function writeReturnPrismaSale(
   const saleId = String(input.saleId).trim();
   await lockSaleForUpdate(tx, tenant, saleId);
   const sale = await loadMutableSale(tx, tenant, saleId);
+  // Status + remaining qty first — before permission / cash-session checks.
+  const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.items);
   if (!input.managerPinApproval) {
     const policy = await buildPosPolicyForTenant(tenant, tx);
     assertPosActionAllowed(policy, "refund_bill", { amountLak: amount(sale.totalAmount) });
   }
-  const session = await assertOpenCashSessionForSale(tenant, tx);
-  const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.items);
+  const refundMethod = asMethod(input.refundMethod);
+  const sessionId = await resolveCashSessionIdForReturnOrExchange(tenant, tx, {
+    kind: "refund",
+    paymentAmountLak: 0,
+    refundAmountLak: returnValueLak,
+    refundMethod,
+  });
   const refund = await persistReturnOrExchange(tx, tenant, sale, {
     approvedBy: input.managerPinApproval?.approvedById ?? null,
     differenceLak: 0,
@@ -983,9 +1021,9 @@ export async function writeReturnPrismaSale(
     prepared,
     reason: input.reason ?? null,
     refundAmountLak: returnValueLak,
-    refundMethod: asMethod(input.refundMethod),
+    refundMethod,
     returnValueLak,
-    sessionId: session.id,
+    sessionId,
   });
   const cashierName = String(
     (await tx.user.findFirst({ select: { fullName: true, username: true }, where: { id: sale.createdBy } }))?.fullName
@@ -1052,11 +1090,7 @@ export async function writeExchangePrismaSale(
   const saleId = String(input.saleId).trim();
   await lockSaleForUpdate(tx, tenant, saleId);
   const sale = await loadMutableSale(tx, tenant, saleId);
-  if (!input.managerPinApproval) {
-    const policy = await buildPosPolicyForTenant(tenant, tx);
-    assertPosActionAllowed(policy, "refund_bill", { amountLak: amount(sale.totalAmount) });
-  }
-  const session = await assertOpenCashSessionForSale(tenant, tx);
+  // Status + remaining qty first — before permission / cash-session checks.
   const { prepared, returnValueLak } = buildPreparedReturnLines(sale, input.returnedItems);
   const { priced, replacementTotalLak } = await priceReplacementItems(tx, tenant, sale, input.replacementItems);
   const differenceLak = roundLak(replacementTotalLak - returnValueLak);
@@ -1065,6 +1099,17 @@ export async function writeExchangePrismaSale(
   if (paymentAmountLak > 0 && amount(input.paidAmountLak) + 0.009 < paymentAmountLak) {
     throw new Error(`Additional payment of ${paymentAmountLak} LAK is required for this exchange.`);
   }
+  if (!input.managerPinApproval) {
+    const policy = await buildPosPolicyForTenant(tenant, tx);
+    assertPosActionAllowed(policy, "refund_bill", { amountLak: amount(sale.totalAmount) });
+  }
+  const refundMethod = asMethod(input.refundMethod);
+  const sessionId = await resolveCashSessionIdForReturnOrExchange(tenant, tx, {
+    kind: "exchange",
+    paymentAmountLak,
+    refundAmountLak,
+    refundMethod,
+  });
   const refund = await persistReturnOrExchange(tx, tenant, sale, {
     approvedBy: input.managerPinApproval?.approvedById ?? null,
     differenceLak,
@@ -1075,9 +1120,9 @@ export async function writeExchangePrismaSale(
     pricedReplacements: priced,
     reason: input.reason ?? null,
     refundAmountLak,
-    refundMethod: asMethod(input.refundMethod),
+    refundMethod,
     returnValueLak,
-    sessionId: session.id,
+    sessionId,
   });
   const cashierName = String(
     (await tx.user.findFirst({ select: { fullName: true, username: true }, where: { id: sale.createdBy } }))?.fullName
@@ -1112,13 +1157,11 @@ export async function returnRemainingSaleCore(
     throw new Error("Sale is already refunded.");
   }
   const { prepared, returnValueLak } = buildPreparedReturnLines(sale, items);
-  const session = await tx.cashSession.findFirst({
-    where: {
-      branchId: sale.branchId,
-      cashierId: tenant.userId,
-      closedAt: null,
-      companyId: tenant.companyId,
-    },
+  const sessionId = await resolveCashSessionIdForReturnOrExchange(tenant, tx, {
+    kind: "refund",
+    paymentAmountLak: 0,
+    refundAmountLak: returnValueLak,
+    refundMethod: "cash",
   });
   await persistReturnOrExchange(tx, tenant, sale, {
     approvedBy: approvedBy ?? tenant.userId,
@@ -1130,7 +1173,7 @@ export async function returnRemainingSaleCore(
     refundAmountLak: returnValueLak,
     refundMethod: "cash",
     returnValueLak,
-    sessionId: session?.id ?? null,
+    sessionId,
   });
   return tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
 }
