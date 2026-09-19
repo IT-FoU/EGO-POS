@@ -78,6 +78,8 @@ export function receiptSnapshotFromPersistedSale(
     branchName: context.branchName,
     cartItems,
     cashierName: context.cashierName,
+    /** STEP 8: persisted sale id for canonical audited reprint path. */
+    saleId: sale.id,
     changeAmount: money(sale.changeAmount),
     createdAt: sale.createdAt instanceof Date ? sale.createdAt.toISOString() : String(sale.createdAt ?? new Date().toISOString()),
     customerName: context.customerName || sale.customer?.fullName || "Guest",

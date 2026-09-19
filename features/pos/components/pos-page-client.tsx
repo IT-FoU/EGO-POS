@@ -135,6 +135,8 @@ type ReceiptSnapshot = {
     paidAmount: number;
     paymentMode: PaymentMode;
     receiptNo: string;
+    /** STEP 8: persisted DB sale id for canonical audited reprint. Absent in demo mode. */
+    saleId?: string;
     saleNo: string;
     subtotal: number;
     taxAmount: number;
@@ -269,6 +271,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [lastReceipt, setLastReceipt] = useState<ReceiptSnapshot | null>(null);
     const [receiptAutoPrint, setReceiptAutoPrint] = useState(false);
+    /**
+     * STEP 8: true when ReceiptPreview shows the initial print after checkout.
+     * The sale-creation transaction itself is audited, so first-print skips the
+     * reprint audit log to avoid duplicating the audit trail.
+     */
+    const [receiptIsFirstPrint, setReceiptIsFirstPrint] = useState(false);
     const [receiptPrintMode, setReceiptPrintMode] = useState<ReceiptPrintMode>(() =>
         readReceiptPrintModePreference(receiptSettings.receiptPrintMode ?? "ask_every_time"),
     );
@@ -1361,6 +1369,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                         ...loaded,
                         branchName: loaded.branchName || branchName,
                         cartItems: loaded.cartItems as PosCartItem[],
+                        saleId: sale.id,
                     };
                 } catch (error) {
                     setMessage(error instanceof Error ? error.message : t("ui.receipt.load.failed"));
@@ -1374,6 +1383,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }
             setRecentSalesOpen(false);
             setLastReceipt(receipt);
+            setReceiptIsFirstPrint(false);
             setReceiptAutoPrint(autoPrint);
             setReceiptOpen(true);
         })();
@@ -2079,11 +2089,40 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             void fetchCurrentCashSession().then(setActiveCashSession).catch(() => undefined);
         }}/>
           <MoreMenuButton label={t("ui.print.reprint.receipt")} onClick={() => {
-            if (lastReceipt) {
+            /* ──────────────────────────────────────────────────────────────────
+             * STEP 8 — Print / Reprint unification.
+             * More "Print / Reprint Receipt" now resolves the persisted saleId
+             * and goes through the same canonical audited reprint path used by
+             * Recent Sales:
+             *   reprintSaleReceipt(saleId) → fetchSaleReceipt(saleId) → window.print
+             * This removes the prior unaudited lastReceipt-only print bypass.
+             * ────────────────────────────────────────────────────────────────── */
+            const saleId = lastReceipt?.saleId;
+            if (saleId && !demoMode) {
+                if (!enforcePosAction("reprint_receipt")) return;
+                void (async () => {
+                    try {
+                        await reprintSaleReceipt(saleId);
+                        const loaded = await fetchSaleReceipt(saleId);
+                        const receipt: ReceiptSnapshot = {
+                            ...loaded,
+                            branchName: loaded.branchName || branchName,
+                            cartItems: loaded.cartItems as PosCartItem[],
+                            saleId,
+                        };
+                        setLastReceipt(receipt);
+                        setReceiptIsFirstPrint(false);
+                        setReceiptAutoPrint(false);
+                        setReceiptOpen(true);
+                    } catch (error) {
+                        setMessage(error instanceof Error ? error.message : t("ui.receipt.load.failed"));
+                    }
+                })();
+            } else if (lastReceipt && demoMode) {
+                setReceiptIsFirstPrint(false);
                 setReceiptAutoPrint(false);
                 setReceiptOpen(true);
-            }
-            else if (enforcePosAction("view_recent_sales")) {
+            } else if (enforcePosAction("view_recent_sales")) {
                 setRecentSalesOpen(true);
             }
         }}/>
@@ -2247,11 +2286,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       {saleCompletedReceipt ? (<SaleCompletedModal receipt={saleCompletedReceipt} printMode={receiptPrintMode} onClose={() => setSaleCompletedReceipt(null)} onNewSale={() => setSaleCompletedReceipt(null)} onPrint={() => {
             setLastReceipt(saleCompletedReceipt);
+            setReceiptIsFirstPrint(true);
             setReceiptAutoPrint(true);
             setReceiptOpen(true);
             setSaleCompletedReceipt(null);
         }} onView={() => {
             setLastReceipt(saleCompletedReceipt);
+            setReceiptIsFirstPrint(true);
             setReceiptAutoPrint(false);
             setReceiptOpen(true);
             setSaleCompletedReceipt(null);
@@ -2299,11 +2340,11 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       ) : null}
       {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} storeRole={posPermissionPolicy.role} onBack={() => backFromMoreChild(() => setOwnShiftReportOpen(false))} onClose={() => closeMoreChild(() => setOwnShiftReportOpen(false))} /> : null}
 
-      {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} onBack={moreMenuOpen && !recentSalesOpen ? () => backFromMoreChild(() => { setReceiptOpen(false); setReceiptAutoPrint(false); }) : undefined} onClose={() => {
+      {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} isFirstPrint={receiptIsFirstPrint} onBack={moreMenuOpen && !recentSalesOpen ? () => backFromMoreChild(() => { setReceiptOpen(false); setReceiptAutoPrint(false); }) : undefined} onClose={() => {
             setReceiptOpen(false);
             setReceiptAutoPrint(false);
             if (!recentSalesOpen) setMoreMenuOpen(false);
-        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
+        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleId={lastReceipt.saleId} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
     </div>);
 }
 function Panel({ children, className, ref }: {
@@ -3252,7 +3293,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
         </div>
     </PosWorkspaceModal>);
 }
-function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, onBack, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, isFirstPrint = false, onBack, onClose, onReprint, paidAmount, paymentMode, receiptNo, receiptSettings, saleId, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
     autoPrint?: boolean;
     branchName: string;
     cashierName: string;
@@ -3261,6 +3302,8 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     createdAt: string;
     customerName: string;
     discountTotal: number;
+    /** STEP 8: true for initial print after checkout — skips reprint audit. */
+    isFirstPrint?: boolean;
     onBack?: () => void;
     onClose: () => void;
     onReprint: () => boolean;
@@ -3268,6 +3311,8 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     paymentMode: PaymentMode;
     receiptNo: string;
     receiptSettings: PosReceiptSettings;
+    /** STEP 8: persisted sale id — enables canonical audited reprint. */
+    saleId?: string;
     saleNo: string;
     showTaxOnReceipt: boolean;
     subtotal: number;
@@ -3280,6 +3325,10 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
             return;
         setAutoPrintStarted(true);
         const timeout = window.setTimeout(() => {
+            /* STEP 8: Auto-print audit is handled by the caller (More menu calls
+             * reprintSaleReceipt before opening; Recent Sales likewise). First-print
+             * after checkout is audited by the sale creation itself. So auto-print
+             * only checks permission, then delegates to window.print as transport. */
             if (onReprint()) {
                 window.print();
             }
@@ -3323,10 +3372,20 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
           <div className="my-4 border-t border-dashed border-border"/>
           <div className="text-center">{receiptFooter}</div>
         </div>
-        <button className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={() => {
-            if (onReprint()) {
-                window.print();
+        <button className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={async () => {
+            if (!onReprint()) return;
+            /* ──────────────────────────────────────────────────────────────
+             * STEP 8 — Canonical audited reprint from ReceiptPreview button.
+             * For non-first-print scenarios the manual "Print Receipt" button
+             * calls reprintSaleReceipt(saleId) so every reprint is logged in
+             * the audit trail. First-print after checkout is excluded because
+             * the sale-creation transaction is itself audited.
+             * window.print() is used purely as browser transport.
+             * ────────────────────────────────────────────────────────────── */
+            if (saleId && !isFirstPrint) {
+                try { await reprintSaleReceipt(saleId); } catch { /* audit failure must not block print transport */ }
             }
+            window.print();
         }}>
           <Printer aria-hidden="true"/>
           {t("ui.print.receipt")}
