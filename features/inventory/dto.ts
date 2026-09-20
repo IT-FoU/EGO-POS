@@ -25,7 +25,7 @@ const stockInFields = [
   "warehouseId",
 ] as const;
 const adjustmentFields = ["note", "productId", "quantity", "reason", "warehouseId"] as const;
-const countFields = ["countedQuantity", "expectedSystemQuantity", "note", "productId", "warehouseId"] as const;
+const countFields = ["countedQuantity", "expectedSystemQuantity", "note", "productId", "unitId", "warehouseId"] as const;
 
 export type StockInInput = {
   expiryDate?: string | null;
@@ -58,6 +58,7 @@ export type StockCountInput = {
   expectedSystemQuantity: number;
   note?: string | null;
   productId: string;
+  unitId?: string | null;
   warehouseId: string;
 };
 
@@ -111,6 +112,7 @@ export function parseStockCountInput(input: unknown): StockCountInput {
     expectedSystemQuantity: parseNumber(dto, "expectedSystemQuantity", { min: 0, required: true })!,
     note: parseString(dto, "note", { nullable: true }),
     productId: parseString(dto, "productId", { required: true })!,
+    unitId: parseString(dto, "unitId", { nullable: true }),
     warehouseId: parseString(dto, "warehouseId", { required: true })!,
   }) as StockCountInput;
 }

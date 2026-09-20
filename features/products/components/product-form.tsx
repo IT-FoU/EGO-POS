@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, Trash2, X, } from "lucide-react";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
+import type { ProductStockSnapshot } from "@/features/inventory/types";
 import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteBrandAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { archiveSupplierAction, createSupplierAction, updateSupplierAction } from "@/features/suppliers/actions";
@@ -24,6 +25,7 @@ import type { Supplier } from "@/features/suppliers/types";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import { isProductStoragePath, isRenderableImageUrl } from "@/lib/storage/product-image-ref";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
+import { ProductStockLotPanel } from "@/features/products/components/product-stock-lot-panel";
 import { ThemedSelect } from "@/features/products/components/themed-select";
 import { BraveImageSearchBrowser } from "@/features/products/components/brave-image-search-browser";
 import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
@@ -195,7 +197,7 @@ function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, 
         }, defaults),
     ];
 }
-export function ProductForm({ mode, product, brands = [], categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, suppliers = [], }: {
+export function ProductForm({ mode, product, brands = [], categories, images: _images, initialBarcode, sourceFlow, locale: localeProp, pricingDefaults, suppliers = [], stockSnapshot = null, canAddStock = false, canAdjustStock = false, }: {
     mode: "create" | "edit";
     product?: Product;
     brands?: Brand[];
@@ -206,6 +208,9 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     locale?: SupportedLocale;
     pricingDefaults?: UnitPricingDefaultsMap;
     suppliers?: Supplier[];
+    stockSnapshot?: ProductStockSnapshot | null;
+    canAddStock?: boolean;
+    canAdjustStock?: boolean;
 }) {
     const locale = useAppLocale(localeProp);
     const t = (key: string) => tProducts(key, locale);
@@ -1613,6 +1618,15 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                 setAliasDrawerUnitId(unitId);
             }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
           </section>
+          {product ? (
+            <ProductStockLotPanel
+              canAddStock={canAddStock}
+              canAdjustStock={canAdjustStock}
+              productId={product.id}
+              snapshot={stockSnapshot}
+              units={product.units}
+            />
+          ) : null}
           <ProductImagesSection assignmentMode={imageAssignmentMode} barcode={barcodeForImageSearch} isPending={isPending} productName={productName} selectedImageId={selectedImageId} onApplyAssignment={applyImageAssignment} onImportSearchResult={importSearchedImage} onRemove={() => {
                 setSelectedImageId(undefined);
             }} onPreview={openProductPreview} onSave={handleSaveClick} onSearchMessage={showFeedback} onSetMainImage={setMainProductImage} onToggleUnitAssignment={toggleImageUnitAssignment} onUpload={selectUploadedImage} productImages={productImages} removeProductImage={removeProductImage} saveValidationIssues={saveValidationIssues} units={units}/>

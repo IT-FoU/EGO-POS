@@ -10,6 +10,7 @@ import { stockAdjustmentAction, stockCountAction, stockInAction } from "@/featur
 import {
     STOCK_COUNT_CHANGED_MESSAGE,
     STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE,
+    STOCK_RESERVED_FLOOR_MESSAGE,
 } from "@/features/inventory/stock-count-errors";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { localizeInventoryError, tInventory } from "@/lib/i18n/inventory-copy";
@@ -120,7 +121,9 @@ export function InventoryActionForm({ items, mode, warehouses, locale: localePro
                         ? t("stockCountChanged")
                         : errorMessage === STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE
                             ? t("stockCountLotUnsupported")
-                            : localizeInventoryError(errorMessage, locale),
+                            : errorMessage === STOCK_RESERVED_FLOOR_MESSAGE
+                                ? t("stockReservedFloor")
+                                : localizeInventoryError(errorMessage, locale),
                 );
                 if (mode === "count") {
                     router.refresh();

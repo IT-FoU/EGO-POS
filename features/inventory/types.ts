@@ -56,6 +56,10 @@ export type StockMovement = {
     | "stock_in"
     | "adjustment"
     | "count"
+    | "sale"
+    | "return"
+    | "damaged"
+    | "lost"
     | "transfer_in"
     | "transfer_out"
     | "expired";
@@ -75,4 +79,28 @@ export type StockMovement = {
   note: string;
   createdBy: string;
   createdAt: string;
+};
+
+export type ProductLotRow = {
+  expiryDate: string | null;
+  id: string;
+  lotNumber: string | null;
+  quantity: number;
+  receivedAt: string | null;
+  status: "active" | "empty" | "expired";
+};
+
+export type ProductWarehouseStock = {
+  available: number;
+  lots: ProductLotRow[];
+  onHand: number;
+  reserved: number;
+  warehouseId: string;
+  warehouseName: string;
+};
+
+export type ProductStockSnapshot = {
+  movements: StockMovement[];
+  productId: string;
+  warehouses: ProductWarehouseStock[];
 };

@@ -6,9 +6,13 @@ import {
   getCategories,
   getMockProductImages,
   getProductById,
+  getProductStockSnapshot,
   getUnitPricingDefaults,
 } from "@/features/products/product-service";
 import { getSuppliers } from "@/features/suppliers/supplier-service";
+import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
+import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
+import { requireSession } from "@/lib/auth/session";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +25,7 @@ export default async function EditProductPage({
   const { productId } = await params;
   const cookieStore = await cookies();
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  const session = await requireSession();
   const [brands, categories, images, product, pricingDefaults, suppliers] = await Promise.all([
     getBrands(),
     getCategories(),
@@ -48,6 +53,8 @@ export default async function EditProductPage({
         ]
       : categories;
 
+  const stockSnapshot = await getProductStockSnapshot(product.id);
+
   return (
     <div className="w-full min-w-0 max-w-full overflow-x-hidden">
       <ProductForm
@@ -59,6 +66,9 @@ export default async function EditProductPage({
         locale={locale}
         pricingDefaults={pricingDefaults}
         suppliers={suppliers}
+        stockSnapshot={stockSnapshot}
+        canAddStock={canUseStoreAction(session.user.roles, STORE_ACTIONS.INVENTORY_STOCK_IN)}
+        canAdjustStock={canUseStoreAction(session.user.roles, STORE_ACTIONS.INVENTORY_ADJUST)}
       />
     </div>
   );

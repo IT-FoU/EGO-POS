@@ -3,16 +3,22 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, withTenantTransaction } from "@/lib/db/write-context";
 import { assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
+import { inventoryLotLockKey } from "@/features/inventory/lot-reconciliation";
 import {
   applyAtomicStockDelta,
   lockInventoryMutationKey,
   setAtomicStockCount,
 } from "@/features/inventory/stock-concurrency";
 import {
+  InventoryCountConflictError,
+  STOCK_RESERVED_FLOOR_MESSAGE,
+} from "@/features/inventory/stock-count-errors";
+import {
   mapPrismaProductToReceivableItem,
   mapPrismaStockMovement,
   mapPrismaWarehouse,
 } from "@/features/inventory/dto-mapper";
+import { readOnHandBaseQty, sumActiveReservedBaseQty } from "@/features/pos/stock-reservation";
 import {
   attachInventorySalesMetrics,
   getPrismaInventoryListPage as loadPrismaInventoryListPage,
@@ -20,7 +26,7 @@ import {
   loadLastSaleByProduct,
   type InventoryListQuery,
 } from "@/features/inventory/list-query";
-import type { InventoryItem } from "@/features/inventory/types";
+import type { InventoryItem, ProductLotRow, ProductStockSnapshot } from "@/features/inventory/types";
 import {
   parseStockAdjustmentInput,
   parseStockCountInput,
@@ -341,6 +347,126 @@ async function generateStockInNumber(tx: any, companyId: string) {
   return `${prefix}${String(count + 1).padStart(4, "0")}`;
 }
 
+async function assertNotBelowReserved(
+  tx: any,
+  input: { afterQty: number; companyId: string; productId: string; warehouseId: string },
+) {
+  const reserved = await sumActiveReservedBaseQty(tx, {
+    companyId: input.companyId,
+    productId: input.productId,
+    warehouseId: input.warehouseId,
+  });
+  if (numberValue(input.afterQty) + 1e-9 < reserved) {
+    throw new InventoryCountConflictError("INVENTORY_RESERVED_FLOOR", STOCK_RESERVED_FLOOR_MESSAGE);
+  }
+}
+
+function lotStatus(quantity: number, expiryDate: Date | string | null | undefined): ProductLotRow["status"] {
+  if (quantity <= 0) return "empty";
+  if (expiryDate) {
+    const expiry = expiryDate instanceof Date ? expiryDate : new Date(expiryDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (Number.isFinite(expiry.getTime()) && expiry < today) return "expired";
+  }
+  return "active";
+}
+
+export async function getPrismaProductStockSnapshot(
+  productId: string,
+  tenant: TenantContext,
+  client: any = db,
+): Promise<ProductStockSnapshot> {
+  const scope = await resolveTenantScope(tenant, client);
+  const product = await client.product.findFirst({
+    select: { id: true },
+    where: { companyId: scope.companyId, id: productId, ...branchOwnedWhere(scope) },
+  });
+  if (!product) {
+    throw new Error("Product was not found in this company.");
+  }
+
+  const warehouses = await client.warehouse.findMany({
+    orderBy: { name: "asc" },
+    where: { companyId: scope.companyId, id: { in: scope.warehouseIds } },
+  });
+  const warehouseIds = warehouses.map((warehouse: { id: string }) => warehouse.id);
+  if (warehouseIds.length === 0) {
+    return { movements: [], productId, warehouses: [] };
+  }
+
+  const [balances, lots, movements, reservedRows] = await Promise.all([
+    client.inventoryBalance.findMany({
+      where: { companyId: scope.companyId, productId, warehouseId: { in: warehouseIds } },
+    }),
+    client.inventoryLot.findMany({
+      orderBy: [{ expiryDate: "asc" }, { receivedAt: "asc" }, { createdAt: "asc" }],
+      where: { companyId: scope.companyId, productId, warehouseId: { in: warehouseIds } },
+    }),
+    client.stockMovement.findMany({
+      include: {
+        product: { select: { nameEn: true, nameLo: true, sku: true } },
+        unit: { select: { unitName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      where: { companyId: scope.companyId, productId, warehouseId: { in: warehouseIds } },
+    }),
+    client.stockReservation.groupBy({
+      _sum: { baseQuantity: true },
+      by: ["warehouseId"],
+      where: {
+        companyId: scope.companyId,
+        productId,
+        status: "ACTIVE",
+        warehouseId: { in: warehouseIds },
+      },
+    }),
+  ]);
+
+  const onHandByWarehouse = new Map<string, number>(
+    balances.map((row: { quantity: unknown; warehouseId: string }) => [row.warehouseId, numberValue(row.quantity)]),
+  );
+  const reservedByWarehouse = new Map<string, number>(
+    reservedRows.map((row: { _sum: { baseQuantity: unknown }; warehouseId: string }) => [
+      row.warehouseId,
+      numberValue(row._sum.baseQuantity),
+    ]),
+  );
+  const lotsByWarehouse = new Map<string, ProductLotRow[]>();
+  for (const lot of lots) {
+    const quantity = numberValue(lot.quantity);
+    const row: ProductLotRow = {
+      expiryDate: lot.expiryDate instanceof Date ? lot.expiryDate.toISOString().slice(0, 10) : null,
+      id: String(lot.id),
+      lotNumber: lot.lotNumber ?? null,
+      quantity,
+      receivedAt: lot.receivedAt instanceof Date ? lot.receivedAt.toISOString().slice(0, 10) : null,
+      status: lotStatus(quantity, lot.expiryDate),
+    };
+    const current = lotsByWarehouse.get(lot.warehouseId) ?? [];
+    current.push(row);
+    lotsByWarehouse.set(lot.warehouseId, current);
+  }
+
+  return {
+    movements: movements.map(mapPrismaStockMovement),
+    productId,
+    warehouses: warehouses.map((warehouse: { id: string; name: string }) => {
+      const onHand = onHandByWarehouse.get(warehouse.id) ?? 0;
+      const reserved = reservedByWarehouse.get(warehouse.id) ?? 0;
+      return {
+        available: Math.max(0, onHand - reserved),
+        lots: lotsByWarehouse.get(warehouse.id) ?? [],
+        onHand,
+        reserved,
+        warehouseId: warehouse.id,
+        warehouseName: warehouse.name,
+      };
+    }),
+  };
+}
+
 export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext) {
   const data = parseStockAdjustmentInput(input);
   return withTenantTransaction({
@@ -352,6 +478,21 @@ export async function createStockAdjustment(input: StockAdjustmentInput, tenant:
       await assertWarehouseInScope(tx, tenant, data.warehouseId);
       await assertProductReceivableInCompany(tx, tenant, data.productId);
       const quantity = numberValue(data.quantity);
+      await lockInventoryMutationKey(
+        tx,
+        inventoryLotLockKey(tenant.companyId, data.warehouseId, data.productId),
+      );
+      const onHand = await readOnHandBaseQty(tx, {
+        companyId: tenant.companyId,
+        productId: data.productId,
+        warehouseId: data.warehouseId,
+      });
+      await assertNotBelowReserved(tx, {
+        afterQty: onHand + quantity,
+        companyId: tenant.companyId,
+        productId: data.productId,
+        warehouseId: data.warehouseId,
+      });
       const balance = await applyAtomicStockDelta(tx, {
         companyId: tenant.companyId,
         productId: data.productId,
@@ -401,9 +542,26 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
     write: async (tx) => {
       await assertWarehouseInScope(tx, tenant, data.warehouseId);
       await assertProductReceivableInCompany(tx, tenant, data.productId);
+      await lockInventoryMutationKey(
+        tx,
+        inventoryLotLockKey(tenant.companyId, data.warehouseId, data.productId),
+      );
+      const unit = data.unitId
+        ? await tx.productUnit.findFirstOrThrow({
+            where: { id: data.unitId, productId: data.productId, status: "active" },
+          })
+        : null;
+      const conversionQty = Math.max(numberValue(unit?.conversionQty, 1), 1);
+      const countedBase = numberValue(data.countedQuantity) * conversionQty;
+      await assertNotBelowReserved(tx, {
+        afterQty: countedBase,
+        companyId: tenant.companyId,
+        productId: data.productId,
+        warehouseId: data.warehouseId,
+      });
       const balance = await setAtomicStockCount(tx, {
         companyId: tenant.companyId,
-        countedQuantity: data.countedQuantity,
+        countedQuantity: countedBase,
         expectedSystemQuantity: data.expectedSystemQuantity,
         productId: data.productId,
         warehouseId: data.warehouseId,
@@ -429,4 +587,32 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
       return balance;
     },
   });
+}
+
+export async function adjustProductStockToActual(
+  input: {
+    countedQuantity: number;
+    expectedSystemQuantity: number;
+    productId: string;
+    reason: string;
+    unitId?: string | null;
+    warehouseId: string;
+  },
+  tenant: TenantContext,
+) {
+  const reason = optionalString(input.reason);
+  if (!reason) {
+    throw new Error("Stock adjustment reason is required.");
+  }
+  return createStockCount(
+    {
+      countedQuantity: input.countedQuantity,
+      expectedSystemQuantity: input.expectedSystemQuantity,
+      note: reason,
+      productId: input.productId,
+      unitId: input.unitId,
+      warehouseId: input.warehouseId,
+    },
+    tenant,
+  );
 }

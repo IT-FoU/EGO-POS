@@ -1,14 +1,20 @@
 "use server";
 
 import { STORE_ACTIONS, type StoreAction } from "@/features/permissions/store-permissions";
-import { createStockAdjustment, createStockCount, createStockIn } from "@/features/inventory/prisma-repository";
+import {
+  adjustProductStockToActual,
+  createStockAdjustment,
+  createStockCount,
+  createStockIn,
+  getPrismaInventoryListPage,
+  getPrismaProductStockSnapshot,
+} from "@/features/inventory/prisma-repository";
 import {
   assertPermission,
   READ_PERMISSIONS,
   WRITE_PERMISSIONS,
   type WritePermissionKey,
 } from "@/lib/auth/permissions";
-import { getPrismaInventoryListPage } from "@/features/inventory/prisma-repository";
 import type { InventoryListQuery } from "@/features/inventory/list-query";
 import { requireSession } from "@/lib/auth/session";
 import { requireStoreActionPermission } from "@/lib/auth/store-permission-guard";
@@ -57,6 +63,30 @@ export async function stockCountAction(input: Parameters<typeof createStockCount
   try {
     return writeSuccess(
       await createStockCount(input, await tenant(WRITE_PERMISSIONS.inventoryCount, STORE_ACTIONS.INVENTORY_COUNT)),
+    );
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function loadProductStockSnapshotAction(productId: string) {
+  try {
+    const session = await requireSession();
+    const nextTenant = tenantFromSession(session);
+    await assertPermission(nextTenant, READ_PERMISSIONS.productsView);
+    return writeSuccess(await getPrismaProductStockSnapshot(productId, nextTenant));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function adjustProductStockAction(input: Parameters<typeof adjustProductStockToActual>[0]) {
+  try {
+    return writeSuccess(
+      await adjustProductStockToActual(
+        input,
+        await tenant(WRITE_PERMISSIONS.inventoryAdjust, STORE_ACTIONS.INVENTORY_ADJUST),
+      ),
     );
   } catch (error) {
     return writeFailure(error);

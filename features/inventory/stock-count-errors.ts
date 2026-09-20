@@ -2,8 +2,13 @@ export const STOCK_COUNT_CHANGED_MESSAGE =
   "Stock changed while you were counting. Refresh and recount before saving.";
 export const STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE =
   "This product has lot/expiry inventory. Use a lot-aware inventory workflow; Stock Count is not supported yet.";
+export const STOCK_RESERVED_FLOOR_MESSAGE =
+  "Cannot set on-hand below reserved quantity. Release or complete held bills first.";
 
-export type InventoryCountConflictCode = "INVENTORY_CHANGED" | "INVENTORY_LOT_COUNT_UNSUPPORTED";
+export type InventoryCountConflictCode =
+  | "INVENTORY_CHANGED"
+  | "INVENTORY_LOT_COUNT_UNSUPPORTED"
+  | "INVENTORY_RESERVED_FLOOR";
 
 export class InventoryCountConflictError extends Error {
   readonly code: InventoryCountConflictCode;

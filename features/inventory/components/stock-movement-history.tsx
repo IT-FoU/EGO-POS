@@ -7,7 +7,7 @@ import { inventoryMovementLabel, inventoryPaymentLabel, tInventory } from "@/lib
 import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
-type MovementFilter = "all" | "quick_stock_in" | "adjustment" | "count" | "purchase_receive" | "transfer";
+type MovementFilter = "all" | "quick_stock_in" | "adjustment" | "count" | "purchase_receive" | "sale" | "return" | "transfer";
 
 function movementProductName(movement: StockMovement, locale: SupportedLocale) {
     if (movement.productNameEn || movement.productNameLo) {
@@ -30,6 +30,8 @@ export function StockMovementHistory({ movements, locale: localeProp }: {
         { label: t("adjustment"), value: "adjustment" },
         { label: t("stockCount"), value: "count" },
         { label: t("filterPurchaseReceive"), value: "purchase_receive" },
+        { label: inventoryMovementLabel("sale", locale), value: "sale" },
+        { label: inventoryMovementLabel("return", locale), value: "return" },
         { label: t("transfer"), value: "transfer" },
     ];
 

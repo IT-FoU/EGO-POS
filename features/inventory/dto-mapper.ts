@@ -106,16 +106,27 @@ export function mapPrismaInventoryBalance(balance: Row): InventoryItem {
   };
 }
 
+function mapMovementType(movement: Row): StockMovement["movementType"] {
+  if (movement.referenceType === "quick_stock_in") return "quick_stock_in";
+  if (movement.referenceType === "stock_count") return "count";
+  if (movement.movementType === "purchase") return "stock_in";
+  if (
+    movement.movementType === "sale" ||
+    movement.movementType === "return" ||
+    movement.movementType === "damaged" ||
+    movement.movementType === "lost" ||
+    movement.movementType === "transfer_in" ||
+    movement.movementType === "transfer_out" ||
+    movement.movementType === "expired"
+  ) {
+    return movement.movementType;
+  }
+  return "adjustment";
+}
+
 export function mapPrismaStockMovement(movement: Row): StockMovement {
   const meta = parseMovementMeta(movement.note);
-  const movementType =
-    movement.referenceType === "quick_stock_in"
-      ? "quick_stock_in"
-      : movement.movementType === "purchase"
-      ? "stock_in"
-      : movement.movementType === "transfer_in" || movement.movementType === "transfer_out" || movement.movementType === "expired"
-        ? movement.movementType
-        : "adjustment";
+  const movementType = mapMovementType(movement);
 
   return {
     afterQty: toNumber(movement.afterQty),
