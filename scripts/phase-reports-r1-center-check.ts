@@ -87,9 +87,9 @@ const centerClient = read("features/reports/components/report-center-client.tsx"
 const prefs = read("features/reports/report-center-prefs.ts");
 const analyticsClient = read("features/reports/components/reports-analytics-client.tsx");
 const catalogLegacy = read("features/reports/report-catalog.ts");
-const salesPage = read("app/(dashboard)/reports/sales/page.tsx") + read("features/reports/components/sales-report-view.tsx");
-const productsPage = read("app/(dashboard)/reports/products/page.tsx") + read("features/reports/components/product-report-view.tsx");
-const inventoryPage = read("app/(dashboard)/reports/inventory/page.tsx") + read("features/reports/components/inventory-report-view.tsx");
+const salesPage = read("app/(dashboard)/reports/sales/page.tsx");
+const productsPage = read("app/(dashboard)/reports/products/page.tsx");
+const inventoryPage = read("app/(dashboard)/reports/inventory/page.tsx");
 const customersPage = read("app/(dashboard)/reports/customers/page.tsx");
 const purchasingPage = read("app/(dashboard)/reports/purchasing/page.tsx");
 const calculator = read("features/cash-sessions/cash-session-calculator.ts");
@@ -130,10 +130,10 @@ check(
     REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse === "products").length === 3 &&
     REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse === "inventory").length === 2 &&
     REPORT_CENTER_ENTRIES.some((entry) => entry.reuse === "payment-methods") &&
-    read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("SalesReportView") &&
-    read("app/(dashboard)/reports/products/[report]/page.tsx").includes("ProductReportView") &&
-    read("app/(dashboard)/reports/inventory/[report]/page.tsx").includes("InventoryReportView") &&
-    read("features/reports/components/payment-methods-report.tsx").includes("hub.paymentBreakdown"),
+    read("app/(dashboard)/reports/sales/[report]/page.tsx").includes('redirect("/reports/sales")') &&
+    read("app/(dashboard)/reports/products/[report]/page.tsx").includes('redirect("/reports/products")') &&
+    read("app/(dashboard)/reports/inventory/[report]/page.tsx").includes('redirect("/reports/inventory")') &&
+    read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("hub.paymentBreakdown"),
 );
 check(
   "9. Search / favorites / recent",

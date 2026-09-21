@@ -1,6 +1,5 @@
-import { notFound } from "next/navigation";
-import InventoryReportView from "@/features/reports/components/inventory-report-view";
-import { ReportCenterReusedPage, ReportCenterSkeletonPage } from "@/features/reports/components/report-center-detail-page";
+import { notFound, redirect } from "next/navigation";
+import { ReportComingSoon } from "@/features/reports/components/report-page-shell";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 
 export default async function InventoryCenterReportPage({
@@ -12,11 +11,7 @@ export default async function InventoryCenterReportPage({
   const entry = findReportCenterEntryBySlug("inventory", report);
   if (!entry) notFound();
   if (entry.reuse === "inventory") {
-    return (
-      <ReportCenterReusedPage entry={entry}>
-        <InventoryReportView />
-      </ReportCenterReusedPage>
-    );
+    redirect("/reports/inventory");
   }
-  return <ReportCenterSkeletonPage entry={entry} />;
+  return <ReportComingSoon entry={entry} />;
 }

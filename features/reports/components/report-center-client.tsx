@@ -37,6 +37,7 @@ import {
 import {
   readReportCenterFavorites,
   readReportCenterRecent,
+  recordReportCenterRecent,
   toggleReportCenterFavorite,
 } from "@/features/reports/report-center-prefs";
 
@@ -83,6 +84,7 @@ function ReportChip({
     <Link
       className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm hover:border-primary"
       href={entry.href}
+      onClick={() => recordReportCenterRecent(entry.id)}
     >
       <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
       <span className="truncate">{tReports(entry.titleKey, locale)}</span>
@@ -113,7 +115,7 @@ function ReportCard({
   const available = Boolean(entry.reuse);
   return (
     <div className="relative rounded-lg border border-border bg-card transition hover:border-primary">
-      <Link className="flex min-w-0 items-start gap-4 p-4 pr-12" href={entry.href}>
+      <Link className="flex min-w-0 items-start gap-4 p-4 pr-12" href={entry.href} onClick={() => recordReportCenterRecent(entry.id)}>
         <div className="grid size-11 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
           <Icon aria-hidden="true" />
         </div>

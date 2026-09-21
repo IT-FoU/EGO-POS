@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ReportCenterSkeletonPage } from "@/features/reports/components/report-center-detail-page";
+import { ReportComingSoon } from "@/features/reports/components/report-page-shell";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 
 export default async function ShiftCenterReportPage({
@@ -10,5 +10,5 @@ export default async function ShiftCenterReportPage({
   const { report } = await params;
   const entry = findReportCenterEntryBySlug("shifts", report);
   if (!entry) notFound();
-  return <ReportCenterSkeletonPage entry={entry} />;
+  return <ReportComingSoon entry={entry} />;
 }

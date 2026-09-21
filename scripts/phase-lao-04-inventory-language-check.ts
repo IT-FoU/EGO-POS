@@ -53,7 +53,7 @@ const shell = readFileSync(resolve(process.cwd(), "components/layout/dashboard-s
 const mapper = readFileSync(resolve(process.cwd(), "features/inventory/dto-mapper.ts"), "utf8");
 const actions = readFileSync(resolve(process.cwd(), "features/inventory/actions.ts"), "utf8");
 const repository = readFileSync(resolve(process.cwd(), "features/inventory/prisma-repository.ts"), "utf8");
-const reportsInventory = readFileSync(resolve(process.cwd(), "app/(dashboard)/reports/inventory/page.tsx"), "utf8") + readFileSync(resolve(process.cwd(), "features/reports/components/inventory-report-view.tsx"), "utf8");
+const reportsInventory = readFileSync(resolve(process.cwd(), "app/(dashboard)/reports/inventory/page.tsx"), "utf8");
 const customersPage = readFileSync(resolve(process.cwd(), "app/(dashboard)/customers/page.tsx"), "utf8");
 const settingsForm = readFileSync(resolve(process.cwd(), "features/settings/components/settings-form.tsx"), "utf8");
 

@@ -1,6 +1,5 @@
-import { notFound } from "next/navigation";
-import ProductReportView from "@/features/reports/components/product-report-view";
-import { ReportCenterReusedPage, ReportCenterSkeletonPage } from "@/features/reports/components/report-center-detail-page";
+import { notFound, redirect } from "next/navigation";
+import { ReportComingSoon } from "@/features/reports/components/report-page-shell";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 
 export default async function ProductCenterReportPage({
@@ -12,11 +11,7 @@ export default async function ProductCenterReportPage({
   const entry = findReportCenterEntryBySlug("products", report);
   if (!entry) notFound();
   if (entry.reuse === "products") {
-    return (
-      <ReportCenterReusedPage entry={entry}>
-        <ProductReportView />
-      </ReportCenterReusedPage>
-    );
+    redirect("/reports/products");
   }
-  return <ReportCenterSkeletonPage entry={entry} />;
+  return <ReportComingSoon entry={entry} />;
 }
