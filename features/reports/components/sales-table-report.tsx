@@ -8,7 +8,7 @@ import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { fillReportsCopy, paymentMethodLabel, tReports } from "@/lib/i18n/reports-copy";
 import { formatLak, formatNumber } from "@/features/reports/format";
-import { formatBusinessDateTimeLabel, formatBusinessTimeLabel } from "@/lib/datetime/business-timezone";
+import { businessDayLabel, formatBusinessDateTimeLabel, formatBusinessTimeLabel } from "@/lib/datetime/business-timezone";
 import { ReportDetailHeader, ReportPageChrome, ReportSheet } from "@/features/reports/components/report-page-shell";
 import { findReportCenterEntry } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
@@ -31,6 +31,14 @@ const numClass = "text-right tabular-nums";
 
 function t(key: string, locale: SupportedLocale) {
   return tReports(key, locale);
+}
+
+function businessDateInputValue(query: SalesTableQuery) {
+  if (query.date) return query.date;
+  if (!query.dateFrom) return "";
+  const parsed = query.dateFrom instanceof Date ? query.dateFrom : new Date(query.dateFrom);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return businessDayLabel(parsed);
 }
 
 function moneyCell(value: number) {
@@ -106,15 +114,8 @@ function SalesTableFilters({
   showReceipt?: boolean;
   showStatus?: boolean;
 }) {
-  const fromDate = typeof query.dateFrom === "string"
-    ? query.dateFrom.slice(0, 10)
-    : query.dateFrom
-      ? query.dateFrom.toISOString().slice(0, 10)
-      : "";
-  const dateValue = query.date || fromDate;
-  const customDate = query.datePreset === "custom" && !showMonth
-    ? (query.date || fromDate)
-    : query.date ?? "";
+  const dateValue = businessDateInputValue(query);
+  const customDate = query.datePreset === "custom" && !showMonth ? dateValue : query.date ?? "";
 
   return (
     <form
