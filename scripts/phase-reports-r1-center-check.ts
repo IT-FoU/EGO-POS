@@ -114,7 +114,8 @@ check(
   analyticsPage.includes("getReportsPageData") &&
     analyticsPage.includes("generatedAt={new Date().toISOString()}") &&
     analyticsPage.includes("locale={locale}") &&
-    analyticsPage.includes('href="/reports"'),
+    analyticsPage.includes("ReportDetailNav") &&
+    analyticsPage.includes("reportsAnalytics"),
 );
 check(
   "7. Existing working reports kept",

@@ -229,6 +229,10 @@ export function findReportCenterEntryBySlug(categoryId: ReportCenterCategoryId, 
   return REPORT_CENTER_ENTRIES.find((entry) => entry.categoryId === categoryId && entry.slug === slug) ?? null;
 }
 
+export function reportCenterCategoryTitleKey(categoryId: ReportCenterCategoryId) {
+  return REPORT_CENTER_CATEGORIES.find((category) => category.id === categoryId)?.titleKey ?? "reports";
+}
+
 export function reportCenterEntriesForCategory(categoryId: ReportCenterCategoryId) {
   return REPORT_CENTER_ENTRIES.filter((entry) => entry.categoryId === categoryId);
 }

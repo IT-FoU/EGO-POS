@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { BarChart3, CircleDollarSign, ReceiptText, Scale } from "lucide-react";
-import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
 import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
+import { ReportDetailNav } from "@/features/reports/components/report-page-shell";
+import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
@@ -15,6 +16,7 @@ export default async function SalesReportPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <ReportDetailNav categoryKey="salesReports" locale={locale} titleKey="salesReport" />
       <ReportHeader
         description={tReports("salesSummary", locale)}
         descriptionKey="salesSummary"

@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
-import Link from "next/link";
 import { ReportsAnalyticsClient } from "@/features/reports/components/reports-analytics-client";
+import { ReportDetailNav } from "@/features/reports/components/report-page-shell";
 import { getReportsPageData } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
-import { tReports } from "@/lib/i18n/reports-copy";
 
 export default async function ReportsAnalyticsPage({
   searchParams,
@@ -16,9 +15,7 @@ export default async function ReportsAnalyticsPage({
   const { filterOptions, filters, hub, productRows } = await getReportsPageData(params);
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <Link className="w-fit text-sm font-medium text-primary hover:underline" href="/reports">
-        {tReports("backToReports", locale)}
-      </Link>
+      <ReportDetailNav categoryKey="reportCenter" locale={locale} titleKey="reportsAnalytics" />
       <ReportsAnalyticsClient
         filterOptions={filterOptions}
         filters={filters}

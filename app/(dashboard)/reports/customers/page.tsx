@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { Gift, TrendingUp, Users, WalletCards } from "lucide-react";
-import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
 import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
+import { ReportDetailNav } from "@/features/reports/components/report-page-shell";
+import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
 import { calculateAvailablePoints } from "@/features/customers/format";
 import { membershipDisplayLabel } from "@/features/customers/membership-display";
 import { formatLak, formatNumber } from "@/features/reports/format";
@@ -22,6 +23,7 @@ export default async function CustomerReportPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <ReportDetailNav categoryKey="customerReports" locale={locale} titleKey="customerReport" />
       <ReportHeader
         description={tReports("customerReports", locale)}
         descriptionKey="customerReports"

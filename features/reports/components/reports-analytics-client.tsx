@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, CalendarClock, ChevronDown, Download, Eye, FileSpreadsheet, FileText, HeartPulse, Printer, RefreshCcw, Search, Send, Star, TrendingUp, type LucideIcon, } from "lucide-react";
+import { BarChart3, CalendarClock, ChevronDown, Download, Eye, FileSpreadsheet, FileText, HeartPulse, Printer, RefreshCcw, Search, Send, Star, TrendingUp, X, type LucideIcon, } from "lucide-react";
 import type { ReportsAnalyticsHub } from "@/features/reports/build-analytics-hub";
 import { currencyRates, type ReportCurrency } from "@/features/reports/currency-rates";
 import { executiveReports, reportCategories, type ReportCategory } from "@/features/reports/report-catalog";
@@ -967,7 +967,14 @@ function ModalFrame({ children, onClose, title }: {
       <section className="flex h-full w-full max-w-none flex-col overflow-hidden border-l border-border bg-card shadow-2xl">
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 py-4 lg:px-8">
           <div className="min-w-0"><h2 className="truncate text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p></div>
-          <button className="h-9 shrink-0 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("close")}</button>
+          <button
+            aria-label={t("close")}
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="button"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
         </header>
         <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 lg:px-8">{children}</div>
       </section>

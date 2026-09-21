@@ -3,27 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  AlertTriangle,
-  ArrowLeftRight,
-  ArrowUpDown,
-  Banknote,
-  CalendarDays,
-  CalendarRange,
-  ClipboardList,
-  History,
-  Package,
-  Receipt,
-  Scale,
-  Search,
-  Star,
-  Tags,
-  TrendingUp,
-  Undo2,
-  Wallet,
-  Warehouse,
-  type LucideIcon,
-} from "lucide-react";
+import { Search, Star } from "lucide-react";
 import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { tReports } from "@/lib/i18n/reports-copy";
@@ -32,33 +12,14 @@ import {
   REPORT_CENTER_ENTRIES,
   findReportCenterEntry,
   type ReportCenterEntry,
-  type ReportCenterIcon,
 } from "@/features/reports/report-center-catalog";
+import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
 import {
   readReportCenterFavorites,
   readReportCenterRecent,
   recordReportCenterRecent,
   toggleReportCenterFavorite,
 } from "@/features/reports/report-center-prefs";
-
-const ICON_MAP: Record<ReportCenterIcon, LucideIcon> = {
-  "alert-triangle": AlertTriangle,
-  "arrow-left-right": ArrowLeftRight,
-  "arrow-up-down": ArrowUpDown,
-  banknote: Banknote,
-  "calendar-days": CalendarDays,
-  "calendar-range": CalendarRange,
-  "clipboard-list": ClipboardList,
-  history: History,
-  package: Package,
-  receipt: Receipt,
-  scale: Scale,
-  tags: Tags,
-  "trending-up": TrendingUp,
-  "undo-2": Undo2,
-  wallet: Wallet,
-  warehouse: Warehouse,
-};
 
 function matchesQuery(entry: ReportCenterEntry, query: string, locale: SupportedLocale) {
   if (!query) return true;
@@ -79,7 +40,7 @@ function ReportChip({
   entry: ReportCenterEntry;
   locale: SupportedLocale;
 }) {
-  const Icon = ICON_MAP[entry.icon];
+  const Icon = REPORT_CENTER_ICON_MAP[entry.icon];
   return (
     <Link
       className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm hover:border-primary"
@@ -103,7 +64,7 @@ function ReportCard({
   locale: SupportedLocale;
   onToggleFavorite: (id: string) => void;
 }) {
-  const Icon = ICON_MAP[entry.icon];
+  const Icon = REPORT_CENTER_ICON_MAP[entry.icon];
   const categoryTitle =
     entry.categoryId === "sales"
       ? tReports("salesReports", locale)

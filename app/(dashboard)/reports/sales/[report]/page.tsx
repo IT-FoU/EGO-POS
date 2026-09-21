@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { CircleDollarSign } from "lucide-react";
 import { BarChart, DataTable } from "@/features/reports/components/report-primitives";
 import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
-import { ReportComingSoon, ReportPageChrome } from "@/features/reports/components/report-page-shell";
+import { ReportComingSoon, ReportDetailShell } from "@/features/reports/components/report-page-shell";
 import { formatLak } from "@/features/reports/format";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 import { getReportsSnapshot } from "@/features/reports/report-service";
@@ -31,33 +31,34 @@ export default async function SalesCenterReportPage({
   const total = hub.paymentBreakdown.reduce((sum, row) => sum + row.value, 0);
 
   return (
-    <div className="flex flex-col gap-4">
-      <ReportPageChrome entry={entry} locale={locale} />
-      <section className="grid gap-4 md:grid-cols-2">
-        <ReportMetricCard
-          icon={CircleDollarSign}
-          label={tReports("salesByPayment", locale)}
-          labelKey="salesByPayment"
-          value={`${formatLak(total)} LAK`}
+    <ReportDetailShell entry={entry} locale={locale}>
+      <div className="flex flex-col gap-6">
+        <section className="grid gap-4 md:grid-cols-2">
+          <ReportMetricCard
+            icon={CircleDollarSign}
+            label={tReports("salesByPayment", locale)}
+            labelKey="salesByPayment"
+            value={`${formatLak(total)} LAK`}
+          />
+        </section>
+        <BarChart
+          rows={hub.paymentBreakdown.map((row) => ({
+            label: paymentMethodLabel(row.label, locale),
+            value: row.value,
+          }))}
+          title={tReports("salesByPayment", locale)}
+          titleKey="salesByPayment"
+          valueKey="value"
         />
-      </section>
-      <BarChart
-        rows={hub.paymentBreakdown.map((row) => ({
-          label: paymentMethodLabel(row.label, locale),
-          value: row.value,
-        }))}
-        title={tReports("salesByPayment", locale)}
-        titleKey="salesByPayment"
-        valueKey="value"
-      />
-      <DataTable
-        columnKeys={["paymentMethod", "revenue"]}
-        columns={[tReports("paymentMethod", locale), tReports("revenue", locale)]}
-        rows={hub.paymentBreakdown.map((row) => [
-          paymentMethodLabel(row.label, locale),
-          `${formatLak(row.value)} LAK`,
-        ])}
-      />
-    </div>
+        <DataTable
+          columnKeys={["paymentMethod", "revenue"]}
+          columns={[tReports("paymentMethod", locale), tReports("revenue", locale)]}
+          rows={hub.paymentBreakdown.map((row) => [
+            paymentMethodLabel(row.label, locale),
+            `${formatLak(row.value)} LAK`,
+          ])}
+        />
+      </div>
+    </ReportDetailShell>
   );
 }

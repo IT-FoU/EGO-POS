@@ -304,7 +304,7 @@ const en = {
   "categorySales": "Category Sales",
   "categorySalesDesc": "Summarize sales by product category.",
   "centerSubtitle": "Choose a report to open. Detailed tables will keep growing in later batches.",
-  "comingSoonTable": "Detailed report table will be added in the next report batch.",
+  "comingSoonTable": "This report is ready for detailed table implementation in the next report batch.",
   "dailySalesDesc": "View daily receipts, items, payments and totals.",
   "favoriteReports": "Favorite reports",
   "lowStockReorder": "Low Stock / Reorder",
@@ -334,7 +334,10 @@ const en = {
   "stockOnHandDesc": "See current on-hand quantity by product.",
   "stockValuation": "Stock Valuation",
   "stockValuationDesc": "Value on-hand stock using current cost.",
-  "unfavorite": "Remove favorite"
+  "unfavorite": "Remove favorite",
+  "breadcrumbNav": "Breadcrumb",
+  "planned": "Planned",
+  "reportTable": "Table"
 };
 
 const lo = {
@@ -641,7 +644,7 @@ const lo = {
   "categorySales": "ຍອດຂາຍຕາມໝວດ",
   "categorySalesDesc": "ສະຫຼຸບຍອດຂາຍຕາມໝວດສິນຄ້າ.",
   "centerSubtitle": "ເລືອກລາຍງານເພື່ອເປີດ. ຕາຕະລາງລະອຽດຈະຖືກເພີ່ມໃນຊຸດຕໍ່ໄປ.",
-  "comingSoonTable": "ຕາຕະລາງລາຍງານລະອຽດຈະຖືກເພີ່ມໃນຊຸດລາຍງານຕໍ່ໄປ.",
+  "comingSoonTable": "ລາຍງານນີ້ພ້ອມແລ້ວສຳລັບການເພີ່ມຕາຕະລາງລະອຽດໃນຊຸດລາຍງານຕໍ່ໄປ.",
   "dailySalesDesc": "ເບິ່ງໃບບິນ, ລາຍການ, ການຊຳລະ ແລະ ຍອດລວມປະຈຳວັນ.",
   "favoriteReports": "ລາຍງານທີ່ມັກ",
   "lowStockReorder": "ສະຕ໋ອກຕ່ຳ / ສັ່ງເພີ່ມ",
@@ -672,6 +675,9 @@ const lo = {
   "stockValuation": "ມູນຄ່າສະຕ໋ອກ",
   "stockValuationDesc": "ຄິດມູນຄ່າສະຕ໋ອກຄົງເຫຼືອຕາມຕົ້ນທຶນປັດຈຸບັນ.",
   "unfavorite": "ເອົາອອກຈາກລາຍການທີ່ມັກ",
+  "breadcrumbNav": "ເສັ້ນທາງລາຍງານ",
+  "planned": "ວາງແຜນໄວ້",
+  "reportTable": "ຕາຕະລາງ",
 };
 
 export type ReportsCopyKey = keyof typeof en;
