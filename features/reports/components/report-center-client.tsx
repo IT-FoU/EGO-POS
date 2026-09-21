@@ -11,6 +11,7 @@ import {
   REPORT_CENTER_CATEGORIES,
   REPORT_CENTER_ENTRIES,
   findReportCenterEntry,
+  isPlannedReportCenterEntry,
   type ReportCenterEntry,
 } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
@@ -73,7 +74,7 @@ function ReportCard({
         : entry.categoryId === "products"
           ? tReports("productReports", locale)
           : tReports("inventoryReports", locale);
-  const available = Boolean(entry.reuse);
+  const planned = isPlannedReportCenterEntry(entry);
   return (
     <div className="relative rounded-lg border border-border bg-card transition hover:border-primary">
       <Link className="flex min-w-0 items-start gap-4 p-4 pr-12" href={entry.href} onClick={() => recordReportCenterRecent(entry.id)}>
@@ -83,9 +84,15 @@ function ReportCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-base font-semibold">{tReports(entry.titleKey, locale)}</h3>
-            <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {available ? tReports("reportReady", locale) : tReports("reportComing", locale)}
-            </span>
+            {planned ? (
+              <span className="rounded-full border border-dashed border-border bg-background px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {tReports("planned", locale)}
+              </span>
+            ) : (
+              <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {tReports("reportReady", locale)}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs font-medium text-muted-foreground">{categoryTitle}</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{tReports(entry.descriptionKey, locale)}</p>

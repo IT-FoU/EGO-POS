@@ -126,15 +126,17 @@ check(
     purchasingPage.includes("getReportsSnapshot"),
 );
 check(
-  "8. Reuse existing sales/products/inventory/payment data",
-  REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse === "sales").length === 2 &&
-    REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse === "products").length === 3 &&
-    REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse === "inventory").length === 2 &&
-    REPORT_CENTER_ENTRIES.some((entry) => entry.reuse === "payment-methods") &&
-    read("app/(dashboard)/reports/sales/[report]/page.tsx").includes('redirect("/reports/sales")') &&
-    read("app/(dashboard)/reports/products/[report]/page.tsx").includes('redirect("/reports/products")') &&
-    read("app/(dashboard)/reports/inventory/[report]/page.tsx").includes('redirect("/reports/inventory")') &&
-    read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("hub.paymentBreakdown"),
+  "8. Owner-verified missing reports are planned, not reused generic pages",
+  REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 8 &&
+    REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse).length === 0 &&
+    read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("ReportComingSoon") &&
+    !read("app/(dashboard)/reports/sales/[report]/page.tsx").includes('redirect("/reports/sales")') &&
+    !read("app/(dashboard)/reports/products/[report]/page.tsx").includes('redirect("/reports/products")') &&
+    !read("app/(dashboard)/reports/inventory/[report]/page.tsx").includes('redirect("/reports/inventory")') &&
+    !read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("hub.paymentBreakdown") &&
+    salesPage.includes("getReportsSnapshot") &&
+    productsPage.includes("getReportsSnapshot") &&
+    inventoryPage.includes("getReportsSnapshot"),
 );
 check(
   "9. Search / favorites / recent",

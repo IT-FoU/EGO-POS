@@ -28,6 +28,7 @@ export type ReportCenterEntry = {
   href: string;
   icon: ReportCenterIcon;
   id: string;
+  planned?: boolean;
   posHint?: boolean;
   reuse: ReportCenterReuse;
   slug: string;
@@ -56,7 +57,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "dailySales",
     descriptionKey: "dailySalesDesc",
     icon: "calendar-days",
-    reuse: "sales",
+    reuse: null,
+    planned: true,
   },
   {
     id: "sales-monthly",
@@ -66,7 +68,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "monthlySales",
     descriptionKey: "monthlySalesDesc",
     icon: "calendar-range",
-    reuse: "sales",
+    reuse: null,
+    planned: true,
   },
   {
     id: "sales-payment-methods",
@@ -76,7 +79,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "salesByPayment",
     descriptionKey: "salesByPaymentDesc",
     icon: "wallet",
-    reuse: "payment-methods",
+    reuse: null,
+    planned: true,
   },
   {
     id: "sales-refunds-voids",
@@ -150,7 +154,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "productSales",
     descriptionKey: "productSalesDesc",
     icon: "package",
-    reuse: "products",
+    reuse: null,
+    planned: true,
   },
   {
     id: "products-categories",
@@ -160,7 +165,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "categorySales",
     descriptionKey: "categorySalesDesc",
     icon: "tags",
-    reuse: "products",
+    reuse: null,
+    planned: true,
   },
   {
     id: "products-performance",
@@ -170,7 +176,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "bestSlowSellers",
     descriptionKey: "bestSlowSellersDesc",
     icon: "trending-up",
-    reuse: "products",
+    reuse: null,
+    planned: true,
   },
   {
     id: "inventory-movements",
@@ -190,7 +197,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "stockOnHand",
     descriptionKey: "stockOnHandDesc",
     icon: "warehouse",
-    reuse: "inventory",
+    reuse: null,
+    planned: true,
   },
   {
     id: "inventory-low-stock",
@@ -200,7 +208,8 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "lowStockReorder",
     descriptionKey: "lowStockReorderDesc",
     icon: "alert-triangle",
-    reuse: "inventory",
+    reuse: null,
+    planned: true,
   },
   {
     id: "inventory-valuation",
@@ -238,3 +247,18 @@ export function reportCenterEntriesForCategory(categoryId: ReportCenterCategoryI
 }
 
 export const REPORT_CENTER_HREFS = REPORT_CENTER_ENTRIES.map((entry) => entry.href);
+
+export const REPORT_CENTER_PLANNED_HREFS = [
+  "/reports/sales/daily",
+  "/reports/sales/monthly",
+  "/reports/sales/payment-methods",
+  "/reports/products/sales",
+  "/reports/products/categories",
+  "/reports/products/performance",
+  "/reports/inventory/on-hand",
+  "/reports/inventory/low-stock",
+] as const;
+
+export function isPlannedReportCenterEntry(entry: Pick<ReportCenterEntry, "planned" | "href">) {
+  return Boolean(entry.planned) || REPORT_CENTER_PLANNED_HREFS.includes(entry.href as (typeof REPORT_CENTER_PLANNED_HREFS)[number]);
+}

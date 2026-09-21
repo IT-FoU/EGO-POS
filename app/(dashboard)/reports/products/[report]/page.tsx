@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ReportComingSoon } from "@/features/reports/components/report-page-shell";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 
@@ -10,8 +10,5 @@ export default async function ProductCenterReportPage({
   const { report } = await params;
   const entry = findReportCenterEntryBySlug("products", report);
   if (!entry) notFound();
-  if (entry.reuse === "products") {
-    redirect("/reports/products");
-  }
   return <ReportComingSoon entry={entry} />;
 }

@@ -71,6 +71,7 @@ const skeletonHrefs = [
 const redirectHrefs = [
   "/reports/sales/daily",
   "/reports/sales/monthly",
+  "/reports/sales/payment-methods",
   "/reports/products/sales",
   "/reports/products/categories",
   "/reports/products/performance",
@@ -121,21 +122,21 @@ check(
     customersPage.includes("ReportDetailNav") &&
     purchasingPage.includes("getReportsSnapshot") &&
     purchasingPage.includes("ReportDetailNav") &&
-    salesCatchAll.includes("hub.paymentBreakdown") &&
-    salesCatchAll.includes("ReportDetailShell") &&
+    salesCatchAll.includes("ReportComingSoon") &&
     analyticsPage.includes("getReportsPageData") &&
     analyticsPage.includes("ReportDetailNav"),
 );
 check(
-  "7. Reuse routes still redirect; skeletons stay full pages",
-  salesCatchAll.includes('redirect("/reports/sales")') &&
-    productsCatchAll.includes('redirect("/reports/products")') &&
-    inventoryCatchAll.includes('redirect("/reports/inventory")') &&
+  "7. Dedicated report routes stay full pages, generic reports are not redirected into",
+  !salesCatchAll.includes('redirect("/reports/sales")') &&
+    !productsCatchAll.includes('redirect("/reports/products")') &&
+    !inventoryCatchAll.includes('redirect("/reports/inventory")') &&
+    !salesCatchAll.includes("hub.paymentBreakdown") &&
     shiftsCatchAll.includes("ReportComingSoon") &&
-    redirectHrefs.every((href) => {
-      const entry = findReportCenterEntryByHref(href);
-      return Boolean(entry?.reuse);
-    }) &&
+    salesCatchAll.includes("ReportComingSoon") &&
+    productsCatchAll.includes("ReportComingSoon") &&
+    inventoryCatchAll.includes("ReportComingSoon") &&
+    redirectHrefs.every((href) => findReportCenterEntryByHref(href)?.planned === true) &&
     skeletonHrefs.every((href) => findReportCenterEntryByHref(href)?.reuse === null),
 );
 check(
