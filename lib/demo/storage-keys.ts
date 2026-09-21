@@ -22,6 +22,8 @@ export const DemoStorageKeys = {
   qrAccounts: "ego.pos.qr.accounts",
   qrBanks: "ego.pos.qr.banks",
   receipts: "ego.pos.receipts",
+  reportCenterFavorites: "ego-pos:report-center.favorites",
+  reportCenterRecent: "ego-pos:report-center.recent",
   sales: "ego.pos.sales",
   settings: "ego.pos.settings",
   staffAudit: "ego.pos.staff.access.audit",

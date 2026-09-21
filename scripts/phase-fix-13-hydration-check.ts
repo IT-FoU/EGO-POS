@@ -47,7 +47,7 @@ const root = process.cwd();
 const quickStockIn = readFileSync(join(root, "features/inventory/components/quick-stock-in-form.tsx"), "utf8");
 const reportsClient = readFileSync(join(root, "features/reports/components/reports-analytics-client.tsx"), "utf8");
 const dashboardClient = readFileSync(join(root, "features/dashboard/components/dashboard-interactions-client.tsx"), "utf8");
-const reportsPage = readFileSync(join(root, "app/(dashboard)/reports/page.tsx"), "utf8");
+const reportsPage = readFileSync(join(root, "app/(dashboard)/reports/analytics/page.tsx"), "utf8");
 
 assert(!quickStockIn.includes("useState(generateClientStockInNo)"), "Quick Stock In still initializes stockInNo during render");
 assert(quickStockIn.includes("setStockInNo((current) => current || generateClientStockInNo())"), "Quick Stock In must assign stockInNo after mount");

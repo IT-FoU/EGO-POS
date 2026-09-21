@@ -140,7 +140,7 @@ export function ReportsAnalyticsClient({
             supplierId: supplierId || undefined,
             warehouseId: warehouseId || undefined,
         });
-        router.push(`/reports?${params.toString()}`);
+        router.push(`/reports/analytics?${params.toString()}`);
         router.refresh();
     }
     function resetFilters() {
@@ -151,7 +151,7 @@ export function ReportsAnalyticsClient({
         setSupplierId("");
         setCashierId("");
         setCurrency("LAK");
-        router.push("/reports");
+        router.push("/reports/analytics");
         router.refresh();
     }
     return (<div className="flex min-w-0 flex-col gap-6 overflow-x-hidden">
