@@ -69,9 +69,6 @@ const skeletonHrefs = [
   "/reports/inventory/valuation",
 ];
 const redirectHrefs = [
-  "/reports/sales/daily",
-  "/reports/sales/monthly",
-  "/reports/sales/payment-methods",
   "/reports/products/sales",
   "/reports/products/categories",
   "/reports/products/performance",

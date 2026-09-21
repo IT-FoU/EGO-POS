@@ -62,6 +62,31 @@ export function parseBusinessDate(value: string) {
   return new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - OFFSET_MS);
 }
 
+export function parseBusinessMonth(value: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  if (month < 0 || month > 11) return undefined;
+  return new Date(Date.UTC(year, month, 1, 0, 0, 0, 0) - OFFSET_MS);
+}
+
+export function endOfBusinessMonth(date = new Date()) {
+  const parts = businessInstantParts(date);
+  const nextMonthStart = new Date(Date.UTC(parts.year, parts.month + 1, 1, 0, 0, 0, 0) - OFFSET_MS);
+  return new Date(nextMonthStart.getTime() - 1);
+}
+
+/** Deterministic clock time for SSR and the first client render. */
+export function formatBusinessTimeLabel(value: Date | string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(toDate(value));
+}
+
 function toDate(value: Date | string) {
   return value instanceof Date ? value : new Date(value);
 }

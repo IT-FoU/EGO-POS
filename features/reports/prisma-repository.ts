@@ -123,7 +123,7 @@ export function netReportLifecycle(refunds: Array<Record<string, any>>, saleItem
   return net;
 }
 
-function refundAmountOf(refund: Record<string, any>) {
+export function refundAmountOf(refund: Record<string, any>) {
   const kind = String(refund.kind ?? "refund");
   return amount(refund.refundAmount) || (kind === "refund" ? amount(refund.totalAmount) : 0);
 }

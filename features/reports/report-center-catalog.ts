@@ -58,7 +58,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "dailySalesDesc",
     icon: "calendar-days",
     reuse: null,
-    planned: true,
   },
   {
     id: "sales-monthly",
@@ -69,7 +68,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "monthlySalesDesc",
     icon: "calendar-range",
     reuse: null,
-    planned: true,
   },
   {
     id: "sales-payment-methods",
@@ -80,7 +78,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "salesByPaymentDesc",
     icon: "wallet",
     reuse: null,
-    planned: true,
   },
   {
     id: "sales-refunds-voids",
@@ -249,9 +246,6 @@ export function reportCenterEntriesForCategory(categoryId: ReportCenterCategoryI
 export const REPORT_CENTER_HREFS = REPORT_CENTER_ENTRIES.map((entry) => entry.href);
 
 export const REPORT_CENTER_PLANNED_HREFS = [
-  "/reports/sales/daily",
-  "/reports/sales/monthly",
-  "/reports/sales/payment-methods",
   "/reports/products/sales",
   "/reports/products/categories",
   "/reports/products/performance",
