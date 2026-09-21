@@ -166,7 +166,7 @@ check(
   "3. Shared STEP9 semantics reused",
   math.includes("netReportLifecycle") &&
     math.includes("isVoidSaleStatus") &&
-    prismaReports.includes("export function refundAmountOf") &&
+    prismaReports.includes("refundAmountOf") &&
     repo.includes("computeSaleReportMetrics"),
 );
 check(

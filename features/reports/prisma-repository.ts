@@ -31,6 +31,7 @@ import type {
   SupplierPayableSummary,
   TrendPoint,
 } from "@/features/reports/types";
+import { netReportLifecycle, refundAmountOf, reportMoney } from "@/features/reports/report-lifecycle";
 
 const db = prisma as any;
 
@@ -86,47 +87,10 @@ function buildReportDataQuality(results: Array<ReportQueryResult<unknown>>): Rep
 }
 
 function amount(value: unknown) {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return reportMoney(value);
 }
 
-export function netReportLifecycle(refunds: Array<Record<string, any>>, saleItems: Array<Record<string, any>>) {
-  const itemById = new Map(saleItems.map((item) => [String(item.id), item]));
-  const net = { cogsLak: 0, profitLak: 0, quantitySold: 0, revenueLak: 0 };
-  for (const refund of refunds) {
-    const kind = String(refund.kind ?? "refund");
-    const refundAmt = amount(refund.refundAmount) || (kind === "refund" ? amount(refund.totalAmount) : 0);
-    if (kind === "refund") {
-      net.revenueLak -= refundAmt;
-    } else {
-      net.revenueLak += amount(refund.paymentAmount) - refundAmt;
-    }
-    for (const row of refund.items ?? []) {
-      const qty = amount(row.quantity);
-      const item = itemById.get(String(row.saleItemId));
-      net.quantitySold -= qty;
-      if (item) {
-        net.cogsLak -= amount(item.costPrice) * qty;
-        const originalQty = amount(item.quantity) || 1;
-        net.profitLak -= amount(item.profitAmount) * (qty / originalQty);
-      }
-    }
-    for (const row of refund.exchangeItems ?? []) {
-      const qty = amount(row.quantity);
-      const lineTotal = amount(row.totalAmount);
-      const lineCost = amount(row.costPrice) * qty;
-      net.quantitySold += qty;
-      net.cogsLak += lineCost;
-      net.profitLak += lineTotal - lineCost;
-    }
-  }
-  return net;
-}
-
-export function refundAmountOf(refund: Record<string, any>) {
-  const kind = String(refund.kind ?? "refund");
-  return amount(refund.refundAmount) || (kind === "refund" ? amount(refund.totalAmount) : 0);
-}
+export { netReportLifecycle, refundAmountOf };
 
 function groupRefundsBySaleId(refunds: Array<Record<string, any>>) {
   const grouped = new Map<string, Array<Record<string, any>>>();

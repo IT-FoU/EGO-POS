@@ -10,8 +10,7 @@
  * - Cost = sale-item `cost_price` snapshot × qty ± lifecycle COGS.
  * - Profit = persisted `profit_amount` ± lifecycle profit.
  */
-import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
-import { netReportLifecycle, refundAmountOf } from "@/features/reports/prisma-repository";
+import { netReportLifecycle, refundAmountOf } from "@/features/reports/report-lifecycle";
 
 export const SALES_TABLE_STATUSES = [
   "completed",
@@ -40,7 +39,13 @@ export function isVoidSaleStatus(status: string) {
 }
 
 export function isGrossQualifyingStatus(status: string) {
-  return (REPORT_SALE_STATUSES as readonly string[]).includes(status);
+  return (
+    status === "completed" ||
+    status === "partial_refunded" ||
+    status === "exchanged" ||
+    status === "adjusted" ||
+    status === "refunded"
+  );
 }
 
 export function isSalesTableStatus(status: string): status is SalesTableStatus {
