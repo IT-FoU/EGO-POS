@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import SalesReportPage from "../page";
+import SalesReportView from "@/features/reports/components/sales-report-view";
 import {
   ReportCenterPaymentMethodsPage,
   ReportCenterReusedPage,
@@ -18,7 +18,7 @@ export default async function SalesCenterReportPage({
   if (entry.reuse === "sales") {
     return (
       <ReportCenterReusedPage entry={entry}>
-        <SalesReportPage />
+        <SalesReportView />
       </ReportCenterReusedPage>
     );
   }

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import InventoryReportPage from "../page";
+import InventoryReportView from "@/features/reports/components/inventory-report-view";
 import { ReportCenterReusedPage, ReportCenterSkeletonPage } from "@/features/reports/components/report-center-detail-page";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 
@@ -14,7 +14,7 @@ export default async function InventoryCenterReportPage({
   if (entry.reuse === "inventory") {
     return (
       <ReportCenterReusedPage entry={entry}>
-        <InventoryReportPage />
+        <InventoryReportView />
       </ReportCenterReusedPage>
     );
   }

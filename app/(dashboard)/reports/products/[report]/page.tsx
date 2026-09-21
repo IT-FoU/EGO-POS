@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import ProductReportPage from "../page";
+import ProductReportView from "@/features/reports/components/product-report-view";
 import { ReportCenterReusedPage, ReportCenterSkeletonPage } from "@/features/reports/components/report-center-detail-page";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
 
@@ -14,7 +14,7 @@ export default async function ProductCenterReportPage({
   if (entry.reuse === "products") {
     return (
       <ReportCenterReusedPage entry={entry}>
-        <ProductReportPage />
+        <ProductReportView />
       </ReportCenterReusedPage>
     );
   }
