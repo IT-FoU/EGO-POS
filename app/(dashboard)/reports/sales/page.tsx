@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { BarChart3, CircleDollarSign, ReceiptText, Scale } from "lucide-react";
-import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/reports/components/report-primitives";
+import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
+import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
@@ -22,10 +23,10 @@ export default async function SalesReportPage() {
         titleKey="salesReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={CircleDollarSign} label={tReports("revenue", locale)} labelKey="revenue" value={`${formatLak(monthly.revenueLak)} LAK`} />
-        <MetricCard icon={BarChart3} label={tReports("profit", locale)} labelKey="profit" value={`${formatLak(monthly.profitLak)} LAK`} />
-        <MetricCard icon={Scale} label={tReports("tax", locale)} labelKey="tax" value={`${formatLak(monthly.taxLak)} LAK`} />
-        <MetricCard icon={ReceiptText} label={tReports("transactions", locale)} labelKey="transactions" value={formatNumber(monthly.transactions)} />
+        <ReportMetricCard icon={CircleDollarSign} label={tReports("revenue", locale)} labelKey="revenue" value={`${formatLak(monthly.revenueLak)} LAK`} />
+        <ReportMetricCard icon={BarChart3} label={tReports("profit", locale)} labelKey="profit" value={`${formatLak(monthly.profitLak)} LAK`} />
+        <ReportMetricCard icon={Scale} label={tReports("tax", locale)} labelKey="tax" value={`${formatLak(monthly.taxLak)} LAK`} />
+        <ReportMetricCard icon={ReceiptText} label={tReports("transactions", locale)} labelKey="transactions" value={formatNumber(monthly.transactions)} />
       </section>
       <section className="grid gap-6 xl:grid-cols-2">
         <BarChart

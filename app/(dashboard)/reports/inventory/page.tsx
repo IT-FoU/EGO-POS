@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { AlertTriangle, Boxes, CalendarClock, Warehouse } from "lucide-react";
-import { DataTable, MetricCard, ReportHeader } from "@/features/reports/components/report-primitives";
+import { DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
+import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
 import { formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
@@ -28,10 +29,10 @@ export default async function InventoryReportPage() {
         titleKey="inventoryReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Warehouse} label={tReports("currentStock", locale)} labelKey="currentStock" value={formatNumber(currentStock)} />
-        <MetricCard icon={AlertTriangle} label={tReports("lowStock", locale)} labelKey="lowStock" value={formatNumber(lowStock.length)} />
-        <MetricCard icon={Boxes} label={tReports("deadStock", locale)} labelKey="deadStock" value={formatNumber(deadStock.length)} />
-        <MetricCard icon={CalendarClock} label={tReports("expiringSoon", locale)} labelKey="expiringSoon" value={formatNumber(expiringStock.length)} />
+        <ReportMetricCard icon={Warehouse} label={tReports("currentStock", locale)} labelKey="currentStock" value={formatNumber(currentStock)} />
+        <ReportMetricCard icon={AlertTriangle} label={tReports("lowStock", locale)} labelKey="lowStock" value={formatNumber(lowStock.length)} />
+        <ReportMetricCard icon={Boxes} label={tReports("deadStock", locale)} labelKey="deadStock" value={formatNumber(deadStock.length)} />
+        <ReportMetricCard icon={CalendarClock} label={tReports("expiringSoon", locale)} labelKey="expiringSoon" value={formatNumber(expiringStock.length)} />
       </section>
       <DataTable
         columnKeys={["product", "sku", "category", "currentStock", "minStock", "expiryDate", "daysWithoutSale"]}

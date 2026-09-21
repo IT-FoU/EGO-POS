@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { CircleDollarSign } from "lucide-react";
-import { BarChart, DataTable, MetricCard } from "@/features/reports/components/report-primitives";
+import { BarChart, DataTable } from "@/features/reports/components/report-primitives";
+import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
 import { ReportComingSoon, ReportPageChrome } from "@/features/reports/components/report-page-shell";
 import { formatLak } from "@/features/reports/format";
 import { findReportCenterEntryBySlug } from "@/features/reports/report-center-catalog";
@@ -33,7 +34,7 @@ export default async function SalesCenterReportPage({
     <div className="flex flex-col gap-4">
       <ReportPageChrome entry={entry} locale={locale} />
       <section className="grid gap-4 md:grid-cols-2">
-        <MetricCard
+        <ReportMetricCard
           icon={CircleDollarSign}
           label={tReports("salesByPayment", locale)}
           labelKey="salesByPayment"

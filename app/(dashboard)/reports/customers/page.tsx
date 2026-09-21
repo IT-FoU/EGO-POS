@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { Gift, TrendingUp, Users, WalletCards } from "lucide-react";
-import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/reports/components/report-primitives";
+import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
+import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
 import { calculateAvailablePoints } from "@/features/customers/format";
 import { membershipDisplayLabel } from "@/features/customers/membership-display";
 import { formatLak, formatNumber } from "@/features/reports/format";
@@ -29,10 +30,10 @@ export default async function CustomerReportPage() {
         titleKey="customerReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Users} label={tReports("totalCustomers", locale)} labelKey="totalCustomers" value={formatNumber(customers.length)} />
-        <MetricCard icon={TrendingUp} label={tReports("topCustomer", locale)} labelKey="topCustomer" value={topCustomers[0]?.fullName ?? tReports("na", locale)} />
-        <MetricCard icon={Gift} label={tReports("loyaltyPoints", locale)} labelKey="loyaltyPoints" value={formatNumber(totalPoints)} />
-        <MetricCard icon={WalletCards} label={tReports("customerSpending", locale)} labelKey="customerSpending" value={`${formatLak(totalSpending)} LAK`} />
+        <ReportMetricCard icon={Users} label={tReports("totalCustomers", locale)} labelKey="totalCustomers" value={formatNumber(customers.length)} />
+        <ReportMetricCard icon={TrendingUp} label={tReports("topCustomer", locale)} labelKey="topCustomer" value={topCustomers[0]?.fullName ?? tReports("na", locale)} />
+        <ReportMetricCard icon={Gift} label={tReports("loyaltyPoints", locale)} labelKey="loyaltyPoints" value={formatNumber(totalPoints)} />
+        <ReportMetricCard icon={WalletCards} label={tReports("customerSpending", locale)} labelKey="customerSpending" value={`${formatLak(totalSpending)} LAK`} />
       </section>
       <BarChart
         rows={topCustomers.map((customer) => ({ label: customer.fullName, spending: customer.totalPurchasesLak }))}

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { CircleDollarSign, CreditCard, ReceiptText, Truck } from "lucide-react";
-import { BarChart, DataTable, MetricCard, ReportHeader } from "@/features/reports/components/report-primitives";
+import { BarChart, DataTable, ReportHeader } from "@/features/reports/components/report-primitives";
+import { ReportMetricCard } from "@/features/reports/components/report-metric-card";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { getReportsSnapshot } from "@/features/reports/report-service";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
@@ -35,10 +36,10 @@ export default async function PurchasingReportPage() {
         titleKey="purchasingReport"
       />
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Truck} label={tReports("suppliers", locale)} labelKey="suppliers" value={formatNumber(suppliers.length)} />
-        <MetricCard icon={ReceiptText} label={tReports("purchaseOrders", locale)} labelKey="purchaseOrders" value={formatNumber(totalOrders)} />
-        <MetricCard icon={CircleDollarSign} label={tReports("purchaseValue", locale)} labelKey="purchaseValue" value={`${formatLak(totalPurchases)} LAK`} />
-        <MetricCard icon={CreditCard} label={tReports("outstandingPayables", locale)} labelKey="outstandingPayables" value={`${formatLak(outstandingPayables)} LAK`} />
+        <ReportMetricCard icon={Truck} label={tReports("suppliers", locale)} labelKey="suppliers" value={formatNumber(suppliers.length)} />
+        <ReportMetricCard icon={ReceiptText} label={tReports("purchaseOrders", locale)} labelKey="purchaseOrders" value={formatNumber(totalOrders)} />
+        <ReportMetricCard icon={CircleDollarSign} label={tReports("purchaseValue", locale)} labelKey="purchaseValue" value={`${formatLak(totalPurchases)} LAK`} />
+        <ReportMetricCard icon={CreditCard} label={tReports("outstandingPayables", locale)} labelKey="outstandingPayables" value={`${formatLak(outstandingPayables)} LAK`} />
       </section>
       <section className="grid gap-6 xl:grid-cols-2">
         <BarChart
