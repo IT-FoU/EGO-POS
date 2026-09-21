@@ -69,9 +69,11 @@ check("1. voidCashLak is no longer hardcoded to 0 in prisma-repository", () => {
 
 check("2. voidCashLak derived from voided sales' cash payments (summarizeSalePayments)", () => {
   assert(
-    repo.includes("summarizeSalePayments(voidedPayments)"),
+    calculator.includes("summarizeSalePayments(input.voidedPayments") ||
+      repo.includes("summarizeSalePayments(voidedPayments)"),
     "voided payments summarized via canonical function",
   );
+  assert(repo.includes("voidedPayments"), "voided payments passed into session ledger");
 });
 
 check("3. loadSessionTotals queries voided (cancelled) sale payments", () => {
@@ -104,7 +106,7 @@ check("5. calculateExpectedCash formula subtracts voidCashLak", () => {
 
 check("6. cashSalesLak includes voided cash (gross) — no double subtraction", () => {
   assert(
-    repo.includes("+ voidCashLak,"),
+    calculator.includes("+ voidCashLak") || repo.includes("+ voidCashLak,"),
     "voidCashLak added to cashSalesLak (gross)",
   );
   const expected = calculateExpectedCash({
@@ -222,6 +224,7 @@ check("16. CASH_SESSION_SALE_STATUSES excludes cancelled (voided filtered separa
   const endBracket = cashStatusBlock.indexOf("] as const");
   const statusContent = cashStatusBlock.slice(0, endBracket);
   assert(!statusContent.includes("cancelled"), "CASH_SESSION_SALE_STATUSES excludes cancelled");
+  assert(statusContent.includes("refunded"), "CASH_SESSION_SALE_STATUSES includes refunded for gross cash");
   assert(postSaleShared.includes("RECENT_SALE_STATUSES"), "RECENT has cancelled (separate constant)");
 });
 

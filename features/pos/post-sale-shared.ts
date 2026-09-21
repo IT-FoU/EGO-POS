@@ -185,6 +185,7 @@ export const CASH_SESSION_SALE_STATUSES = [
   "partial_refunded",
   "exchanged",
   "adjusted",
+  "refunded",
 ] as const;
 
 export const REPORT_SALE_STATUSES = [

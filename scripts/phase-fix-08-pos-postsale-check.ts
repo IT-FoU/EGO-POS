@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { buildCashSessionTotals, summarizeSalePayments } from "../features/cash-sessions/cash-session-calculator";
+import { aggregateCashSessionLedger } from "../features/cash-sessions/cash-session-calculator";
 import { writeCompletePrismaSale, type CompletePrismaSaleInput } from "../features/pos/prisma-repository";
 import { writeVoidPrismaSale } from "../features/pos/post-sale-repository";
 import {
@@ -358,25 +358,16 @@ async function sessionImpact(tx: Tx, tenant: TenantContext) {
     (CASH_SESSION_SALE_STATUSES as readonly string[]).includes(sale.saleStatus),
   );
   const payments = active.flatMap((sale: { payments: Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }> }) => sale.payments);
-  const paymentTotals = summarizeSalePayments(payments);
-  let refundLak = 0;
-  let exchangeCashInLak = 0;
-  for (const sale of active) {
-    for (const refund of sale.refunds ?? []) {
-      if (String(refund.refundMethod) === "cash") {
-        refundLak += money(refund.refundAmount);
-        exchangeCashInLak += money(refund.paymentAmount);
-      }
-    }
-  }
-  return buildCashSessionTotals({
-    cashInLak: 0,
-    cashOutLak: 0,
-    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak),
-    nonCashSalesLak: paymentTotals.nonCashSalesLak,
+  const refundRows = sales.flatMap((sale: Record<string, any>) =>
+    (sale.refunds ?? []).map((refund: Record<string, any>) => ({
+      ...refund,
+      sale,
+    })),
+  );
+  return aggregateCashSessionLedger({
     openingCashLak: OPENING_CASH,
-    refundLak: Math.round(refundLak),
-    voidCashLak: 0,
+    payments,
+    refundRows,
   });
 }
 
@@ -537,7 +528,9 @@ async function main() {
     const refund = await tx.refund.findFirst({ where: { saleId: sale.id } });
     assert(refund?.refundMethod === "cash", "Cash refund method");
     const impact = await sessionImpact(tx, fixture.tenant);
-    assertClose(impact.expectedCashLak, OPENING_CASH, "Full cash refund must drop original cash sale from session");
+    assertClose(impact.cashSalesLak, 10000, "Gross cash sales remain after full refund");
+    assertClose(impact.refundLak, 10000, "Cash refunds show full cash refund");
+    assertClose(impact.expectedCashLak, OPENING_CASH, "Full cash refund net drawer is 0");
   });
 
   await isolated("7. Non-cash refund", async (tx) => {
@@ -574,6 +567,8 @@ async function main() {
     const refund = await tx.refund.findFirst({ where: { saleId: sale.id } });
     assert(refund?.refundMethod === "cash", "Split refund records chosen method");
     const impact = await sessionImpact(tx, fixture.tenant);
+    assertClose(impact.cashSalesLak, 4000, "Gross cash is cash component after mixed refund");
+    assertClose(impact.refundLak, 4000, "Cash refund is cash component only");
     assertClose(impact.expectedCashLak, OPENING_CASH, "Fully refunded mixed sale leaves opening cash");
   });
 

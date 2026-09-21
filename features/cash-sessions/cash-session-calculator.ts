@@ -106,3 +106,101 @@ export function computeCashRefundLak(
   const ratio = Math.min(amount(refundAmountLak) / saleTotal, 1);
   return Math.round(cashPortion * ratio);
 }
+
+export type CashSessionPaymentRow = {
+  amount: unknown;
+  changeAmount?: unknown;
+  paymentMethod: string;
+};
+
+export type CashSessionRefundRow = {
+  id?: string | null;
+  kind?: string | null;
+  paymentAmount?: unknown;
+  refundAmount?: unknown;
+  refundMethod?: string | null;
+  sale?: {
+    payments?: CashSessionPaymentRow[] | null;
+    saleStatus?: string | null;
+    totalAmount?: unknown;
+  } | null;
+  totalAmount?: unknown;
+};
+
+/** Drawer cash-out / exchange cash-in for one persisted refund or exchange row. */
+export function cashDrawerEffectFromRefundRow(refund: CashSessionRefundRow) {
+  const saleStatus = String(refund.sale?.saleStatus ?? "");
+  if (saleStatus === "cancelled") {
+    return { exchangeCashInLak: 0, refundLak: 0 };
+  }
+
+  const kind = String(refund.kind ?? "refund");
+  const method = String(refund.refundMethod ?? "cash");
+  const refundAmount =
+    amount(refund.refundAmount) || (kind === "refund" ? amount(refund.totalAmount) : 0);
+  const paymentAmount = amount(refund.paymentAmount);
+
+  if (kind === "exchange") {
+    if (method !== "cash") {
+      return { exchangeCashInLak: 0, refundLak: 0 };
+    }
+    return { exchangeCashInLak: paymentAmount, refundLak: refundAmount };
+  }
+
+  if (method !== "cash") {
+    return { exchangeCashInLak: 0, refundLak: 0 };
+  }
+
+  return {
+    exchangeCashInLak: 0,
+    refundLak: computeCashRefundLak(
+      refund.sale?.payments ?? [],
+      amount(refund.sale?.totalAmount),
+      refundAmount,
+    ),
+  };
+}
+
+/**
+ * Gross cash sales stay on original tender (including fully refunded sales).
+ * Cash refunds use persisted refund rows + original sale payments (cash component only).
+ * Voids stay on cancelled payments: added to gross then subtracted as voidCashLak.
+ */
+export function aggregateCashSessionLedger(input: {
+  openingCashLak: number;
+  payments: CashSessionPaymentRow[];
+  refundRows: CashSessionRefundRow[];
+  transactions?: Array<{ amount: unknown; transactionType: string }>;
+  voidedPayments?: CashSessionPaymentRow[];
+}): CashSessionTotals {
+  const paymentTotals = summarizeSalePayments(input.payments);
+  const voidCashLak = Math.round(summarizeSalePayments(input.voidedPayments ?? []).cashSalesLak);
+  const cashInLak = sumCashTransactions(input.transactions ?? [], "cash_in");
+  const cashOutLak = sumCashTransactions(input.transactions ?? [], "cash_out");
+
+  const seenRefundIds = new Set<string>();
+  let refundLak = 0;
+  let exchangeCashInLak = 0;
+  for (const refund of input.refundRows) {
+    const refundId = refund.id != null && String(refund.id).trim() ? String(refund.id) : "";
+    if (refundId) {
+      if (seenRefundIds.has(refundId)) {
+        continue;
+      }
+      seenRefundIds.add(refundId);
+    }
+    const effect = cashDrawerEffectFromRefundRow(refund);
+    refundLak += effect.refundLak;
+    exchangeCashInLak += effect.exchangeCashInLak;
+  }
+
+  return buildCashSessionTotals({
+    cashInLak,
+    cashOutLak,
+    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak) + voidCashLak,
+    nonCashSalesLak: paymentTotals.nonCashSalesLak,
+    openingCashLak: Math.round(amount(input.openingCashLak)),
+    refundLak: Math.round(refundLak),
+    voidCashLak,
+  });
+}

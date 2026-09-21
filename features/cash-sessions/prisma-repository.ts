@@ -1,12 +1,11 @@
 import { prisma } from "@/lib/db/prisma";
 import {
+  aggregateCashSessionLedger,
   assertCashOutWithinExpected,
   buildCashSessionTotals,
   calculateExpectedCash,
   calculateVariance,
   cashSessionLedgerLockKey,
-  sumCashTransactions,
-  summarizeSalePayments,
 } from "@/features/cash-sessions/cash-session-calculator";
 import { CASH_SESSION_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import {
@@ -79,38 +78,33 @@ function totalsFromLoadedSessionRows(
   refundRows: Array<Record<string, any>>,
   voidedPayments: Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }> = [],
 ) {
-  const paymentTotals = summarizeSalePayments(payments);
-  const voidCashLak = Math.round(summarizeSalePayments(voidedPayments).cashSalesLak);
-  const cashInLak = sumCashTransactions(session.transactions ?? [], "cash_in");
-  const cashOutLak = sumCashTransactions(session.transactions ?? [], "cash_out");
-  let refundLak = 0;
-  let exchangeCashInLak = 0;
-  for (const refund of refundRows) {
-    const sale = refund.sale ?? {};
-    const saleStatus = String(sale.saleStatus);
-    const method = String(refund.refundMethod ?? "cash");
-    const refundAmount = amount(refund.refundAmount) || (String(refund.kind ?? "refund") === "refund" ? amount(refund.totalAmount) : 0);
-    const paymentAmount = amount(refund.paymentAmount);
-    if (!CASH_SESSION_SALE_STATUSES.includes(saleStatus as (typeof CASH_SESSION_SALE_STATUSES)[number])) {
-      continue;
-    }
-    if (method === "cash") {
-      refundLak += refundAmount;
-      exchangeCashInLak += paymentAmount;
-    }
-  }
-  refundLak = Math.round(refundLak);
-
-  return buildCashSessionTotals({
-    cashInLak,
-    cashOutLak,
-    // Gross cash: active sales + voided cash so formula can subtract voidCashLak explicitly.
-    cashSalesLak: paymentTotals.cashSalesLak + Math.round(exchangeCashInLak) + voidCashLak,
-    nonCashSalesLak: paymentTotals.nonCashSalesLak,
+  // Gross cash: qualifying sales (including refunded) + voided cash so formula can subtract voidCashLak explicitly.
+  return aggregateCashSessionLedger({
     openingCashLak: amount(session.openingCash),
-    refundLak,
-    voidCashLak,
+    payments,
+    refundRows,
+    transactions: session.transactions ?? [],
+    voidedPayments,
   });
+}
+
+function parseSalePaymentJson(value: unknown): Array<{ amount: unknown; changeAmount?: unknown; paymentMethod: string }> {
+  if (value == null) {
+    return [];
+  }
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((row) => ({
+      amount: row?.amount,
+      changeAmount: row?.changeAmount,
+      paymentMethod: String(row?.paymentMethod ?? "cash"),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 function inSessionWindow(value: Date, openedAt: Date, endAt: Date) {
@@ -192,11 +186,14 @@ export async function computeCashSessionTotalsForShifts(
     refundAmount: unknown;
     refundCreatedAt: Date | string | null;
     refundCreatedBy: string | null;
+    refundId: string | null;
     refundMethod: string | null;
     rowKind: string;
     saleCreatedAt: Date | string | null;
     saleCreatedBy: string | null;
+    salePayments: unknown;
     saleStatus: string | null;
+    saleTotalAmount: unknown;
     totalAmount: unknown;
   };
   const rows = await client.$queryRaw<CashTotalRow[]>`
@@ -208,13 +205,16 @@ export async function computeCashSessionTotalsForShifts(
       s.created_at AS "saleCreatedAt",
       s.created_by AS "saleCreatedBy",
       s.sale_status::text AS "saleStatus",
+      s.total_amount AS "saleTotalAmount",
       NULL::timestamptz AS "refundCreatedAt",
       NULL::text AS "refundCreatedBy",
+      NULL::text AS "refundId",
       NULL::text AS kind,
       NULL::numeric AS "paymentAmount",
       NULL::numeric AS "refundAmount",
       NULL::text AS "refundMethod",
-      NULL::numeric AS "totalAmount"
+      NULL::numeric AS "totalAmount",
+      NULL::json AS "salePayments"
     FROM sale_payments sp
     JOIN sales s ON s.id = sp.sale_id
     WHERE s.company_id = ${companyId}
@@ -222,7 +222,7 @@ export async function computeCashSessionTotalsForShifts(
       AND s.created_at >= ${minOpened}
       AND s.created_at <= ${maxEnd}
       AND s.created_by = ANY(${cashierIds})
-      AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'cancelled')
+      AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'cancelled', 'refunded')
     UNION ALL
     SELECT
       'refund' AS "rowKind",
@@ -232,13 +232,24 @@ export async function computeCashSessionTotalsForShifts(
       NULL::timestamptz,
       NULL::text,
       s.sale_status::text,
+      s.total_amount,
       r.created_at,
       r.created_by,
+      r.id,
       r.kind::text,
       r.payment_amount,
       r.refund_amount,
       r.refund_method::text,
-      r.total_amount
+      r.total_amount,
+      (
+        SELECT COALESCE(json_agg(json_build_object(
+          'amount', sp.amount,
+          'changeAmount', sp.change_amount,
+          'paymentMethod', sp.payment_method
+        )), '[]'::json)
+        FROM sale_payments sp
+        WHERE sp.sale_id = r.sale_id
+      )
     FROM refunds r
     JOIN sales s ON s.id = r.sale_id
     WHERE r.company_id = ${companyId}
@@ -277,11 +288,16 @@ export async function computeCashSessionTotalsForShifts(
         && inSessionWindow(new Date(row.refundCreatedAt), window.openedAt, window.endAt)
       ))
       .map((row: CashTotalRow) => ({
+        id: row.refundId,
         kind: row.kind,
         paymentAmount: row.paymentAmount,
         refundAmount: row.refundAmount,
         refundMethod: row.refundMethod,
-        sale: { saleStatus: row.saleStatus },
+        sale: {
+          payments: parseSalePaymentJson(row.salePayments),
+          saleStatus: row.saleStatus,
+          totalAmount: row.saleTotalAmount,
+        },
         totalAmount: row.totalAmount,
       }));
     totals.set(String(window.session.id), totalsFromLoadedSessionRows(window.session, payments, refundRows, voidedPayments));
