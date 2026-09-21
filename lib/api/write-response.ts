@@ -33,7 +33,7 @@ function apiStatusFromError(error: unknown): number {
   return 400;
 }
 
-function apiJsonFromError(error: unknown) {
+export function apiJsonFromError(error: unknown) {
   if (error instanceof PermissionDeniedError || error instanceof PermissionMatrixDeniedError) {
     return NextResponse.json(
       {

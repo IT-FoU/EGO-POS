@@ -173,4 +173,28 @@ export function salesTableHref(
   return search ? `${pathname}?${search}` : pathname;
 }
 
+export function salesTableExportHref(
+  report: "daily" | "monthly" | "payment-methods",
+  query: SalesTableQuery,
+  defaults: { datePreset: SalesTableDatePreset },
+) {
+  const params = salesTableQueryToSearchParams({ ...query, page: 1, saleId: undefined }, defaults);
+  params.delete("page");
+  params.delete("sale");
+  const search = params.toString();
+  return search ? `/api/reports/sales/${report}/export?${search}` : `/api/reports/sales/${report}/export`;
+}
+
+export function selectSalesTableRows<T>(sorted: T[], page: number, pageSize: number, allRows = false) {
+  const size = Math.max(1, pageSize);
+  const pageCount = Math.max(1, Math.ceil(sorted.length / size));
+  const current = Math.min(Math.max(page, 1), pageCount);
+  const start = (current - 1) * size;
+  return {
+    page: current,
+    pageCount,
+    rows: allRows ? sorted : sorted.slice(start, start + size),
+  };
+}
+
 export const SALES_TABLE_DEFAULT_PAGE_SIZE = SALES_TABLE_PAGE_SIZE;

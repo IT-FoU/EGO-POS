@@ -18,7 +18,7 @@ import {
   SALES_TABLE_STATUSES,
   saleStatusCopyKey,
 } from "@/features/reports/sales-table-math";
-import { salesTableHref, type SalesTableDatePreset, type SalesTableQuery } from "@/features/reports/sales-table-query";
+import { salesTableExportHref, salesTableHref, type SalesTableDatePreset, type SalesTableQuery } from "@/features/reports/sales-table-query";
 import type {
   DailySalesTableResult,
   MonthlySalesTableResult,
@@ -28,6 +28,13 @@ import type {
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const fieldClass = `h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 ${focusRing}`;
 const numClass = "text-right tabular-nums";
+const gridTable = "w-full border-separate border-spacing-0 text-sm text-zinc-900";
+const thCell = "border border-zinc-300 bg-zinc-100 px-2.5 py-2 align-middle text-xs font-semibold uppercase tracking-wide text-zinc-700";
+const tdCell = "border border-zinc-300 bg-white px-2.5 py-1.5 align-middle text-zinc-900 group-hover:bg-zinc-50";
+const tdTotal = "border border-zinc-300 border-t-2 border-t-zinc-500 bg-zinc-100 px-2.5 py-2 align-middle font-semibold text-zinc-900";
+const thSticky = `${thCell} sticky left-0 z-30`;
+const tdSticky = `${tdCell} sticky left-0 z-10 group-hover:bg-zinc-50`;
+const tdTotalSticky = `${tdTotal} sticky left-0 z-10`;
 
 function t(key: string, locale: SupportedLocale) {
   return tReports(key, locale);
@@ -57,9 +64,9 @@ function SortLink({
   href: string;
 }) {
   return (
-    <Link className={`inline-flex items-center gap-1 hover:text-zinc-900 ${focusRing} ${active ? "text-zinc-900" : ""}`} href={href}>
+    <Link className={`inline-flex max-w-full items-center gap-1 whitespace-nowrap hover:text-zinc-900 ${focusRing} ${active ? "text-zinc-900" : ""}`} href={href}>
       {children}
-      {active ? <span aria-hidden="true">{dir === "asc" ? "↑" : "↓"}</span> : null}
+      {active ? <span aria-hidden="true" className="shrink-0">{dir === "asc" ? "↑" : "↓"}</span> : null}
     </Link>
   );
 }
@@ -93,6 +100,7 @@ function FilterSelect({
 
 function SalesTableFilters({
   defaults,
+  exportHref,
   extra,
   filterOptions,
   locale,
@@ -104,6 +112,7 @@ function SalesTableFilters({
   showStatus,
 }: {
   defaults: { datePreset: SalesTableDatePreset };
+  exportHref?: string;
   extra?: ReactNode;
   filterOptions: ReportFilterOptions;
   locale: SupportedLocale;
@@ -223,8 +232,52 @@ function SalesTableFilters({
         <Link className={`inline-flex h-10 items-center rounded-md border border-zinc-300 px-4 text-sm font-semibold text-zinc-800 ${focusRing}`} href={pathname}>
           {t("clear", locale)}
         </Link>
+        {exportHref ? <ExportExcelButton href={exportHref} locale={locale} /> : null}
       </div>
     </form>
+  );
+}
+
+function ExportExcelButton({ href, locale }: { href: string; locale: SupportedLocale }) {
+  const [state, setState] = useState<"idle" | "exporting" | "done" | "error">("idle");
+
+  async function onExport() {
+    setState("exporting");
+    try {
+      const response = await fetch(href);
+      if (!response.ok) throw new Error("export");
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+      const quoted = /filename="([^"]+)"/i.exec(disposition);
+      const filename = decodeURIComponent((encoded?.[1] || quoted?.[1] || "EGO-POS-Report.xlsx").trim());
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setState("done");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        className={`inline-flex h-10 items-center rounded-md border border-zinc-800 px-4 text-sm font-semibold text-zinc-900 disabled:opacity-60 ${focusRing}`}
+        disabled={state === "exporting"}
+        onClick={onExport}
+        type="button"
+      >
+        {state === "exporting" ? t("exporting", locale) : t("exportExcel", locale)}
+      </button>
+      {state === "done" ? <span className="text-sm text-zinc-600">{t("exportComplete", locale)}</span> : null}
+      {state === "error" ? <span className="text-sm text-red-700">{t("exportFailed", locale)}</span> : null}
+    </div>
   );
 }
 
@@ -444,6 +497,7 @@ export function DailySalesReportView({
         <>
           <SalesTableFilters
             defaults={defaults}
+            exportHref={salesTableExportHref("daily", query, defaults)}
             filterOptions={data.filterOptions}
             locale={locale}
             pathname={pathname}
@@ -455,37 +509,37 @@ export function DailySalesReportView({
           <SummaryStrip items={summaryItems} />
           <ReportSheet>
             <Spreadsheet empty={data.rows.length === 0} locale={locale}>
-              <table className="w-full min-w-[1100px] border-collapse text-sm text-zinc-900">
-                <thead className="sticky top-0 z-10 bg-white text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <tr className="border-b border-zinc-200">
-                    <th className="sticky left-0 z-20 bg-white px-3 py-2">{t("colNo", locale)}</th>
-                    <th className="sticky left-10 z-20 bg-white px-3 py-2">
+              <table className={`${gridTable} min-w-[1100px]`}>
+                <thead className="sticky top-0 z-20">
+                  <tr>
+                    <th className={thSticky}>{t("colNo", locale)}</th>
+                    <th className={thCell}>
                       <SortLink active={query.sort === "time" || !query.sort} dir={query.dir} href={sortHref("time")}>{t("colTime", locale)}</SortLink>
                     </th>
-                    <th className="px-3 py-2"><SortLink active={query.sort === "receipt"} dir={query.dir} href={sortHref("receipt")}>{t("colReceipt", locale)}</SortLink></th>
-                    <th className="px-3 py-2"><SortLink active={query.sort === "cashier"} dir={query.dir} href={sortHref("cashier")}>{t("cashier", locale)}</SortLink></th>
-                    <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "items"} dir={query.dir} href={sortHref("items")}>{t("colItems", locale)}</SortLink></th>
-                    <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "gross"} dir={query.dir} href={sortHref("gross")}>{t("colGross", locale)}</SortLink></th>
-                    <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "discount"} dir={query.dir} href={sortHref("discount")}>{t("colDiscount", locale)}</SortLink></th>
-                    <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "refund"} dir={query.dir} href={sortHref("refund")}>{t("colRefund", locale)}</SortLink></th>
-                    <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "void"} dir={query.dir} href={sortHref("void")}>{t("colVoid", locale)}</SortLink></th>
-                    <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "net"} dir={query.dir} href={sortHref("net")}>{t("colNet", locale)}</SortLink></th>
-                    <th className="px-3 py-2"><SortLink active={query.sort === "payment"} dir={query.dir} href={sortHref("payment")}>{t("colPayment", locale)}</SortLink></th>
+                    <th className={thCell}><SortLink active={query.sort === "receipt"} dir={query.dir} href={sortHref("receipt")}>{t("colReceipt", locale)}</SortLink></th>
+                    <th className={thCell}><SortLink active={query.sort === "cashier"} dir={query.dir} href={sortHref("cashier")}>{t("cashier", locale)}</SortLink></th>
+                    <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "items"} dir={query.dir} href={sortHref("items")}>{t("colItems", locale)}</SortLink></th>
+                    <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "gross"} dir={query.dir} href={sortHref("gross")}>{t("colGross", locale)}</SortLink></th>
+                    <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "discount"} dir={query.dir} href={sortHref("discount")}>{t("colDiscount", locale)}</SortLink></th>
+                    <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "refund"} dir={query.dir} href={sortHref("refund")}>{t("colRefund", locale)}</SortLink></th>
+                    <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "void"} dir={query.dir} href={sortHref("void")}>{t("colVoid", locale)}</SortLink></th>
+                    <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "net"} dir={query.dir} href={sortHref("net")}>{t("colNet", locale)}</SortLink></th>
+                    <th className={thCell}><SortLink active={query.sort === "payment"} dir={query.dir} href={sortHref("payment")}>{t("colPayment", locale)}</SortLink></th>
                     {data.showCostProfit ? (
                       <>
-                        <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "cost"} dir={query.dir} href={sortHref("cost")}>{t("colCost", locale)}</SortLink></th>
-                        <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "profit"} dir={query.dir} href={sortHref("profit")}>{t("colProfit", locale)}</SortLink></th>
+                        <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "cost"} dir={query.dir} href={sortHref("cost")}>{t("colCost", locale)}</SortLink></th>
+                        <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "profit"} dir={query.dir} href={sortHref("profit")}>{t("colProfit", locale)}</SortLink></th>
                       </>
                     ) : null}
-                    <th className="px-3 py-2"><SortLink active={query.sort === "status"} dir={query.dir} href={sortHref("status")}>{t("colStatus", locale)}</SortLink></th>
+                    <th className={`${thCell} text-center`}><SortLink active={query.sort === "status"} dir={query.dir} href={sortHref("status")}>{t("colStatus", locale)}</SortLink></th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.rows.map((row, index) => (
-                    <tr className="border-b border-zinc-100 hover:bg-zinc-50" key={row.id}>
-                      <td className="sticky left-0 bg-white px-3 py-1.5">{(data.page - 1) * data.pageSize + index + 1}</td>
-                      <td className="sticky left-10 bg-white px-3 py-1.5 whitespace-nowrap">{formatBusinessTimeLabel(row.createdAt)}</td>
-                      <td className="px-3 py-1.5">
+                    <tr className="group hover:bg-zinc-50" key={row.id}>
+                      <td className={tdSticky}>{(data.page - 1) * data.pageSize + index + 1}</td>
+                      <td className={`${tdCell} whitespace-nowrap`}>{formatBusinessTimeLabel(row.createdAt)}</td>
+                      <td className={tdCell}>
                         <Link
                           className={`font-medium text-primary underline-offset-2 hover:underline ${focusRing}`}
                           href={salesTableHref(pathname, query, defaults, { saleId: row.id })}
@@ -498,41 +552,43 @@ export function DailySalesReportView({
                           {row.receipt}
                         </Link>
                       </td>
-                      <td className="px-3 py-1.5">{row.cashierName}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{formatNumber(row.items)}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.grossLak)}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.discountLak)}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.refundLak)}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.voidLak)}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.netLak)}</td>
-                      <td className="px-3 py-1.5">{row.paymentMethods.map((method) => paymentMethodLabel(method, locale)).join(" + ")}</td>
+                      <td className={tdCell}>{row.cashierName}</td>
+                      <td className={`${tdCell} ${numClass}`}>{formatNumber(row.items)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.grossLak)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.discountLak)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.refundLak)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.voidLak)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.netLak)}</td>
+                      <td className={tdCell}>{row.paymentMethods.map((method) => paymentMethodLabel(method, locale)).join(" + ")}</td>
                       {data.showCostProfit ? (
                         <>
-                          <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.costLak)}</td>
-                          <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.profitLak)}</td>
+                          <td className={`${tdCell} ${numClass}`}>{moneyCell(row.costLak)}</td>
+                          <td className={`${tdCell} ${numClass}`}>{moneyCell(row.profitLak)}</td>
                         </>
                       ) : null}
-                      <td className="px-3 py-1.5">{t(saleStatusCopyKey(row.status), locale)}</td>
+                      <td className={`${tdCell} text-center`}>{t(saleStatusCopyKey(row.status), locale)}</td>
                     </tr>
                   ))}
                   {data.rows.length > 0 ? (
-                    <tr className="bg-zinc-50 font-semibold">
-                      <td className="sticky left-0 bg-zinc-50 px-3 py-2" colSpan={2}>{t("total", locale)}</td>
-                      <td className="px-3 py-2" colSpan={2} />
-                      <td className={`px-3 py-2 ${numClass}`}>{formatNumber(data.totalRow.items)}</td>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.grossLak)}</td>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.discountLak)}</td>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.refundLak)}</td>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.voidLak)}</td>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.netLak)}</td>
-                      <td className="px-3 py-2" />
+                    <tr>
+                      <td className={tdTotalSticky}>{t("total", locale)}</td>
+                      <td className={tdTotal} />
+                      <td className={tdTotal} />
+                      <td className={tdTotal} />
+                      <td className={`${tdTotal} ${numClass}`}>{formatNumber(data.totalRow.items)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.grossLak)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.discountLak)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.refundLak)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.voidLak)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.netLak)}</td>
+                      <td className={tdTotal} />
                       {data.showCostProfit ? (
                         <>
-                          <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.costLak)}</td>
-                          <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRow.profitLak)}</td>
+                          <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.costLak)}</td>
+                          <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.profitLak)}</td>
                         </>
                       ) : null}
-                      <td className="px-3 py-2" />
+                      <td className={tdTotal} />
                     </tr>
                   ) : null}
                 </tbody>
@@ -597,6 +653,7 @@ export function MonthlySalesReportView({
     <ReportFrame entryId="sales-monthly" locale={locale}>
       <SalesTableFilters
         defaults={defaults}
+        exportHref={salesTableExportHref("monthly", data.query, defaults)}
         filterOptions={data.filterOptions}
         locale={locale}
         pathname={pathname}
@@ -606,74 +663,74 @@ export function MonthlySalesReportView({
       <SummaryStrip items={summaryItems} />
       <ReportSheet>
         <Spreadsheet empty={data.rows.length === 0} locale={locale}>
-          <table className="w-full min-w-[1100px] border-collapse text-sm text-zinc-900">
-            <thead className="sticky top-0 z-10 bg-white text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              <tr className="border-b border-zinc-200">
-                <th className="sticky left-0 z-20 bg-white px-3 py-2">{t("colDate", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("bills", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("colItems", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("colGross", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("colDiscount", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("colRefund", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("colVoid", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("netSales", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("paymentCash", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("paymentQr", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("paymentTransfer", locale)}</th>
-                <th className={`px-3 py-2 ${numClass}`}>{t("paymentCard", locale)}</th>
+          <table className={`${gridTable} min-w-[1100px]`}>
+            <thead className="sticky top-0 z-20">
+              <tr>
+                <th className={thSticky}>{t("colDate", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("bills", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("colItems", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("colGross", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("colDiscount", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("colRefund", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("colVoid", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("netSales", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("paymentCash", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("paymentQr", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("paymentTransfer", locale)}</th>
+                <th className={`${thCell} ${numClass}`}>{t("paymentCard", locale)}</th>
                 {data.showCostProfit ? (
                   <>
-                    <th className={`px-3 py-2 ${numClass}`}>{t("colCost", locale)}</th>
-                    <th className={`px-3 py-2 ${numClass}`}>{t("colProfit", locale)}</th>
+                    <th className={`${thCell} ${numClass}`}>{t("colCost", locale)}</th>
+                    <th className={`${thCell} ${numClass}`}>{t("colProfit", locale)}</th>
                   </>
                 ) : null}
               </tr>
             </thead>
             <tbody>
               {data.rows.map((row) => (
-                <tr className="border-b border-zinc-100 hover:bg-zinc-50" key={row.date}>
-                  <td className="sticky left-0 bg-white px-3 py-1.5">
+                <tr className="group hover:bg-zinc-50" key={row.date}>
+                  <td className={tdSticky}>
                     <Link className={`font-medium text-primary underline-offset-2 hover:underline ${focusRing}`} href={`/reports/sales/daily?date=${row.date}`}>
                       {row.date}
                     </Link>
                   </td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{formatNumber(row.bills)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{formatNumber(row.itemsSold)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.grossLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.discountLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.refundLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.voidLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.netLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.cashLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.qrLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.transferLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.cardLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{formatNumber(row.bills)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{formatNumber(row.itemsSold)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.grossLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.discountLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.refundLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.voidLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.netLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.cashLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.qrLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.transferLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.cardLak)}</td>
                   {data.showCostProfit ? (
                     <>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.costLak)}</td>
-                      <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.profitLak)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.costLak)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{moneyCell(row.profitLak)}</td>
                     </>
                   ) : null}
                 </tr>
               ))}
               {data.rows.length > 0 ? (
-                <tr className="bg-zinc-50 font-semibold">
-                  <td className="sticky left-0 bg-zinc-50 px-3 py-2">{t("total", locale)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{formatNumber(data.summary.bills)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{formatNumber(data.summary.itemsSold)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.grossLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.discountLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.refundLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.voidLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.netLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.cashLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.qrLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.transferLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.cardLak)}</td>
+                <tr>
+                  <td className={tdTotalSticky}>{t("total", locale)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{formatNumber(data.summary.bills)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{formatNumber(data.summary.itemsSold)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.grossLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.discountLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.refundLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.voidLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.netLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.cashLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.qrLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.transferLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.cardLak)}</td>
                   {data.showCostProfit ? (
                     <>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.costLak)}</td>
-                      <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.profitLak)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.costLak)}</td>
+                      <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.profitLak)}</td>
                     </>
                   ) : null}
                 </tr>
@@ -722,6 +779,7 @@ export function PaymentMethodSalesReportView({
     <ReportFrame entryId="sales-payment-methods" locale={locale}>
       <SalesTableFilters
         defaults={defaults}
+        exportHref={salesTableExportHref("payment-methods", query, defaults)}
         filterOptions={data.filterOptions}
         locale={locale}
         pathname={pathname}
@@ -733,26 +791,26 @@ export function PaymentMethodSalesReportView({
       <SummaryStrip items={summaryItems} />
       <ReportSheet>
         <Spreadsheet empty={data.rows.length === 0} locale={locale}>
-          <table className="w-full min-w-[980px] border-collapse text-sm text-zinc-900">
-            <thead className="sticky top-0 z-10 bg-white text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              <tr className="border-b border-zinc-200">
-                <th className="sticky left-0 z-20 bg-white px-3 py-2">{t("colNo", locale)}</th>
-                <th className="px-3 py-2"><SortLink active={!query.sort || query.sort === "time"} dir={query.dir} href={sortHref("time")}>{t("colDateTime", locale)}</SortLink></th>
-                <th className="px-3 py-2"><SortLink active={query.sort === "receipt"} dir={query.dir} href={sortHref("receipt")}>{t("colReceipt", locale)}</SortLink></th>
-                <th className="px-3 py-2"><SortLink active={query.sort === "cashier"} dir={query.dir} href={sortHref("cashier")}>{t("cashier", locale)}</SortLink></th>
-                <th className="px-3 py-2"><SortLink active={query.sort === "paymentMethod"} dir={query.dir} href={sortHref("paymentMethod")}>{t("paymentMethod", locale)}</SortLink></th>
-                <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "paymentAmount"} dir={query.dir} href={sortHref("paymentAmount")}>{t("colPaymentAmount", locale)}</SortLink></th>
-                <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "saleTotal"} dir={query.dir} href={sortHref("saleTotal")}>{t("colSaleTotal", locale)}</SortLink></th>
-                <th className={`px-3 py-2 ${numClass}`}><SortLink active={query.sort === "refund"} dir={query.dir} href={sortHref("refund")}>{t("colRefundAmount", locale)}</SortLink></th>
-                <th className="px-3 py-2"><SortLink active={query.sort === "status"} dir={query.dir} href={sortHref("status")}>{t("colStatus", locale)}</SortLink></th>
+          <table className={`${gridTable} min-w-[980px]`}>
+            <thead className="sticky top-0 z-20">
+              <tr>
+                <th className={thSticky}>{t("colNo", locale)}</th>
+                <th className={thCell}><SortLink active={!query.sort || query.sort === "time"} dir={query.dir} href={sortHref("time")}>{t("colDateTime", locale)}</SortLink></th>
+                <th className={thCell}><SortLink active={query.sort === "receipt"} dir={query.dir} href={sortHref("receipt")}>{t("colReceipt", locale)}</SortLink></th>
+                <th className={thCell}><SortLink active={query.sort === "cashier"} dir={query.dir} href={sortHref("cashier")}>{t("cashier", locale)}</SortLink></th>
+                <th className={thCell}><SortLink active={query.sort === "paymentMethod"} dir={query.dir} href={sortHref("paymentMethod")}>{t("paymentMethod", locale)}</SortLink></th>
+                <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "paymentAmount"} dir={query.dir} href={sortHref("paymentAmount")}>{t("colPaymentAmount", locale)}</SortLink></th>
+                <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "saleTotal"} dir={query.dir} href={sortHref("saleTotal")}>{t("colSaleTotal", locale)}</SortLink></th>
+                <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "refund"} dir={query.dir} href={sortHref("refund")}>{t("colRefundAmount", locale)}</SortLink></th>
+                <th className={`${thCell} text-center`}><SortLink active={query.sort === "status"} dir={query.dir} href={sortHref("status")}>{t("colStatus", locale)}</SortLink></th>
               </tr>
             </thead>
             <tbody>
               {data.rows.map((row, index) => (
-                <tr className="border-b border-zinc-100 hover:bg-zinc-50" key={row.id}>
-                  <td className="sticky left-0 bg-white px-3 py-1.5">{(data.page - 1) * data.pageSize + index + 1}</td>
-                  <td className="px-3 py-1.5 whitespace-nowrap">{formatBusinessDateTimeLabel(row.createdAt)}</td>
-                  <td className="px-3 py-1.5">
+                <tr className="group hover:bg-zinc-50" key={row.id}>
+                  <td className={tdSticky}>{(data.page - 1) * data.pageSize + index + 1}</td>
+                  <td className={`${tdCell} whitespace-nowrap`}>{formatBusinessDateTimeLabel(row.createdAt)}</td>
+                  <td className={tdCell}>
                     <Link
                       className={`font-medium text-primary underline-offset-2 hover:underline ${focusRing}`}
                       href={salesTableHref(pathname, query, defaults, { saleId: row.saleId })}
@@ -765,21 +823,25 @@ export function PaymentMethodSalesReportView({
                       {row.receipt}
                     </Link>
                   </td>
-                  <td className="px-3 py-1.5">{row.cashierName}</td>
-                  <td className="px-3 py-1.5">{paymentMethodLabel(row.paymentMethod, locale)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{moneyCell(row.paymentAmountLak)}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{row.saleTotalLak ? moneyCell(row.saleTotalLak) : ""}</td>
-                  <td className={`px-3 py-1.5 ${numClass}`}>{row.refundLak ? moneyCell(row.refundLak) : ""}</td>
-                  <td className="px-3 py-1.5">{t(saleStatusCopyKey(row.status), locale)}</td>
+                  <td className={tdCell}>{row.cashierName}</td>
+                  <td className={tdCell}>{paymentMethodLabel(row.paymentMethod, locale)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{moneyCell(row.paymentAmountLak)}</td>
+                  <td className={`${tdCell} ${numClass}`}>{row.saleTotalLak ? moneyCell(row.saleTotalLak) : ""}</td>
+                  <td className={`${tdCell} ${numClass}`}>{row.refundLak ? moneyCell(row.refundLak) : ""}</td>
+                  <td className={`${tdCell} text-center`}>{t(saleStatusCopyKey(row.status), locale)}</td>
                 </tr>
               ))}
               {data.rows.length > 0 ? (
-                <tr className="bg-zinc-50 font-semibold">
-                  <td className="sticky left-0 bg-zinc-50 px-3 py-2" colSpan={5}>{t("total", locale)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.summary.totalPaidLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalSaleLak)}</td>
-                  <td className={`px-3 py-2 ${numClass}`}>{moneyCell(data.totalRefundLak)}</td>
-                  <td className="px-3 py-2" />
+                <tr>
+                  <td className={tdTotalSticky}>{t("total", locale)}</td>
+                  <td className={tdTotal} />
+                  <td className={tdTotal} />
+                  <td className={tdTotal} />
+                  <td className={tdTotal} />
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.summary.totalPaidLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalSaleLak)}</td>
+                  <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRefundLak)}</td>
+                  <td className={tdTotal} />
                 </tr>
               ) : null}
             </tbody>

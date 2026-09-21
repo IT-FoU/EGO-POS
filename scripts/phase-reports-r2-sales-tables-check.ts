@@ -182,10 +182,11 @@ check(
     !ui.includes("paymentMode === \"mixed\""),
 );
 check(
-  "6. No fake export actions on live R2 pages",
-  !dailyPage.includes("excel") &&
-    !monthlyPage.includes("pdf") &&
-    !ui.includes('tReports("excel"') &&
+  "6. Live R2 Excel is real; Print/PDF stay omitted",
+  ui.includes("exportExcel") &&
+    ui.includes("salesTableExportHref") &&
+    !ui.includes('t("print"') &&
+    !ui.includes('t("pdf"') &&
     !ui.includes('tReports("print"') &&
     ui.includes("emptySalesTable") &&
     ui.includes("errorSalesTable"),

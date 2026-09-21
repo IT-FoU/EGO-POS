@@ -22,6 +22,7 @@ import {
 } from "@/features/reports/sales-table-math";
 import {
   resolveSalesTableRange,
+  selectSalesTableRows,
   type SalesTableQuery,
 } from "@/features/reports/sales-table-query";
 import {
@@ -34,6 +35,14 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 
 const db = prisma as any;
+
+export type SalesTableLoadOptions = {
+  allRows?: boolean;
+};
+
+function salesTableClient(client?: any) {
+  return client ?? db;
+}
 
 function clampSalesTableQuery(scope: BranchScope, query: SalesTableQuery): SalesTableQuery {
   const next = { ...query };
@@ -227,12 +236,14 @@ export async function loadDailySalesTable(
   tenant: TenantContext,
   query: SalesTableQuery,
   client: any = db,
+  options: SalesTableLoadOptions = {},
 ): Promise<DailySalesTableResult> {
-  const scope = await resolveTenantScope(tenant, client);
+  const dbClient = salesTableClient(client);
+  const scope = await resolveTenantScope(tenant, dbClient);
   const clamped = clampSalesTableQuery(scope, query);
   const [facts, filterOptions] = await Promise.all([
-    loadSaleFacts(scope, clamped, client),
-    getReportFilterOptions(tenant, client),
+    loadSaleFacts(scope, clamped, dbClient),
+    getReportFilterOptions(tenant, dbClient),
   ]);
   const decorated = facts.sales.map((sale) => {
     const metrics = computeSaleReportMetrics(sale);
@@ -257,17 +268,14 @@ export async function loadDailySalesTable(
   const summary = summarizeSaleMetrics(decorated.map((row) => row.metrics));
   const sorted = decorated.map((row) => row.row).sort((left, right) => compareDailyRows(left, right, clamped.sort, clamped.dir));
   const pageSize = SALES_TABLE_PAGE_SIZE;
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const page = Math.min(clamped.page, pageCount);
-  const start = (page - 1) * pageSize;
-  const rows = sorted.slice(start, start + pageSize);
+  const paged = selectSalesTableRows(sorted, clamped.page, pageSize, options.allRows === true);
   return {
     filterOptions,
-    page,
-    pageCount,
+    page: paged.page,
+    pageCount: paged.pageCount,
     pageSize,
-    query: { ...clamped, page },
-    rows,
+    query: { ...clamped, page: paged.page },
+    rows: paged.rows,
     showCostProfit: true,
     summary,
     totalRow: {
@@ -312,7 +320,8 @@ export async function loadMonthlySalesTable(
   query: SalesTableQuery,
   client: any = db,
 ): Promise<MonthlySalesTableResult> {
-  const scope = await resolveTenantScope(tenant, client);
+  const dbClient = salesTableClient(client);
+  const scope = await resolveTenantScope(tenant, dbClient);
   const clamped: SalesTableQuery = {
     ...clampSalesTableQuery(scope, query),
     date: undefined,
@@ -328,8 +337,8 @@ export async function loadMonthlySalesTable(
   clamped.dateFrom = monthStart;
   clamped.dateTo = endOfBusinessMonth(monthStart);
   const [facts, filterOptions] = await Promise.all([
-    loadSaleFacts(scope, clamped, client),
-    getReportFilterOptions(tenant, client),
+    loadSaleFacts(scope, clamped, dbClient),
+    getReportFilterOptions(tenant, dbClient),
   ]);
 
   const byDay = new Map<string, MonthlySalesTableRow>();
@@ -464,24 +473,26 @@ export async function loadPaymentMethodSalesTable(
   tenant: TenantContext,
   query: SalesTableQuery,
   client: any = db,
+  options: SalesTableLoadOptions = {},
 ): Promise<PaymentMethodTableResult> {
-  const scope = await resolveTenantScope(tenant, client);
+  const dbClient = salesTableClient(client);
+  const scope = await resolveTenantScope(tenant, dbClient);
   const clamped = clampSalesTableQuery(scope, query);
   const saleWhere = buildSalesTableWhere(scope, clamped, { ignorePaymentMethod: true });
-  const count = await client.sale.count({ where: saleWhere });
+  const count = await dbClient.sale.count({ where: saleWhere });
   if (count > SALES_TABLE_SCAN_LIMIT) {
     throw new Error("SALES_TABLE_TOO_LARGE");
   }
   const [saleRows, filterOptions] = await Promise.all([
-    client.sale.findMany({
+    dbClient.sale.findMany({
       orderBy: { createdAt: "desc" },
       select: saleFactSelect,
       where: saleWhere,
     }),
-    getReportFilterOptions(tenant, client),
+    getReportFilterOptions(tenant, dbClient),
   ]);
   const sales = saleRows.map(mapSaleFact);
-  const cashiers = await loadCashierNames(client, sales.map((sale: SaleReportFacts) => sale.createdBy));
+  const cashiers = await loadCashierNames(dbClient, sales.map((sale: SaleReportFacts) => sale.createdBy));
   const summary = emptyPaymentMethodTotals();
   const seenSales = new Set<string>();
   const allRows: PaymentMethodTableRow[] = [];
@@ -522,16 +533,14 @@ export async function loadPaymentMethodSalesTable(
 
   const sorted = allRows.sort((left, right) => comparePaymentRows(left, right, clamped.sort, clamped.dir));
   const pageSize = SALES_TABLE_PAGE_SIZE;
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const page = Math.min(clamped.page, pageCount);
-  const start = (page - 1) * pageSize;
+  const paged = selectSalesTableRows(sorted, clamped.page, pageSize, options.allRows === true);
   return {
     filterOptions,
-    page,
-    pageCount,
+    page: paged.page,
+    pageCount: paged.pageCount,
     pageSize,
-    query: { ...clamped, page },
-    rows: sorted.slice(start, start + pageSize),
+    query: { ...clamped, page: paged.page },
+    rows: paged.rows,
     summary,
     totalRefundLak,
     totalSaleLak,

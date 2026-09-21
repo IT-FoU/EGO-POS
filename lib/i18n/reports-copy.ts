@@ -381,7 +381,19 @@ const en = {
   "totalBills": "Total bills",
   "totalItems": "Total items",
   "totalPaid": "Total paid",
-  "voids": "Voids"
+  "voids": "Voids",
+  "cashierFilter": "Cashier filter",
+  "exportComplete": "Export complete",
+  "exportExcel": "Export Excel",
+  "exportFailed": "Export failed",
+  "exporting": "Exporting...",
+  "generatedAt": "Generated At",
+  "paymentFilter": "Payment filter",
+  "paymentMethodsSheet": "Payment Methods",
+  "report": "Report",
+  "reportSummary": "Summary",
+  "statusFilter": "Status filter",
+  "store": "Store"
 };
 
 const lo = {
@@ -765,7 +777,19 @@ const lo = {
   "totalBills": "ບິນທັງໝົດ",
   "totalItems": "ລາຍການທັງໝົດ",
   "totalPaid": "ຍອດຊຳລະລວມ",
-  "voids": "ຍົກເລີກ"
+  "voids": "ຍົກເລີກ",
+  "cashierFilter": "ກັ່ນຕອງພະນັກງານຂາຍ",
+  "exportComplete": "ສົ່ງອອກສຳເລັດ",
+  "exportExcel": "ສົ່ງອອກ Excel",
+  "exportFailed": "ສົ່ງອອກບໍ່ສຳເລັດ",
+  "exporting": "ກຳລັງສົ່ງອອກ...",
+  "generatedAt": "ເວລາສ້າງ",
+  "paymentFilter": "ກັ່ນຕອງວິທີຊຳລະ",
+  "paymentMethodsSheet": "ວິທີຊຳລະເງິນ",
+  "report": "ລາຍງານ",
+  "reportSummary": "ສະຫຼຸບ",
+  "statusFilter": "ກັ່ນຕອງສະຖານະ",
+  "store": "ຮ້ານ"
 };
 
 export type ReportsCopyKey = keyof typeof en;
