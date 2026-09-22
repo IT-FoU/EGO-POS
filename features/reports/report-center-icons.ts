@@ -13,6 +13,7 @@ import {
   Tags,
   TrendingUp,
   Undo2,
+  Users,
   Wallet,
   Warehouse,
   type LucideIcon,
@@ -34,6 +35,7 @@ export const REPORT_CENTER_ICON_MAP: Record<ReportCenterIcon, LucideIcon> = {
   tags: Tags,
   "trending-up": TrendingUp,
   "undo-2": Undo2,
+  users: Users,
   wallet: Wallet,
   warehouse: Warehouse,
 };

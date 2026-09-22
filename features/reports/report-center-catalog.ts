@@ -1,4 +1,4 @@
-export const REPORT_CENTER_CATEGORY_IDS = ["sales", "shifts", "products", "inventory"] as const;
+export const REPORT_CENTER_CATEGORY_IDS = ["sales", "shifts", "products", "inventory", "staff"] as const;
 
 export type ReportCenterCategoryId = (typeof REPORT_CENTER_CATEGORY_IDS)[number];
 
@@ -19,6 +19,7 @@ export type ReportCenterIcon =
   | "tags"
   | "trending-up"
   | "undo-2"
+  | "users"
   | "wallet"
   | "warehouse";
 
@@ -46,6 +47,7 @@ export const REPORT_CENTER_CATEGORIES: ReportCenterCategory[] = [
   { id: "shifts", titleKey: "shiftReports", descriptionKey: "shiftReportsDesc" },
   { id: "products", titleKey: "productReports", descriptionKey: "productReportsDesc" },
   { id: "inventory", titleKey: "inventoryReports", descriptionKey: "inventoryReportsDesc" },
+  { id: "staff", titleKey: "staffReports", descriptionKey: "staffReportsDesc" },
 ];
 
 export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
@@ -221,6 +223,16 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     titleKey: "stockValuation",
     descriptionKey: "stockValuationDesc",
     icon: "scale",
+    reuse: null,
+  },
+  {
+    id: "staff-attendance",
+    slug: "attendance",
+    href: "/reports/staff/attendance",
+    categoryId: "staff",
+    titleKey: "staffAttendance",
+    descriptionKey: "staffAttendanceDesc",
+    icon: "users",
     reuse: null,
   },
 ];

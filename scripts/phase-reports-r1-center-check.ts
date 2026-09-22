@@ -60,6 +60,7 @@ const requiredHrefs = [
   "/reports/inventory/low-stock",
   "/reports/inventory/reorder",
   "/reports/inventory/valuation",
+  "/reports/staff/attendance",
 ];
 
 const copyKeys = [
@@ -78,6 +79,8 @@ const copyKeys = [
   "reportReady",
   "searchReports",
   "shiftReports",
+  "staffAttendance",
+  "staffReports",
   "stockValuation",
 ];
 
@@ -96,8 +99,8 @@ const purchasingPage = read("app/(dashboard)/reports/purchasing/page.tsx");
 const calculator = read("features/cash-sessions/cash-session-calculator.ts");
 const postSale = read("features/pos/post-sale-shared.ts");
 
-check("1. Four report categories", REPORT_CENTER_CATEGORIES.map((row) => row.id).join(",") === "sales,shifts,products,inventory");
-check("2. Seventeen report entries", REPORT_CENTER_ENTRIES.length === 17);
+check("1. Five report categories", REPORT_CENTER_CATEGORIES.map((row) => row.id).join(",") === "sales,shifts,products,inventory,staff");
+check("2. Eighteen report entries", REPORT_CENTER_ENTRIES.length === 18);
 check(
   "3. Stable hrefs",
   requiredHrefs.every((href) => REPORT_CENTER_HREFS.includes(href)) && requiredHrefs.every((href) => Boolean(findReportCenterEntryByHref(href))),

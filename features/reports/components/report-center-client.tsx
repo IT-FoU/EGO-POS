@@ -12,6 +12,7 @@ import {
   REPORT_CENTER_ENTRIES,
   findReportCenterEntry,
   isPlannedReportCenterEntry,
+  reportCenterCategoryTitleKey,
   type ReportCenterEntry,
 } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
@@ -27,7 +28,7 @@ function matchesQuery(entry: ReportCenterEntry, query: string, locale: Supported
   const haystack = [
     tReports(entry.titleKey, locale),
     tReports(entry.descriptionKey, locale),
-    tReports(entry.categoryId === "sales" ? "salesReports" : entry.categoryId === "shifts" ? "shiftReports" : entry.categoryId === "products" ? "productReports" : "inventoryReports", locale),
+    tReports(reportCenterCategoryTitleKey(entry.categoryId), locale),
   ]
     .join(" ")
     .toLowerCase();
@@ -66,14 +67,7 @@ function ReportCard({
   onToggleFavorite: (id: string) => void;
 }) {
   const Icon = REPORT_CENTER_ICON_MAP[entry.icon];
-  const categoryTitle =
-    entry.categoryId === "sales"
-      ? tReports("salesReports", locale)
-      : entry.categoryId === "shifts"
-        ? tReports("shiftReports", locale)
-        : entry.categoryId === "products"
-          ? tReports("productReports", locale)
-          : tReports("inventoryReports", locale);
+  const categoryTitle = tReports(reportCenterCategoryTitleKey(entry.categoryId), locale);
   const planned = isPlannedReportCenterEntry(entry);
   return (
     <div className="relative rounded-lg border border-border bg-card transition hover:border-primary">
