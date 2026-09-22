@@ -74,6 +74,7 @@ function copy(locale?: string) {
     openingDenoms: t("ui.shift.denomination.opening"),
     openShift: t("ui.cash.session.opened").replace(/\.$/, ""),
     ownShiftReport: t("ui.own.shift.report"),
+    ownShiftHistoryReport: t("ui.own.shift.history.report"),
     payment: t("ui.payment"),
     paymentBreakdown: t("ui.payment.breakdown"),
     promotionUsage: t("ui.promotion.usage"),
@@ -511,6 +512,15 @@ export function OwnShiftReportModal({ locale, onBack, onClose, storeRole }: OwnS
           ) : null}
         </div>
       ) : null}
+
+      <div className="mb-4">
+        <a
+          className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-semibold text-primary underline-offset-2 hover:underline"
+          href="/reports/shifts/own-history"
+        >
+          {c.ownShiftHistoryReport}
+        </a>
+      </div>
 
       {error ? (
         <div className="rounded-md border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{error}</div>

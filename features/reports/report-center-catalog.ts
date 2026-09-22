@@ -131,6 +131,7 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     icon: "banknote",
     reuse: null,
     posHint: true,
+    planned: true,
   },
   {
     id: "shifts-cash-in-out",
@@ -142,6 +143,7 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     icon: "arrow-left-right",
     reuse: null,
     posHint: true,
+    planned: true,
   },
   {
     id: "products-sales",

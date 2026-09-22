@@ -39,8 +39,7 @@ function check(label: string, ok: boolean, extra = "") {
   console.log(`PASS: ${label}`);
 }
 
-const plannedIds = [
-];
+const plannedIds = ["shifts-cash-count", "shifts-cash-in-out"];
 const availableIds = REPORT_CENTER_ENTRIES.filter((entry) => !plannedIds.includes(entry.id)).map((entry) => entry.id);
 const centerClient = read("features/reports/components/report-center-client.tsx");
 const salesCatchAll = read("app/(dashboard)/reports/sales/[report]/page.tsx");
@@ -66,7 +65,7 @@ check(
 );
 check(
   "4. Available reports are not Planned",
-  availableIds.length === 16 &&
+  availableIds.length === 14 &&
     availableIds.every((id) => {
       const entry = REPORT_CENTER_ENTRIES.find((row) => row.id === id);
       return Boolean(entry && !isPlannedReportCenterEntry(entry));

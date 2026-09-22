@@ -83,6 +83,15 @@ export default function middleware(request: NextRequest, event: NextFetchEvent) 
     return NextResponse.next();
   }
 
+  // R7A: inject pathname for reports layout surgical Own Shift History gate.
+  if (pathname === "/reports" || pathname.startsWith("/reports/")) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-igo-pathname", pathname);
+    return NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+  }
+
   if (!pathname.startsWith("/dashboard")) {
     return NextResponse.next();
   }
@@ -96,6 +105,8 @@ export const config = {
     "/register",
     "/auth",
     "/dashboard/:path*",
+    "/reports",
+    "/reports/:path*",
     "/super-admin/:path*",
     "/api/super-admin/login",
     "/igo-admin/:path*",

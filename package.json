@@ -45,6 +45,7 @@
     "test:reports-r4": "tsx scripts/phase-reports-r4-inventory-reports-check.ts",
     "test:reports-r5": "tsx scripts/phase-reports-r5-stock-movement-valuation-check.ts",
     "test:reports-r6": "tsx scripts/phase-reports-r6-postsale-receipts-check.ts",
+    "test:reports-r7a": "tsx scripts/phase-reports-r7a-shift-reports-check.ts",
     "test:dashboard-loader": "tsx scripts/phase-perf-04-dashboard-loader-check.ts",
     "test:dashboard-critical": "tsx scripts/phase-perf-07-dashboard-critical-path-check.ts",
     "test:dashboard-roundtrips": "tsx scripts/phase-perf-10-dashboard-roundtrips-check.ts",
