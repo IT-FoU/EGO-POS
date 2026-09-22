@@ -152,7 +152,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "productSalesDesc",
     icon: "package",
     reuse: null,
-    planned: true,
   },
   {
     id: "products-categories",
@@ -163,7 +162,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "categorySalesDesc",
     icon: "tags",
     reuse: null,
-    planned: true,
   },
   {
     id: "products-performance",
@@ -174,7 +172,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "bestSlowSellersDesc",
     icon: "trending-up",
     reuse: null,
-    planned: true,
   },
   {
     id: "inventory-movements",
@@ -246,9 +243,6 @@ export function reportCenterEntriesForCategory(categoryId: ReportCenterCategoryI
 export const REPORT_CENTER_HREFS = REPORT_CENTER_ENTRIES.map((entry) => entry.href);
 
 export const REPORT_CENTER_PLANNED_HREFS = [
-  "/reports/products/sales",
-  "/reports/products/categories",
-  "/reports/products/performance",
   "/reports/inventory/on-hand",
   "/reports/inventory/low-stock",
 ] as const;

@@ -40,9 +40,6 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 const plannedIds = [
-  "products-sales",
-  "products-categories",
-  "products-performance",
   "inventory-on-hand",
   "inventory-low-stock",
 ];
@@ -57,7 +54,7 @@ const genericInventory = read("app/(dashboard)/reports/inventory/page.tsx");
 const shell = read("features/reports/components/report-page-shell.tsx");
 const calculator = read("features/cash-sessions/cash-session-calculator.ts");
 
-check("1. Five remaining Planned reports", REPORT_CENTER_PLANNED_HREFS.length === 5 && plannedIds.every((id) => REPORT_CENTER_ENTRIES.some((entry) => entry.id === id && entry.planned)));
+check("1. Two remaining Planned inventory reports", REPORT_CENTER_PLANNED_HREFS.length === 2 && plannedIds.every((id) => REPORT_CENTER_ENTRIES.some((entry) => entry.id === id && entry.planned)));
 check(
   "2. Planned hrefs stay dedicated",
   REPORT_CENTER_PLANNED_HREFS.every((href) => {
@@ -74,7 +71,7 @@ check(
 );
 check(
   "4. Available reports are not Planned",
-  availableIds.length === 11 &&
+  availableIds.length === 14 &&
     availableIds.every((id) => {
       const entry = REPORT_CENTER_ENTRIES.find((row) => row.id === id);
       return Boolean(entry && !isPlannedReportCenterEntry(entry));

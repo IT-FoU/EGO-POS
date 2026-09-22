@@ -127,7 +127,7 @@ check(
 );
 check(
   "8. Owner-verified missing reports are planned, not reused generic pages",
-  REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 5 &&
+  REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 2 &&
     REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse).length === 0 &&
     read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("ReportComingSoon") &&
     !read("app/(dashboard)/reports/sales/[report]/page.tsx").includes('redirect("/reports/sales")') &&
