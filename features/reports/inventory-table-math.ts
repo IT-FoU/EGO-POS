@@ -84,6 +84,7 @@ export type InventoryReportSummary = {
   lowStock: number;
   noReorderLevel: number;
   outOfStock: number;
+  productsWithoutCost: number;
   suggestedReorder: number;
   totalAvailable: number;
   totalOnHand: number;
@@ -100,6 +101,7 @@ export function emptyInventorySummary(): InventoryReportSummary {
     lowStock: 0,
     noReorderLevel: 0,
     outOfStock: 0,
+    productsWithoutCost: 0,
     suggestedReorder: 0,
     totalAvailable: 0,
     totalOnHand: 0,
@@ -113,6 +115,7 @@ export function summarizeInventoryRows(
   rows: Array<{
     alreadyOrdered?: boolean;
     available: number;
+    hasCost?: boolean;
     minStock: number;
     onHand: number;
     reserved: number;
@@ -133,6 +136,7 @@ export function summarizeInventoryRows(
     if (row.status === "out_of_stock") summary.outOfStock += 1;
     if (row.status === "no_reorder_level") summary.noReorderLevel += 1;
     if (row.alreadyOrdered) summary.alreadyOrdered += 1;
+    if (row.hasCost === false) summary.productsWithoutCost += 1;
     if (isLowStockCandidate(row.status)) {
       summary.suggestedReorder += 1;
       // Reorder qty / target stock are not persisted — do not invent estimated cost.

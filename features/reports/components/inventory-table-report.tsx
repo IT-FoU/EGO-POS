@@ -48,11 +48,13 @@ function ReportFrame({
   children,
   entryId,
   error,
+  errorKey = "errorInventoryTable",
   locale,
 }: {
   children?: ReactNode;
   entryId: string;
   error?: string;
+  errorKey?: string;
   locale: SupportedLocale;
 }) {
   const entry = findReportCenterEntry(entryId);
@@ -68,7 +70,7 @@ function ReportFrame({
       />
       {error ? (
         <ReportSheet>
-          <p className="py-8 text-center text-sm text-zinc-600">{t("errorInventoryTable", locale)}</p>
+          <p className="py-8 text-center text-sm text-zinc-600">{t(errorKey, locale)}</p>
         </ReportSheet>
       ) : children}
     </div>
@@ -369,8 +371,14 @@ function InventoryTable({
                 </td>
                 {data.showCost ? (
                   <>
-                    <td className={`${tdCell} ${numClass}`}>{money(row.unitCostLak)}</td>
-                    {!lowStock ? <td className={`${tdCell} ${numClass}`}>{money(row.stockValueLak)}</td> : null}
+                    <td className={`${tdCell} ${numClass}`}>
+                      {row.hasCost ? money(row.unitCostLak) : t("noCost", locale)}
+                    </td>
+                    {!lowStock ? (
+                      <td className={`${tdCell} ${numClass}`}>
+                        {row.hasCost ? money(row.stockValueLak) : "—"}
+                      </td>
+                    ) : null}
                   </>
                 ) : null}
                 {!lowStock ? <td className={tdCell}>{row.supplierName || "—"}</td> : null}
@@ -565,6 +573,70 @@ export function LowStockReportView({
             <SummaryStrip items={summaryItems} />
             {data.selectedProduct ? <DrillDown data={data} locale={locale} pathname={pathname} /> : null}
             <InventoryTable data={data} locale={locale} lowStock pathname={pathname} />
+            <Pager
+              locale={locale}
+              nextHref={data.page < data.pageCount ? inventoryTableHref(pathname, data.query, { page: data.page + 1 }) : undefined}
+              page={data.page}
+              pageCount={data.pageCount}
+              prevHref={data.page > 1 ? inventoryTableHref(pathname, data.query, { page: data.page - 1 }) : undefined}
+            />
+          </div>
+        </ReportSheet>
+      ) : null}
+    </ReportFrame>
+  );
+}
+
+export function StockValuationReportView({
+  data,
+  error,
+  locale,
+}: {
+  data?: InventoryOnHandResult & { valuationMethod?: string };
+  error?: string;
+  locale: SupportedLocale;
+}) {
+  const pathname = "/reports/inventory/valuation";
+  const summaryItems = useMemo(() => {
+    if (!data) return [];
+    const items = [
+      { key: "method", label: t("valuationMethod", locale), value: t("currentCostValuation", locale) },
+      { key: "products", label: t("totalProducts", locale), value: formatNumber(data.summary.totalProducts) },
+      { key: "onHand", label: t("colOnHand", locale), value: formatNumber(data.summary.totalOnHand) },
+      { key: "reserved", label: t("colReserved", locale), value: formatNumber(data.summary.totalReserved) },
+      { key: "available", label: t("colAvailable", locale), value: formatNumber(data.summary.totalAvailable) },
+    ];
+    if (data.showCost) {
+      items.push(
+        { key: "value", label: t("stockValue", locale), value: money(data.summary.totalStockValueLak) },
+        { key: "nocost", label: t("productsWithoutCost", locale), value: formatNumber(data.summary.productsWithoutCost) },
+      );
+    }
+    return items;
+  }, [data, locale]);
+
+  return (
+    <ReportFrame entryId="inventory-valuation" error={error} errorKey="errorValuationTable" locale={locale}>
+      {data ? (
+        <ReportSheet>
+          <div className="flex flex-col gap-4 px-6 py-5 sm:px-8">
+            <p className="text-sm font-medium text-zinc-800">
+              {t("currentInventoryValuation", locale)} — {t("currentCostValuation", locale)}
+            </p>
+            <InventoryFilters
+              exportHref={inventoryTableExportHref("/api/reports/inventory/valuation/export", data.query)}
+              filterOptions={data.filterOptions}
+              locale={locale}
+              pathname={pathname}
+              query={data.query}
+            />
+            <SummaryStrip items={summaryItems} />
+            {data.selectedProduct ? <DrillDown data={data} locale={locale} pathname={pathname} /> : null}
+            {data.rows.length === 0 ? (
+              <p className="py-8 text-center text-sm text-zinc-600">{t("emptyValuationTable", locale)}</p>
+            ) : (
+              <InventoryTable data={data} locale={locale} pathname={pathname} />
+            )}
             <Pager
               locale={locale}
               nextHref={data.page < data.pageCount ? inventoryTableHref(pathname, data.query, { page: data.page + 1 }) : undefined}

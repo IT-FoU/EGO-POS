@@ -340,3 +340,107 @@ export async function buildLowStockExcel(input: {
     },
   );
 }
+
+export async function buildStockValuationExcel(input: {
+  data: InventoryOnHandResult & { valuationMethod?: string };
+  locale: SupportedLocale;
+  storeName: string;
+}): Promise<SalesExcelFile> {
+  const { data, locale, storeName } = input;
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Stock Valuation");
+  metaBlock(sheet, locale, storeName, t("stockValuation", locale), data);
+  writeMeta(sheet, 9, t("valuationMethod", locale), t("currentCostValuation", locale));
+  const showCost = data.showCost;
+  const summaryItems = [
+    { label: t("totalProducts", locale), value: data.summary.totalProducts },
+    { label: t("colOnHand", locale), value: data.summary.totalOnHand },
+    { label: t("colReserved", locale), value: data.summary.totalReserved },
+    { label: t("colAvailable", locale), value: data.summary.totalAvailable },
+    ...(showCost
+      ? [
+          { label: t("stockValue", locale), value: data.summary.totalStockValueLak },
+          { label: t("productsWithoutCost", locale), value: data.summary.productsWithoutCost },
+        ]
+      : []),
+  ];
+  const tableStart = writeSummary(sheet, 11, summaryItems) + 2;
+  const columns: ColumnSpec[] = [
+    { header: t("colNo", locale), key: "no", kind: "int", width: 6 },
+    { header: t("colProduct", locale), key: "product", kind: "text", width: 28 },
+    { header: t("colSku", locale), key: "sku", kind: "text", width: 16 },
+    { header: t("colCategory", locale), key: "category", kind: "text", width: 16 },
+    { header: t("colBaseUnit", locale), key: "baseUnit", kind: "text", width: 12 },
+    { header: t("colOnHand", locale), key: "onHand", kind: "qty", width: 12 },
+    { header: t("colReserved", locale), key: "reserved", kind: "qty", width: 12 },
+    { header: t("colAvailable", locale), key: "available", kind: "qty", width: 12 },
+    ...(showCost
+      ? [
+          { header: t("unitCost", locale), key: "unitCost", kind: "text" as const, width: 12 },
+          { header: t("stockValue", locale), key: "stockValue", kind: "money" as const, width: 14 },
+          { header: t("costSource", locale), key: "costSource", kind: "text" as const, width: 16 },
+        ]
+      : []),
+    { header: t("supplier", locale), key: "supplier", kind: "text", width: 18 },
+    { header: t("colLastReceived", locale), key: "lastReceived", kind: "text", width: 18 },
+    { header: t("colLastMovement", locale), key: "lastMovement", kind: "text", width: 18 },
+  ];
+  const rows = data.rows.map((row, index) => ({
+    no: index + 1,
+    product: row.productName,
+    sku: row.sku,
+    category: row.categoryName,
+    baseUnit: row.baseUnit,
+    onHand: row.onHand,
+    reserved: row.reserved,
+    available: row.available,
+    unitCost: row.hasCost ? row.unitCostLak : t("noCost", locale),
+    stockValue: row.hasCost ? row.stockValueLak : "",
+    costSource: row.hasCost ? t("currentBaseUnitCost", locale) : t("noCost", locale),
+    supplier: row.supplierName,
+    lastReceived: row.lastReceivedAt ? row.lastReceivedAt.slice(0, 16).replace("T", " ") : "",
+    lastMovement: row.lastMovementAt ? row.lastMovementAt.slice(0, 16).replace("T", " ") : "",
+  }));
+  writeTable(sheet, tableStart, columns, rows, {
+    no: "",
+    product: t("total", locale),
+    sku: "",
+    category: "",
+    baseUnit: "",
+    onHand: data.totalRow.onHand,
+    reserved: data.totalRow.reserved,
+    available: data.totalRow.available,
+    unitCost: "",
+    stockValue: showCost ? data.totalRow.stockValueLak : "",
+    costSource: "",
+    supplier: data.totalRow.productCount,
+    lastReceived: "",
+    lastMovement: "",
+  });
+  return toFile(
+    workbook,
+    `EGO-POS-Stock-Valuation-${stamp(data.query)}.xlsx`,
+    "Stock Valuation",
+    columns.map((column) => column.header),
+    rows.length,
+    {
+      totalProducts: data.summary.totalProducts,
+      totalOnHand: data.summary.totalOnHand,
+      totalReserved: data.summary.totalReserved,
+      totalAvailable: data.summary.totalAvailable,
+      ...(showCost
+        ? {
+            totalStockValueLak: data.summary.totalStockValueLak,
+            productsWithoutCost: data.summary.productsWithoutCost,
+          }
+        : {}),
+    },
+    {
+      productCount: data.totalRow.productCount,
+      onHand: data.totalRow.onHand,
+      reserved: data.totalRow.reserved,
+      available: data.totalRow.available,
+      ...(showCost ? { stockValueLak: data.totalRow.stockValueLak } : {}),
+    },
+  );
+}

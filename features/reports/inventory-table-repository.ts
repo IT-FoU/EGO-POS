@@ -28,6 +28,7 @@ export type InventoryStockRow = {
   available: number;
   baseUnit: string;
   categoryName: string;
+  hasCost: boolean;
   lastMovementAt?: string;
   lastReceivedAt?: string;
   lastSoldAt?: string;
@@ -386,7 +387,9 @@ async function buildRows(
 
   for (const product of products as Array<Record<string, any>>) {
     const baseUnit = (product.units ?? []).find((unit: any) => unit.isBaseUnit) ?? product.units?.[0];
-    const unitCostLak = moneyLak(baseUnit?.costPriceLak ?? product.costPriceLak);
+    const rawCost = baseUnit?.costPriceLak ?? product.costPriceLak;
+    const hasCost = rawCost != null && Number.isFinite(Number(rawCost)) && Number(rawCost) > 0;
+    const unitCostLak = hasCost ? moneyLak(rawCost) : 0;
     const minStock = qtyNum(product.minStock);
     const supplierName = String(product.supplier?.companyName || product.supplier?.name || "");
     const categoryName = String(product.category?.nameEn || product.category?.nameLo || "");
@@ -416,6 +419,7 @@ async function buildRows(
         available,
         baseUnit: String(baseUnit?.unitName || "Piece"),
         categoryName,
+        hasCost,
         lastMovementAt,
         lastReceivedAt,
         lastSoldAt: lastSold.get(String(product.id)),
@@ -427,7 +431,7 @@ async function buildRows(
         reserved,
         sku: String(product.sku || product.productCode || ""),
         status,
-        stockValueLak: stockValueLak(onHand, unitCostLak),
+        stockValueLak: hasCost ? stockValueLak(onHand, unitCostLak) : 0,
         supplierName,
         unitCostLak,
         warehouseId,
@@ -448,6 +452,7 @@ async function buildRows(
         available,
         baseUnit: String(baseUnit?.unitName || "Piece"),
         categoryName,
+        hasCost,
         lastMovementAt: lastMovements.get(key),
         lastReceivedAt: lastReceived.get(key),
         lastSoldAt: lastSold.get(String(product.id)),
@@ -459,7 +464,7 @@ async function buildRows(
         reserved,
         sku: String(product.sku || product.productCode || ""),
         status,
-        stockValueLak: stockValueLak(onHand, unitCostLak),
+        stockValueLak: hasCost ? stockValueLak(onHand, unitCostLak) : 0,
         supplierName,
         unitCostLak,
         warehouseId: warehouse.id,
