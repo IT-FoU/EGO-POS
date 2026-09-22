@@ -122,3 +122,22 @@ export async function cashOutRequest(sessionId: string, amountLak: number, reaso
   });
   return mapToPosContext(await readJson(response));
 }
+
+/** R9A End Work — closes attendance only; does not close cash session. */
+export async function endAttendanceWorkRequest(note?: string) {
+  const response = await fetch("/api/pos/attendance/end-work", {
+    body: JSON.stringify({ note }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(cashSessionRequestError(payload));
+  }
+  return payload.data as {
+    endedAt: string;
+    id: string;
+    regularMinutes: number | null;
+    status: string;
+  };
+}

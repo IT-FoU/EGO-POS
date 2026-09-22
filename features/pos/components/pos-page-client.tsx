@@ -65,6 +65,7 @@ import {
   cashInRequest,
   cashOutRequest,
   closeCashSessionRequest,
+  endAttendanceWorkRequest,
   fetchCurrentCashSession,
   openCashSessionRequest,
 } from "@/features/pos/cash-session-client";
@@ -1675,6 +1676,21 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setCashCloseBusy(false);
         }
     }
+    function endAttendanceWork() {
+        if (demoMode) {
+            setMessage(t("ui.end.work"));
+            return;
+        }
+        startTransition(async () => {
+            try {
+                await endAttendanceWorkRequest();
+                setMessage(t("ui.end.work"));
+                router.refresh();
+            } catch (error) {
+                setMessage(error instanceof Error ? error.message : t("ui.end.work.failed"));
+            }
+        });
+    }
     async function submitCashMovement(input: { amountLak: number; reason: string; type: CashMovementType }) {
         if (!claimCashMovementSubmit(cashInOutInFlightRef)) {
             return;
@@ -2262,6 +2278,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           qrTransferSales={qrTransferSales}
           sessionStatus={activeCashSession.status}
           onConfirmClosing={confirmClosingSummary}
+          onEndWork={endAttendanceWork}
           onOpenSession={openCashShiftSession}
           onToggleExpanded={() => setStaffControlExpanded((current) => !current)}
           onUpdateClosingCashCount={updateClosingCashCount}
@@ -2672,6 +2689,7 @@ function StaffControl({
   openingCashCounts,
   openingCashTotal,
   onConfirmClosing,
+  onEndWork,
   onOpenSession,
   onToggleExpanded,
   onUpdateClosingCashCount,
@@ -2693,6 +2711,7 @@ function StaffControl({
   openingCashCounts: Record<number, number>;
   openingCashTotal: number;
   onConfirmClosing: () => void;
+  onEndWork: () => void;
   onOpenSession: () => void;
   onToggleExpanded: () => void;
   onUpdateClosingCashCount: (denomination: number, quantity: number) => void;
@@ -2823,15 +2842,26 @@ function StaffControl({
               <div>{fillPosCopy(t("ui.cash.difference.amount"), { amount: formatLak(cashDifference) })}</div>
             </div>
             {sessionOpen ? (
-              <button
-                className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                data-testid="confirm-closing-summary"
-                disabled={cashCloseBusy}
-                type="button"
-                onClick={onConfirmClosing}
-              >
-                {cashCloseBusy ? t("ui.confirming") : t("ui.confirm.closing.summary")}
-              </button>
+              <>
+                <button
+                  className="mt-2 h-9 w-full rounded-md border border-border bg-background text-xs font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid="end-work"
+                  disabled={cashCloseBusy}
+                  type="button"
+                  onClick={onEndWork}
+                >
+                  {t("ui.end.work")}
+                </button>
+                <button
+                  className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid="confirm-closing-summary"
+                  disabled={cashCloseBusy}
+                  type="button"
+                  onClick={onConfirmClosing}
+                >
+                  {cashCloseBusy ? t("ui.confirming") : t("ui.confirm.closing.summary")}
+                </button>
+              </>
             ) : null}
           </div>
         </>

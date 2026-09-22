@@ -267,6 +267,8 @@ model Company {
   qrPaymentAccounts QrPaymentAccount[]
   branchFavoriteProducts BranchFavoriteProduct[]
   reorderManualItems ReorderManualItem[]
+  staffWorkSchedules StaffWorkSchedule[]
+  staffAttendanceSessions StaffAttendanceSession[]
 
   @@map("companies")
 }
@@ -324,6 +326,7 @@ model Branch {
   storeActivityLogs StoreActivityLog[]
   companyUsers CompanyUser[]
   branchFavoriteProducts BranchFavoriteProduct[]
+  staffAttendanceSessions StaffAttendanceSession[]
 
   @@index([companyId])
   @@map("branches")
@@ -417,6 +420,8 @@ model User {
   storeActivityLogs StoreActivityLog[]
   loginHistory    LoginHistory[]
   favoriteProducts FavoriteProduct[]
+  staffWorkSchedules StaffWorkSchedule[]
+  staffAttendanceSessions StaffAttendanceSession[]
 
   @@map("users")
 }
@@ -1388,9 +1393,56 @@ model CashSession {
   company        Company   @relation(fields: [companyId], references: [id])
   branch         Branch    @relation(fields: [branchId], references: [id])
   transactions   CashTransaction[]
+  attendanceSessions StaffAttendanceSession[]
 
   @@index([companyId, cashierId])
   @@map("cash_sessions")
+}
+
+/// R9A company default or per-employee weekday work hours (no overnight).
+model StaffWorkSchedule {
+  id          String   @id @default(cuid())
+  companyId   String   @map("company_id")
+  userId      String?  @map("user_id")
+  weekday     Int      @db.SmallInt
+  startMinute Int      @map("start_minute")
+  endMinute   Int      @map("end_minute")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId])
+  @@map("staff_work_schedules")
+}
+
+/// R9A attendance session — separate from cash_sessions; linked optionally via cash_session_id.
+model StaffAttendanceSession {
+  id             String    @id @default(cuid())
+  companyId      String    @map("company_id")
+  branchId       String    @map("branch_id")
+  userId         String    @map("user_id")
+  businessDate   DateTime  @map("business_date") @db.Date
+  startedAt      DateTime  @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  endSource      String?   @map("end_source")
+  cashSessionId  String?   @map("cash_session_id")
+  lateMinutes    Int       @default(0) @map("late_minutes")
+  regularMinutes Int?      @map("regular_minutes")
+  status         String
+  note           String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch         Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashSession    CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, businessDate])
+  @@index([companyId, userId, businessDate])
+  @@index([companyId, branchId, businessDate])
+  @@index([cashSessionId])
+  @@map("staff_attendance_sessions")
 }
 
 model CashTransaction {

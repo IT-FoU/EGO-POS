@@ -21,6 +21,10 @@ import type {
   CloseCashSessionInput,
   OpenCashSessionInput,
 } from "@/features/cash-sessions/types";
+import {
+  assertOpenAttendanceForSale,
+  createOpenAttendanceInTx,
+} from "@/features/attendance/prisma-repository";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, withTenantTransaction } from "@/lib/db/write-context";
@@ -426,6 +430,14 @@ export async function openCashSession(input: OpenCashSessionInput, tenant: Tenan
         include: { transactions: true },
       });
 
+      // R9A: Start Work must create attendance in the same transaction as cash open.
+      await createOpenAttendanceInTx(tx, tenant, {
+        branchId: scope.branchId,
+        cashSessionId: session.id,
+        note: input.note,
+        startedAt: session.openedAt ? new Date(session.openedAt) : new Date(),
+      });
+
       const totals = await loadSessionTotals(tx, session);
       return mapSessionSummary(session, totals);
     },
@@ -559,6 +571,8 @@ export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Re
   if (!session) {
     throw new Error("An open cash session is required before completing a sale.");
   }
+
+  await assertOpenAttendanceForSale(tenant, tx, session.id);
 
   return session;
 }

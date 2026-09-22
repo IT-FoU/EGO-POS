@@ -48,6 +48,8 @@
     "test:reports-r7a": "tsx scripts/phase-reports-r7a-shift-reports-check.ts",
     "test:reports-r7b": "tsx scripts/phase-reports-r7b-cash-reports-check.ts",
     "test:reports-r8": "tsx scripts/phase-reports-r8-reorder-check.ts",
+    "test:r9a-attendance": "tsx scripts/phase-r9a-attendance-foundation-check.ts",
+    "test:r9a-attendance-qa": "tsx scripts/phase-r9a-attendance-qa-check.ts",
     "test:dashboard-loader": "tsx scripts/phase-perf-04-dashboard-loader-check.ts",
     "test:dashboard-critical": "tsx scripts/phase-perf-07-dashboard-critical-path-check.ts",
     "test:dashboard-roundtrips": "tsx scripts/phase-perf-10-dashboard-roundtrips-check.ts",
