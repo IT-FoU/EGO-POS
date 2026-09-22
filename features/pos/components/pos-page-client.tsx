@@ -15,6 +15,7 @@ import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashS
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
 import { MyDayOffPanel } from "@/features/pos/components/my-day-off-modal";
+import { MyOtPanel } from "@/features/pos/components/my-ot-modal";
 import { PosSmallModal } from "@/features/pos/components/pos-small-modal";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import {
@@ -300,6 +301,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const recentSalesRequestId = useRef(0);
     const [ownShiftReportOpen, setOwnShiftReportOpen] = useState(false);
     const [myDayOffOpen, setMyDayOffOpen] = useState(false);
+    const [myOtOpen, setMyOtOpen] = useState(false);
     const [managerApprovalRequest, setManagerApprovalRequest] = useState<ManagerApprovalRequest | null>(null);
     const [managerApprovalPin, setManagerApprovalPin] = useState("");
     const [managerApprovalReason, setManagerApprovalReason] = useState("");
@@ -1686,7 +1688,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         startTransition(async () => {
             try {
                 await endAttendanceWorkRequest();
-                setMessage(t("ui.end.work"));
+                setMessage(t("ui.work.shift.ended"));
                 router.refresh();
             } catch (error) {
                 setMessage(error instanceof Error ? error.message : t("ui.end.work.failed"));
@@ -2099,6 +2101,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           <MoreMenuButton label={t("ui.my.day.off")} onClick={() => {
             setMyDayOffOpen(true);
         }}/>
+          <MoreMenuButton label={t("ui.my.ot")} onClick={() => {
+            setMyOtOpen(true);
+        }}/>
           <MoreMenuButton label={t("ui.member.search")} onClick={() => {
             setMemberSearchOpen(true);
         }}/>
@@ -2371,6 +2376,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           onClose={() => closeMoreChild(() => setMyDayOffOpen(false))}
         >
           <MyDayOffPanel />
+        </PosModal>
+      ) : null}
+      {myOtOpen ? (
+        <PosModal
+          title={t("ui.my.ot")}
+          onBack={() => backFromMoreChild(() => setMyOtOpen(false))}
+          onClose={() => closeMoreChild(() => setMyOtOpen(false))}
+        >
+          <MyOtPanel />
         </PosModal>
       ) : null}
 

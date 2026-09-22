@@ -16,6 +16,8 @@ export const ATTENDANCE_STATUS = {
 
 export const ATTENDANCE_END_SOURCE = {
   MANUAL: "manual",
+  AUTO_SCHEDULE: "auto_schedule",
+  AUTO_OT: "auto_ot",
 } as const;
 
 export type StaffScheduleRow = {

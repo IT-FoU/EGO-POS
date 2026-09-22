@@ -5,7 +5,6 @@ import {
   assertValidScheduleMinutes,
   assertValidWeekday,
   computeLateMinutes,
-  computeRegularMinutes,
   parseBusinessDateOnly,
   resolveScheduleForUser,
   weekdayForBusinessInstant,
@@ -15,17 +14,25 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { withTenantTransaction } from "@/lib/db/write-context";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import { applyDayOffOnStartWorkInTx } from "@/features/day-off/prisma-repository";
+import {
+  computeAndApplyAutoEndAtForOpenSessionInTx,
+  computeClosePersistence,
+  reconcileDueAutoEndForUser,
+} from "@/features/ot/prisma-repository";
 
 const db = prisma as any;
 
 export type AttendanceSessionSummary = {
+  autoEndAt: string | null;
   branchId: string;
   businessDate: string;
   cashSessionId: string | null;
+  dayOffKind: string | null;
   endSource: string | null;
   endedAt: string | null;
   id: string;
   lateMinutes: number;
+  otMinutes: number | null;
   regularMinutes: number | null;
   startedAt: string;
   status: "open" | "closed";
@@ -38,13 +45,16 @@ function mapAttendance(row: Record<string, any>): AttendanceSessionSummary {
       ? row.businessDate.toISOString().slice(0, 10)
       : String(row.businessDate).slice(0, 10);
   return {
+    autoEndAt: row.autoEndAt ? new Date(row.autoEndAt).toISOString() : null,
     branchId: String(row.branchId),
     businessDate,
     cashSessionId: row.cashSessionId ? String(row.cashSessionId) : null,
+    dayOffKind: row.dayOffKind ? String(row.dayOffKind) : null,
     endSource: row.endSource ? String(row.endSource) : null,
     endedAt: row.endedAt ? new Date(row.endedAt).toISOString() : null,
     id: String(row.id),
     lateMinutes: Number(row.lateMinutes ?? 0),
+    otMinutes: row.otMinutes == null ? null : Number(row.otMinutes),
     regularMinutes: row.regularMinutes == null ? null : Number(row.regularMinutes),
     startedAt: new Date(row.startedAt).toISOString(),
     status: row.status === ATTENDANCE_STATUS.CLOSED ? "closed" : "open",
@@ -204,13 +214,21 @@ export async function createOpenAttendanceInTx(
   });
 
   const refreshed = await tx.staffAttendanceSession.findFirst({ where: { id: row.id } });
-  return mapAttendance(refreshed ?? row);
+  // R9C: set auto_end_at from schedule / OT / Day Off OT grant.
+  if (refreshed) {
+    await computeAndApplyAutoEndAtForOpenSessionInTx(tx, tenant.companyId, refreshed);
+  }
+  const withAutoEnd = await tx.staffAttendanceSession.findFirst({ where: { id: row.id } });
+  return mapAttendance(withAutoEnd ?? refreshed ?? row);
 }
 
 export async function endAttendanceWork(
   tenant: TenantContext,
   input?: { note?: string },
 ): Promise<AttendanceSessionSummary> {
+  // R9C lazy Auto End safety net before manual End.
+  await reconcileDueAutoEndForUser(tenant).catch(() => null);
+
   return withTenantTransaction({
     action: "end_work",
     module: "attendance",
@@ -231,13 +249,22 @@ export async function endAttendanceWork(
       }
 
       const endedAt = new Date();
-      const regularMinutes = computeRegularMinutes(new Date(open.startedAt), endedAt);
+      const computed = await computeClosePersistence(
+        tx,
+        tenant.companyId,
+        open,
+        endedAt,
+        ATTENDANCE_END_SOURCE.MANUAL,
+      );
       const closed = await tx.staffAttendanceSession.update({
         data: {
-          endSource: ATTENDANCE_END_SOURCE.MANUAL,
-          endedAt,
+          autoEndAt: null,
+          endSource: computed.endSource,
+          endedAt: computed.endedAt,
           note: input?.note?.trim() ? input.note.trim() : open.note,
-          regularMinutes,
+          otApprovalId: computed.otApprovalId,
+          otMinutes: computed.otMinutes,
+          regularMinutes: computed.regularMinutes,
           status: ATTENDANCE_STATUS.CLOSED,
         },
         where: { id: open.id },
@@ -252,6 +279,9 @@ export async function assertOpenAttendanceForSale(
   tx: Record<string, any>,
   cashSessionId: string,
 ) {
+  // R9C: if Auto End is due, close before sale gate check.
+  await reconcileDueAutoEndForUser(tenant).catch(() => null);
+
   const scope = await resolveTenantScope(tenant, tx);
   const session = await tx.staffAttendanceSession.findFirst({
     where: {

@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "egopos",
-  "main": ".open-next/worker.js",
+  "main": "cloudflare-custom-worker.ts",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": [
     "nodejs_compat",
@@ -17,6 +17,11 @@
       "service": "egopos"
     }
   ],
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
   "vars": {
     "IGO_DEMO_MODE": "false",
     "NEXTAUTH_URL": "https://egopos.i-goto.workers.dev"

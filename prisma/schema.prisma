@@ -273,6 +273,8 @@ model Company {
   staffDayOffQuotaPolicies StaffDayOffQuotaPolicy[]
   staffDayOffMonths StaffDayOffMonth[]
   staffDayOffRequests StaffDayOffRequest[]
+  staffOtWeeklyPolicies StaffOtWeeklyPolicy[]
+  staffOtApprovals StaffOtApproval[]
 
   @@map("companies")
 }
@@ -332,6 +334,7 @@ model Branch {
   branchFavoriteProducts BranchFavoriteProduct[]
   staffAttendanceSessions StaffAttendanceSession[]
   staffDayOffRequests StaffDayOffRequest[]
+  staffOtApprovals StaffOtApproval[]
 
   @@index([companyId])
   @@map("branches")
@@ -431,6 +434,8 @@ model User {
   staffDayOffQuotaPolicies StaffDayOffQuotaPolicy[]
   staffDayOffMonths StaffDayOffMonth[]
   staffDayOffRequests StaffDayOffRequest[]
+  staffOtWeeklyPolicies StaffOtWeeklyPolicy[]
+  staffOtApprovals StaffOtApproval[]
 
   @@map("users")
 }
@@ -1438,11 +1443,16 @@ model StaffAttendanceSession {
   cashSessionId  String?   @map("cash_session_id")
   lateMinutes    Int       @default(0) @map("late_minutes")
   regularMinutes Int?      @map("regular_minutes")
+  /// R9C: NULL = pre-R9C unknown; 0+ = computed OT minutes after R9C close.
+  otMinutes      Int?      @map("ot_minutes")
   status         String
   note           String?
   /// R9B: weekly | quota | special when Worked on Day Off.
   dayOffKind     String?   @map("day_off_kind")
   dayOffRequestId String?  @map("day_off_request_id")
+  /// R9C: intended Auto End instant for open sessions.
+  autoEndAt      DateTime? @map("auto_end_at")
+  otApprovalId   String?   @map("ot_approval_id")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1450,13 +1460,63 @@ model StaffAttendanceSession {
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   cashSession    CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   dayOffRequest  StaffDayOffRequest? @relation(fields: [dayOffRequestId], references: [id], onDelete: SetNull)
+  otApproval     StaffOtApproval? @relation(fields: [otApprovalId], references: [id], onDelete: SetNull)
 
   @@index([companyId, businessDate])
   @@index([companyId, userId, businessDate])
   @@index([companyId, branchId, businessDate])
   @@index([cashSessionId])
   @@index([dayOffRequestId])
+  @@index([otApprovalId])
   @@map("staff_attendance_sessions")
+}
+
+/// R9C weekday OT template (NOT approval).
+model StaffOtWeeklyPolicy {
+  id          String   @id @default(cuid())
+  companyId   String   @map("company_id")
+  userId      String?  @map("user_id")
+  weekday     Int      @db.SmallInt
+  enabled     Boolean  @default(true)
+  startMinute Int      @map("start_minute")
+  endMinute   Int      @map("end_minute")
+  updatedBy   String?  @map("updated_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId])
+  @@map("staff_ot_weekly_policies")
+}
+
+/// R9C direct OT grant for one employee + business date.
+model StaffOtApproval {
+  id              String    @id @default(cuid())
+  companyId       String    @map("company_id")
+  branchId        String    @map("branch_id")
+  userId          String    @map("user_id")
+  businessDate    DateTime  @map("business_date") @db.Date
+  startMinute     Int       @map("start_minute")
+  endMinute       Int       @map("end_minute")
+  status          String
+  approvedBy      String    @map("approved_by")
+  approvedAt      DateTime  @map("approved_at")
+  cancelledBy     String?   @map("cancelled_by")
+  cancelledAt     DateTime? @map("cancelled_at")
+  note            String?
+  templateWeekday Int?      @map("template_weekday") @db.SmallInt
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attendanceSessions StaffAttendanceSession[]
+
+  @@index([companyId, businessDate, status])
+  @@index([companyId, userId, businessDate])
+  @@index([companyId, branchId, status])
+  @@map("staff_ot_approvals")
 }
 
 /// R9B fixed weekly rest day (does not consume monthly quota).
