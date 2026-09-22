@@ -129,12 +129,24 @@ async function createIsolatedTenant(tx: Tx, label: string) {
       userId: user.id,
     },
   });
-  await tx.cashSession.create({
+  const session = await tx.cashSession.create({
     data: {
       branchId: branch.id,
       cashierId: user.id,
       companyId: company.id,
       openingCash: OPENING_CASH,
+    },
+  });
+  await tx.staffAttendanceSession.create({
+    data: {
+      branchId: branch.id,
+      businessDate: new Date(),
+      cashSessionId: session.id,
+      companyId: company.id,
+      lateMinutes: 0,
+      startedAt: session.openedAt ?? new Date(),
+      status: "open",
+      userId: user.id,
     },
   });
 
