@@ -63,8 +63,8 @@ const skeletonHrefs = [
   "/reports/sales/receipts",
   "/reports/shifts/summary",
   "/reports/shifts/own-history",
-  "/reports/shifts/cash-count",
-  "/reports/shifts/cash-in-out",
+  "/reports/shifts/cash-counts",
+  "/reports/shifts/cash-movements",
   "/reports/inventory/movements",
   "/reports/inventory/valuation",
 ];

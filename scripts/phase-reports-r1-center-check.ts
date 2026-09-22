@@ -50,8 +50,8 @@ const requiredHrefs = [
   "/reports/sales/receipts",
   "/reports/shifts/summary",
   "/reports/shifts/own-history",
-  "/reports/shifts/cash-count",
-  "/reports/shifts/cash-in-out",
+  "/reports/shifts/cash-counts",
+  "/reports/shifts/cash-movements",
   "/reports/products/sales",
   "/reports/products/categories",
   "/reports/products/performance",
@@ -127,9 +127,7 @@ check(
 );
 check(
   "8. Owner-verified missing reports are planned, not reused generic pages",
-  REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).every(
-    (entry) => entry.id === "shifts-cash-count" || entry.id === "shifts-cash-in-out",
-  ) &&
+  REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 0 &&
     REPORT_CENTER_ENTRIES.filter((entry) => entry.reuse).length === 0 &&
     read("app/(dashboard)/reports/sales/[report]/page.tsx").includes("ReportComingSoon") &&
     !read("app/(dashboard)/reports/sales/[report]/page.tsx").includes('redirect("/reports/sales")') &&

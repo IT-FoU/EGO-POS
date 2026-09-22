@@ -154,12 +154,12 @@ check(
 
 const summaryEntry = findReportCenterEntryByHref("/reports/shifts/summary");
 const ownEntry = findReportCenterEntryByHref("/reports/shifts/own-history");
-const cashCountEntry = findReportCenterEntryByHref("/reports/shifts/cash-count");
+const cashCountEntry = findReportCenterEntryByHref("/reports/shifts/cash-counts");
 check("7. Shift Summary not planned", Boolean(summaryEntry) && !isPlannedReportCenterEntry(summaryEntry!));
 check("8. Own Shift History not planned", Boolean(ownEntry) && !isPlannedReportCenterEntry(ownEntry!));
-check("9. Cash Shift Count remains planned (R7B)", Boolean(cashCountEntry) && isPlannedReportCenterEntry(cashCountEntry!));
-const cashInOutEntry = findReportCenterEntryByHref("/reports/shifts/cash-in-out");
-check("9b. Cash In/Out remains planned", Boolean(cashInOutEntry) && isPlannedReportCenterEntry(cashInOutEntry!));
+check("9. Cash Shift Count is live (R7B)", Boolean(cashCountEntry) && !isPlannedReportCenterEntry(cashCountEntry!));
+const cashInOutEntry = findReportCenterEntryByHref("/reports/shifts/cash-movements");
+check("9b. Cash In/Out is live (R7B)", Boolean(cashInOutEntry) && !isPlannedReportCenterEntry(cashInOutEntry!));
 
 const layout = read("app/(dashboard)/reports/layout.tsx");
 const middleware = read("middleware.ts");

@@ -162,9 +162,7 @@ check(
   REPORT_CENTER_PLANNED_HREFS.length === 0 &&
     !isPlannedReportCenterEntry(findReportCenterEntryByHref("/reports/inventory/on-hand")!) &&
     !isPlannedReportCenterEntry(findReportCenterEntryByHref("/reports/inventory/low-stock")!) &&
-    REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).every(
-      (entry) => entry.id === "shifts-cash-count" || entry.id === "shifts-cash-in-out",
-    ),
+    REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 0,
 );
 check(
   "3. Shared STEP9 semantics reused",
