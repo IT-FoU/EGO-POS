@@ -69,8 +69,6 @@ const skeletonHrefs = [
   "/reports/inventory/valuation",
 ];
 const redirectHrefs = [
-  "/reports/inventory/on-hand",
-  "/reports/inventory/low-stock",
 ];
 const fullPageFiles = [
   salesPage,

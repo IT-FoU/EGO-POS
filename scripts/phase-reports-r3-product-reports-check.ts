@@ -161,10 +161,8 @@ check(
     existsSync(join(ROOT, "app/api/reports/products/performance/export/route.ts")),
 );
 check(
-  "2. Remaining Planned reports are inventory only",
-  REPORT_CENTER_PLANNED_HREFS.length === 2 &&
-    REPORT_CENTER_PLANNED_HREFS.includes("/reports/inventory/on-hand") &&
-    REPORT_CENTER_PLANNED_HREFS.includes("/reports/inventory/low-stock"),
+  "2. Remaining Planned inventory reports cleared by R4",
+  REPORT_CENTER_PLANNED_HREFS.length === 0,
 );
 check(
   "3. R2 lifecycle reused; current product cost is not used for sold cost",

@@ -158,9 +158,9 @@ check(
     existsSync(join(ROOT, "app/(dashboard)/reports/sales/daily/loading.tsx")),
 );
 check(
-  "2. Remaining inventory reports stay Planned",
-  REPORT_CENTER_PLANNED_HREFS.length === 2 &&
-    REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 2,
+  "2. Remaining inventory planned shells cleared for on-hand/low-stock",
+  REPORT_CENTER_PLANNED_HREFS.length === 0 &&
+    REPORT_CENTER_ENTRIES.filter((entry) => entry.planned).length === 0,
 );
 check(
   "3. Shared STEP9 semantics reused",

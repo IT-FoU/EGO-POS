@@ -192,7 +192,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "stockOnHandDesc",
     icon: "warehouse",
     reuse: null,
-    planned: true,
   },
   {
     id: "inventory-low-stock",
@@ -203,7 +202,6 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     descriptionKey: "lowStockReorderDesc",
     icon: "alert-triangle",
     reuse: null,
-    planned: true,
   },
   {
     id: "inventory-valuation",
@@ -242,11 +240,8 @@ export function reportCenterEntriesForCategory(categoryId: ReportCenterCategoryI
 
 export const REPORT_CENTER_HREFS = REPORT_CENTER_ENTRIES.map((entry) => entry.href);
 
-export const REPORT_CENTER_PLANNED_HREFS = [
-  "/reports/inventory/on-hand",
-  "/reports/inventory/low-stock",
-] as const;
+export const REPORT_CENTER_PLANNED_HREFS = [] as const;
 
 export function isPlannedReportCenterEntry(entry: Pick<ReportCenterEntry, "planned" | "href">) {
-  return Boolean(entry.planned) || REPORT_CENTER_PLANNED_HREFS.includes(entry.href as (typeof REPORT_CENTER_PLANNED_HREFS)[number]);
+  return Boolean(entry.planned) || REPORT_CENTER_PLANNED_HREFS.includes(entry.href as never);
 }

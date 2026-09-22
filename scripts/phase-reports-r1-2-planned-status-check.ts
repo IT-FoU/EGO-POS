@@ -40,8 +40,6 @@ function check(label: string, ok: boolean, extra = "") {
 }
 
 const plannedIds = [
-  "inventory-on-hand",
-  "inventory-low-stock",
 ];
 const availableIds = REPORT_CENTER_ENTRIES.filter((entry) => !plannedIds.includes(entry.id)).map((entry) => entry.id);
 const centerClient = read("features/reports/components/report-center-client.tsx");
@@ -54,16 +52,13 @@ const genericInventory = read("app/(dashboard)/reports/inventory/page.tsx");
 const shell = read("features/reports/components/report-page-shell.tsx");
 const calculator = read("features/cash-sessions/cash-session-calculator.ts");
 
-check("1. Two remaining Planned inventory reports", REPORT_CENTER_PLANNED_HREFS.length === 2 && plannedIds.every((id) => REPORT_CENTER_ENTRIES.some((entry) => entry.id === id && entry.planned)));
+check("1. No remaining Planned reports", REPORT_CENTER_PLANNED_HREFS.length === 0 && plannedIds.every((id) => REPORT_CENTER_ENTRIES.some((entry) => entry.id === id && entry.planned)));
 check(
   "2. Planned hrefs stay dedicated",
-  REPORT_CENTER_PLANNED_HREFS.every((href) => {
-    const entry = findReportCenterEntryByHref(href);
-    return Boolean(entry && isPlannedReportCenterEntry(entry) && entry.reuse === null && entry.href === href);
-  }),
+  REPORT_CENTER_PLANNED_HREFS.length === 0,
 );
 check(
-  "3. Center badge uses Planned for the eight only",
+  "3. Center badge uses Planned helper for any remaining planned entries",
   centerClient.includes('tReports("planned"') &&
     centerClient.includes("isPlannedReportCenterEntry") &&
     centerClient.includes('tReports("reportReady"') &&
@@ -71,7 +66,7 @@ check(
 );
 check(
   "4. Available reports are not Planned",
-  availableIds.length === 14 &&
+  availableIds.length === 16 &&
     availableIds.every((id) => {
       const entry = REPORT_CENTER_ENTRIES.find((row) => row.id === id);
       return Boolean(entry && !isPlannedReportCenterEntry(entry));
