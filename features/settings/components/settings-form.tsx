@@ -36,6 +36,7 @@ import {
 import { publishCustomerDisplayQrCatalog } from "@/features/pos/customer-display-qr";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { StaffControlSection } from "@/features/settings/components/staff-control-section";
+import { DayOffSettingsPanel } from "@/features/day-off/components/day-off-settings-panel";
 import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
@@ -463,6 +464,8 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
           </section>}
         onNotify={setMessage}
       />
+
+      <DayOffSettingsPanel />
 
       <section className="rounded-lg border border-border bg-card p-5">
         <SectionTitle icon={Percent} title={tSettings("taxVatSettings", locale)}/>

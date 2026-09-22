@@ -14,6 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import type { HeldBillCartSnapshot, HeldSale, PaymentMode, PosCartItem, PosCashSessionContext, PosCustomer, PosDisplayState, PosLoyaltySettings, PosProduct, PosProductUnit, PosPromotion, PosReceiptSettings, QrBank, } from "@/features/pos/types";
 import { PosProductImage } from "@/features/pos/components/pos-product-image";
 import { OwnShiftReportModal } from "@/features/pos/components/own-shift-report-drawer";
+import { MyDayOffPanel } from "@/features/pos/components/my-day-off-modal";
 import { PosSmallModal } from "@/features/pos/components/pos-small-modal";
 import { PosWorkspaceModal } from "@/features/pos/components/pos-workspace-modal";
 import {
@@ -298,6 +299,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [recentSalesError, setRecentSalesError] = useState<string | null>(null);
     const recentSalesRequestId = useRef(0);
     const [ownShiftReportOpen, setOwnShiftReportOpen] = useState(false);
+    const [myDayOffOpen, setMyDayOffOpen] = useState(false);
     const [managerApprovalRequest, setManagerApprovalRequest] = useState<ManagerApprovalRequest | null>(null);
     const [managerApprovalPin, setManagerApprovalPin] = useState("");
     const [managerApprovalReason, setManagerApprovalReason] = useState("");
@@ -2094,6 +2096,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           <MoreMenuButton label={t("ui.own.shift.report")} onClick={() => {
             setOwnShiftReportOpen(true);
         }}/>
+          <MoreMenuButton label={t("ui.my.day.off")} onClick={() => {
+            setMyDayOffOpen(true);
+        }}/>
           <MoreMenuButton label={t("ui.member.search")} onClick={() => {
             setMemberSearchOpen(true);
         }}/>
@@ -2359,6 +2364,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         />
       ) : null}
       {ownShiftReportOpen ? <OwnShiftReportModal key={ownShiftReportEpoch} storeRole={posPermissionPolicy.role} onBack={() => backFromMoreChild(() => setOwnShiftReportOpen(false))} onClose={() => closeMoreChild(() => setOwnShiftReportOpen(false))} /> : null}
+      {myDayOffOpen ? (
+        <PosModal
+          title={t("ui.my.day.off")}
+          onBack={() => backFromMoreChild(() => setMyDayOffOpen(false))}
+          onClose={() => closeMoreChild(() => setMyDayOffOpen(false))}
+        >
+          <MyDayOffPanel />
+        </PosModal>
+      ) : null}
 
       {receiptOpen && lastReceipt ? (<ReceiptPreview autoPrint={receiptAutoPrint} branchName={lastReceipt.branchName} cashierName={lastReceipt.cashierName} cartItems={lastReceipt.cartItems} changeAmount={lastReceipt.changeAmount} createdAt={lastReceipt.createdAt} customerName={lastReceipt.customerName} discountTotal={lastReceipt.discountTotal} isFirstPrint={receiptIsFirstPrint} onBack={moreMenuOpen && !recentSalesOpen ? () => backFromMoreChild(() => { setReceiptOpen(false); setReceiptAutoPrint(false); }) : undefined} onClose={() => {
             setReceiptOpen(false);

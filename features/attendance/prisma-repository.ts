@@ -14,6 +14,7 @@ import {
 import type { TenantContext } from "@/lib/db/write-context";
 import { withTenantTransaction } from "@/lib/db/write-context";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
+import { applyDayOffOnStartWorkInTx } from "@/features/day-off/prisma-repository";
 
 const db = prisma as any;
 
@@ -193,7 +194,17 @@ export async function createOpenAttendanceInTx(
       userId: tenant.userId,
     },
   });
-  return mapAttendance(row);
+
+  // R9B: classify Worked on Day Off without blocking Start Work / sale gate.
+  await applyDayOffOnStartWorkInTx(tx, tenant, {
+    attendanceId: String(row.id),
+    businessDate,
+    startedAt,
+    userId: tenant.userId,
+  });
+
+  const refreshed = await tx.staffAttendanceSession.findFirst({ where: { id: row.id } });
+  return mapAttendance(refreshed ?? row);
 }
 
 export async function endAttendanceWork(

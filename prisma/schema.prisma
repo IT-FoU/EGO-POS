@@ -269,6 +269,10 @@ model Company {
   reorderManualItems ReorderManualItem[]
   staffWorkSchedules StaffWorkSchedule[]
   staffAttendanceSessions StaffAttendanceSession[]
+  staffWeeklyDayOffs StaffWeeklyDayOff[]
+  staffDayOffQuotaPolicies StaffDayOffQuotaPolicy[]
+  staffDayOffMonths StaffDayOffMonth[]
+  staffDayOffRequests StaffDayOffRequest[]
 
   @@map("companies")
 }
@@ -327,6 +331,7 @@ model Branch {
   companyUsers CompanyUser[]
   branchFavoriteProducts BranchFavoriteProduct[]
   staffAttendanceSessions StaffAttendanceSession[]
+  staffDayOffRequests StaffDayOffRequest[]
 
   @@index([companyId])
   @@map("branches")
@@ -422,6 +427,10 @@ model User {
   favoriteProducts FavoriteProduct[]
   staffWorkSchedules StaffWorkSchedule[]
   staffAttendanceSessions StaffAttendanceSession[]
+  staffWeeklyDayOffs StaffWeeklyDayOff[]
+  staffDayOffQuotaPolicies StaffDayOffQuotaPolicy[]
+  staffDayOffMonths StaffDayOffMonth[]
+  staffDayOffRequests StaffDayOffRequest[]
 
   @@map("users")
 }
@@ -1431,18 +1440,106 @@ model StaffAttendanceSession {
   regularMinutes Int?      @map("regular_minutes")
   status         String
   note           String?
+  /// R9B: weekly | quota | special when Worked on Day Off.
+  dayOffKind     String?   @map("day_off_kind")
+  dayOffRequestId String?  @map("day_off_request_id")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   branch         Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   cashSession    CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  dayOffRequest  StaffDayOffRequest? @relation(fields: [dayOffRequestId], references: [id], onDelete: SetNull)
 
   @@index([companyId, businessDate])
   @@index([companyId, userId, businessDate])
   @@index([companyId, branchId, businessDate])
   @@index([cashSessionId])
+  @@index([dayOffRequestId])
   @@map("staff_attendance_sessions")
+}
+
+/// R9B fixed weekly rest day (does not consume monthly quota).
+model StaffWeeklyDayOff {
+  id        String   @id @default(cuid())
+  companyId String   @map("company_id")
+  userId    String   @map("user_id")
+  weekday   Int      @db.SmallInt
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId])
+  @@map("staff_weekly_day_offs")
+}
+
+/// R9B configured monthly Day Off quota (company default or employee override).
+model StaffDayOffQuotaPolicy {
+  id               String   @id @default(cuid())
+  companyId        String   @map("company_id")
+  userId           String?  @map("user_id")
+  monthlyQuotaDays Int      @map("monthly_quota_days")
+  updatedBy        String?  @map("updated_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, userId])
+  @@map("staff_day_off_quota_policies")
+}
+
+/// R9B frozen monthly quota snapshot — created only on real quota write workflow.
+model StaffDayOffMonth {
+  id        String   @id @default(cuid())
+  companyId String   @map("company_id")
+  userId    String   @map("user_id")
+  monthKey  String   @map("month_key")
+  quotaDays Int      @map("quota_days")
+  createdAt DateTime @default(now()) @map("created_at")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId, monthKey])
+  @@index([companyId, monthKey])
+  @@map("staff_day_off_months")
+}
+
+/// R9B Day Off request / special grant.
+model StaffDayOffRequest {
+  id                         String    @id @default(cuid())
+  companyId                  String    @map("company_id")
+  branchId                   String    @map("branch_id")
+  userId                     String    @map("user_id")
+  requestDate                DateTime  @map("request_date") @db.Date
+  monthKey                   String    @map("month_key")
+  kind                       String
+  source                     String
+  status                     String
+  reason                     String?
+  decisionNote               String?   @map("decision_note")
+  requestedAt                DateTime  @default(now()) @map("requested_at")
+  requestedBy                String    @map("requested_by")
+  decidedAt                  DateTime? @map("decided_at")
+  decidedBy                  String?   @map("decided_by")
+  quotaConsumed              Boolean   @default(false) @map("quota_consumed")
+  quotaReturned              Boolean   @default(false) @map("quota_returned")
+  workedMarkedAt             DateTime? @map("worked_marked_at")
+  primaryAttendanceSessionId String?   @map("primary_attendance_session_id")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+  company                    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch                     Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user                       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attendanceSessions         StaffAttendanceSession[]
+
+  @@index([companyId, status])
+  @@index([companyId, branchId, status])
+  @@index([companyId, userId, monthKey])
+  @@index([companyId, requestDate])
+  @@map("staff_day_off_requests")
 }
 
 model CashTransaction {
