@@ -65,7 +65,7 @@ check(
 );
 check(
   "4. Available reports are not Planned",
-  availableIds.length === 16 &&
+  availableIds.length === 17 &&
     availableIds.every((id) => {
       const entry = REPORT_CENTER_ENTRIES.find((row) => row.id === id);
       return Boolean(entry && !isPlannedReportCenterEntry(entry));

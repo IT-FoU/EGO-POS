@@ -182,7 +182,7 @@ check(
     calculator.includes("cashSalesLak") &&
     postSale.includes("refunded"),
 );
-check("16. Catalog routes still registered", REPORT_CENTER_ENTRIES.length === 16 && existsSync(join(ROOT, "features/reports/report-center-icons.ts")));
+check("16. Catalog routes still registered", REPORT_CENTER_ENTRIES.length === 17 && existsSync(join(ROOT, "features/reports/report-center-icons.ts")));
 check(
   "17. Full-page report files expose Back via shared nav",
   fullPageFiles.every((source) => source.includes("ReportDetailNav") || source.includes("ReportComingSoon") || source.includes("ReportDetailShell") || source.includes("backToReports")),

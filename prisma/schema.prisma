@@ -266,6 +266,7 @@ model Company {
   qrPaymentBanks QrPaymentBank[]
   qrPaymentAccounts QrPaymentAccount[]
   branchFavoriteProducts BranchFavoriteProduct[]
+  reorderManualItems ReorderManualItem[]
 
   @@map("companies")
 }
@@ -391,6 +392,7 @@ model Warehouse {
   sales        Sale[]
   fromTransfers StockTransfer[]     @relation("FromWarehouse")
   toTransfers   StockTransfer[]     @relation("ToWarehouse")
+  reorderManualItems ReorderManualItem[]
 
   @@index([companyId, branchId])
   @@map("warehouses")
@@ -534,6 +536,7 @@ model Product {
   branchFavorites BranchFavoriteProduct[]
   promotionProducts PromotionProduct[]
   productSuppliers ProductSupplier[]
+  reorderManualItems ReorderManualItem[]
 
   @@unique([companyId, sku])
   @@unique([companyId, productCode])
@@ -626,6 +629,26 @@ model InventoryBalance {
   @@unique([warehouseId, productId])
   @@index([companyId])
   @@map("inventory_balances")
+}
+
+/// R8 Manual Add to Need Reorder — warehouse-scoped; does not change min_stock or stock.
+model ReorderManualItem {
+  id          String    @id @default(cuid())
+  companyId   String    @map("company_id")
+  warehouseId String    @map("warehouse_id")
+  productId   String    @map("product_id")
+  addedBy     String?   @map("added_by")
+  note        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, warehouseId, productId])
+  @@index([companyId, warehouseId])
+  @@index([productId])
+  @@map("reorder_manual_items")
 }
 
 model InventoryLot {

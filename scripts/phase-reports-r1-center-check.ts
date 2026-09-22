@@ -58,6 +58,7 @@ const requiredHrefs = [
   "/reports/inventory/movements",
   "/reports/inventory/on-hand",
   "/reports/inventory/low-stock",
+  "/reports/inventory/reorder",
   "/reports/inventory/valuation",
 ];
 
@@ -96,7 +97,7 @@ const calculator = read("features/cash-sessions/cash-session-calculator.ts");
 const postSale = read("features/pos/post-sale-shared.ts");
 
 check("1. Four report categories", REPORT_CENTER_CATEGORIES.map((row) => row.id).join(",") === "sales,shifts,products,inventory");
-check("2. Sixteen report entries", REPORT_CENTER_ENTRIES.length === 16);
+check("2. Seventeen report entries", REPORT_CENTER_ENTRIES.length === 17);
 check(
   "3. Stable hrefs",
   requiredHrefs.every((href) => REPORT_CENTER_HREFS.includes(href)) && requiredHrefs.every((href) => Boolean(findReportCenterEntryByHref(href))),

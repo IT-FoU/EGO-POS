@@ -204,6 +204,16 @@ export const REPORT_CENTER_ENTRIES: ReportCenterEntry[] = [
     reuse: null,
   },
   {
+    id: "inventory-reorder",
+    slug: "reorder",
+    href: "/reports/inventory/reorder",
+    categoryId: "inventory",
+    titleKey: "reorderPurchaseSuggestion",
+    descriptionKey: "reorderPurchaseSuggestionDesc",
+    icon: "clipboard-list",
+    reuse: null,
+  },
+  {
     id: "inventory-valuation",
     slug: "valuation",
     href: "/reports/inventory/valuation",
