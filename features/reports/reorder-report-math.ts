@@ -4,6 +4,15 @@
  * Configured Reorder Level: Available <= min_stock.
  * No Reorder Level: Available <= 2 (R8-only; does not change R4).
  * Active PO exclusion: draft | ordered | partial.
+ *
+ * R10-B Suggested Qty (AUTO):
+ * Effective Stock = Available + Remaining Open PO Qty (base)
+ * Suggested Qty Base = max(Target Stock − Effective Stock, 0)
+ *
+ * NOTE: R8 Need Reorder still EXCLUDES products with active draft|ordered|partial POs.
+ * Remaining Open PO Qty is used for Already Ordered / Effective Stock when computing
+ * suggestions for eligible Need rows (typically openPoRemaining=0) and for history.
+ * Do not reintroduce active-PO products into Need merely to show Suggested Qty.
  */
 import { availableBaseQty, hasReorderThreshold, moneyLak, qtyNum } from "@/features/reports/inventory-table-math";
 
@@ -22,8 +31,10 @@ export const REORDER_REASONS = [
 ] as const;
 export type ReorderReason = (typeof REORDER_REASONS)[number];
 
-export const REORDER_TABS = ["need", "already"] as const;
+export const REORDER_TABS = ["need", "already", "history"] as const;
 export type ReorderTab = (typeof REORDER_TABS)[number];
+
+export type ReorderQtyMode = "AUTO" | "MANUAL";
 
 export { availableBaseQty, hasReorderThreshold, moneyLak, qtyNum };
 
@@ -62,6 +73,50 @@ export function classifyReorderReason(input: {
 
 export function remainingOrderedQty(orderedQty: number, receivedQty: number) {
   return Math.max(0, qtyNum(orderedQty) - qtyNum(receivedQty));
+}
+
+/** Remaining open PO quantity in BASE units. */
+export function remainingOpenPoQtyBase(input: {
+  conversionQty: number;
+  orderedQty: number;
+  receivedQty: number;
+}) {
+  const remainingPurchase = remainingOrderedQty(input.orderedQty, input.receivedQty);
+  const conversion = Math.max(qtyNum(input.conversionQty) || 1, 1e-9);
+  return remainingPurchase * conversion;
+}
+
+export function effectiveStockBase(input: { available: number; openPoRemainingBase: number }) {
+  return Math.max(0, qtyNum(input.available)) + Math.max(0, qtyNum(input.openPoRemainingBase));
+}
+
+/**
+ * AUTO Suggested Qty in BASE units.
+ * MANUAL mode returns 0 (Owner enters Order Qty; do not force a suggestion).
+ */
+export function suggestedQtyBase(input: {
+  available: number;
+  openPoRemainingBase?: number;
+  reorderQtyMode?: ReorderQtyMode | string | null;
+  targetStock: number;
+}) {
+  if (input.reorderQtyMode === "MANUAL") return 0;
+  const effective = effectiveStockBase({
+    available: input.available,
+    openPoRemainingBase: input.openPoRemainingBase ?? 0,
+  });
+  return Math.max(0, qtyNum(input.targetStock) - effective);
+}
+
+/**
+ * Convert base suggestion to whole purchase units.
+ * Rounds UP so Target Stock is not underfilled when Pack/Box cannot represent exact base.
+ */
+export function suggestedPurchaseQtyFromBase(suggestedBase: number, conversionQty: number) {
+  const conversion = Math.max(qtyNum(conversionQty) || 1, 1e-9);
+  const base = Math.max(0, qtyNum(suggestedBase));
+  if (base <= 0) return 0;
+  return Math.ceil(base / conversion - 1e-12);
 }
 
 export function estimatedLineCostLak(orderQty: number, unitCostLak: number | null | undefined) {

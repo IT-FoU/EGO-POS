@@ -6,6 +6,7 @@ import { requireReadPermission, requireWritePermission, WRITE_PERMISSIONS, READ_
 import {
   archivePrismaProduct,
   bulkUpdatePrismaProductPrices,
+  bulkUpdatePrismaReorderSettings,
   createPrismaProduct,
   deletePrismaBrand,
   deletePrismaCategory,
@@ -18,6 +19,7 @@ import {
   upsertPrismaCategory,
   type ProductWriteInput,
   type BulkPriceUpdateInput,
+  type BulkReorderSettingsInput,
 } from "@/features/products/prisma-repository";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { searchBraveImages } from "@/features/products/brave-image-search";
@@ -224,6 +226,18 @@ export async function bulkPriceUpdateAction(input: BulkPriceUpdateInput) {
   try {
     const data = await bulkUpdatePrismaProductPrices(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
     revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function bulkReorderSettingsAction(input: BulkReorderSettingsInput) {
+  try {
+    const data = await bulkUpdatePrismaReorderSettings(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
+    revalidateProductCataloguePaths();
+    revalidatePath("/inventory/reorder-settings");
+    revalidatePath("/reports/inventory/reorder");
     return writeSuccess(data);
   } catch (error) {
     return writeFailure(error);

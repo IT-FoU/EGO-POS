@@ -2,6 +2,7 @@ export type ProductStatus = "active" | "inactive" | "draft" | "deleted";
 export type StockDisplayMode = "base_unit_only" | "breakdown";
 export type UnitStatus = "active" | "inactive";
 export type UnitPricingMode = "manual" | "cost_plus_percent" | "cost_plus_amount";
+export type ReorderQtyMode = "AUTO" | "MANUAL";
 
 export type ProductUnit = {
   allowManualUnitSelect?: boolean;
@@ -62,7 +63,11 @@ export type Product = {
   expiryDate?: string;
   stockDisplayMode?: StockDisplayMode;
   sellingPriceLak: number;
+  /** Canonical Reorder Level (products.min_stock). */
   minStock: number;
+  /** Desired base stock after replenishment. */
+  targetStock: number;
+  reorderQtyMode: ReorderQtyMode;
   status: ProductStatus;
   units: ProductUnit[];
   priceHistory?: Array<{

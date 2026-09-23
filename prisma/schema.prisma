@@ -223,6 +223,13 @@ enum StockReservationStatus {
   CONSUMED
 }
 
+/// R10: How Suggested Order Qty is derived on Reorder.
+/// AUTO = max(Target − Effective Stock, 0); MANUAL = Owner enters Order Qty.
+enum ReorderQtyMode {
+  AUTO
+  MANUAL
+}
+
 model Company {
   id                  String         @id @default(cuid())
   name                String
@@ -267,6 +274,7 @@ model Company {
   qrPaymentAccounts QrPaymentAccount[]
   branchFavoriteProducts BranchFavoriteProduct[]
   reorderManualItems ReorderManualItem[]
+  reorderHistorySnapshots ReorderHistorySnapshot[]
   staffWorkSchedules StaffWorkSchedule[]
   staffAttendanceSessions StaffAttendanceSession[]
   staffWeeklyDayOffs StaffWeeklyDayOff[]
@@ -404,6 +412,7 @@ model Warehouse {
   fromTransfers StockTransfer[]     @relation("FromWarehouse")
   toTransfers   StockTransfer[]     @relation("ToWarehouse")
   reorderManualItems ReorderManualItem[]
+  reorderHistorySnapshots ReorderHistorySnapshot[]
 
   @@index([companyId, branchId])
   @@map("warehouses")
@@ -530,7 +539,11 @@ model Product {
   stockDisplayMode StockDisplayMode @default(base_unit_only) @map("stock_display_mode")
   costPriceLak    Decimal      @default(0) @map("cost_price_lak") @db.Decimal(18, 2)
   sellingPriceLak Decimal      @default(0) @map("selling_price_lak") @db.Decimal(18, 2)
+  /// Canonical Reorder Level (R8/R10). UI label: "Reorder Level". Qualifies Need Reorder when Available <= minStock (or <= 2 when unset).
   minStock        Decimal      @default(0) @map("min_stock") @db.Decimal(18, 3)
+  /// Desired base stock after replenishment. Suggested Qty (AUTO) = max(targetStock − Effective Stock, 0).
+  targetStock     Decimal      @default(0) @map("target_stock") @db.Decimal(18, 3)
+  reorderQtyMode  ReorderQtyMode @default(AUTO) @map("reorder_qty_mode")
   status          ProductStatus @default(active)
   isActive        Boolean      @default(true) @map("is_active")
   createdAt       DateTime     @default(now()) @map("created_at")
@@ -556,6 +569,7 @@ model Product {
   promotionProducts PromotionProduct[]
   productSuppliers ProductSupplier[]
   reorderManualItems ReorderManualItem[]
+  reorderHistorySnapshots ReorderHistorySnapshot[]
 
   @@unique([companyId, sku])
   @@unique([companyId, productCode])
@@ -668,6 +682,38 @@ model ReorderManualItem {
   @@index([companyId, warehouseId])
   @@index([productId])
   @@map("reorder_manual_items")
+}
+
+/// R10-F: Snapshot at Create PO from Reorder. Read-only audit; does not mutate stock/PO.
+model ReorderHistorySnapshot {
+  id                 String   @id @default(cuid())
+  companyId          String   @map("company_id")
+  warehouseId        String   @map("warehouse_id")
+  productId          String   @map("product_id")
+  purchaseId         String?  @map("purchase_id")
+  purchaseNo         String?  @map("purchase_no")
+  supplierId         String?  @map("supplier_id")
+  supplierName       String?  @map("supplier_name")
+  purchaseUnitId     String?  @map("purchase_unit_id")
+  purchaseUnitName   String?  @map("purchase_unit_name")
+  reorderLevel       Decimal  @default(0) @map("reorder_level") @db.Decimal(18, 3)
+  targetStock        Decimal  @default(0) @map("target_stock") @db.Decimal(18, 3)
+  availableAtOrder   Decimal  @default(0) @map("available_at_order") @db.Decimal(18, 3)
+  openPoRemainingAtOrder Decimal @default(0) @map("open_po_remaining_at_order") @db.Decimal(18, 3)
+  suggestedQtyBase   Decimal  @default(0) @map("suggested_qty_base") @db.Decimal(18, 3)
+  orderedQtyPurchase Decimal  @default(0) @map("ordered_qty_purchase") @db.Decimal(18, 3)
+  orderedQtyBase     Decimal  @default(0) @map("ordered_qty_base") @db.Decimal(18, 3)
+  reorderQtyMode     ReorderQtyMode @default(AUTO) @map("reorder_qty_mode")
+  createdByUserId    String?  @map("created_by_user_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  warehouse          Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, productId])
+  @@index([companyId, purchaseId])
+  @@map("reorder_history_snapshots")
 }
 
 model InventoryLot {

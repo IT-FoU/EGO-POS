@@ -190,6 +190,9 @@ export type ProductWriteInput = {
   imageUrl?: string | null;
   initialStock?: ProductInitialStockInput;
   minStock?: number;
+  /** Desired base stock after replenishment. Defaults to 0. */
+  targetStock?: number;
+  reorderQtyMode?: "AUTO" | "MANUAL";
   nameEn?: string;
   nameLo: string;
   productCode?: string;
@@ -411,7 +414,11 @@ async function loadCreatedProduct(tx: any, productId: string) {
 function assertValidProductWriteInput(input: Partial<ProductWriteInput>) {
   assertNonNegative(input.costPriceLak, "Cost price");
   assertNonNegative(input.sellingPriceLak, "Selling price");
-  assertNonNegative(input.minStock, "Minimum stock");
+  assertNonNegative(input.minStock, "Reorder Level");
+  assertNonNegative(input.targetStock, "Target Stock");
+  if (input.reorderQtyMode != null && input.reorderQtyMode !== "AUTO" && input.reorderQtyMode !== "MANUAL") {
+    throw new Error("Reorder quantity mode must be AUTO or MANUAL.");
+  }
   assertNonNegative(input.initialStock?.quantity, "Opening stock quantity");
   assertNonNegative(input.initialStock?.unitCostLak, "Opening stock cost");
   assertSafePricingValue(input.costPriceLak, "Cost price");
@@ -689,12 +696,14 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
       nameEn: optionalString(input.nameEn),
       nameLo: stringValue(input.nameLo),
       productCode: optionalString(input.productCode),
+      reorderQtyMode: input.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO",
       sellingPriceLak: numberValue(input.sellingPriceLak),
       sku: optionalString(input.sku),
       status: input.status ?? "active",
       stockDisplayMode: input.stockDisplayMode ?? "base_unit_only",
       supplierId: null,
       tags: input.tags ?? [],
+      targetStock: numberValue(input.targetStock),
       units: {
         create: units.map(({ id: _id, ...unit }) => unit),
       },
@@ -766,11 +775,18 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           nameEn: input.nameEn === undefined ? undefined : optionalString(input.nameEn),
           nameLo: input.nameLo === undefined ? undefined : stringValue(input.nameLo),
           productCode: input.productCode === undefined ? undefined : optionalString(input.productCode),
+          reorderQtyMode:
+            input.reorderQtyMode === undefined
+              ? undefined
+              : input.reorderQtyMode === "MANUAL"
+                ? "MANUAL"
+                : "AUTO",
           sellingPriceLak: input.sellingPriceLak === undefined ? undefined : numberValue(input.sellingPriceLak),
           sku: input.sku === undefined ? undefined : optionalString(input.sku),
           status: input.status,
           stockDisplayMode: input.stockDisplayMode,
           tags: input.tags,
+          targetStock: input.targetStock === undefined ? undefined : numberValue(input.targetStock),
         },
         where: { id: existing.id },
       });
@@ -946,10 +962,12 @@ export async function duplicatePrismaProduct(productId: string, tenant: TenantCo
           nameEn: existing.nameEn ? `${existing.nameEn} Copy` : null,
           nameLo: `${existing.nameLo} Copy`,
           productCode: `COPY-${timestamp}`,
+          reorderQtyMode: existing.reorderQtyMode ?? "AUTO",
           sellingPriceLak: existing.sellingPriceLak,
           sku: `COPY-${timestamp}`,
           status: "draft",
           stockDisplayMode: existing.stockDisplayMode,
+          targetStock: existing.targetStock ?? 0,
           supplierId: null,
           tags: existing.tags,
           units: {
@@ -1106,6 +1124,59 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
       }
 
       return { updatedProducts: products.length };
+    },
+  });
+}
+
+export type BulkReorderSettingsInput = {
+  minStock?: number | null;
+  productIds: string[];
+  reorderQtyMode?: "AUTO" | "MANUAL" | null;
+  targetStock?: number | null;
+};
+
+export async function bulkUpdatePrismaReorderSettings(input: BulkReorderSettingsInput, tenant: TenantContext) {
+  const productIds = Array.isArray(input.productIds)
+    ? [...new Set(input.productIds.map((id) => String(id).trim()).filter(Boolean))]
+    : [];
+  if (!productIds.length) {
+    throw new Error("Select at least one product.");
+  }
+
+  const data: Record<string, unknown> = {};
+  if (input.minStock != null && input.minStock !== undefined) {
+    const minStock = numberValue(input.minStock);
+    if (!(minStock >= 0)) throw new Error("Reorder Level must be greater than or equal to zero.");
+    data.minStock = minStock;
+  }
+  if (input.targetStock != null && input.targetStock !== undefined) {
+    const targetStock = numberValue(input.targetStock);
+    if (!(targetStock >= 0)) throw new Error("Target Stock must be greater than or equal to zero.");
+    data.targetStock = targetStock;
+  }
+  if (input.reorderQtyMode === "AUTO" || input.reorderQtyMode === "MANUAL") {
+    data.reorderQtyMode = input.reorderQtyMode;
+  }
+  if (!Object.keys(data).length) {
+    throw new Error("Provide Reorder Level, Target Stock, and/or Qty Mode to apply.");
+  }
+
+  return withTenantTransaction({
+    action: "bulk_reorder_settings",
+    module: "products",
+    newData: { ...input, productIds },
+    tenant,
+    write: async (tx) => {
+      const scope = await resolveTenantScope(tenant, tx);
+      const result = await tx.product.updateMany({
+        data,
+        where: {
+          companyId: tenant.companyId,
+          id: { in: productIds },
+          ...branchOwnedWhere(scope),
+        },
+      });
+      return { updatedProducts: result.count };
     },
   });
 }

@@ -50,6 +50,8 @@ export const mockProducts: Product[] = [
     expiryDate: "2026-08-18",
     sellingPriceLak: 8000,
     minStock: 24,
+    targetStock: 48,
+    reorderQtyMode: "AUTO",
     status: "active",
     updatedAt: "2026-06-10",
     units: [
@@ -97,6 +99,8 @@ export const mockProducts: Product[] = [
     expiryDate: "2027-01-04",
     sellingPriceLak: 3000,
     minStock: 48,
+    targetStock: 120,
+    reorderQtyMode: "AUTO",
     status: "active",
     updatedAt: "2026-06-09",
     units: [
@@ -136,6 +140,8 @@ export const mockProducts: Product[] = [
     expiryDate: "2026-07-02",
     sellingPriceLak: 10000,
     minStock: 20,
+    targetStock: 40,
+    reorderQtyMode: "MANUAL",
     status: "draft",
     updatedAt: "2026-06-08",
     units: [
@@ -166,6 +172,8 @@ export const mockProducts: Product[] = [
     currentStock: 0,
     sellingPriceLak: 16000,
     minStock: 12,
+    targetStock: 24,
+    reorderQtyMode: "AUTO",
     status: "inactive",
     updatedAt: "2026-06-07",
     units: [

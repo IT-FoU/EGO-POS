@@ -874,11 +874,15 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             nameEn: nameValue,
             nameLo: nameValue,
             productCode,
+            reorderQtyMode: (String(formData.get("reorderQtyMode") ?? "AUTO") === "MANUAL" ? "MANUAL" : "AUTO") as
+              | "AUTO"
+              | "MANUAL",
             sellingPriceLak,
             sku: resolvedSku,
             status: String(formData.get("status") ?? "active"),
             stockDisplayMode: String(formData.get("stockDisplayMode") ?? "base_unit_only") as "base_unit_only" | "breakdown",
             supplierId: preferredSupplierId || assignedSupplierIds[0] || undefined,
+            targetStock: Number(formData.get("targetStock") ?? 0),
             supplierIds: assignedSupplierIds,
             tags,
             units: productUnits,
@@ -1297,12 +1301,50 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
         }} snapshot={previewSnapshot}/>) : null}
       {aliasDrawerUnitId ? (<BarcodeAliasDrawer aliasInput={aliasInput} aliases={barcodeAliases[aliasDrawerUnitId] ?? []} onAddAlias={() => addBarcodeAlias(aliasDrawerUnitId)} onAliasInputChange={setAliasInput} onClose={() => setAliasDrawerUnitId(null)} onRemoveAlias={(aliasIndex) => removeBarcodeAlias(aliasDrawerUnitId, aliasIndex)} onUpdateMainBarcode={(barcodeValue) => updateUnit(aliasDrawerUnitId, { barcode: barcodeValue })} unit={units.find((unit) => unit.id === aliasDrawerUnitId)}/>) : null}
       <input type="hidden" name="status" value={product?.status ?? "active"}/>
-      <input type="hidden" name="minStock" value={product?.minStock ?? 0}/>
       <input type="hidden" name="stockDisplayMode" value={product?.stockDisplayMode ?? "base_unit_only"}/>
       <input type="hidden" name="tags" value={product?.tags?.join(", ") ?? ""}/>
 
       <div className="grid min-w-0 max-w-full gap-4 overflow-x-hidden">
         <div className="flex min-w-0 max-w-full flex-col gap-4 overflow-x-hidden">
+          <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
+            <h2 className="text-base font-semibold">{t("reorderSettings")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("reorderSettingsHint")}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <Field label={t("reorderLevel")}>
+                <input
+                  className="field-input"
+                  defaultValue={product?.minStock ?? 0}
+                  min={0}
+                  name="minStock"
+                  step="0.001"
+                  type="number"
+                />
+                <span className="text-xs text-muted-foreground">{t("reorderLevelHint")}</span>
+              </Field>
+              <Field label={t("targetStock")}>
+                <input
+                  className="field-input"
+                  defaultValue={product?.targetStock ?? 0}
+                  min={0}
+                  name="targetStock"
+                  step="0.001"
+                  type="number"
+                />
+                <span className="text-xs text-muted-foreground">{t("targetStockHint")}</span>
+              </Field>
+              <Field label={t("reorderQtyMode")}>
+                <select
+                  className="field-input"
+                  defaultValue={product?.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO"}
+                  name="reorderQtyMode"
+                >
+                  <option value="AUTO">{t("reorderQtyModeAuto")}</option>
+                  <option value="MANUAL">{t("reorderQtyModeManual")}</option>
+                </select>
+                <span className="text-xs text-muted-foreground">{t("reorderQtyModeHint")}</span>
+              </Field>
+            </div>
+          </section>
           {isCreate ? (<>
               <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card p-4">
                 <h2 className="text-base font-semibold">{t("basicProductInformation")}</h2>

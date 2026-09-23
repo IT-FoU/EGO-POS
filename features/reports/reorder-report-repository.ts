@@ -7,6 +7,7 @@ import type { ReportFilterOptions } from "@/features/reports/report-filters";
 import {
   availableBaseQty,
   classifyReorderReason,
+  effectiveStockBase,
   emptyNeedReorderSummary,
   hasReorderThreshold,
   qtyNum,
@@ -14,6 +15,7 @@ import {
   REORDER_PAGE_SIZE,
   REORDER_SCAN_LIMIT,
   R8_ACTIVE_PO_STATUSES,
+  suggestedQtyBase,
   type NeedReorderSummary,
   type ReorderReason,
 } from "@/features/reports/reorder-report-math";
@@ -38,16 +40,21 @@ export type NeedReorderRow = {
   available: number;
   barcode: string | null;
   categoryName: string;
+  effectiveStock: number;
   isManual: boolean;
   manualItemId: string | null;
   minStock: number;
   onHand: number;
+  openPoRemainingBase: number;
   preferredSupplierId: string | null;
   preferredSupplierName: string | null;
   productId: string;
   productName: string;
   reason: ReorderReason;
+  reorderQtyMode: "AUTO" | "MANUAL";
   reserved: number;
+  suggestedQtyBase: number;
+  targetStock: number;
   units: ReorderUnitOption[];
   warehouseId: string;
   warehouseName: string;
@@ -72,10 +79,36 @@ export type AlreadyOrderedRow = {
   warehouseName: string;
 };
 
+export type ReorderHistoryRow = {
+  availableAtOrder: number;
+  barcode: string | null;
+  createdAt: string;
+  id: string;
+  livePoStatus: string | null;
+  liveReceivedQty: number | null;
+  openPoRemainingAtOrder: number;
+  orderedQtyBase: number;
+  orderedQtyPurchase: number;
+  productId: string;
+  productName: string;
+  purchaseId: string | null;
+  purchaseNo: string | null;
+  purchaseUnitName: string | null;
+  reorderLevel: number;
+  reorderQtyMode: "AUTO" | "MANUAL";
+  suggestedQtyBase: number;
+  supplierName: string | null;
+  targetStock: number;
+  warehouseId: string;
+  warehouseName: string;
+};
+
 export type ReorderPageResult = {
   alreadyOrderedCount: number;
   alreadyRows: AlreadyOrderedRow[];
   filterOptions: ReportFilterOptions & { warehouses: Array<{ id: string; label: string }> };
+  historyCount: number;
+  historyRows: ReorderHistoryRow[];
   needRows: NeedReorderRow[];
   page: number;
   pageCount: number;
@@ -285,20 +318,37 @@ export async function loadReorderPage(
       if (clamped.hasBarcode === "yes" && !barcode) continue;
       if (clamped.hasBarcode === "no" && barcode) continue;
 
+      const targetStock = qtyNum(product.targetStock);
+      const reorderQtyMode = product.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO";
+      // Need rows exclude active POs, so open PO remaining is always 0 here.
+      const openPoRemainingBase = 0;
+      const effectiveStock = effectiveStockBase({ available, openPoRemainingBase });
+      const suggested = suggestedQtyBase({
+        available,
+        openPoRemainingBase,
+        reorderQtyMode,
+        targetStock,
+      });
+
       needRows.push({
         available,
         barcode,
         categoryName: String(product.category?.nameEn || product.category?.nameLo || "—"),
+        effectiveStock,
         isManual,
         manualItemId: manualMap.get(key) ?? null,
         minStock,
         onHand,
+        openPoRemainingBase,
         preferredSupplierId: preferred?.id ? String(preferred.id) : null,
         preferredSupplierName: preferred?.name ? String(preferred.name) : null,
         productId: String(product.id),
         productName: productLabel(product),
         reason,
+        reorderQtyMode,
         reserved,
+        suggestedQtyBase: suggested,
+        targetStock,
         units: (product.units as Array<Record<string, any>>).map((unit) => ({
           barcode: unit.barcode ? String(unit.barcode) : null,
           conversionQty: qtyNum(unit.conversionQty) || 1,
@@ -355,8 +405,102 @@ export async function loadReorderPage(
     })
     .sort((a, b) => b.orderedAt.localeCompare(a.orderedAt));
 
+  const historyWhere: Record<string, unknown> = {
+    companyId: scope.companyId,
+    ...(warehouseIds.length ? { warehouseId: { in: warehouseIds } } : { warehouseId: { in: [] } }),
+  };
+  if (clamped.warehouseId) historyWhere.warehouseId = clamped.warehouseId;
+  if (clamped.supplierId) historyWhere.supplierId = clamped.supplierId;
+  if (clamped.productSearch) {
+    const q = clamped.productSearch;
+    historyWhere.product = {
+      OR: [
+        { nameEn: { contains: q, mode: "insensitive" } },
+        { nameLo: { contains: q, mode: "insensitive" } },
+        { barcode: { contains: q, mode: "insensitive" } },
+      ],
+    };
+  }
+  if (clamped.barcode) {
+    historyWhere.product = {
+      OR: [
+        { barcode: { contains: clamped.barcode, mode: "insensitive" } },
+        { units: { some: { barcode: { contains: clamped.barcode, mode: "insensitive" } } } },
+      ],
+    };
+  }
+
+  const historyCount = warehouseIds.length
+    ? await dbClient.reorderHistorySnapshot.count({ where: historyWhere })
+    : 0;
+
+  let historyRows: ReorderHistoryRow[] = [];
+  if (clamped.tab === "history" && warehouseIds.length) {
+    const snapshots = await dbClient.reorderHistorySnapshot.findMany({
+      include: {
+        product: { select: { barcode: true, nameEn: true, nameLo: true } },
+        warehouse: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: REORDER_SCAN_LIMIT,
+      where: historyWhere,
+    });
+
+    const purchaseIds = [
+      ...new Set(
+        (snapshots as Array<{ purchaseId: string | null }>)
+          .map((row) => row.purchaseId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const purchases =
+      purchaseIds.length > 0
+        ? await dbClient.purchase.findMany({
+            include: {
+              items: { select: { productId: true, receivedQuantity: true } },
+            },
+            where: { companyId: scope.companyId, id: { in: purchaseIds } },
+          })
+        : [];
+    const purchaseById = new Map(
+      (purchases as Array<Record<string, any>>).map((row) => [String(row.id), row]),
+    );
+
+    historyRows = (snapshots as Array<Record<string, any>>).map((row) => {
+      const purchase = row.purchaseId ? purchaseById.get(String(row.purchaseId)) : null;
+      const liveItem = purchase?.items?.find(
+        (item: { productId: string }) => String(item.productId) === String(row.productId),
+      );
+      return {
+        availableAtOrder: qtyNum(row.availableAtOrder),
+        barcode: row.product?.barcode ? String(row.product.barcode) : null,
+        createdAt:
+          row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt ?? ""),
+        id: String(row.id),
+        livePoStatus: purchase?.status ? String(purchase.status) : null,
+        liveReceivedQty: liveItem ? qtyNum(liveItem.receivedQuantity) : null,
+        openPoRemainingAtOrder: qtyNum(row.openPoRemainingAtOrder),
+        orderedQtyBase: qtyNum(row.orderedQtyBase),
+        orderedQtyPurchase: qtyNum(row.orderedQtyPurchase),
+        productId: String(row.productId),
+        productName: productLabel(row.product ?? {}),
+        purchaseId: row.purchaseId ? String(row.purchaseId) : null,
+        purchaseNo: row.purchaseNo ? String(row.purchaseNo) : null,
+        purchaseUnitName: row.purchaseUnitName ? String(row.purchaseUnitName) : null,
+        reorderLevel: qtyNum(row.reorderLevel),
+        reorderQtyMode: row.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO",
+        suggestedQtyBase: qtyNum(row.suggestedQtyBase),
+        supplierName: row.supplierName ? String(row.supplierName) : null,
+        targetStock: qtyNum(row.targetStock),
+        warehouseId: String(row.warehouseId),
+        warehouseName: String(row.warehouse?.name ?? warehouseName.get(String(row.warehouseId)) ?? "—"),
+      } satisfies ReorderHistoryRow;
+    });
+  }
+
   const pageSize = REORDER_PAGE_SIZE;
-  const sourceRows = clamped.tab === "already" ? alreadyRows : needRows;
+  const sourceRows =
+    clamped.tab === "already" ? alreadyRows : clamped.tab === "history" ? historyRows : needRows;
   const pageCount = Math.max(1, Math.ceil(sourceRows.length / pageSize));
   const page = Math.min(clamped.page, pageCount);
   const start = options?.allRows ? 0 : (page - 1) * pageSize;
@@ -377,6 +521,8 @@ export async function loadReorderPage(
       ...filterOptions,
       warehouses: warehouses.map((row) => ({ id: row.id, label: row.name })),
     },
+    historyCount,
+    historyRows: clamped.tab === "history" ? (sliced as ReorderHistoryRow[]) : [],
     needRows: clamped.tab === "need" ? (sliced as NeedReorderRow[]) : needRows.slice(0, 0),
     page,
     pageCount,
@@ -473,9 +619,16 @@ export async function removeManualReorderItem(
 }
 
 export type CreateReorderPoLine = {
+  available?: number;
+  conversionQty?: number;
   productId: string;
+  purchaseUnitName?: string | null;
   quantity: number;
+  reorderLevel?: number;
+  reorderQtyMode?: "AUTO" | "MANUAL";
+  suggestedQtyBase?: number;
   supplierId: string;
+  targetStock?: number;
   unitCost: number;
   unitId?: string | null;
   warehouseId: string;
@@ -522,6 +675,49 @@ export async function createReorderPurchaseOrders(
       purchaseNo: String(po.purchaseNo),
       status: String(po.status),
       supplierId: first.supplierId,
+    });
+
+    const supplier = await db.supplier.findFirst({
+      select: { name: true },
+      where: { companyId: tenant.companyId, id: first.supplierId },
+    });
+    const productIds = group.map((line) => line.productId);
+    const products = await db.product.findMany({
+      select: { id: true, minStock: true, reorderQtyMode: true, targetStock: true },
+      where: { companyId: tenant.companyId, id: { in: productIds } },
+    });
+    const productById = new Map(
+      (products as Array<Record<string, any>>).map((row) => [String(row.id), row]),
+    );
+
+    await db.reorderHistorySnapshot.createMany({
+      data: group.map((line) => {
+        const product = productById.get(line.productId);
+        const conversion = Math.max(qtyNum(line.conversionQty) || 1, 1e-9);
+        const orderedPurchase = qtyNum(line.quantity);
+        const mode =
+          line.reorderQtyMode === "MANUAL" || product?.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO";
+        return {
+          availableAtOrder: qtyNum(line.available ?? 0),
+          companyId: tenant.companyId,
+          createdByUserId: tenant.userId || null,
+          openPoRemainingAtOrder: 0,
+          orderedQtyBase: orderedPurchase * conversion,
+          orderedQtyPurchase: orderedPurchase,
+          productId: line.productId,
+          purchaseId: String(po.id),
+          purchaseNo: String(po.purchaseNo),
+          purchaseUnitId: line.unitId || null,
+          purchaseUnitName: line.purchaseUnitName || null,
+          reorderLevel: qtyNum(line.reorderLevel ?? product?.minStock ?? 0),
+          reorderQtyMode: mode,
+          suggestedQtyBase: qtyNum(line.suggestedQtyBase ?? 0),
+          supplierId: first.supplierId,
+          supplierName: supplier?.name ? String(supplier.name) : null,
+          targetStock: qtyNum(line.targetStock ?? product?.targetStock ?? 0),
+          warehouseId: first.warehouseId,
+        };
+      }),
     });
 
     // Drop manual rows for products now on draft PO (they move to Already Ordered).

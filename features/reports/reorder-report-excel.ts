@@ -59,14 +59,20 @@ export async function buildReorderExcel(input: {
 }): Promise<SalesExcelFile> {
   const { data, locale, storeName, tab } = input;
   const workbook = new ExcelJS.Workbook();
-  const isNeed = tab === "need";
-  const sheet = workbook.addWorksheet(isNeed ? "Need Reorder" : "Already Ordered");
+  const sheetName =
+    tab === "need" ? "Need Reorder" : tab === "history" ? "Reorder History" : "Already Ordered";
+  const sheet = workbook.addWorksheet(sheetName);
   writeMeta(sheet, 1, t("store", locale), storeName);
-  writeMeta(sheet, 2, t("report", locale), isNeed ? t("needReorder", locale) : t("alreadyOrdered", locale));
+  writeMeta(
+    sheet,
+    2,
+    t("report", locale),
+    tab === "need" ? t("needReorder", locale) : tab === "history" ? t("history", locale) : t("alreadyOrdered", locale),
+  );
   writeMeta(sheet, 3, t("generatedAt", locale), `${stampDay()} ${formatBusinessTimeLabel(new Date())}`);
 
   let row = 5;
-  if (isNeed) {
+  if (tab === "need") {
     const headers = [
       t("product", locale),
       t("barcode", locale),
@@ -75,6 +81,8 @@ export async function buildReorderExcel(input: {
       t("colReserved", locale),
       t("colAvailable", locale),
       t("colReorderLevel", locale),
+      t("colTargetStock", locale),
+      t("suggestedQtyBase", locale),
       t("reason", locale),
       t("orderQty", locale),
       t("orderUnit", locale),
@@ -100,6 +108,8 @@ export async function buildReorderExcel(input: {
         item.reserved,
         item.available,
         item.minStock > 0 ? item.minStock : t("noReorderLevel", locale),
+        item.targetStock,
+        item.reorderQtyMode === "MANUAL" ? "—" : item.suggestedQtyBase,
         reasonLabel(item.reason, locale),
         "",
         "",
@@ -117,6 +127,65 @@ export async function buildReorderExcel(input: {
       row += 1;
     }
     return toFile(workbook, `EGO-POS-Reorder-Need-${stampDay()}.xlsx`, "Need Reorder", headers, data.needRows.length);
+  }
+
+  if (tab === "history") {
+    const headers = [
+      t("orderedAtHistory", locale),
+      t("product", locale),
+      t("barcode", locale),
+      t("warehouse", locale),
+      t("poNo", locale),
+      t("supplier", locale),
+      t("colReorderLevel", locale),
+      t("colTargetStock", locale),
+      t("availableAtOrder", locale),
+      t("suggestedQtyBase", locale),
+      t("orderedQty", locale),
+      t("qtyMode", locale),
+      t("livePoStatus", locale),
+      t("liveReceivedQty", locale),
+    ];
+    headers.forEach((header, index) => {
+      const cell = sheet.getCell(row, index + 1);
+      cell.value = header;
+      cell.border = BORDER;
+      cell.fill = HEADER_FILL;
+      cell.font = { bold: true };
+    });
+    row += 1;
+    const historyRows = data.historyRows ?? [];
+    for (const item of historyRows) {
+      const values = [
+        item.createdAt.slice(0, 16).replace("T", " "),
+        item.productName,
+        item.barcode || t("noBarcode", locale),
+        item.warehouseName,
+        item.purchaseNo || "—",
+        item.supplierName || t("noSupplier", locale),
+        item.reorderLevel,
+        item.targetStock,
+        item.availableAtOrder,
+        item.suggestedQtyBase,
+        item.orderedQtyBase,
+        item.reorderQtyMode,
+        item.livePoStatus || "—",
+        item.liveReceivedQty ?? "—",
+      ];
+      values.forEach((value, index) => {
+        const cell = sheet.getCell(row, index + 1);
+        cell.value = value as ExcelJS.CellValue;
+        cell.border = BORDER;
+      });
+      row += 1;
+    }
+    return toFile(
+      workbook,
+      `EGO-POS-Reorder-History-${stampDay()}.xlsx`,
+      "Reorder History",
+      headers,
+      historyRows.length,
+    );
   }
 
   const headers = [

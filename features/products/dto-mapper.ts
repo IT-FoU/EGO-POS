@@ -60,6 +60,8 @@ export function mapPrismaProduct(product: PrismaProduct): Product {
     nameEn: product.nameEn ?? "",
     nameLo: product.nameLo,
     productCode: product.productCode ?? undefined,
+    reorderQtyMode: product.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO",
+    targetStock: toNumber(product.targetStock),
     priceHistory: (product.priceHistory ?? []).map((entry: Record<string, any>) => ({
       changeType: entry.changeType ?? "",
       changedBy: entry.changedBy ?? undefined,

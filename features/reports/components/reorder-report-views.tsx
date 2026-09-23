@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SupportedLocale } from "@/lib/constants";
@@ -10,9 +10,9 @@ import { formatLak, formatNumber } from "@/features/reports/format";
 import { ReportDetailHeader, ReportPageChrome, ReportSheet } from "@/features/reports/components/report-page-shell";
 import { findReportCenterEntry } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
-import { estimatedLineCostLak } from "@/features/reports/reorder-report-math";
+import { estimatedLineCostLak, suggestedPurchaseQtyFromBase } from "@/features/reports/reorder-report-math";
 import { reorderExportHref, reorderTableHref } from "@/features/reports/reorder-report-query";
-import type { NeedReorderRow, ReorderPageResult } from "@/features/reports/reorder-report-repository";
+import type { NeedReorderRow, ReorderHistoryRow, ReorderPageResult } from "@/features/reports/reorder-report-repository";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const fieldClass = `h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 ${focusRing}`;
@@ -53,6 +53,92 @@ function displayBarcode(row: NeedReorderRow, unitId: string, locale: SupportedLo
   return t("noBarcode", locale);
 }
 
+function defaultOrderQty(row: NeedReorderRow, unitId: string) {
+  if (row.reorderQtyMode !== "AUTO" || !(row.suggestedQtyBase > 0)) return "";
+  const unit = row.units.find((item) => item.id === unitId) ?? row.units.find((item) => item.isBaseUnit) ?? row.units[0];
+  const purchaseQty = suggestedPurchaseQtyFromBase(row.suggestedQtyBase, unit?.conversionQty ?? 1);
+  return purchaseQty > 0 ? String(purchaseQty) : "";
+}
+
+function buildPrintableHtml(input: {
+  alreadyRows: ReorderPageResult["alreadyRows"];
+  historyRows: ReorderHistoryRow[];
+  locale: SupportedLocale;
+  needRows: NeedReorderRow[];
+  tab: string;
+  title: string;
+}) {
+  const { alreadyRows, historyRows, locale, needRows, tab, title } = input;
+  const esc = (value: string) =>
+    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  let body = "";
+  if (tab === "need") {
+    body = `<table><thead><tr>
+      <th>${esc(t("product", locale))}</th><th>${esc(t("barcode", locale))}</th>
+      <th>${esc(t("colAvailable", locale))}</th><th>${esc(t("colReorderLevel", locale))}</th>
+      <th>${esc(t("colTargetStock", locale))}</th><th>${esc(t("suggestedQtyBase", locale))}</th>
+      <th>${esc(t("reason", locale))}</th>
+    </tr></thead><tbody>${needRows
+      .map(
+        (row) => `<tr>
+      <td>${esc(row.productName)}</td><td>${esc(row.barcode || t("noBarcode", locale))}</td>
+      <td>${formatNumber(row.available)}</td><td>${row.minStock > 0 ? formatNumber(row.minStock) : esc(t("noReorderLevel", locale))}</td>
+      <td>${formatNumber(row.targetStock)}</td><td>${formatNumber(row.suggestedQtyBase)}</td>
+      <td>${esc(reasonLabel(row.reason, locale))}</td>
+    </tr>`,
+      )
+      .join("")}</tbody></table>`;
+  } else if (tab === "already") {
+    body = `<table><thead><tr>
+      <th>${esc(t("product", locale))}</th><th>${esc(t("poNo", locale))}</th>
+      <th>${esc(t("orderedQty", locale))}</th><th>${esc(t("remaining", locale))}</th>
+      <th>${esc(t("poStatus", locale))}</th>
+    </tr></thead><tbody>${alreadyRows
+      .map(
+        (row) => `<tr>
+      <td>${esc(row.productName)}</td><td>${esc(row.poNo)}</td>
+      <td>${formatNumber(row.orderedQty)}</td><td>${formatNumber(row.remainingQty)}</td>
+      <td>${esc(row.poStatus)}</td>
+    </tr>`,
+      )
+      .join("")}</tbody></table>`;
+  } else {
+    body = `<table><thead><tr>
+      <th>${esc(t("orderedAtHistory", locale))}</th><th>${esc(t("product", locale))}</th>
+      <th>${esc(t("poNo", locale))}</th><th>${esc(t("suggestedQtyBase", locale))}</th>
+      <th>${esc(t("orderedQty", locale))}</th><th>${esc(t("livePoStatus", locale))}</th>
+    </tr></thead><tbody>${historyRows
+      .map(
+        (row) => `<tr>
+      <td>${esc(row.createdAt.slice(0, 10))}</td><td>${esc(row.productName)}</td>
+      <td>${esc(row.purchaseNo || "—")}</td><td>${formatNumber(row.suggestedQtyBase)}</td>
+      <td>${formatNumber(row.orderedQtyBase)}</td><td>${esc(row.livePoStatus || "—")}</td>
+    </tr>`,
+      )
+      .join("")}</tbody></table>`;
+  }
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  body { font-family: Arial, sans-serif; color: #18181b; font-size: 11px; }
+  h1 { font-size: 16px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #a1a1aa; padding: 4px 6px; text-align: left; }
+  th { background: #f4f4f5; }
+</style></head><body><h1>${esc(title)}</h1>${body}</body></html>`;
+}
+
+async function downloadHtmlAsFile(html: string, filename: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  return blob;
+}
+
 export function ReorderReportView({
   data,
   error,
@@ -65,6 +151,7 @@ export function ReorderReportView({
   const locale = useAppLocale(localeProp);
   const router = useRouter();
   const entry = findReportCenterEntry("inventory-reorder");
+  const printRef = useRef<HTMLDivElement>(null);
   const [pending, startTransition] = useTransition();
   const [drafts, setDrafts] = useState<Record<string, DraftLine>>({});
   const [groupBySupplier, setGroupBySupplier] = useState(false);
@@ -76,17 +163,19 @@ export function ReorderReportView({
   const query = data?.query;
   const needRows = data?.needRows ?? [];
   const alreadyRows = data?.alreadyRows ?? [];
+  const historyRows = data?.historyRows ?? [];
 
   const getDraft = (row: NeedReorderRow): DraftLine => {
     const key = rowKey(row);
     const existing = drafts[key];
     if (existing) return existing;
     const baseUnit = row.units.find((unit) => unit.isBaseUnit) ?? row.units[0];
+    const unitId = baseUnit?.id ?? "";
     return {
-      orderQty: "",
+      orderQty: defaultOrderQty(row, unitId),
       selected: false,
       supplierId: row.preferredSupplierId ?? "",
-      unitId: baseUnit?.id ?? "",
+      unitId,
     };
   };
 
@@ -96,12 +185,16 @@ export function ReorderReportView({
       const base =
         prev[key] ??
         ({
-          orderQty: "",
+          orderQty: defaultOrderQty(row, (row.units.find((unit) => unit.isBaseUnit) ?? row.units[0])?.id ?? ""),
           selected: false,
           supplierId: row.preferredSupplierId ?? "",
           unitId: (row.units.find((unit) => unit.isBaseUnit) ?? row.units[0])?.id ?? "",
         } satisfies DraftLine);
-      return { ...prev, [key]: { ...base, ...patch } };
+      const next = { ...base, ...patch };
+      if (patch.unitId && patch.orderQty === undefined && row.reorderQtyMode === "AUTO") {
+        next.orderQty = defaultOrderQty(row, patch.unitId);
+      }
+      return { ...prev, [key]: next };
     });
   };
 
@@ -228,9 +321,16 @@ export function ReorderReportView({
       }
       const unit = row.units.find((item) => item.id === draft.unitId);
       lines.push({
+        available: row.available,
+        conversionQty: unit?.conversionQty ?? 1,
         productId: row.productId,
+        purchaseUnitName: unit?.unitName ?? null,
         quantity: qty,
+        reorderLevel: row.minStock,
+        reorderQtyMode: row.reorderQtyMode,
+        suggestedQtyBase: row.suggestedQtyBase,
         supplierId: draft.supplierId,
+        targetStock: row.targetStock,
         unitCost: unit?.costPriceLak ?? 0,
         unitId: draft.unitId || null,
         warehouseId: row.warehouseId,
@@ -251,6 +351,69 @@ export function ReorderReportView({
     }
   }
 
+  const printableTitle =
+    query.tab === "already"
+      ? t("alreadyOrdered", locale)
+      : query.tab === "history"
+        ? t("history", locale)
+        : t("needReorder", locale);
+
+  function openPrintWindow() {
+    const html = buildPrintableHtml({
+      alreadyRows,
+      historyRows,
+      locale,
+      needRows,
+      tab: query!.tab,
+      title: printableTitle,
+    });
+    const win = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!win) {
+      window.print();
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  async function onDownloadPdf() {
+    const html = buildPrintableHtml({
+      alreadyRows,
+      historyRows,
+      locale,
+      needRows,
+      tab: query!.tab,
+      title: printableTitle,
+    });
+    await downloadHtmlAsFile(html, `reorder-${query!.tab}-${new Date().toISOString().slice(0, 10)}.html`);
+    // Browser print-to-PDF remains available via Print A4.
+  }
+
+  async function onDeviceShare() {
+    const html = buildPrintableHtml({
+      alreadyRows,
+      historyRows,
+      locale,
+      needRows,
+      tab: query!.tab,
+      title: printableTitle,
+    });
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const file = new File([blob], `reorder-${query!.tab}.html`, { type: "text/html" });
+    if (typeof navigator !== "undefined" && navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: printableTitle });
+        return;
+      } catch {
+        // fall through to download
+      }
+    }
+    await downloadHtmlAsFile(html, `reorder-${query!.tab}-${new Date().toISOString().slice(0, 10)}.html`);
+    setMessage(t("shareNotSupported", locale));
+  }
+
   const supplierGroups = useMemo(() => {
     if (!groupBySupplier) return null;
     const map = new Map<string, NeedReorderRow[]>();
@@ -267,25 +430,30 @@ export function ReorderReportView({
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <ReportPageChrome entry={entry} locale={locale} />
-      <ReportDetailHeader
-        descriptionKey={entry.descriptionKey}
-        icon={REPORT_CENTER_ICON_MAP[entry.icon]}
-        locale={locale}
-        titleKey={entry.titleKey}
-      />
+      <div className="print:hidden">
+        <ReportPageChrome entry={entry} locale={locale} />
+        <ReportDetailHeader
+          descriptionKey={entry.descriptionKey}
+          icon={REPORT_CENTER_ICON_MAP[entry.icon]}
+          locale={locale}
+          titleKey={entry.titleKey}
+        />
+      </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 print:hidden">
         <Link className={query.tab === "need" ? btnPrimary : btnSecondary} href={reorderTableHref({ ...query, page: 1, tab: "need" })}>
           {t("needReorder", locale)} ({data.summary.needReorder})
         </Link>
         <Link className={query.tab === "already" ? btnPrimary : btnSecondary} href={reorderTableHref({ ...query, page: 1, tab: "already" })}>
           {t("alreadyOrdered", locale)} ({data.summary.alreadyOrdered})
         </Link>
+        <Link className={query.tab === "history" ? btnPrimary : btnSecondary} href={reorderTableHref({ ...query, page: 1, tab: "history" })}>
+          {t("history", locale)} ({data.historyCount})
+        </Link>
       </div>
 
       <ReportSheet>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 print:hidden">
           <div>
             <div className="text-xs uppercase tracking-wide text-zinc-500">{t("needReorder", locale)}</div>
             <div className="text-lg font-semibold tabular-nums">{formatNumber(data.summary.needReorder)}</div>
@@ -310,7 +478,7 @@ export function ReorderReportView({
       </ReportSheet>
 
       <ReportSheet>
-        <form action={reorderTableHref({ tab: query.tab })} className="flex flex-wrap gap-3" method="get">
+        <form action={reorderTableHref({ tab: query.tab })} className="flex flex-wrap gap-3 print:hidden" method="get">
           <input name="tab" type="hidden" value={query.tab} />
           <label className="flex min-w-[10rem] flex-col gap-1 text-xs font-medium text-zinc-600">
             {t("branch", locale)}
@@ -336,13 +504,20 @@ export function ReorderReportView({
           </label>
           <button className={btnPrimary} type="submit">{t("apply", locale)}</button>
           <a className={btnSecondary} href={reorderExportHref(query.tab, query)}>{t("exportExcel", locale)}</a>
+          <button className={btnSecondary} onClick={openPrintWindow} type="button">{t("printA4", locale)}</button>
+          <button className={btnSecondary} onClick={() => void onDownloadPdf()} type="button">{t("downloadPdf", locale)}</button>
+          <button className={btnSecondary} onClick={() => void onDeviceShare()} type="button">{t("deviceShare", locale)}</button>
         </form>
       </ReportSheet>
+
+      <div className="hidden print:block" ref={printRef}>
+        <h1 className="mb-3 text-base font-semibold">{printableTitle}</h1>
+      </div>
 
       {query.tab === "need" ? (
         <>
           <ReportSheet>
-            <form className="flex flex-wrap items-end gap-3" onSubmit={onAddManual}>
+            <form className="flex flex-wrap items-end gap-3 print:hidden" onSubmit={onAddManual}>
               <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-medium text-zinc-600">
                 {t("addProduct", locale)}
                 <input className={fieldClass} onChange={(e) => setAddProductId(e.target.value)} placeholder="productId" value={addProductId} />
@@ -358,10 +533,10 @@ export function ReorderReportView({
               </label>
               <button className={btnSecondary} disabled={pending} type="submit">{t("addToReorder", locale)}</button>
             </form>
-            {message ? <p className="mt-3 text-sm text-zinc-700">{message}</p> : null}
+            {message ? <p className="mt-3 text-sm text-zinc-700 print:hidden">{message}</p> : null}
           </ReportSheet>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 print:hidden">
             <button className={btnSecondary} onClick={selectAll} type="button">{t("selectAll", locale)}</button>
             <button className={btnSecondary} onClick={clearSelection} type="button">{t("clearSelection", locale)}</button>
             <button className={btnSecondary} onClick={() => setGroupBySupplier((v) => !v)} type="button">
@@ -379,7 +554,7 @@ export function ReorderReportView({
 
           {groupBySupplier && supplierGroups ? (
             <ReportSheet>
-              <ul className="space-y-1 text-sm">
+              <ul className="space-y-1 text-sm print:hidden">
                 {supplierGroups.map(([supplierId, rows]) => {
                   const name =
                     supplierId === "__none__"
@@ -400,7 +575,7 @@ export function ReorderReportView({
               <table className={gridTable}>
                 <thead>
                   <tr>
-                    <th className={thCell}>☐</th>
+                    <th className={`${thCell} print:hidden`}>☐</th>
                     <th className={`${thCell} text-left`}>{t("product", locale)}</th>
                     <th className={`${thCell} text-left`}>{t("barcode", locale)}</th>
                     <th className={`${thCell} text-left`}>{t("category", locale)}</th>
@@ -408,19 +583,21 @@ export function ReorderReportView({
                     <th className={`${thCell} text-right`}>{t("colReserved", locale)}</th>
                     <th className={`${thCell} text-right`}>{t("colAvailable", locale)}</th>
                     <th className={`${thCell} text-right`}>{t("colReorderLevel", locale)}</th>
+                    <th className={`${thCell} text-right`}>{t("colTargetStock", locale)}</th>
+                    <th className={`${thCell} text-right`}>{t("suggestedQtyBase", locale)}</th>
                     <th className={`${thCell} text-left`}>{t("reason", locale)}</th>
-                    <th className={`${thCell} text-right`}>{t("orderQty", locale)}</th>
-                    <th className={`${thCell} text-left`}>{t("orderUnit", locale)}</th>
-                    <th className={`${thCell} text-left`}>{t("supplier", locale)}</th>
-                    <th className={`${thCell} text-right`}>{t("unitCost", locale)}</th>
-                    <th className={`${thCell} text-right`}>{t("estimatedCost", locale)}</th>
-                    <th className={`${thCell} text-left`}>{t("status", locale)}</th>
+                    <th className={`${thCell} text-right print:hidden`}>{t("orderQty", locale)}</th>
+                    <th className={`${thCell} text-left print:hidden`}>{t("orderUnit", locale)}</th>
+                    <th className={`${thCell} text-left print:hidden`}>{t("supplier", locale)}</th>
+                    <th className={`${thCell} text-right print:hidden`}>{t("unitCost", locale)}</th>
+                    <th className={`${thCell} text-right print:hidden`}>{t("estimatedCost", locale)}</th>
+                    <th className={`${thCell} text-left print:hidden`}>{t("status", locale)}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {needRows.length === 0 ? (
                     <tr>
-                      <td className={tdCell} colSpan={15}>{t("emptyReorderTable", locale)}</td>
+                      <td className={tdCell} colSpan={17}>{t("emptyReorderTable", locale)}</td>
                     </tr>
                   ) : (
                     needRows.map((row) => {
@@ -430,7 +607,7 @@ export function ReorderReportView({
                       const est = qty > 0 ? estimatedLineCostLak(qty, unit?.costPriceLak) : null;
                       return (
                         <tr key={rowKey(row)}>
-                          <td className={tdCell}>
+                          <td className={`${tdCell} print:hidden`}>
                             <input
                               checked={draft.selected}
                               onChange={(e) => setDraft(row, { selected: e.target.checked })}
@@ -446,8 +623,12 @@ export function ReorderReportView({
                           <td className={`${tdCell} ${numClass}`}>
                             {row.minStock > 0 ? formatNumber(row.minStock) : t("noReorderLevel", locale)}
                           </td>
+                          <td className={`${tdCell} ${numClass}`}>{formatNumber(row.targetStock)}</td>
+                          <td className={`${tdCell} ${numClass}`}>
+                            {row.reorderQtyMode === "MANUAL" ? "—" : formatNumber(row.suggestedQtyBase)}
+                          </td>
                           <td className={tdCell}>{reasonLabel(row.reason, locale)}</td>
-                          <td className={tdCell}>
+                          <td className={`${tdCell} print:hidden`}>
                             <input
                               className={`${fieldClass} w-24`}
                               inputMode="decimal"
@@ -455,7 +636,7 @@ export function ReorderReportView({
                               value={draft.orderQty}
                             />
                           </td>
-                          <td className={tdCell}>
+                          <td className={`${tdCell} print:hidden`}>
                             <select
                               className={fieldClass}
                               onChange={(e) => setDraft(row, { unitId: e.target.value })}
@@ -469,7 +650,7 @@ export function ReorderReportView({
                               ))}
                             </select>
                           </td>
-                          <td className={tdCell}>
+                          <td className={`${tdCell} print:hidden`}>
                             <select
                               className={fieldClass}
                               onChange={(e) => setDraft(row, { supplierId: e.target.value })}
@@ -481,13 +662,13 @@ export function ReorderReportView({
                               ))}
                             </select>
                           </td>
-                          <td className={`${tdCell} ${numClass}`}>
+                          <td className={`${tdCell} ${numClass} print:hidden`}>
                             {unit?.costPriceLak == null ? t("noCost", locale) : formatLak(unit.costPriceLak)}
                           </td>
-                          <td className={`${tdCell} ${numClass}`}>
+                          <td className={`${tdCell} ${numClass} print:hidden`}>
                             {est == null ? "—" : formatLak(est)}
                           </td>
-                          <td className={tdCell}>
+                          <td className={`${tdCell} print:hidden`}>
                             {row.isManual && row.reason === "added_manually" ? (
                               <button className="text-xs text-zinc-700 underline" onClick={() => onRemoveManual(row)} type="button">
                                 {t("removeFromReorder", locale)}
@@ -505,7 +686,7 @@ export function ReorderReportView({
             </div>
           </ReportSheet>
         </>
-      ) : (
+      ) : query.tab === "already" ? (
         <ReportSheet>
           <div className="overflow-x-auto">
             <table className={gridTable}>
@@ -537,7 +718,7 @@ export function ReorderReportView({
                       <td className={tdCell}>{row.unitName}</td>
                       <td className={tdCell}>{row.supplierName}</td>
                       <td className={tdCell}>
-                        <Link className="underline" href="/purchasing">{row.poNo}</Link>
+                        <Link className="underline print:no-underline" href="/purchasing">{row.poNo}</Link>
                       </td>
                       <td className={tdCell}>{row.orderedAt.slice(0, 10)}</td>
                       <td className={tdCell}>{row.poStatus}</td>
@@ -550,10 +731,69 @@ export function ReorderReportView({
             </table>
           </div>
         </ReportSheet>
+      ) : (
+        <ReportSheet>
+          <div className="overflow-x-auto">
+            <table className={gridTable}>
+              <thead>
+                <tr>
+                  <th className={`${thCell} text-left`}>{t("orderedAtHistory", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("product", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("barcode", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("warehouse", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("poNo", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("supplier", locale)}</th>
+                  <th className={`${thCell} text-right`}>{t("colReorderLevel", locale)}</th>
+                  <th className={`${thCell} text-right`}>{t("colTargetStock", locale)}</th>
+                  <th className={`${thCell} text-right`}>{t("availableAtOrder", locale)}</th>
+                  <th className={`${thCell} text-right`}>{t("suggestedQtyBase", locale)}</th>
+                  <th className={`${thCell} text-right`}>{t("orderedQty", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("qtyMode", locale)}</th>
+                  <th className={`${thCell} text-left`}>{t("livePoStatus", locale)}</th>
+                  <th className={`${thCell} text-right`}>{t("liveReceivedQty", locale)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyRows.length === 0 ? (
+                  <tr>
+                    <td className={tdCell} colSpan={14}>{t("emptyHistoryTable", locale)}</td>
+                  </tr>
+                ) : (
+                  historyRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className={tdCell}>{row.createdAt.slice(0, 16).replace("T", " ")}</td>
+                      <td className={tdCell}>{row.productName}</td>
+                      <td className={tdCell}>{row.barcode || t("noBarcode", locale)}</td>
+                      <td className={tdCell}>{row.warehouseName}</td>
+                      <td className={tdCell}>{row.purchaseNo || "—"}</td>
+                      <td className={tdCell}>{row.supplierName || t("noSupplier", locale)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{formatNumber(row.reorderLevel)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{formatNumber(row.targetStock)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{formatNumber(row.availableAtOrder)}</td>
+                      <td className={`${tdCell} ${numClass}`}>{formatNumber(row.suggestedQtyBase)}</td>
+                      <td className={`${tdCell} ${numClass}`}>
+                        {formatNumber(row.orderedQtyPurchase)}
+                        {row.purchaseUnitName ? ` ${row.purchaseUnitName}` : ""}
+                        {` / ${formatNumber(row.orderedQtyBase)}`}
+                      </td>
+                      <td className={tdCell}>
+                        {row.reorderQtyMode === "MANUAL" ? t("qtyModeManual", locale) : t("qtyModeAuto", locale)}
+                      </td>
+                      <td className={tdCell}>{row.livePoStatus || "—"}</td>
+                      <td className={`${tdCell} ${numClass}`}>
+                        {row.liveReceivedQty == null ? "—" : formatNumber(row.liveReceivedQty)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ReportSheet>
       )}
 
       {confirmOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden">
           <div className="max-h-[80vh] w-full max-w-lg overflow-auto rounded-md border border-zinc-300 bg-white p-4 shadow-lg">
             <h3 className="text-base font-semibold text-zinc-900">{t("createPo", locale)}</h3>
             <p className="mt-2 text-sm text-zinc-600">{t("createPoConfirmHint", locale)}</p>

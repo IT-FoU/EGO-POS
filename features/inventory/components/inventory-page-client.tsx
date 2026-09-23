@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ClipboardCheck, PackagePlus, ReceiptText, SlidersHorizontal, Truck, } from "lucide-react";
+import { ClipboardCheck, PackagePlus, ReceiptText, RefreshCw, Settings2, SlidersHorizontal, Truck, } from "lucide-react";
 import type { InventoryItem, StockMovement, Warehouse } from "@/features/inventory/types";
 import type { InventoryListPage } from "@/features/inventory/list-query";
 import { loadInventoryListAction } from "@/features/inventory/actions";
@@ -125,7 +125,7 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
 
       <InventoryInsightPanel activePanel={activePanel} items={listPage?.previewItems ?? filteredItems} locale={locale} onFilterChange={setStockFilter}/>
 
-      <nav className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <nav className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90" href="/inventory/quick-stock-in">
           <PackagePlus aria-hidden="true"/>
           {t("quickStockIn")}
@@ -145,6 +145,14 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
         <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/purchasing/receiving">
           <Truck aria-hidden="true"/>
           {t("goodsReceiving")}
+        </Link>
+        <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/inventory/reorder">
+          <RefreshCw aria-hidden="true"/>
+          {t("reorder")}
+        </Link>
+        <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/inventory/reorder-settings">
+          <Settings2 aria-hidden="true"/>
+          {t("reorderSettings")}
         </Link>
       </nav>
 

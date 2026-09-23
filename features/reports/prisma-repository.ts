@@ -368,10 +368,12 @@ function slimReportProduct(row: Record<string, any>): Product {
     minStock: 0,
     nameEn: String(row.nameEn ?? ""),
     nameLo: String(row.nameLo ?? ""),
+    reorderQtyMode: row.reorderQtyMode === "MANUAL" ? "MANUAL" : "AUTO",
     sellingPriceLak: 0,
     sku: String(row.sku ?? ""),
     status: "active",
     supplierName: "",
+    targetStock: Number(row.targetStock ?? 0),
     units: [],
     updatedAt: "",
   };

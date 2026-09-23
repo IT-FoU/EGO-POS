@@ -137,10 +137,12 @@ check(
   "22. Create PO uses existing engine",
   read("features/reports/reorder-report-repository.ts").includes("createPurchaseOrder"),
 );
+// R10 adds advisory Suggested Qty (Owner override). Create PO remains Owner-triggered only.
 check(
-  "23. No auto qty/unit formulas",
-  !read("features/reports/reorder-report-math.ts").includes("targetStock") &&
-    !read("features/reports/components/reorder-report-views.tsx").includes("Suggested Order"),
+  "23. No auto-create PO; suggested qty is advisory",
+  read("features/reports/reorder-report-math.ts").includes("suggestedQtyBase") &&
+    read("features/reports/reorder-report-repository.ts").includes("createPurchaseOrder") &&
+    !read("features/reports/reorder-report-repository.ts").match(/autoCreate|createPoAutomatically/i),
 );
 check(
   "24. Barcode primary not SKU column",
@@ -150,7 +152,7 @@ check(
 
 async function live() {
   loadProjectEnvFiles();
-  const url = resolveScriptDatabaseUrl({ allowProduction: false });
+  const url = resolveScriptDatabaseUrl("dev-write");
   const adapter = new PrismaPg({ connectionString: url });
   const prisma = new PrismaClient({ adapter });
   const stamp = randomBytes(3).toString("hex");
