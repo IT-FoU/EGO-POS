@@ -7,7 +7,7 @@ import {
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { fillPosCopy, tPos as t } from "@/lib/i18n/pos-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { BadgePercent, Banknote, Barcode, CalendarDays, ChevronDown, ChevronUp, CreditCard, Minus, Plus, Printer, QrCode, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, UserRoundSearch, WalletCards, X, } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -42,6 +42,10 @@ import {
     resolvePosSaleUnits,
     updatePosCartQuantity,
 } from "@/features/pos/pos-cart";
+import {
+    isScannerEnterCode,
+    ScannerKeycodeSession,
+} from "@/features/pos/scanner-keycode";
 import {
   DEFAULT_POS_UNIT_DISPLAY_MODE,
   readPosUnitDisplayMode,
@@ -222,6 +226,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const checkoutInFlightRef = useRef(false);
     const postSaleInFlightRef = useRef(false);
     const [productQuery, setProductQuery] = useState("");
+    const scannerSessionRef = useRef(new ScannerKeycodeSession());
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [productGridVisible, setProductGridVisible] = useState(true);
     const [unitDisplayMode, setUnitDisplayMode] = useState<PosUnitDisplayMode>(DEFAULT_POS_UNIT_DISPLAY_MODE);
@@ -873,8 +878,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMessage(error instanceof Error ? error.message : t("ui.favorite.update.failed"));
         }
     }
-    function scanBarcode() {
-        const normalized = productQuery.trim();
+    function scanBarcode(explicitScanValue?: string) {
+        const fromScanner = typeof explicitScanValue === "string";
+        const normalized = (fromScanner ? explicitScanValue : productQuery).trim();
         if (!normalized) {
             setMessage(t("ui.scan.or.enter.barcode.sku.or.internal.code.f"));
             return;
@@ -882,14 +888,37 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         const match = findPosScanMatch(visibleProducts, normalized);
         if (!match) {
             setMessage(t("ui.no.product.found.for.barcode.sku.or.internal"));
+            // Clear layout-translated wedge garbage after a confirmed scanner attempt.
+            if (fromScanner) setProductQuery("");
             return;
         }
         if (match.conflict) {
             setMessage(t("ui.barcode.conflict"));
+            if (fromScanner) setProductQuery("");
             return;
         }
         selectProductForSale(match.product, match.unit);
         setProductQuery("");
+    }
+    function handleProductSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+        const session = scannerSessionRef.current;
+        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const code = event.code;
+
+        if (isScannerEnterCode(code) || event.key === "Enter") {
+            event.preventDefault();
+            const finalized = session.finalize(now);
+            if (finalized.ok) {
+                scanBarcode(finalized.value);
+            }
+            else {
+                scanBarcode();
+            }
+            return;
+        }
+
+        // Build scanner candidate from physical codes only. Never block human typing.
+        session.pushCode(code, now);
     }
     function toggleProductGrid() {
         setProductGridVisible((current) => {
@@ -1883,12 +1912,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <label className="relative">
                 <Barcode className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary" aria-hidden="true"/>
-                <input autoFocus className="h-[60px] w-full rounded-xl border border-primary/35 bg-background pl-12 pr-4 text-lg font-bold shadow-inner outline-none transition placeholder:text-sm placeholder:font-medium focus:border-primary focus:ring-4 focus:ring-primary/10" placeholder={t("ui.search.or.scan.barcode.sku.product.name")} value={productQuery} onChange={(event) => setProductQuery(event.target.value)} onKeyDown={(event) => {
-            if (event.key === "Enter") {
-                event.preventDefault();
-                scanBarcode();
-            }
-        }}/>
+                <input autoFocus className="h-[60px] w-full rounded-xl border border-primary/35 bg-background pl-12 pr-4 text-lg font-bold shadow-inner outline-none transition placeholder:text-sm placeholder:font-medium focus:border-primary focus:ring-4 focus:ring-primary/10" placeholder={t("ui.search.or.scan.barcode.sku.product.name")} value={productQuery} onChange={(event) => setProductQuery(event.target.value)} onKeyDown={handleProductSearchKeyDown}/>
               </label>
               <button className="h-[60px] rounded-xl border border-primary/25 bg-primary/10 px-4 text-sm font-bold text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setFavoritesOpen(true)}>
                 {t("ui.favorites")}
