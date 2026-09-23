@@ -119,6 +119,113 @@ export function suggestedPurchaseQtyFromBase(suggestedBase: number, conversionQt
   return Math.ceil(base / conversion - 1e-12);
 }
 
+/** Purchase-draft unit roles used only for default Order Unit priority (Box > Pack > Piece). */
+export type ReorderPurchaseUnitRole = "box" | "pack" | "piece" | "other";
+
+export function classifyReorderPurchaseUnitRole(unitName: string): ReorderPurchaseUnitRole {
+  const name = String(unitName ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  if (!name) return "other";
+  // Box / carton family (EN + common LO)
+  if (
+    /\bbox(es)?\b/.test(name) ||
+    /\bcarton(s)?\b/.test(name) ||
+    name.includes("ກ່ອງ") ||
+    name === "box" ||
+    name === "boxes"
+  ) {
+    return "box";
+  }
+  // Pack family
+  if (
+    /\bpack(s|age|ages)?\b/.test(name) ||
+    /\bpkt\b/.test(name) ||
+    name.includes("ແພັກ") ||
+    name.includes("ແພค") ||
+    name.includes("ຫໍ່") ||
+    name === "pack" ||
+    name === "packs"
+  ) {
+    return "pack";
+  }
+  // Piece / base selling unit family
+  if (
+    /\bpiece(s)?\b/.test(name) ||
+    /\bpcs?\b/.test(name) ||
+    /\bunit(s)?\b/.test(name) ||
+    name.includes("ອັນ") ||
+    name.includes("ຊິ້ນ") ||
+    name === "piece" ||
+    name === "pieces"
+  ) {
+    return "piece";
+  }
+  return "other";
+}
+
+/**
+ * Enabled purchase units for Reorder Order Unit.
+ * Uses ProductUnit.isPurchaseUnit; disabled (false) units never appear.
+ * Fallback: base unit only when no purchase units are flagged.
+ */
+export function filterReorderPurchaseUnits<
+  T extends { isBaseUnit: boolean; isPurchaseUnit?: boolean },
+>(units: T[]): T[] {
+  const enabled = units.filter((unit) => unit.isPurchaseUnit === true);
+  if (enabled.length > 0) return enabled;
+  const base = units.find((unit) => unit.isBaseUnit);
+  return base ? [base] : units.slice(0, 1);
+}
+
+/**
+ * Default Order Unit for purchase preparation only (does not change Product selling default):
+ * Box → Pack → Piece → base → first.
+ */
+export function pickDefaultReorderPurchaseUnit<
+  T extends { id: string; isBaseUnit: boolean; unitName: string },
+>(units: T[]): T | null {
+  if (!units.length) return null;
+  const byRole = (role: ReorderPurchaseUnitRole) =>
+    units.find((unit) => classifyReorderPurchaseUnitRole(unit.unitName) === role) ?? null;
+  return (
+    byRole("box") ??
+    byRole("pack") ??
+    byRole("piece") ??
+    units.find((unit) => unit.isBaseUnit) ??
+    units[0] ??
+    null
+  );
+}
+
+/**
+ * Supplier-facing barcode: prefer selected unit barcode; fallback to product/base barcode.
+ * Never invent barcodes; returns null only when both are missing.
+ */
+export function supplierOrderBarcode(input: {
+  productBarcode?: string | null;
+  unitBarcode?: string | null;
+}): string | null {
+  const unit = String(input.unitBarcode ?? "").trim();
+  if (unit) return unit;
+  const product = String(input.productBarcode ?? "").trim();
+  if (product) return product;
+  return null;
+}
+
+/** Columns allowed on supplier Print / PDF / Excel / Share (plus document header metadata). */
+export const SUPPLIER_ORDER_COLUMNS = ["productName", "barcode", "orderQty", "orderUnit"] as const;
+
+export type SupplierOrderLine = {
+  barcode: string;
+  orderQty: number;
+  orderUnit: string;
+  productName: string;
+  supplierId: string;
+  supplierName: string;
+};
+
 export function estimatedLineCostLak(orderQty: number, unitCostLak: number | null | undefined) {
   if (unitCostLak == null || !Number.isFinite(Number(unitCostLak))) return null;
   return moneyLak(qtyNum(orderQty) * qtyNum(unitCostLak));

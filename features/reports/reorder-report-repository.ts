@@ -9,6 +9,7 @@ import {
   classifyReorderReason,
   effectiveStockBase,
   emptyNeedReorderSummary,
+  filterReorderPurchaseUnits,
   hasReorderThreshold,
   qtyNum,
   remainingOrderedQty,
@@ -33,6 +34,7 @@ export type ReorderUnitOption = {
   costPriceLak: number | null;
   id: string;
   isBaseUnit: boolean;
+  isPurchaseUnit: boolean;
   unitName: string;
 };
 
@@ -209,6 +211,7 @@ export async function loadReorderPage(
           costPriceLak: true,
           id: true,
           isBaseUnit: true,
+          isPurchaseUnit: true,
           status: true,
           unitName: true,
         },
@@ -330,6 +333,18 @@ export async function loadReorderPage(
         targetStock,
       });
 
+      const mappedUnits = (product.units as Array<Record<string, any>>).map((unit) => ({
+        barcode: unit.barcode ? String(unit.barcode) : null,
+        conversionQty: qtyNum(unit.conversionQty) || 1,
+        costPriceLak: unit.costPriceLak == null ? null : qtyNum(unit.costPriceLak),
+        id: String(unit.id),
+        isBaseUnit: Boolean(unit.isBaseUnit),
+        isPurchaseUnit: Boolean(unit.isPurchaseUnit),
+        unitName: String(unit.unitName || "Unit"),
+      }));
+      // Order Unit dropdown: enabled purchase units only (status=active already applied).
+      const purchaseUnits = filterReorderPurchaseUnits(mappedUnits);
+
       needRows.push({
         available,
         barcode,
@@ -349,14 +364,7 @@ export async function loadReorderPage(
         reserved,
         suggestedQtyBase: suggested,
         targetStock,
-        units: (product.units as Array<Record<string, any>>).map((unit) => ({
-          barcode: unit.barcode ? String(unit.barcode) : null,
-          conversionQty: qtyNum(unit.conversionQty) || 1,
-          costPriceLak: unit.costPriceLak == null ? null : qtyNum(unit.costPriceLak),
-          id: String(unit.id),
-          isBaseUnit: Boolean(unit.isBaseUnit),
-          unitName: String(unit.unitName || "Unit"),
-        })),
+        units: purchaseUnits,
         warehouseId: warehouse.id,
         warehouseName: warehouseName.get(warehouse.id) || warehouse.name,
       });

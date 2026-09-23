@@ -236,3 +236,88 @@ export async function buildReorderExcel(input: {
     data.alreadyRows.length,
   );
 }
+
+/**
+ * Supplier-facing order Excel — Product Name, Barcode, Order Qty, Order Unit only
+ * (+ company / supplier / date header). One sheet per supplier.
+ * Does NOT include stock, suggested qty, cost, or other internal fields.
+ */
+export async function buildReorderSupplierOrderExcel(input: {
+  companyName: string;
+  draftRef?: string;
+  locale: SupportedLocale;
+  lines: Array<{
+    barcode: string;
+    orderQty: number;
+    orderUnit: string;
+    productName: string;
+    supplierId: string;
+    supplierName: string;
+  }>;
+}): Promise<SalesExcelFile> {
+  const { companyName, draftRef, locale, lines } = input;
+  const workbook = new ExcelJS.Workbook();
+  const bySupplier = new Map<string, typeof lines>();
+  for (const line of lines) {
+    const key = line.supplierId || "__none__";
+    const list = bySupplier.get(key) ?? [];
+    list.push(line);
+    bySupplier.set(key, list);
+  }
+
+  const headers = [t("product", locale), t("barcode", locale), t("orderQty", locale), t("orderUnit", locale)];
+  let totalRows = 0;
+  let sheetIndex = 0;
+
+  for (const [, group] of bySupplier) {
+    sheetIndex += 1;
+    const supplierName = group[0]?.supplierName || t("noSupplier", locale);
+    const safeName = supplierName.replace(/[\\/*?:\[\]]/g, " ").slice(0, 28) || `Supplier ${sheetIndex}`;
+    const sheet = workbook.addWorksheet(safeName);
+    writeMeta(sheet, 1, t("store", locale), companyName);
+    writeMeta(sheet, 2, t("supplier", locale), supplierName);
+    writeMeta(sheet, 3, t("generatedAt", locale), `${stampDay()} ${formatBusinessTimeLabel(new Date())}`);
+    if (draftRef) writeMeta(sheet, 4, t("purchaseDraftRef", locale), draftRef);
+
+    let row = draftRef ? 6 : 5;
+    headers.forEach((header, index) => {
+      const cell = sheet.getCell(row, index + 1);
+      cell.value = header;
+      cell.border = BORDER;
+      cell.fill = HEADER_FILL;
+      cell.font = { bold: true };
+    });
+    row += 1;
+    for (const item of group) {
+      const values = [item.productName, item.barcode, item.orderQty, item.orderUnit];
+      values.forEach((value, index) => {
+        const cell = sheet.getCell(row, index + 1);
+        cell.value = value as ExcelJS.CellValue;
+        cell.border = BORDER;
+      });
+      row += 1;
+      totalRows += 1;
+    }
+  }
+
+  if (sheetIndex === 0) {
+    const sheet = workbook.addWorksheet("Supplier Order");
+    writeMeta(sheet, 1, t("store", locale), companyName);
+    writeMeta(sheet, 2, t("generatedAt", locale), `${stampDay()} ${formatBusinessTimeLabel(new Date())}`);
+    headers.forEach((header, index) => {
+      const cell = sheet.getCell(4, index + 1);
+      cell.value = header;
+      cell.border = BORDER;
+      cell.fill = HEADER_FILL;
+      cell.font = { bold: true };
+    });
+  }
+
+  return toFile(
+    workbook,
+    `EGO-POS-Supplier-Order-${stampDay()}.xlsx`,
+    "Supplier Order",
+    headers,
+    totalRows,
+  );
+}
