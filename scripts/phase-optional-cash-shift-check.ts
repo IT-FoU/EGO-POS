@@ -9,7 +9,7 @@ import {
   deriveCashShiftUiState,
   startWorkBlockedReasonKey,
 } from "../features/pos/cash-shift-ui-state";
-import { readRequireCashShiftBeforeSaleFromJson } from "../features/products/unit-pricing-defaults";
+import { readRequireCashShiftBeforeSaleFromJson, parseRequireCashShiftBeforeSaleFlag, withRequireCashShiftBeforeSale } from "../features/products/unit-pricing-defaults";
 import { posCopyHasNoReplacementChars, posCopyKeyParity, tPos } from "../lib/i18n/pos-copy";
 import {
   reportsCopyHasNoReplacementChars,
@@ -62,6 +62,34 @@ check(
 check(
   "10. Explicit true stays ON",
   readRequireCashShiftBeforeSaleFromJson({ __requireCashShiftBeforeSale: true }) === true,
+);
+check(
+  "10b. String/number false encodings stay OFF (not Boolean coercion)",
+  readRequireCashShiftBeforeSaleFromJson({ __requireCashShiftBeforeSale: "false" }) === false &&
+    readRequireCashShiftBeforeSaleFromJson({ __requireCashShiftBeforeSale: 0 }) === false &&
+    parseRequireCashShiftBeforeSaleFlag("false") === false &&
+    parseRequireCashShiftBeforeSaleFlag(0) === false &&
+    parseRequireCashShiftBeforeSaleFlag(false) === false,
+);
+check(
+  "10c. withRequire always writes explicit boolean (never deletes key for OFF)",
+  withRequireCashShiftBeforeSale({ units: {}, version: 1 }, false).__requireCashShiftBeforeSale === false &&
+    withRequireCashShiftBeforeSale({ units: {}, version: 1 }, true).__requireCashShiftBeforeSale === true,
+);
+check(
+  "10d. Settings save sends 0/1 for cash-shift flag",
+  read("features/settings/components/settings-form.tsx").includes("requireCashShiftBeforeSale: (settings.requireCashShiftBeforeSale === false ? 0 : 1)"),
+);
+check(
+  "10e. Settings upsert writes unitPricingDefaults atomically + verifies read-back",
+  (() => {
+    const src = read("features/settings/prisma-repository.ts");
+    return (
+      src.includes("unitPricingDefaults: nextDefaults") &&
+      src.includes("Failed to persist Require Cash Shift Before Sale") &&
+      src.includes("parseRequireCashShiftBeforeSaleFlag")
+    );
+  })(),
 );
 
 check(

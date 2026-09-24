@@ -3,6 +3,7 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import type { SettingsFormData } from "@/features/settings/types";
 import {
+  parseRequireCashShiftBeforeSaleFlag,
   readRequireCashShiftBeforeSaleFromJson,
   withRequireCashShiftBeforeSale,
 } from "@/features/products/unit-pricing-defaults";
@@ -90,11 +91,11 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
       ? (String(input.receiptPrintMode) as SettingsFormData["receiptPrintMode"])
       : DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: stringValue(input.receiptPrefix, DEFAULT_SETTINGS.receiptPrefix),
-    // Missing/undefined => ON (strict). Explicit false only when Owner turns setting OFF.
+    // Missing/null/undefined => ON. Explicit false/"false"/0 => OFF. Never Boolean("false").
     requireCashShiftBeforeSale:
-      input.requireCashShiftBeforeSale === undefined
+      input.requireCashShiftBeforeSale === undefined || input.requireCashShiftBeforeSale === null
         ? DEFAULT_SETTINGS.requireCashShiftBeforeSale
-        : Boolean(input.requireCashShiftBeforeSale),
+        : parseRequireCashShiftBeforeSaleFlag(input.requireCashShiftBeforeSale),
     roundingMethod: ["down", "nearest", "up"].includes(String(input.roundingMethod)) ? String(input.roundingMethod) : DEFAULT_SETTINGS.roundingMethod,
     showLogoOnReceipt: Boolean(input.showLogoOnReceipt),
     showTaxOnReceipt: Boolean(input.showTaxOnReceipt),
@@ -201,6 +202,17 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         where: { id: company.id },
       });
 
+      const existingSettings = await tx.companySetting.findUnique({
+        select: { unitPricingDefaults: true },
+        where: { companyId: company.id },
+      });
+      // Persist explicit boolean into JSON in the same upsert as other settings fields.
+      // OFF must write false — never omit the key (missing means legacy ON).
+      const nextDefaults = withRequireCashShiftBeforeSale(
+        existingSettings?.unitPricingDefaults,
+        normalized.requireCashShiftBeforeSale,
+      );
+
       await tx.companySetting.upsert({
         create: {
           baseCurrency: normalized.baseCurrency,
@@ -222,6 +234,7 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
           showTaxOnReceipt: normalized.showTaxOnReceipt,
           taxInclusive: normalized.taxInclusive,
           taxNumber: normalized.taxNumber,
+          unitPricingDefaults: nextDefaults,
           vatEnabled: normalized.vatEnabled,
           vatRate: normalized.vatRate,
         },
@@ -244,22 +257,10 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
           showTaxOnReceipt: normalized.showTaxOnReceipt,
           taxInclusive: normalized.taxInclusive,
           taxNumber: normalized.taxNumber,
+          unitPricingDefaults: nextDefaults,
           vatEnabled: normalized.vatEnabled,
           vatRate: normalized.vatRate,
         },
-        where: { companyId: company.id },
-      });
-
-      const existingSettings = await tx.companySetting.findUnique({
-        select: { unitPricingDefaults: true },
-        where: { companyId: company.id },
-      });
-      const nextDefaults = withRequireCashShiftBeforeSale(
-        existingSettings?.unitPricingDefaults,
-        normalized.requireCashShiftBeforeSale,
-      );
-      await tx.companySetting.update({
-        data: { unitPricingDefaults: nextDefaults },
         where: { companyId: company.id },
       });
 
@@ -268,9 +269,17 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         where: { id: company.id },
       });
 
+      const persistedFlag = requireCashShiftBeforeSaleFromOpsRow(updatedCompany.settings);
+      // Fail closed if OFF was requested but JSON still reads as ON (false lost).
+      if (persistedFlag !== normalized.requireCashShiftBeforeSale) {
+        throw new Error(
+          "Failed to persist Require Cash Shift Before Sale. Please try Save Settings again.",
+        );
+      }
+
       return {
         ...mapSettings(updatedCompany),
-        requireCashShiftBeforeSale: requireCashShiftBeforeSaleFromOpsRow(updatedCompany.settings),
+        requireCashShiftBeforeSale: persistedFlag,
       };
     },
   });
