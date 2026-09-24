@@ -12,6 +12,28 @@ export type UnitPricingDefaultsMap = {
   version: 1;
 };
 
+/** Reserved flag inside company_settings.unit_pricing_defaults JSON (no DDL). Missing => ON. */
+export const REQUIRE_CASH_SHIFT_JSON_KEY = "__requireCashShiftBeforeSale";
+
+export function readRequireCashShiftBeforeSaleFromJson(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+  return (value as Record<string, unknown>)[REQUIRE_CASH_SHIFT_JSON_KEY] !== false;
+}
+
+export function withRequireCashShiftBeforeSale(current: unknown, required: boolean): Record<string, unknown> {
+  const base =
+    current && typeof current === "object" && !Array.isArray(current)
+      ? { ...(current as Record<string, unknown>) }
+      : {};
+  const pricing = parseUnitPricingDefaults(base);
+  return {
+    ...base,
+    units: pricing.units,
+    version: 1 as const,
+    [REQUIRE_CASH_SHIFT_JSON_KEY]: required,
+  };
+}
+
 export function normalizeUnitTypeKey(unitName: unknown) {
   return String(unitName ?? "").trim().toLowerCase();
 }
@@ -73,7 +95,8 @@ export function applyDefaultsToNewUnit<T extends Pick<ProductUnit, "unitName" | 
 export function mergeUnitPricingDefaultsFromUnits(
   current: unknown,
   units: Array<{ markupPercent?: number; pricingMode?: string; roundingLak?: number; unitName: string }>,
-): UnitPricingDefaultsMap {
+): UnitPricingDefaultsMap & Record<string, unknown> {
+  const requireCashShift = readRequireCashShiftBeforeSaleFromJson(current);
   const next = parseUnitPricingDefaults(current);
   for (const unit of units) {
     const key = normalizeUnitTypeKey(unit.unitName);
@@ -84,5 +107,8 @@ export function mergeUnitPricingDefaultsFromUnits(
       roundingLak: normalizeRounding(unit.roundingLak),
     };
   }
-  return next;
+  return {
+    ...next,
+    [REQUIRE_CASH_SHIFT_JSON_KEY]: requireCashShift,
+  };
 }

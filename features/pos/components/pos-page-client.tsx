@@ -28,6 +28,12 @@ import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
+import {
+  canStartWork,
+  deriveCashShiftUiState,
+  startWorkBlockedReasonKey,
+  type CashShiftUiState,
+} from "@/features/pos/cash-shift-ui-state";
 import { hasRestorableHeldCart, pickRestorableHeldSale, restoreCartFromHeldSale, slimHeldSnapshot } from "@/features/pos/held-cart";
 import {
     cartExceedsStock,
@@ -1178,6 +1184,15 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMessage(t("ui.cart.is.empty"));
             return;
         }
+        // Soft UX guard when Require Cash Shift Before Sale is ON (server still enforces).
+        if (activeCashSession.requireCashShiftBeforeSale !== false) {
+            const cashOk = activeCashSession.status === "open" && Boolean(activeCashSession.sessionId);
+            const attendanceOk = Boolean(activeCashSession.attendanceOpen);
+            if (!cashOk || !attendanceOk) {
+                setMessage(t("ui.start.work.before.sale"));
+                return;
+            }
+        }
         const stockError = getStockValidationError();
         if (stockError) {
             setMessage(stockError);
@@ -1600,6 +1615,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setClosingSummaryVisible(false);
             setLastCloseSummary(null);
             setActiveCashSession({
+                attendanceCashSessionId: "demo-cash-session",
+                attendanceOpen: true,
                 cashInLak: 0,
                 cashOutLak: 0,
                 cashSalesLak: 0,
@@ -1607,6 +1624,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 nonCashSalesLak: 0,
                 openedAt: new Date().toISOString(),
                 openingCashLak: openingCashTotal,
+                requireCashShiftBeforeSale: activeCashSession.requireCashShiftBeforeSale !== false,
                 sessionId: "demo-cash-session",
                 status: "open",
             });
@@ -1618,7 +1636,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 const session = await openCashSessionRequest(openingCashTotal, {
                     countBreakdown: { opening: toDenominationCountMap(openingCashCounts) },
                 });
-                setActiveCashSession(session);
+                setActiveCashSession({
+                    ...session,
+                    requireCashShiftBeforeSale: activeCashSession.requireCashShiftBeforeSale !== false,
+                });
                 setClosingSummaryVisible(false);
                 setLastCloseSummary(null);
                 setClosingCashCounts(emptyDenominationCounts());
@@ -1682,12 +1703,18 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }
     function endAttendanceWork() {
         if (demoMode) {
-            setMessage(t("ui.end.work"));
+            setActiveCashSession((current) => ({ ...current, attendanceOpen: false, attendanceCashSessionId: null }));
+            setMessage(t("ui.work.shift.ended"));
             return;
         }
         startTransition(async () => {
             try {
                 await endAttendanceWorkRequest();
+                const session = await fetchCurrentCashSession();
+                setActiveCashSession({
+                    ...session,
+                    requireCashShiftBeforeSale: activeCashSession.requireCashShiftBeforeSale !== false,
+                });
                 setMessage(t("ui.work.shift.ended"));
                 router.refresh();
             } catch (error) {
@@ -1715,7 +1742,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             const session = input.type === "cash_in"
                 ? await cashInRequest(activeCashSession.sessionId, input.amountLak, input.reason || undefined)
                 : await cashOutRequest(activeCashSession.sessionId, input.amountLak, input.reason);
-            setActiveCashSession(session);
+            setActiveCashSession({
+                ...session,
+                attendanceCashSessionId: activeCashSession.attendanceCashSessionId,
+                attendanceOpen: activeCashSession.attendanceOpen,
+                requireCashShiftBeforeSale: activeCashSession.requireCashShiftBeforeSale !== false,
+            });
             setOwnShiftReportEpoch((current) => current + 1);
             setCashInOutOpen(false);
             setMessage(
@@ -2272,6 +2304,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       {cashShiftCountOpen ? (<PosModal title={t("ui.cash.shift.count")} onBack={() => backFromMoreChild(() => setCashShiftCountOpen(false))} onClose={() => closeMoreChild(() => setCashShiftCountOpen(false))}>
         <StaffControl
+          attendanceOpen={Boolean(activeCashSession.attendanceOpen)}
           businessDate={businessDate}
           cashCloseBusy={cashCloseBusy}
           cashDifference={cashDifference}
@@ -2287,6 +2320,12 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           openingCashTotal={effectiveOpeningCash}
           qrTransferSales={qrTransferSales}
           sessionStatus={activeCashSession.status}
+          shiftUiState={deriveCashShiftUiState({
+            attendanceCashSessionId: activeCashSession.attendanceCashSessionId,
+            attendanceOpen: Boolean(activeCashSession.attendanceOpen),
+            cashSessionId: activeCashSession.sessionId,
+            cashStatus: activeCashSession.status,
+          })}
           onConfirmClosing={confirmClosingSummary}
           onEndWork={endAttendanceWork}
           onOpenSession={openCashShiftSession}
@@ -2703,6 +2742,7 @@ function Metric({ label, value }: {
     </div>);
 }
 function StaffControl({
+  attendanceOpen,
   businessDate,
   cashCloseBusy,
   cashDifference,
@@ -2724,7 +2764,9 @@ function StaffControl({
   onUpdateOpeningCashCount,
   qrTransferSales,
   sessionStatus,
+  shiftUiState,
 }: {
+  attendanceOpen: boolean;
   businessDate: string;
   cashCloseBusy: boolean;
   cashDifference: number;
@@ -2746,18 +2788,24 @@ function StaffControl({
   onUpdateOpeningCashCount: (denomination: number, quantity: number) => void;
   qrTransferSales: number;
   sessionStatus: "closed" | "not_started" | "open";
+  shiftUiState: CashShiftUiState;
 }) {
   const CollapseIcon = expanded ? ChevronUp : ChevronDown;
   const sessionOpen = sessionStatus === "open";
+  const showStartWork = canStartWork(shiftUiState) || shiftUiState === "recovery_required";
+  const startBlockedKey = startWorkBlockedReasonKey(shiftUiState);
+  const startDisabled = !canStartWork(shiftUiState);
   const variance = varianceKind(cashDifference);
   const varianceLabel =
     variance === "exact" ? t("ui.exact") : variance === "over" ? t("ui.over") : t("ui.short");
   const statusLabel =
-    sessionStatus === "open"
-      ? t("ui.session.open")
-      : sessionStatus === "closed"
-        ? t("ui.session.closed")
-        : t("ui.staff.not.started");
+    shiftUiState === "open"
+      ? t("ui.shift.state.open")
+      : shiftUiState === "needs_closing"
+        ? t("ui.shift.state.needs.closing")
+        : shiftUiState === "recovery_required"
+          ? t("ui.shift.state.recovery")
+          : t("ui.shift.state.not.started");
   return (
     <section className="min-w-0 scroll-mt-24 rounded-lg border border-border bg-card p-3" data-testid="cash-shift-count" id="staff-control">
       <button className="flex w-full items-center justify-between gap-3 text-left" type="button" onClick={onToggleExpanded} aria-expanded={expanded}>
@@ -2768,7 +2816,7 @@ function StaffControl({
               <h3 className="text-sm font-semibold">{t("ui.cash.shift.count")}</h3>
               <span className="text-muted-foreground">|</span>
               <span className="text-muted-foreground">{businessDate}</span>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", sessionStatusClassName(sessionStatus))}>{statusLabel}</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", shiftUiStateClassName(shiftUiState))} data-testid="cash-shift-ui-state">{statusLabel}</span>
             </div>
           </div>
         </div>
@@ -2782,7 +2830,23 @@ function StaffControl({
             <div className="mt-1 text-2xl font-black leading-none text-[#FFD700]">{formatLak(openingCashTotal)} LAK</div>
           </div>
 
-          {!sessionOpen ? (
+          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+            <SettlementValue label={t("ui.cash.session.status")} value={sessionOpen ? t("ui.session.open") : t("ui.session.closed")} />
+            <SettlementValue label={t("ui.attendance.status")} value={attendanceOpen ? t("ui.attendance.open") : t("ui.attendance.closed")} />
+          </div>
+
+          {shiftUiState === "recovery_required" ? (
+            <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning" data-testid="cash-shift-recovery-hint">
+              {t("ui.shift.recovery.hint")}
+            </p>
+          ) : null}
+          {shiftUiState === "needs_closing" ? (
+            <p className="mt-2 rounded-md border border-border bg-background p-2 text-xs text-muted-foreground" data-testid="cash-shift-needs-closing-hint">
+              {t("ui.shift.needs.closing.hint")}
+            </p>
+          ) : null}
+
+          {showStartWork ? (
             <>
               <div className="mt-2 rounded-md border border-border bg-background p-2">
                 <div className="mb-2 text-xs font-semibold">{t("ui.opening.cash.count")}</div>
@@ -2807,13 +2871,17 @@ function StaffControl({
                 </div>
               </div>
               <button
-                className="mt-2 h-9 w-full rounded-md border border-success/40 bg-success/10 text-xs font-semibold text-success transition hover:bg-success hover:text-white disabled:opacity-50"
+                className="mt-2 h-9 w-full rounded-md border border-success/40 bg-success/10 text-xs font-semibold text-success transition hover:bg-success hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="open-cash-session"
+                disabled={startDisabled || cashCloseBusy}
                 type="button"
                 onClick={onOpenSession}
               >
                 {t("ui.start.work")}
               </button>
+              {startDisabled && startBlockedKey ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">{t(startBlockedKey)}</p>
+              ) : null}
             </>
           ) : (
             <div className="mt-2 rounded-md border border-border bg-background p-2">
@@ -2869,27 +2937,27 @@ function StaffControl({
               <div>{varianceLabel}</div>
               <div>{fillPosCopy(t("ui.cash.difference.amount"), { amount: formatLak(cashDifference) })}</div>
             </div>
+            {attendanceOpen ? (
+              <button
+                className="mt-2 h-9 w-full rounded-md border border-border bg-background text-xs font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="end-work"
+                disabled={cashCloseBusy}
+                type="button"
+                onClick={onEndWork}
+              >
+                {t("ui.end.work")}
+              </button>
+            ) : null}
             {sessionOpen ? (
-              <>
-                <button
-                  className="mt-2 h-9 w-full rounded-md border border-border bg-background text-xs font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                  data-testid="end-work"
-                  disabled={cashCloseBusy}
-                  type="button"
-                  onClick={onEndWork}
-                >
-                  {t("ui.end.work")}
-                </button>
-                <button
-                  className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  data-testid="confirm-closing-summary"
-                  disabled={cashCloseBusy}
-                  type="button"
-                  onClick={onConfirmClosing}
-                >
-                  {cashCloseBusy ? t("ui.confirming") : t("ui.confirm.closing.summary")}
-                </button>
-              </>
+              <button
+                className="mt-2 h-9 w-full rounded-md border border-primary/40 bg-primary/10 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="confirm-closing-summary"
+                disabled={cashCloseBusy}
+                type="button"
+                onClick={onConfirmClosing}
+              >
+                {cashCloseBusy ? t("ui.confirming") : t("ui.confirm.closing.summary")}
+              </button>
             ) : null}
           </div>
         </>
@@ -2911,6 +2979,12 @@ function sessionStatusClassName(status: "closed" | "not_started" | "open") {
     if (status === "open") return "bg-success/15 text-success";
     if (status === "closed") return "bg-danger/15 text-danger";
     return "bg-muted text-muted-foreground";
+}
+function shiftUiStateClassName(state: CashShiftUiState) {
+  if (state === "open") return "bg-success/15 text-success";
+  if (state === "needs_closing") return "bg-warning/15 text-warning";
+  if (state === "recovery_required") return "bg-danger/15 text-danger";
+  return "bg-muted text-muted-foreground";
 }
 function PosNumberInput({ className, "data-testid": dataTestId, max, min = 0, onValueChange, value, }: {
     className?: string;

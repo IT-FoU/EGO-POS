@@ -1,8 +1,43 @@
 import type { CashSessionSummary } from "@/features/cash-sessions/types";
 import type { PosCashSessionContext } from "@/features/pos/types";
 
-function mapToPosContext(session: CashSessionSummary): PosCashSessionContext {
+type CurrentCashSessionPayload = {
+  attendanceCashSessionId: string | null;
+  attendanceOpen: boolean;
+  requireCashShiftBeforeSale: boolean;
+  session: CashSessionSummary | null;
+};
+
+function emptyPosContext(
+  extras?: Partial<Pick<PosCashSessionContext, "attendanceCashSessionId" | "attendanceOpen" | "requireCashShiftBeforeSale" | "status">>,
+): PosCashSessionContext {
   return {
+    attendanceCashSessionId: extras?.attendanceCashSessionId ?? null,
+    attendanceOpen: extras?.attendanceOpen ?? false,
+    cashInLak: 0,
+    cashOutLak: 0,
+    cashSalesLak: 0,
+    expectedCashLak: 0,
+    nonCashSalesLak: 0,
+    openedAt: null,
+    openingCashLak: 0,
+    requireCashShiftBeforeSale: extras?.requireCashShiftBeforeSale !== false,
+    sessionId: null,
+    status: extras?.status ?? "not_started",
+  };
+}
+
+function mapToPosContext(
+  session: CashSessionSummary,
+  extras: {
+    attendanceCashSessionId: string | null;
+    attendanceOpen: boolean;
+    requireCashShiftBeforeSale: boolean;
+  },
+): PosCashSessionContext {
+  return {
+    attendanceCashSessionId: extras.attendanceCashSessionId,
+    attendanceOpen: extras.attendanceOpen,
     cashInLak: session.cashInLak,
     cashOutLak: session.cashOutLak,
     cashSalesLak: session.cashSalesLak,
@@ -10,8 +45,19 @@ function mapToPosContext(session: CashSessionSummary): PosCashSessionContext {
     nonCashSalesLak: session.nonCashSalesLak,
     openedAt: session.openedAt,
     openingCashLak: session.openingCashLak,
+    requireCashShiftBeforeSale: extras.requireCashShiftBeforeSale,
     sessionId: session.status === "closed" ? null : session.id,
     status: session.status === "closed" ? "closed" : "open",
+  };
+}
+
+function preserveShiftFlags(prev: PosCashSessionContext | undefined, next: PosCashSessionContext): PosCashSessionContext {
+  if (!prev) return next;
+  return {
+    ...next,
+    attendanceCashSessionId: next.attendanceCashSessionId ?? prev.attendanceCashSessionId,
+    attendanceOpen: next.attendanceOpen,
+    requireCashShiftBeforeSale: next.requireCashShiftBeforeSale,
   };
 }
 
@@ -21,20 +67,28 @@ export async function fetchCurrentCashSession(): Promise<PosCashSessionContext> 
   if (!response.ok || payload.ok === false) {
     throw new Error(cashSessionRequestError(payload));
   }
-  if (!payload.data) {
-    return {
-      cashInLak: 0,
-      cashOutLak: 0,
-      cashSalesLak: 0,
-      expectedCashLak: 0,
-      nonCashSalesLak: 0,
-      openedAt: null,
-      openingCashLak: 0,
-      sessionId: null,
-      status: "not_started",
+  const data = payload.data as CurrentCashSessionPayload | CashSessionSummary | null;
+  // Backward-compatible: older payloads were the session object directly.
+  if (data && "session" in (data as CurrentCashSessionPayload)) {
+    const wrapped = data as CurrentCashSessionPayload;
+    const extras = {
+      attendanceCashSessionId: wrapped.attendanceCashSessionId,
+      attendanceOpen: wrapped.attendanceOpen,
+      requireCashShiftBeforeSale: wrapped.requireCashShiftBeforeSale !== false,
     };
+    if (!wrapped.session) {
+      return emptyPosContext({ ...extras, status: "not_started" });
+    }
+    return mapToPosContext(wrapped.session, extras);
   }
-  return mapToPosContext(payload.data as CashSessionSummary);
+  if (!data) {
+    return emptyPosContext();
+  }
+  return mapToPosContext(data as CashSessionSummary, {
+    attendanceCashSessionId: null,
+    attendanceOpen: false,
+    requireCashShiftBeforeSale: true,
+  });
 }
 
 function cashSessionRequestError(payload: Record<string, any>) {
@@ -71,7 +125,12 @@ export async function openCashSessionRequest(
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
-  return mapToPosContext(await readJson(response));
+  const summary = await readJson(response);
+  return mapToPosContext(summary, {
+    attendanceCashSessionId: summary.id,
+    attendanceOpen: true,
+    requireCashShiftBeforeSale: true,
+  });
 }
 
 export type CloseCashSessionResult = PosCashSessionContext & {
@@ -97,7 +156,11 @@ export async function closeCashSessionRequest(
   });
   const summary = await readJson(response);
   return {
-    ...mapToPosContext(summary),
+    ...mapToPosContext(summary, {
+      attendanceCashSessionId: null,
+      attendanceOpen: false,
+      requireCashShiftBeforeSale: true,
+    }),
     countBreakdown: summary.countBreakdown ?? null,
     countedCashLak: Number(summary.countedCashLak ?? countedCashLak),
     expectedCashLak: Number(summary.expectedCashLak ?? 0),
@@ -111,7 +174,12 @@ export async function cashInRequest(sessionId: string, amountLak: number, reason
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
-  return mapToPosContext(await readJson(response));
+  const summary = await readJson(response);
+  return mapToPosContext(summary, {
+    attendanceCashSessionId: null,
+    attendanceOpen: true,
+    requireCashShiftBeforeSale: true,
+  });
 }
 
 export async function cashOutRequest(sessionId: string, amountLak: number, reason: string) {
@@ -120,7 +188,12 @@ export async function cashOutRequest(sessionId: string, amountLak: number, reaso
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
-  return mapToPosContext(await readJson(response));
+  const summary = await readJson(response);
+  return mapToPosContext(summary, {
+    attendanceCashSessionId: null,
+    attendanceOpen: true,
+    requireCashShiftBeforeSale: true,
+  });
 }
 
 /** R9A End Work — closes attendance only; does not close cash session. */
@@ -141,3 +214,5 @@ export async function endAttendanceWorkRequest(note?: string) {
     status: string;
   };
 }
+
+export { preserveShiftFlags };

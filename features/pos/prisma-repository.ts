@@ -1,5 +1,7 @@
 import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
+import { getOpenAttendanceSession } from "@/features/attendance/prisma-repository";
 import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
+import { readRequireCashShiftBeforeSaleFromJson } from "@/features/products/unit-pricing-defaults";
 import { mapPaymentModeToSalePayments, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
 import type { PosCustomer } from "@/features/pos/types";
 import { getPrismaPosQrBanks } from "@/features/qr-payments/prisma-repository";
@@ -177,7 +179,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const now = new Date();
   // STEP 7: do not boot-load the full customer/member table into the POS client.
   // Member Search uses /api/pos/members/search; Hold/Resume embeds customer in snapshot.
-  const [products, settings, promotions, membershipLevels, openSession, qrBanks, favoriteProductIds] = await timedPosLoad(
+  const [products, settings, promotions, membershipLevels, openSession, openAttendance, qrBanks, favoriteProductIds] = await timedPosLoad(
     "parallel-reads",
     () =>
       Promise.all([
@@ -217,6 +219,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           where: { companyId: scope.companyId, isActive: true },
         }),
         getOpenCashSession(tenant, { scope }),
+        getOpenAttendanceSession(tenant),
         getPrismaPosQrBanks(tenant, scope.branchId),
         db.branchFavoriteProduct.findMany({
           select: { productId: true },
@@ -228,6 +231,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       ]),
   );
   const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
+  const requireCashShiftBeforeSale = readRequireCashShiftBeforeSaleFromJson(settings?.unitPricingDefaults);
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
   // Preview sale numbers are display-only. Checkout still issues/validates via resolvePosSaleNo.
   const nextSaleNo = "";
@@ -263,6 +267,8 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     cashierName: "Current Cashier",
     cashSession: openSession
       ? {
+          attendanceCashSessionId: openAttendance?.cashSessionId ?? null,
+          attendanceOpen: openAttendance?.status === "open",
           cashInLak: openSession.cashInLak,
           cashOutLak: openSession.cashOutLak,
           cashSalesLak: openSession.cashSalesLak,
@@ -270,10 +276,13 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           nonCashSalesLak: openSession.nonCashSalesLak,
           openedAt: openSession.openedAt,
           openingCashLak: openSession.openingCashLak,
+          requireCashShiftBeforeSale,
           sessionId: openSession.id,
           status: "open" as const,
         }
       : {
+          attendanceCashSessionId: openAttendance?.cashSessionId ?? null,
+          attendanceOpen: openAttendance?.status === "open",
           cashInLak: 0,
           cashOutLak: 0,
           cashSalesLak: 0,
@@ -281,6 +290,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           nonCashSalesLak: 0,
           openedAt: null,
           openingCashLak: 0,
+          requireCashShiftBeforeSale,
           sessionId: null,
           status: "not_started" as const,
         },

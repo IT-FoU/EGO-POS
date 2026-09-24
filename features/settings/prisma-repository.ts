@@ -2,6 +2,10 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import type { SettingsFormData } from "@/features/settings/types";
+import {
+  readRequireCashShiftBeforeSaleFromJson,
+  withRequireCashShiftBeforeSale,
+} from "@/features/products/unit-pricing-defaults";
 
 const db = prisma as any;
 
@@ -15,6 +19,7 @@ const DEFAULT_SETTINGS = {
   loyaltySpendPerPointLak: 10000,
   receiptPrefix: "INV",
   receiptPrintMode: "ask_every_time" as const,
+  requireCashShiftBeforeSale: true,
   roundingMethod: "nearest",
   showLogoOnReceipt: true,
   showTaxOnReceipt: true,
@@ -85,6 +90,11 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
       ? (String(input.receiptPrintMode) as SettingsFormData["receiptPrintMode"])
       : DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: stringValue(input.receiptPrefix, DEFAULT_SETTINGS.receiptPrefix),
+    // Missing/undefined => ON (strict). Explicit false only when Owner turns setting OFF.
+    requireCashShiftBeforeSale:
+      input.requireCashShiftBeforeSale === undefined
+        ? DEFAULT_SETTINGS.requireCashShiftBeforeSale
+        : Boolean(input.requireCashShiftBeforeSale),
     roundingMethod: ["down", "nearest", "up"].includes(String(input.roundingMethod)) ? String(input.roundingMethod) : DEFAULT_SETTINGS.roundingMethod,
     showLogoOnReceipt: Boolean(input.showLogoOnReceipt),
     showTaxOnReceipt: Boolean(input.showTaxOnReceipt),
@@ -108,6 +118,11 @@ export function taxAndLoyaltyFromSettingsRow(settings: SettingsRow | null | unde
   };
 }
 
+/** Missing / unset => ON (strict default). Stored in unit_pricing_defaults JSON (no DDL). */
+export function requireCashShiftBeforeSaleFromOpsRow(ops: SettingsRow | null | undefined) {
+  return readRequireCashShiftBeforeSaleFromJson(ops?.unitPricingDefaults ?? ops);
+}
+
 function mapSettings(company: SettingsRow): SettingsFormData {
   const settings = company.settings ?? {};
 
@@ -127,6 +142,7 @@ function mapSettings(company: SettingsRow): SettingsFormData {
     receiptHeader: settings.receiptHeader ?? undefined,
     receiptPrintMode: settings.receiptPrintMode ?? DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: settings.receiptPrefix ?? DEFAULT_SETTINGS.receiptPrefix,
+    requireCashShiftBeforeSale: DEFAULT_SETTINGS.requireCashShiftBeforeSale,
     roundingMethod: settings.roundingMethod ?? DEFAULT_SETTINGS.roundingMethod,
     showLogoOnReceipt: settings.showLogoOnReceipt ?? DEFAULT_SETTINGS.showLogoOnReceipt,
     showTaxOnReceipt: settings.showTaxOnReceipt ?? DEFAULT_SETTINGS.showTaxOnReceipt,
@@ -150,7 +166,10 @@ export async function getPrismaSettings(tenant: TenantContext) {
     throw new Error("Company settings not found.");
   }
 
-  return mapSettings(company);
+  return {
+    ...mapSettings(company),
+    requireCashShiftBeforeSale: requireCashShiftBeforeSaleFromOpsRow(company.settings),
+  };
 }
 
 export async function updatePrismaSettings(input: Partial<SettingsFormData>, tenant: TenantContext) {
@@ -231,12 +250,28 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         where: { companyId: company.id },
       });
 
+      const existingSettings = await tx.companySetting.findUnique({
+        select: { unitPricingDefaults: true },
+        where: { companyId: company.id },
+      });
+      const nextDefaults = withRequireCashShiftBeforeSale(
+        existingSettings?.unitPricingDefaults,
+        normalized.requireCashShiftBeforeSale,
+      );
+      await tx.companySetting.update({
+        data: { unitPricingDefaults: nextDefaults },
+        where: { companyId: company.id },
+      });
+
       const updatedCompany = await tx.company.findUniqueOrThrow({
         include: { settings: true },
         where: { id: company.id },
       });
 
-      return mapSettings(updatedCompany);
+      return {
+        ...mapSettings(updatedCompany),
+        requireCashShiftBeforeSale: requireCashShiftBeforeSaleFromOpsRow(updatedCompany.settings),
+      };
     },
   });
 }

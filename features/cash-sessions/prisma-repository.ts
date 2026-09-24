@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { readRequireCashShiftBeforeSaleFromJson } from "@/features/products/unit-pricing-defaults";
 import {
   aggregateCashSessionLedger,
   assertCashOutWithinExpected,
@@ -566,6 +567,18 @@ async function findOpenCashSessionForCashier(tenant: TenantContext, tx: Record<s
 }
 
 export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Record<string, any>) {
+  // Optional Cash Shift: when company setting is OFF, do not block checkout.
+  // Sale + SalePayment + inventory still write normally; no implicit cash_session is created.
+  // Cash In / Cash Out / Close Shift remain session-gated elsewhere.
+  // Persistence: company_settings.unit_pricing_defaults.__requireCashShiftBeforeSale (default ON).
+  const settings = await tx.companySetting.findUnique({
+    select: { unitPricingDefaults: true },
+    where: { companyId: tenant.companyId },
+  });
+  if (settings && readRequireCashShiftBeforeSaleFromJson(settings.unitPricingDefaults) === false) {
+    return null;
+  }
+
   const session = await findOpenCashSessionForCashier(tenant, tx);
 
   if (!session) {
