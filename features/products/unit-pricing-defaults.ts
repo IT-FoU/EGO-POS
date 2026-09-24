@@ -15,9 +15,24 @@ export type UnitPricingDefaultsMap = {
 /** Reserved flag inside company_settings.unit_pricing_defaults JSON (no DDL). Missing => ON. */
 export const REQUIRE_CASH_SHIFT_JSON_KEY = "__requireCashShiftBeforeSale";
 
+/**
+ * Explicit three-state read — never treat stored false as missing.
+ * false / 0 / "false" / "0" => OFF
+ * true / 1 / "true" / "1" => ON
+ * missing / invalid => ON (backward-compatible default)
+ */
+export function parseRequireCashShiftBeforeSaleFlag(value: unknown): boolean {
+  if (value === false || value === 0 || value === "false" || value === "0") return false;
+  if (value === true || value === 1 || value === "true" || value === "1") return true;
+  return true;
+}
+
 export function readRequireCashShiftBeforeSaleFromJson(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return true;
-  return (value as Record<string, unknown>)[REQUIRE_CASH_SHIFT_JSON_KEY] !== false;
+  const raw = (value as Record<string, unknown>)[REQUIRE_CASH_SHIFT_JSON_KEY];
+  // Missing key (undefined) => ON. Explicit false must stay false.
+  if (raw === undefined) return true;
+  return parseRequireCashShiftBeforeSaleFlag(raw);
 }
 
 export function withRequireCashShiftBeforeSale(current: unknown, required: boolean): Record<string, unknown> {
@@ -26,11 +41,12 @@ export function withRequireCashShiftBeforeSale(current: unknown, required: boole
       ? { ...(current as Record<string, unknown>) }
       : {};
   const pricing = parseUnitPricingDefaults(base);
+  // Always persist an explicit boolean — never delete the key to mean OFF (missing = ON).
   return {
     ...base,
     units: pricing.units,
     version: 1 as const,
-    [REQUIRE_CASH_SHIFT_JSON_KEY]: required,
+    [REQUIRE_CASH_SHIFT_JSON_KEY]: required === true,
   };
 }
 

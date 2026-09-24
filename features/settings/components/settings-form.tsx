@@ -216,14 +216,24 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         }
         setMessage(null);
         startTransition(async () => {
-            const result = await updateSettingsAction(settings);
+            // Send 0/1 — never omit the field when OFF. Boolean false can be dropped by
+            // some server-action serializers; 0 survives and parses as OFF explicitly.
+            const result = await updateSettingsAction({
+                ...settings,
+                requireCashShiftBeforeSale: (settings.requireCashShiftBeforeSale === false ? 0 : 1) as unknown as boolean,
+            });
             if (!result.ok || !result.data) {
                 setMessage({ text: localizeSettingsError(result.error, locale), tone: "error" });
                 return;
             }
             const printMode = settings.receiptPrintMode;
             writeReceiptPrintModePreference(printMode);
-            setSettings({ ...(result.data as SettingsFormData), receiptPrintMode: printMode });
+            const saved = result.data as SettingsFormData;
+            setSettings({
+                ...saved,
+                receiptPrintMode: printMode,
+                requireCashShiftBeforeSale: saved.requireCashShiftBeforeSale !== false,
+            });
             setMessage({ text: tSettings("saved", locale), tone: "success" });
             router.refresh();
         });
