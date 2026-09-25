@@ -9,6 +9,7 @@ if (configuredBaseUrl !== QA_BASE_URL) throw new Error(`QA safety check failed: 
 
 export default defineConfig({
   testDir: "./tests",
+  globalSetup: "./tests/support/qa-global-setup.ts",
   timeout: 45_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

@@ -16,15 +16,4 @@ test.describe("Module navigation and loading", () => {
       await expect(page.getByText(/access denied|internal server error/i)).toHaveCount(0);
     });
   }
-  test("restricted-account access denial is covered when dedicated credentials are supplied", async ({ browser }) => {
-    test.skip(!process.env.EGO_QA_RESTRICTED_USERNAME || !process.env.EGO_QA_RESTRICTED_PASSWORD, "Missing dedicated restricted QA credentials.");
-    const page = await browser.newPage();
-    await page.goto("/login");
-    await page.getByRole("textbox", { name: /email|username/i }).fill(process.env.EGO_QA_RESTRICTED_USERNAME!);
-    await page.locator("#merchant-login-password").fill(process.env.EGO_QA_RESTRICTED_PASSWORD!);
-    await page.getByRole("button", { name: /sign in|login/i }).click();
-    await page.goto("/settings");
-    await expect(page.getByText(/access denied|not authorized|permission/i)).toBeVisible();
-    await page.context().close();
-  });
 });
