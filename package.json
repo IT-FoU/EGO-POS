@@ -9,6 +9,7 @@
     "dev:uat": "node scripts/dev-uat.cjs",
     "test:db-safety": "tsx scripts/phase-env-01-database-safety-check.ts",
     "test:browser-smoke": "tsx scripts/phase-fix-04-browser-smoke.ts",
+    "test:ego-qa": "playwright test",
     "build": "next build",
     "start": "next start",
     "cf:build": "node scripts/cf-build.cjs",
@@ -129,6 +130,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "4.3.1",
     "@types/node": "^25.0.0",
     "@types/react": "^19.2.0",

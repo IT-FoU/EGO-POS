@@ -5,6 +5,7 @@ dist
 .open-next
 .wrangler
 .env
+.env.test
 .env*.local
 !.env.example
 .dev.vars
@@ -36,3 +37,11 @@ backups/
 
 # Agent / remote attachment artifacts
 .codex-remote-attachments/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+QA_REPORT.md
