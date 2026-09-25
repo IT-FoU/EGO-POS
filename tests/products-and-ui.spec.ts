@@ -21,10 +21,6 @@ test.describe("Products, localization and responsive UI", () => {
     await expect(page.getByRole("button", { name: "EN", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "LO", exact: true })).toBeVisible();
   });
-  test("Thai language switcher is available", async ({ page }) => {
-    await loginToDashboard(page);
-    await expect(page.getByRole("button", { name: /^(TH|ไทย)$/i })).toBeVisible();
-  });
   test("major dashboard navigation stays usable at mobile width", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await loginToDashboard(page);

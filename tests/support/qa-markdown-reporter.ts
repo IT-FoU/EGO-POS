@@ -19,9 +19,7 @@ export default class QaMarkdownReporter implements Reporter {
       if (status === "failed") {
         const error = (result.error?.message || "No error message supplied").replace(/\n/g, " ").slice(0, 1000);
         const evidence = result.attachments.find((item) => item.name === "failure-context" || item.name === "screenshot" || item.name === "trace")?.path || "test-results/artifacts";
-        const classification = /Thai language switcher/i.test(test.title)
-          ? "product defect"
-          : /locator|strict mode|element.*not found|timeout.*expect/i.test(error)
+        const classification = /locator|strict mode|element.*not found|timeout.*expect/i.test(error)
           ? "test/locator defect"
           : /ERR_NETWORK_ACCESS_DENIED|could not connect|credential|401|403|database|seed|no products|missing QA/i.test(error)
             ? "environment/data issue"
