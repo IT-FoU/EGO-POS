@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { expect, loginToDashboard, test } from "./support/qa-fixtures";
@@ -74,6 +74,12 @@ type Phase2State = {
   expectedDeduction: number;
   session?: CashSession;
   createdSession: boolean;
+  testIdentityCreated: boolean;
+  testIdentityRole?: string;
+  testUsername: string;
+  restrictedIdentityCreated: boolean;
+  restrictedUsername: string;
+  runId: string;
   saleAllowedWithoutSession: boolean;
   sale?: RecentSale;
   heldId?: string;
@@ -83,7 +89,7 @@ type Phase2State = {
 
 const statePath = path.resolve("test-results/.phase2-run-state.json");
 const state = JSON.parse(fs.readFileSync(statePath, "utf8")) as Phase2State;
-const suffix = state.productName.replace(/^TEST-P2-/, "").replace(/-EDIT$/, "");
+const runPrefix = `PWTEST_${state.runId}_`;
 
 function saveState() {
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -96,10 +102,55 @@ function unit(product: Product, name: string) {
 }
 
 async function openPos(page: Page) {
-  await loginToDashboard(page);
+  await loginTestIdentity(page);
   await page.addInitScript(() => localStorage.setItem("ego.pos.unitDisplayMode", "separate"));
   await page.goto("/pos");
   await expect(page.getByRole("main")).toBeVisible();
+}
+
+function testPassword() {
+  const value = process.env.EGO_QA_TEST_PASSWORD;
+  if (!value) throw new Error("Environment/data blocker: EGO_QA_TEST_PASSWORD is missing from ignored .env.test.");
+  return value;
+}
+
+async function loginWithCredentials(page: Page, username: string, password: string) {
+  await page.goto("/login?callbackUrl=%2Fdashboard");
+  await page.getByRole("textbox", { name: /email|username/i }).fill(username);
+  await page.locator("#merchant-login-password").fill(password);
+  await page.getByRole("button", { name: /sign in|login/i }).click();
+  await expect(page).toHaveURL(/\/(dashboard|pos)(?:[/?#]|$)/, { timeout: 30_000 });
+}
+
+async function loginTestIdentity(page: Page) {
+  if (!state.testIdentityCreated) throw new Error("Environment/data blocker: dedicated PWTEST test identity was not created.");
+  await loginWithCredentials(page, state.testUsername, testPassword());
+}
+
+async function chooseRole(drawer: Locator, preferredRoles: RegExp[]) {
+  const select = drawer.locator("label").filter({ hasText: /^Role$/i }).locator("select");
+  const options = await select.locator("option").evaluateAll((entries) => entries.map((entry) => ({ text: entry.textContent?.trim() ?? "", value: entry.getAttribute("value") ?? "" })));
+  const selected = options.find((option) => preferredRoles.some((role) => role.test(option.text)) && option.value);
+  if (!selected) {
+    return undefined;
+  }
+  await select.selectOption(selected.value);
+  return selected.text;
+}
+
+async function createTestStaff(page: Page, username: string, preferredRoles: RegExp[], allowBackOffice: boolean) {
+  await page.getByRole("button", { name: /^Add Staff$/i }).click();
+  const drawer = page.getByRole("heading", { name: /^Add Staff$/i }).locator("xpath=ancestor::section[1]");
+  await drawer.getByLabel(/^Full name$/i).fill(username);
+  await drawer.getByLabel(/^Username$/i).fill(username);
+  const selectedRole = await chooseRole(drawer, preferredRoles);
+  if (!selectedRole) return undefined;
+  await drawer.getByLabel(/^Password$/i).fill(testPassword());
+  await drawer.getByLabel(/^Confirm password$/i).fill(testPassword());
+  if (allowBackOffice) await drawer.getByLabel(/Allow Back Office access/i).check();
+  await drawer.getByRole("button", { name: /^Add Staff$/i }).click();
+  await expect(page.getByText(username, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  return selectedRole;
 }
 
 async function safeGoto(page: Page, route: string) {
@@ -135,28 +186,13 @@ async function findCreatedSale(page: Page) {
   throw new Error(`Application defect: completed sale for ${state.productName} did not appear in Recent Sales.`);
 }
 
-async function cleanPhase2Data(page: Page) {
-  state.cleanupErrors = [];
+async function cleanDedicatedData(page: Page) {
   try {
-    if (state.sale && !["voided", "deleted"].includes(state.sale.status)) {
-      const result = await qaApiRaw<{ sale?: RecentSale }>(page, `/api/pos/sales/${state.sale.id}/void`, "POST", { reason: `TEST Phase 2 cleanup ${suffix}` });
-      if (!result.response.ok() && !/already (?:voided|refunded)/i.test(result.payload.message ?? result.payload.error ?? "")) {
-        state.cleanupErrors.push(`sale cleanup: ${result.payload.message ?? result.payload.error ?? result.response.statusText()}`);
-      }
-    }
     if (state.heldId) {
-      const result = await qaApiRaw(page, `/api/pos/held-bills/${state.heldId}/cancel`, "POST", { reason: `TEST Phase 2 cleanup ${suffix}` });
+      const result = await qaApiRaw(page, `/api/pos/held-bills/${state.heldId}/cancel`, "POST", { reason: `${runPrefix}cleanup` });
       if (!result.response.ok() && !/cancelled|completed|not found/i.test(result.payload.message ?? result.payload.error ?? "")) {
         state.cleanupErrors.push(`held bill cleanup: ${result.payload.message ?? result.payload.error ?? result.response.statusText()}`);
       }
-    }
-    if (state.customer) {
-      const result = await qaApiRaw(page, `/api/customers/${state.customer.id}`, "DELETE");
-      if (!result.response.ok()) state.cleanupErrors.push(`customer archive: ${result.payload.message ?? result.payload.error ?? result.response.statusText()}`);
-    }
-    if (state.product) {
-      const result = await qaApiRaw(page, `/api/products/${state.product.id}`, "DELETE");
-      if (!result.response.ok()) state.cleanupErrors.push(`product archive: ${result.payload.message ?? result.payload.error ?? result.response.statusText()}`);
     }
     if (state.createdSession && state.session) {
       const current = await qaApi<CashContext>(page, "/api/pos/cash-sessions/current");
@@ -164,9 +200,9 @@ async function cleanPhase2Data(page: Page) {
         await qaApi(page, "/api/pos/cash-sessions/close", "POST", {
           sessionId: state.session.id,
           countedCashLak: current.session.expectedCashLak,
-          note: `TEST Phase 2 cleanup ${suffix}`,
+          note: `${runPrefix}cleanup`,
         });
-        await qaApi(page, "/api/pos/attendance/end-work", "POST", { note: `TEST Phase 2 cleanup ${suffix}` });
+        await qaApi(page, "/api/pos/attendance/end-work", "POST", { note: `${runPrefix}cleanup` });
       }
     }
   } catch (error) {
@@ -174,6 +210,60 @@ async function cleanPhase2Data(page: Page) {
   }
   saveState();
 }
+
+async function cleanOwnerData(page: Page) {
+  try {
+    if (state.sale && !["voided", "deleted"].includes(state.sale.status)) {
+      const result = await qaApiRaw<{ sale?: RecentSale }>(page, `/api/pos/sales/${state.sale.id}/void`, "POST", { reason: `${runPrefix}cleanup` });
+      if (!result.response.ok() && !/already (?:voided|refunded)/i.test(result.payload.message ?? result.payload.error ?? "")) {
+        state.cleanupErrors.push(`sale cleanup: ${result.payload.message ?? result.payload.error ?? result.response.statusText()}`);
+      }
+    }
+    if (state.customer) {
+      const archived = await qaApi<{ status?: string }>(page, `/api/customers/${state.customer.id}`, "DELETE");
+      if (archived.status !== "inactive") state.cleanupErrors.push(`customer archive: expected inactive status, received ${archived.status ?? "none"}`);
+    }
+    if (state.product) {
+      const archived = await qaApi<{ status?: string }>(page, `/api/products/${state.product.id}`, "DELETE");
+      if (archived.status !== "deleted") state.cleanupErrors.push(`product archive: expected deleted status, received ${archived.status ?? "none"}`);
+    }
+  } catch (error) {
+    state.cleanupErrors.push(error instanceof Error ? error.message : String(error));
+  }
+  saveState();
+}
+
+async function deactivateTestStaff(page: Page, username: string) {
+  await page.goto("/settings");
+  const search = page.getByPlaceholder(/Search staff/i);
+  await search.fill(username);
+  const row = page.locator("tbody tr").filter({ hasText: username });
+  if (await row.count()) {
+    await row.getByRole("button", { name: /^Deactivate$/i }).click();
+    await expect(row).toContainText(/Inactive/i, { timeout: 30_000 });
+  }
+}
+
+test.describe("Dedicated QA identity", () => {
+  test("creates run-owned POS and restricted Cashier identities", async ({ page }) => {
+    test.setTimeout(120_000);
+    test.skip(!process.env.EGO_QA_TEST_USERNAME_PREFIX || !process.env.EGO_QA_TEST_PASSWORD, "Environment/data blocker: dedicated QA test credentials are missing from ignored .env.test.");
+    await loginToDashboard(page);
+    await page.getByRole("button", { name: "EN", exact: true }).click();
+    await page.goto("/settings");
+    // QA role records are tenant-configurable. Prefer Manager, but Cashier is a
+    // safe built-in fallback for the isolated session and POS workflow.
+    const posRole = await createTestStaff(page, state.testUsername, [/Manager/i, /Staff\/?Cashier/i, /Cashier/i], false);
+    test.skip(!posRole, "Environment/data blocker: QA Staff Management has no non-Owner role configured, so a safe dedicated PWTEST identity cannot be created.");
+    state.testIdentityRole = posRole;
+    state.testIdentityCreated = true;
+    saveState();
+    const restrictedRole = await createTestStaff(page, state.restrictedUsername, [/Staff\/?Cashier/i, /Cashier/i], false);
+    test.skip(!restrictedRole, "Environment/data blocker: QA Staff Management has no Cashier role configured, so restricted-account coverage cannot be created safely.");
+    state.restrictedIdentityCreated = true;
+    saveState();
+  });
+});
 
 test.describe("Products", () => {
   test("creates and edits an isolated multi-unit TEST product with pricing and reorder settings", async ({ page }) => {
@@ -183,12 +273,12 @@ test.describe("Products", () => {
     const category = categories.find((entry) => entry.status === "active") ?? categories[0];
     test.skip(!category, "Environment/data blocker: no QA category exists for the isolated TEST product.");
 
-    const base = `TEST-P2-${suffix}`;
+    const base = `${runPrefix}PRODUCT`;
     const created = await qaApi<Product>(page, "/api/products", "POST", {
       nameEn: base,
       nameLo: base,
       sku: base,
-      barcode: `P2${Date.now()}`,
+      barcode: `${runPrefix}PRODUCT`,
       categoryId: category.id,
       costPriceLak: 1_000,
       sellingPriceLak: 2_000,
@@ -197,12 +287,12 @@ test.describe("Products", () => {
       reorderQtyMode: "MANUAL",
       stockDisplayMode: "breakdown",
       status: "active",
-      initialStock: { quantity: 120, unitName: "Piece", unitCostLak: 1_000, lotNumber: `TEST-${suffix}` },
+      initialStock: { quantity: 120, unitName: "Piece", unitCostLak: 1_000, lotNumber: `${runPrefix}LOT` },
       units: [
-        { unitName: "Piece", conversionQty: 1, barcode: `PCE${Date.now()}`, costPriceLak: 1_000, pricingMode: "manual", markupPercent: 0, addAmountLak: 0, roundingLak: 0, sellingPriceLak: 2_000, isBaseUnit: true, isDefaultSaleUnit: true, isPurchaseUnit: false, status: "active", sortOrder: 0 },
-        { unitName: "Pack", conversionQty: 6, barcode: `PAK${Date.now()}`, costPriceLak: 6_000, pricingMode: "manual", markupPercent: 0, addAmountLak: 0, roundingLak: 0, sellingPriceLak: 11_000, isBaseUnit: false, isDefaultSaleUnit: false, isPurchaseUnit: true, status: "active", sortOrder: 1 },
-        { unitName: "Box", conversionQty: 24, barcode: `BOX${Date.now()}`, costPriceLak: 24_000, pricingMode: "cost_plus_percent", markupPercent: 20, addAmountLak: 0, roundingLak: 1_000, sellingPriceLak: 29_000, isBaseUnit: false, isDefaultSaleUnit: false, isPurchaseUnit: false, status: "active", sortOrder: 2 },
-        { unitName: "Case", conversionQty: 48, barcode: `CSE${Date.now()}`, costPriceLak: 48_000, pricingMode: "cost_plus_amount", markupPercent: 0, addAmountLak: 2_000, roundingLak: 500, sellingPriceLak: 50_000, isBaseUnit: false, isDefaultSaleUnit: false, isPurchaseUnit: false, status: "inactive", sortOrder: 3 },
+        { unitName: "Piece", conversionQty: 1, barcode: `${runPrefix}PIECE`, costPriceLak: 1_000, pricingMode: "manual", markupPercent: 0, addAmountLak: 0, roundingLak: 0, sellingPriceLak: 2_000, isBaseUnit: true, isDefaultSaleUnit: true, isPurchaseUnit: false, status: "active", sortOrder: 0 },
+        { unitName: "Pack", conversionQty: 6, barcode: `${runPrefix}PACK`, costPriceLak: 6_000, pricingMode: "manual", markupPercent: 0, addAmountLak: 0, roundingLak: 0, sellingPriceLak: 11_000, isBaseUnit: false, isDefaultSaleUnit: false, isPurchaseUnit: true, status: "active", sortOrder: 1 },
+        { unitName: "Box", conversionQty: 24, barcode: `${runPrefix}BOX`, costPriceLak: 24_000, pricingMode: "cost_plus_percent", markupPercent: 20, addAmountLak: 0, roundingLak: 1_000, sellingPriceLak: 29_000, isBaseUnit: false, isDefaultSaleUnit: false, isPurchaseUnit: false, status: "active", sortOrder: 2 },
+        { unitName: "Case", conversionQty: 48, barcode: `${runPrefix}CASE`, costPriceLak: 48_000, pricingMode: "cost_plus_amount", markupPercent: 0, addAmountLak: 2_000, roundingLak: 500, sellingPriceLak: 50_000, isBaseUnit: false, isDefaultSaleUnit: false, isPurchaseUnit: false, status: "inactive", sortOrder: 3 },
       ],
     });
     state.product = created;
@@ -210,13 +300,13 @@ test.describe("Products", () => {
 
     const editedUnits = created.units.map((entry) => ({
       ...entry,
-      barcode: entry.unitName === "Piece" ? `PC2${Date.now()}` : entry.barcode,
+      barcode: entry.unitName === "Piece" ? `${runPrefix}PIECE_EDIT` : entry.barcode,
     }));
     const edited = await qaApi<Product>(page, `/api/products/${created.id}`, "PATCH", {
       nameEn: state.productName,
       nameLo: state.productName,
       categoryId: category.id,
-      barcode: `P2E${Date.now()}`,
+      barcode: `${runPrefix}PRODUCT_EDIT`,
       units: editedUnits,
     });
     state.product = edited;
@@ -257,18 +347,19 @@ test.describe("Product Images", () => {
 
 test.describe("Cash Session", () => {
   test("opens or verifies the cash session and attendance state", async ({ page }) => {
-    await loginToDashboard(page);
+    test.skip(!state.testIdentityCreated, "Environment/data blocker: dedicated PWTEST test identity is unavailable.");
+    await loginTestIdentity(page);
     let current = await qaApi<CashContext>(page, "/api/pos/cash-sessions/current");
     let recoveryBlocked = !current.session && current.attendanceOpen;
     state.saleAllowedWithoutSession = current.requireCashShiftBeforeSale === false;
     saveState();
     if (recoveryBlocked && current.attendanceCashSessionId == null) {
-      await qaApi(page, "/api/pos/attendance/end-work", "POST", { note: `TEST Phase 2 safe orphan-attendance recovery ${suffix}` });
+      await qaApi(page, "/api/pos/attendance/end-work", "POST", { note: `${runPrefix}safe orphan-attendance recovery` });
       current = await qaApi<CashContext>(page, "/api/pos/cash-sessions/current");
       recoveryBlocked = !current.session && current.attendanceOpen;
     }
     if (!current.session && !recoveryBlocked) {
-      const opened = await qaApi<CashSession>(page, "/api/pos/cash-sessions/open", "POST", { openingCashLak: 0, note: `TEST Phase 2 ${suffix}` });
+      const opened = await qaApi<CashSession>(page, "/api/pos/cash-sessions/open", "POST", { openingCashLak: 0, note: `${runPrefix}cash session` });
       state.createdSession = true;
       state.session = opened;
       saveState();
@@ -292,12 +383,12 @@ test.describe("Cash Session", () => {
   test("rejects an unsafe cash overdraw on the isolated test-created session", async ({ page }) => {
     test.skip(!state.createdSession || !state.session, "Environment/data blocker: no isolated test-created cash session is available, so destructive overdraw probing is unsafe.");
     const session = state.session!;
-    await loginToDashboard(page);
+    await loginTestIdentity(page);
     const current = await qaApi<CashContext>(page, "/api/pos/cash-sessions/current");
     const overdraw = await qaApiRaw(page, "/api/pos/cash-sessions/cash-out", "POST", {
       sessionId: session.id,
       amountLak: current.session!.expectedCashLak + 1,
-      reason: `TEST unsafe overdraw guard ${suffix}`,
+      reason: `${runPrefix}unsafe overdraw guard`,
     });
     expect(overdraw.response.ok(), "Cash Out above expected cash must be rejected without mutation.").toBe(false);
   });
@@ -305,10 +396,10 @@ test.describe("Cash Session", () => {
   test("records balanced TEST Cash In and Cash Out without changing expected cash", async ({ page }) => {
     test.skip(!state.session, "Environment/data blocker: no open QA cash session is available.");
     const session = state.session!;
-    await loginToDashboard(page);
+    await loginTestIdentity(page);
     const before = await qaApi<CashContext>(page, "/api/pos/cash-sessions/current");
-    await qaApi(page, "/api/pos/cash-sessions/cash-in", "POST", { sessionId: session.id, amountLak: 100, reason: `TEST Phase 2 in ${suffix}` });
-    await qaApi(page, "/api/pos/cash-sessions/cash-out", "POST", { sessionId: session.id, amountLak: 100, reason: `TEST Phase 2 out ${suffix}` });
+    await qaApi(page, "/api/pos/cash-sessions/cash-in", "POST", { sessionId: session.id, amountLak: 100, reason: `${runPrefix}cash in` });
+    await qaApi(page, "/api/pos/cash-sessions/cash-out", "POST", { sessionId: session.id, amountLak: 100, reason: `${runPrefix}cash out` });
     const after = await qaApi<CashContext>(page, "/api/pos/cash-sessions/current");
     expect(after.session?.expectedCashLak).toBe(before.session?.expectedCashLak);
   });
@@ -375,7 +466,7 @@ test.describe("Stock deduction", () => {
   test("deducts base stock using Piece=1, Pack=6 and Box=24 conversions", async ({ page }) => {
     test.skip(!state.product || !state.sale || state.stockBefore == null, "Environment/data blocker: the multi-unit TEST sale was not created.");
     const sale = state.sale!;
-    await loginToDashboard(page);
+    await loginTestIdentity(page);
     const product = await latestProduct(page);
     expect(product).toBeTruthy();
     state.stockAfterSale = Number(product!.currentStock);
@@ -392,7 +483,7 @@ test.describe("Refund/Void", () => {
     test.skip(!state.product || !state.sale || state.stockBefore == null, "Environment/data blocker: no isolated TEST sale is available to void.");
     const sale = state.sale!;
     await loginToDashboard(page);
-    const result = await qaApi<{ status: string; sale: RecentSale }>(page, `/api/pos/sales/${sale.id}/void`, "POST", { reason: `TEST Phase 2 void ${suffix}` });
+    const result = await qaApi<{ status: string; sale: RecentSale }>(page, `/api/pos/sales/${sale.id}/void`, "POST", { reason: `${runPrefix}void` });
     state.sale = result.sale;
     saveState();
     expect(result.status).toBe("completed");
@@ -441,10 +532,10 @@ test.describe("Customers/Membership", () => {
     await loginToDashboard(page);
     const phone = `020${Date.now().toString().slice(-8)}`;
     state.customer = await qaApi<Customer>(page, "/api/customers", "POST", {
-      fullName: `TEST Member ${suffix}`,
+      fullName: `${runPrefix}MEMBER`,
       phone,
-      email: `test-${suffix.toLowerCase()}@example.invalid`,
-      notes: `TEST Phase 2 ${suffix}`,
+      email: `${runPrefix.toLowerCase()}member@example.invalid`,
+      notes: `${runPrefix}customer`,
       openingBalance: 0,
       creditLimit: 0,
     });
@@ -509,12 +600,9 @@ test.describe("Reports", () => {
 
 test.describe("Permissions", () => {
   test("a restricted account is denied protected settings access", async ({ browser }) => {
-    test.skip(!process.env.EGO_QA_RESTRICTED_USERNAME || !process.env.EGO_QA_RESTRICTED_PASSWORD, "Environment/data blocker: dedicated restricted QA credentials are not present in .env.test; Owner access is not treated as permission coverage.");
+    test.skip(!state.restrictedIdentityCreated, "Environment/data blocker: dedicated run-owned PWTEST Cashier identity was not created.");
     const page = await browser.newPage();
-    await page.goto("/login");
-    await page.getByRole("textbox", { name: /email|username/i }).fill(process.env.EGO_QA_RESTRICTED_USERNAME!);
-    await page.locator("#merchant-login-password").fill(process.env.EGO_QA_RESTRICTED_PASSWORD!);
-    await page.getByRole("button", { name: /sign in|login/i }).click();
+    await loginWithCredentials(page, state.restrictedUsername, testPassword());
     await page.goto("/settings");
     await expect(page.getByText(/access denied|not authorized|permission/i)).toBeVisible();
     await page.context().close();
@@ -522,10 +610,22 @@ test.describe("Permissions", () => {
 });
 
 test.describe("Cleanup", () => {
-  test("archives only the isolated TEST records and closes only a test-created cash session", async ({ page }) => {
-    test.setTimeout(90_000);
-    await loginToDashboard(page);
-    await cleanPhase2Data(page);
+  test("archives only run-owned records, closes its session, and deactivates its identities", async ({ browser }) => {
+    test.setTimeout(120_000);
+    state.cleanupErrors = [];
+    if (state.testIdentityCreated) {
+      const testPage = await browser.newPage();
+      await loginTestIdentity(testPage);
+      await cleanDedicatedData(testPage);
+      await testPage.context().close();
+    }
+    const ownerPage = await browser.newPage();
+    await loginToDashboard(ownerPage);
+    await ownerPage.getByRole("button", { name: "EN", exact: true }).click();
+    await cleanOwnerData(ownerPage);
+    await deactivateTestStaff(ownerPage, state.restrictedUsername);
+    await deactivateTestStaff(ownerPage, state.testUsername);
+    await ownerPage.context().close();
     expect(state.cleanupErrors, `QA cleanup must not leave TEST records or a test-created cash session active: ${state.cleanupErrors.join("; ")}`).toEqual([]);
   });
 });
