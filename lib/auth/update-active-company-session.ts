@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { getToken } from "next-auth/jwt";
 import { encode } from "next-auth/jwt";
+import { getCurrentSession } from "@/lib/auth/session";
 import { getMembershipSessionFields } from "@/lib/auth/store-membership";
 
 function sessionCookieName() {
@@ -15,17 +15,8 @@ export async function updateActiveCompanySession(userId: string, companyId: stri
     throw new Error("NEXTAUTH_SECRET is not configured.");
   }
 
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map(({ name, value }) => `${name}=${value}`)
-    .join("; ");
-  const token = await getToken({
-    req: new Request("http://localhost", { headers: { cookie: cookieHeader } }) as never,
-    secret,
-  });
-
-  if (!token?.sub || token.sub !== userId) {
+  const session = await getCurrentSession();
+  if (!session?.user?.id || session.user.id !== userId) {
     return false;
   }
 
@@ -37,19 +28,24 @@ export async function updateActiveCompanySession(userId: string, companyId: stri
   const nextToken = await encode({
     secret,
     token: {
-      ...token,
+      allowBackOfficeAccess: membershipFields.allowBackOfficeAccess,
+      allowPOSAccess: membershipFields.allowPOSAccess,
       activeBranchId: membershipFields.activeBranchId,
       activeCompanyId: membershipFields.activeCompanyId,
       activeCompanyName: membershipFields.activeCompanyName,
       activeWarehouseId: membershipFields.activeWarehouseId,
-      allowBackOfficeAccess: membershipFields.allowBackOfficeAccess,
-      allowPOSAccess: membershipFields.allowPOSAccess,
       assignedTerminal: membershipFields.assignedTerminal,
       businessTemplateKey: membershipFields.businessTemplateKey,
+      email: session.user.email,
+      name: session.user.name,
       roles: membershipFields.roles,
+      sub: session.user.id,
+      username: session.user.username,
+      locale: session.user.locale,
     },
   });
 
+  const cookieStore = await cookies();
   cookieStore.set(sessionCookieName(), nextToken, {
     httpOnly: true,
     path: "/",
