@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { encode } from "next-auth/jwt";
+import type { Session } from "next-auth";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getMembershipSessionFields } from "@/lib/auth/store-membership";
 
@@ -9,13 +10,13 @@ function sessionCookieName() {
     : "next-auth.session-token";
 }
 
-export async function updateActiveCompanySession(userId: string, companyId: string) {
+export async function updateActiveCompanySession(userId: string, companyId: string, currentSession?: Session) {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) {
     throw new Error("NEXTAUTH_SECRET is not configured.");
   }
 
-  const session = await getCurrentSession();
+  const session = currentSession ?? (await getCurrentSession());
   if (!session?.user?.id || session.user.id !== userId) {
     return false;
   }
