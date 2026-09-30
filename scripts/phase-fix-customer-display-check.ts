@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { t } from "../lib/i18n/ui";
+import { tPos } from "../lib/i18n/pos-copy";
 import { formatLak } from "../features/pos/format";
 import { isSupportedCompanyLogoUrl, storeInitials } from "../features/brand/company-logo";
 import {
@@ -209,6 +210,18 @@ await check("source: permission message EN + LO", () => {
   assert(Boolean(lo[permissionKey]), "lo locale missing permission copy");
   assert(t(permissionKey, "en") === en[permissionKey], t(permissionKey, "en"));
   assert(t(permissionKey, "th") === en[permissionKey], "legacy th stays English");
+});
+
+await check("source: success status auto-dismisses in EN + LO", () => {
+  assert(toggle.includes("CUSTOMER_DISPLAY_STATUS_AUTO_DISMISS_MS = 3000"), "success duration must be 3 seconds");
+  assert(toggle.includes("window.setTimeout"), "success status timer missing");
+  assert(toggle.includes("window.clearTimeout"), "success status timer cleanup missing");
+  assert(toggle.includes('"ui.customer.display.opened"'), "open success copy missing");
+  assert(toggle.includes('"ui.customer.display.closed"'), "close success copy missing");
+  assert(tPos("ui.customer.display.opened", "en") === "Customer Display opened.", "EN open success copy missing");
+  assert(tPos("ui.customer.display.closed", "en") === "Customer Display closed.", "EN close success copy missing");
+  assert(tPos("ui.customer.display.opened", "lo") !== "ui.customer.display.opened", "LO open success copy missing");
+  assert(tPos("ui.customer.display.closed", "lo") !== "ui.customer.display.closed", "LO close success copy missing");
 });
 
 await check("source: no POS/sale mutation from display toggle", () => {

@@ -3,7 +3,7 @@
 import { tPos } from "@/lib/i18n/pos-copy";
 import { t } from "@/lib/i18n/ui";
 import { fillPosCopy } from "@/lib/i18n/pos-copy";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Maximize2, Monitor, Settings2 } from "lucide-react";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
@@ -20,6 +20,7 @@ import {
 
 let customerDisplayWindow: Window | null = null;
 let configuredCustomerDisplayScreen: CustomerDisplayScreen | null = null;
+const CUSTOMER_DISPLAY_STATUS_AUTO_DISMISS_MS = 3000;
 
 export function CustomerDisplayToggle() {
   const locale = useAppLocale();
@@ -29,24 +30,48 @@ export function CustomerDisplayToggle() {
   const [screenOptions, setScreenOptions] = useState<CustomerDisplayScreen[]>([]);
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [canRetrySetup, setCanRetrySetup] = useState(false);
+  const hintTimer = useRef<number | null>(null);
+  const activeHintKey = useRef<string | null>(null);
 
   function clearHint() {
+    activeHintKey.current = null;
+    if (hintTimer.current !== null) {
+      window.clearTimeout(hintTimer.current);
+      hintTimer.current = null;
+    }
     setHint(null);
     setHintKey(null);
     setHintVars({});
   }
 
   function setPlainHint(value: string | null) {
+    clearHint();
     setHint(value);
     setHintKey(null);
     setHintVars({});
   }
 
-  function setCopyHint(key: string, vars: Record<string, string | number> = {}) {
+  function setCopyHint(
+    key: string,
+    vars: Record<string, string | number> = {},
+    autoDismissMs?: number,
+  ) {
     clearHint();
+    activeHintKey.current = key;
     setHintKey(key);
     setHintVars(vars);
+    if (autoDismissMs) {
+      hintTimer.current = window.setTimeout(() => {
+        if (activeHintKey.current === key) clearHint();
+      }, autoDismissMs);
+    }
   }
+
+  useEffect(() => {
+    return () => {
+      if (hintTimer.current !== null) window.clearTimeout(hintTimer.current);
+    };
+  }, []);
 
   function openOrReuse() {
     if (customerDisplayWindow && !customerDisplayWindow.closed) {
@@ -69,7 +94,8 @@ export function CustomerDisplayToggle() {
     if (customerDisplayWindow && !customerDisplayWindow.closed) {
       customerDisplayWindow.close();
       customerDisplayWindow = null;
-      clearHint();
+      setCanRetrySetup(false);
+      setCopyHint("ui.customer.display.closed", {}, CUSTOMER_DISPLAY_STATUS_AUTO_DISMISS_MS);
       return;
     }
     const popup = openOrReuse();
@@ -80,12 +106,17 @@ export function CustomerDisplayToggle() {
     void placeCustomerDisplayWindow(popup).then((result) => {
       setCanRetrySetup(["denied", "unsupported", "disconnected", "setup_required"].includes(result));
       const messageKey = placementMessage(result);
-      if (messageKey) setCopyHint(messageKey);
+      if (messageKey === "ui.customer.display.opened") {
+        setCopyHint(messageKey, {}, CUSTOMER_DISPLAY_STATUS_AUTO_DISMISS_MS);
+      } else if (messageKey) {
+        setCopyHint(messageKey);
+      }
       else clearHint();
     });
   }
 
   function placementMessage(result: Awaited<ReturnType<typeof placeCustomerDisplayWindow>>) {
+    if (result === "placed") return "ui.customer.display.opened";
     if (result === "denied") return "ui.window.management.permission.denied";
     if (result === "unsupported") return "ui.window.management.unsupported";
     if (result === "single") return "ui.only.one.display.available";
