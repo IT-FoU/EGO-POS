@@ -14,14 +14,10 @@ export async function updateSettingsAction(input: Partial<SettingsFormData>) {
     const settings = await updatePrismaSettings(input, tenant);
     const session = await getCurrentSession();
     if (session?.user?.id) {
-      const refreshed = await updateActiveCompanySession(
-        session.user.id,
-        tenant.companyId,
-        session,
-        settings.companyName,
-      );
-      if (!refreshed) {
-        throw new Error("Active company session could not be refreshed.");
+      try {
+        await updateActiveCompanySession(session.user.id, tenant.companyId, session, settings.companyName);
+      } catch {
+        // The database value is authoritative; the client publishes it after this action succeeds.
       }
     }
     revalidatePath("/settings");

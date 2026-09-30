@@ -9,8 +9,8 @@ function assert(condition: unknown, message: string): asserts condition {
 const root = process.cwd();
 const dashboardShell = readFileSync(join(root, "components/layout/dashboard-shell.tsx"), "utf8");
 const settingsAction = readFileSync(join(root, "features/settings/actions.ts"), "utf8");
-const settingsRepository = readFileSync(join(root, "features/settings/prisma-repository.ts"), "utf8");
 const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const settingsRepository = readFileSync(join(root, "features/settings/prisma-repository.ts"), "utf8");
 const authOptions = readFileSync(join(root, "lib/auth/options.ts"), "utf8");
 const sessionRefresh = readFileSync(join(root, "lib/auth/update-active-company-session.ts"), "utf8");
 const provisionStore = readFileSync(join(root, "lib/setup-admin/provision-store.ts"), "utf8");
@@ -39,6 +39,7 @@ assert(
 assert(settingsAction.includes("updateActiveCompanySession"), "settings refresh the authenticated company session");
 assert(settingsAction.includes("getCurrentSession"), "settings refresh the current authenticated session");
 assert(settingsForm.includes("router.refresh()"), "settings refresh the rendered header after save");
+assert(settingsForm.includes("ACTIVE_COMPANY_NAME_CHANGE_EVENT"), "settings publish the saved company name to the header");
 
 assert(authOptions.includes("activeCompanyName: activeCompany.name"), "login session uses the active Company.name");
 assert(sessionRefresh.includes("getMembershipSessionFields(userId, companyId)"), "session refresh resolves the selected tenant");

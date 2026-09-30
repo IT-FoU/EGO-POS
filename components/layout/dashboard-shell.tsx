@@ -29,7 +29,10 @@ import { LogoContainer } from "@/components/brand/logo-container";
 import { COMPANY_LOGO_CHANGE_EVENT, readCompanyLogoUrl } from "@/features/brand/company-logo";
 import { APP_NAME, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
-import { resolveActiveCompanyName } from "@/lib/auth/active-company-name";
+import {
+  ACTIVE_COMPANY_NAME_CHANGE_EVENT,
+  resolveActiveCompanyName,
+} from "@/lib/auth/active-company-name";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
@@ -161,6 +164,16 @@ export function DashboardShell({
     setStoreName(resolveActiveCompanyName(session.user.activeCompanyName));
     setLogoUrl(readCompanyLogoUrl() || null);
   }, [session.user.activeCompanyName]);
+
+  useEffect(() => {
+    function refreshStoreName(event: Event) {
+      const nextName = (event as CustomEvent<{ name?: string }>).detail?.name;
+      if (nextName) setStoreName(nextName);
+    }
+
+    window.addEventListener(ACTIVE_COMPANY_NAME_CHANGE_EVENT, refreshStoreName);
+    return () => window.removeEventListener(ACTIVE_COMPANY_NAME_CHANGE_EVENT, refreshStoreName);
+  }, []);
 
   useEffect(() => {
     function refreshLogo() {
