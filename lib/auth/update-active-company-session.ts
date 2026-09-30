@@ -1,4 +1,4 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { getToken } from "next-auth/jwt";
 import { encode } from "next-auth/jwt";
 import { getMembershipSessionFields } from "@/lib/auth/store-membership";
@@ -16,9 +16,12 @@ export async function updateActiveCompanySession(userId: string, companyId: stri
   }
 
   const cookieStore = await cookies();
-  const requestHeaders = await headers();
+  const cookieHeader = cookieStore
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
   const token = await getToken({
-    req: { headers: requestHeaders } as never,
+    req: new Request("http://localhost", { headers: { cookie: cookieHeader } }) as never,
     secret,
   });
 
