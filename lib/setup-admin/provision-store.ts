@@ -226,7 +226,7 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
           status: "active",
           storeCode,
         },
-        select: { businessTemplateKey: true, id: true, name: true, storeCode: true },
+        select: { businessTemplateKey: true, createdAt: true, id: true, name: true, storeCode: true },
       });
 
       const branch = await tx.branch.create({
@@ -353,7 +353,8 @@ export async function provisionStore(input: ProvisionStoreInput): Promise<Provis
           billingCycle: "monthly",
           companyId: company.id,
           planId: plan.id,
-          startDate: new Date(),
+          registeredAt: company.createdAt,
+          startDate: company.createdAt,
           status: "active",
         },
       });

@@ -122,6 +122,7 @@ async function seedFoundation(db: any) {
       maxProducts: 5000,
       maxPromotions: 10,
       maxReports: 5,
+      durationDays: 30,
       planName: "Free",
       removeWatermark: false,
     },

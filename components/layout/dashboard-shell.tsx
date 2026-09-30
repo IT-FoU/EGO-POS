@@ -41,6 +41,8 @@ import { tPromotions } from "@/lib/i18n/promotions-copy";
 import { tReports } from "@/lib/i18n/reports-copy";
 import { tSettings } from "@/lib/i18n/settings-copy";
 import { tSuppliers } from "@/lib/i18n/suppliers-copy";
+import { PlanStatusControl } from "@/features/business-plan/components/plan-status-control";
+import type { BusinessPlanHeaderStatus } from "@/features/business-plan/entitlement";
 
 const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, locked: false },
@@ -59,14 +61,10 @@ const navigation = [
 type NavigationKey = (typeof navigation)[number]["key"];
 
 const shellCopy: Record<SupportedLocale, {
-  daysLeft: string;
-  freePlan: string;
   lockedFeature: string;
   nav: Record<NavigationKey, string>;
 }> = {
   en: {
-    daysLeft: "Days Left",
-    freePlan: "Free Plan",
     lockedFeature: "Paid feature locked",
     nav: {
       customers: tCustomers("customers", "en"),
@@ -83,8 +81,6 @@ const shellCopy: Record<SupportedLocale, {
     },
   },
   lo: {
-    daysLeft: "Days Left",
-    freePlan: "Free Plan",
     lockedFeature: "Paid feature locked",
     nav: {
       customers: tCustomers("customers", "lo"),
@@ -105,10 +101,12 @@ const shellCopy: Record<SupportedLocale, {
 export function DashboardShell({
   children,
   demoMode: _demoMode,
+  planStatus,
   session,
 }: {
   children: React.ReactNode;
   demoMode: boolean;
+  planStatus: BusinessPlanHeaderStatus | null;
   session: Session;
 }) {
   const pathname = usePathname();
@@ -119,8 +117,6 @@ export function DashboardShell({
     normalizeStoreName(session.user.activeCompanyName ?? "Business"),
   );
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [planName, setPlanName] = useState("Free Plan");
-  const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const locale = useAppLocale(session.user.locale);
 
   useLayoutEffect(() => {
@@ -165,8 +161,6 @@ export function DashboardShell({
       setStoreName(normalizeStoreName(session.user.activeCompanyName));
     }
     setLogoUrl(readCompanyLogoUrl() || null);
-    setPlanName("Free Plan");
-    setDaysLeft(null);
   }, [session.user.activeCompanyName]);
 
   useEffect(() => {
@@ -181,9 +175,7 @@ export function DashboardShell({
     };
   }, []);
 
-  const showDaysLeft = planName.toLowerCase() !== "free plan" && daysLeft !== null;
   const copy = shellCopy[locale];
-  const displayPlanName = planName.toLowerCase() === "free plan" ? copy.freePlan : planName;
   const visibleNavigation = useMemo(
     () => navigation.filter((item) => canViewStoreNavigationItem(session.user.roles, item.key)),
     [session.user.roles],
@@ -239,12 +231,10 @@ export function DashboardShell({
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold">
                 <span className="min-w-0 truncate">{storeName}</span>
-                <span className="text-muted-foreground">|</span>
-                <span>{displayPlanName}</span>
-                {showDaysLeft ? (
+                {planStatus ? (
                   <>
                     <span className="text-muted-foreground">|</span>
-                    <span className="text-muted-foreground">{daysLeft} {copy.daysLeft}</span>
+                    <PlanStatusControl locale={locale} status={planStatus} />
                   </>
                 ) : null}
               </div>

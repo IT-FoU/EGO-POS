@@ -107,6 +107,7 @@ async function main() {
     update: {},
     create: {
       planName: "Free",
+      durationDays: 30,
       maxProducts: 5000,
       maxCashiers: 3,
       maxBranches: 1,
