@@ -172,9 +172,9 @@ const customer: CustomerDisplayScreen = { availHeight: 1080, availLeft: 1440, av
 const leftCustomer: CustomerDisplayScreen = { availHeight: 1080, availLeft: -1920, availTop: 0, availWidth: 1920 };
 
 await check("source: click opens named popup immediately", () => {
-  assert(toggle.includes("openCustomerDisplayPopup()"), "toggle must open popup during click");
+  assert(toggle.includes("openCustomerDisplayPopup("), "toggle must open popup during click");
   assert(!/await[\s\S]{0,80}openCustomerDisplayPopup/.test(toggle), "window.open must not wait on permission");
-  const openIndex = toggle.indexOf("openCustomerDisplayPopup()");
+  const openIndex = toggle.indexOf("openCustomerDisplayPopup(");
   const placeIndex = toggle.indexOf("placeCustomerDisplayWindow(popup)");
   assert(openIndex >= 0 && placeIndex > openIndex, "placement must run after popup creation");
 });
