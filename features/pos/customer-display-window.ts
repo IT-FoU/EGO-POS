@@ -1,3 +1,27 @@
+import {
+  readCustomerDisplayScreenPreference,
+  resolveSavedCustomerDisplayScreen,
+  writeCustomerDisplayScreenPreference,
+  type CustomerDisplayScreen,
+} from "@/features/pos/customer-display-screen";
+
+export {
+  CUSTOMER_DISPLAY_SCREEN_STORAGE_KEY,
+  clearCustomerDisplayScreenPreference,
+  isScreenPreferenceMatch,
+  readCustomerDisplayScreenPreference,
+  resolveSavedCustomerDisplayScreen,
+  screenDisplayLabel,
+  screenPreferenceFromScreen,
+  screenPreferenceToBounds,
+  screenIsCurrent,
+  writeCustomerDisplayScreenPreference,
+} from "@/features/pos/customer-display-screen";
+export type {
+  CustomerDisplayScreen,
+  CustomerDisplayScreenPreference,
+} from "@/features/pos/customer-display-screen";
+
 /**
  * Browser toolbar/taskbar cannot always be removed by normal web code.
  * Customer Display fullscreen is user-gesture only (POS Maximize or the
@@ -17,13 +41,6 @@ export const CUSTOMER_DISPLAY_PLACEMENT_RETRY_DELAY_MS = 180;
 export const CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES = 3;
 export const CUSTOMER_DISPLAY_PLACEMENT_TOLERANCE_PX = 64;
 
-export type CustomerDisplayScreen = {
-  availHeight: number;
-  availLeft: number;
-  availTop: number;
-  availWidth: number;
-};
-
 export type CustomerDisplayScreenDetails = {
   currentScreen: CustomerDisplayScreen;
   screens: CustomerDisplayScreen[];
@@ -34,7 +51,9 @@ export type CustomerDisplayPlacement =
   | "placed"
   | "single"
   | "unavailable"
-  | "unsupported";
+  | "unsupported"
+  | "setup_required"
+  | "disconnected";
 
 export type CustomerDisplayBounds = {
   height: number;
@@ -48,9 +67,14 @@ export type CustomerDisplayPlacementClock = {
   onLoad: (popup: Window, callback: () => void) => void;
 };
 
-type ScreenDetailsApi = {
+export type ScreenDetailsApi = {
   getScreenDetails?: () => Promise<CustomerDisplayScreenDetails>;
 };
+
+export type CustomerDisplayScreenDiscovery =
+  | { status: "unsupported" }
+  | { status: "denied" }
+  | { details: CustomerDisplayScreenDetails; status: "available" };
 
 const defaultPlacementClock: CustomerDisplayPlacementClock = {
   delay(callback, ms) {
@@ -162,8 +186,33 @@ export function scheduleCustomerDisplayPlacementRetries(
   clock.delay(apply, CUSTOMER_DISPLAY_PLACEMENT_RETRY_DELAY_MS);
 }
 
-export function openCustomerDisplayPopup(host: Window = window) {
-  return host.open(CUSTOMER_DISPLAY_PATH, CUSTOMER_DISPLAY_WINDOW_NAME, customerDisplayOpenFeatures(null, host));
+export function openCustomerDisplayPopup(
+  host: Window = window,
+  preferredBounds?: CustomerDisplayBounds | null,
+) {
+  return host.open(
+    CUSTOMER_DISPLAY_PATH,
+    CUSTOMER_DISPLAY_WINDOW_NAME,
+    customerDisplayOpenFeatures(preferredBounds ?? null, host),
+  );
+}
+
+export async function discoverCustomerDisplayScreens(
+  host: ScreenDetailsApi = window as unknown as ScreenDetailsApi,
+): Promise<CustomerDisplayScreenDiscovery> {
+  const getScreenDetails = host.getScreenDetails;
+  if (typeof getScreenDetails !== "function") {
+    return { status: "unsupported" };
+  }
+
+  try {
+    return {
+      details: await getScreenDetails.call(host),
+      status: "available",
+    };
+  } catch {
+    return { status: "denied" };
+  }
 }
 
 export async function requestCustomerDisplayFullscreen(
@@ -195,37 +244,46 @@ export async function placeCustomerDisplayWindow(
     return "unavailable";
   }
 
-  const getScreenDetails = host.getScreenDetails;
-  if (typeof getScreenDetails !== "function") {
+  const discovery = await discoverCustomerDisplayScreens(host);
+  if (discovery.status === "unsupported") {
     popup.focus();
     return "unsupported";
   }
-
-  try {
-    const details = await getScreenDetails.call(host);
-    const target = pickCustomerScreen(details);
-    if (!target) {
-      popup.focus();
-      return "single";
-    }
-
-    const bounds = customerDisplayTargetBounds(target);
-    let applies = 0;
-
-    const apply = () => {
-      if (applies >= CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES || popup.closed) {
-        return;
-      }
-      applies += 1;
-      applyCustomerDisplayBounds(popup, bounds);
-    };
-
-    apply();
-    scheduleCustomerDisplayPlacementRetries(popup, apply, clock);
-    popup.focus();
-    return "placed";
-  } catch {
+  if (discovery.status === "denied") {
     popup.focus();
     return "denied";
   }
+
+  const { details } = discovery;
+  if (details.screens.length < 2) {
+    popup.focus();
+    return "single";
+  }
+
+  const preference = readCustomerDisplayScreenPreference();
+  let target = resolveSavedCustomerDisplayScreen(details.screens, details.currentScreen, preference);
+  if (!preference && details.screens.length === 2) {
+    target = pickCustomerScreen(details);
+    if (target) writeCustomerDisplayScreenPreference(target);
+  }
+  if (!target) {
+    popup.focus();
+    return preference ? "disconnected" : "setup_required";
+  }
+
+  const bounds = customerDisplayTargetBounds(target);
+  let applies = 0;
+
+  const apply = () => {
+    if (applies >= CUSTOMER_DISPLAY_PLACEMENT_MAX_APPLIES || popup.closed) {
+      return;
+    }
+    applies += 1;
+    applyCustomerDisplayBounds(popup, bounds);
+  };
+
+  apply();
+  scheduleCustomerDisplayPlacementRetries(popup, apply, clock);
+  popup.focus();
+  return "placed";
 }
