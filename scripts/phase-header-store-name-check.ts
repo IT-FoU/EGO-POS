@@ -42,7 +42,11 @@ assert(settingsForm.includes("router.refresh()"), "settings refresh the rendered
 
 assert(authOptions.includes("activeCompanyName: activeCompany.name"), "login session uses the active Company.name");
 assert(sessionRefresh.includes("getMembershipSessionFields(userId, companyId)"), "session refresh resolves the selected tenant");
-assert(sessionRefresh.includes("activeCompanyName: membershipFields.activeCompanyName"), "session refresh carries the current Company.name");
+assert(
+  sessionRefresh.includes("activeCompanyName: sessionFields.activeCompanyName") &&
+    sessionRefresh.includes("activeCompanyName: updatedCompanyName"),
+  "session refresh carries the current Company.name",
+);
 assert(provisionStore.includes("name: storeName"), "new businesses persist the submitted store name");
 
 console.log("PASS: header store name source, exact rendering, rename refresh, and tenant scope");
