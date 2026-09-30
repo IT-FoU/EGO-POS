@@ -17,6 +17,8 @@ export type SettingsFormData = {
   receiptHeader?: string;
   receiptPrintMode: ReceiptPrintMode;
   receiptPrefix: string;
+  /** Default true: Pay requires Start Work (open cash + attendance). */
+  requireCashShiftBeforeSale: boolean;
   roundingMethod: string;
   showLogoOnReceipt: boolean;
   showTaxOnReceipt: boolean;

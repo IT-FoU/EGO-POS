@@ -5,7 +5,7 @@ import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
+import { Building2, Banknote, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { updateSettingsAction } from "@/features/settings/actions";
 import type { CurrencyCode, SettingsFormData } from "@/features/settings/types";
@@ -479,6 +479,18 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
           <Field label={tSettings("vatRate", locale)}>
             <input className="field-input" max="100" min="0" step="0.01" type="number" value={settings.vatRate} onChange={(event) => update("vatRate", Number(event.target.value))}/>
           </Field>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <SectionTitle icon={Banknote} title={tSettings("requireCashShiftBeforeSale", locale)}/>
+        <div className="mt-5 grid gap-4">
+          <Toggle
+            label={tSettings("requireCashShiftBeforeSale", locale)}
+            checked={settings.requireCashShiftBeforeSale !== false}
+            onChange={(value) => update("requireCashShiftBeforeSale", value)}
+          />
+          <p className="text-sm text-muted-foreground">{tSettings("requireCashShiftBeforeSaleHelp", locale)}</p>
         </div>
       </section>
 

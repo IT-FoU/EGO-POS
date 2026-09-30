@@ -205,11 +205,13 @@ try {
   );
 
   const cashSource = readFileSync("features/pos/prisma-repository.ts", "utf8");
+  const cashAssert = readFileSync("features/cash-sessions/prisma-repository.ts", "utf8");
   check(
     "4. Cash-session setting",
     cashSource.includes("assertOpenCashSessionForSale") &&
-      !readFileSync("features/settings/types.ts", "utf8").includes("requireCashSession"),
-    "Always required before checkout; no Settings toggle",
+      cashAssert.includes("readRequireCashShiftBeforeSaleFromJson") &&
+      readFileSync("features/settings/types.ts", "utf8").includes("requireCashShiftBeforeSale"),
+    "Checkout gate is setting-aware; default ON via unit_pricing_defaults.__requireCashShiftBeforeSale",
   );
   await prisma.cashSession.updateMany({
     data: { cashDifference: 0, closedAt: new Date(), closingCash: 0, expectedCash: 0 },

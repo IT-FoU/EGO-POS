@@ -141,6 +141,8 @@ export type PosLoyaltySettings = {
 };
 
 export type PosCashSessionContext = {
+  attendanceCashSessionId: string | null;
+  attendanceOpen: boolean;
   cashInLak: number;
   cashOutLak: number;
   cashSalesLak: number;
@@ -148,6 +150,8 @@ export type PosCashSessionContext = {
   nonCashSalesLak: number;
   openedAt: string | null;
   openingCashLak: number;
+  /** Default true when unset — matches company_settings.require_cash_shift_before_sale. */
+  requireCashShiftBeforeSale: boolean;
   sessionId: string | null;
   status: "closed" | "not_started" | "open";
 };
