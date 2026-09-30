@@ -186,12 +186,13 @@ await check("source: getScreenDetails used after open", () => {
   assert(helper.includes("availLeft") && helper.includes("availWidth"), "target bounds missing");
 });
 
-await check("source: reuse named window, never close on second click", () => {
+await check("source: reuse named window and close on second click", () => {
   assert(helper.includes("CUSTOMER_DISPLAY_WINDOW_NAME"), "named window missing");
   assert(CUSTOMER_DISPLAY_WINDOW_NAME === "ego-pos-customer-display", CUSTOMER_DISPLAY_WINDOW_NAME);
   assert(CUSTOMER_DISPLAY_PATH === "/customer-display", CUSTOMER_DISPLAY_PATH);
   assert(CUSTOMER_DISPLAY_OPEN_FEATURES.includes(`width=${CUSTOMER_DISPLAY_FALLBACK_OPEN_WIDTH}`), CUSTOMER_DISPLAY_OPEN_FEATURES);
-  assert(!toggle.includes(".close()"), "second click must not close the customer window");
+  assert(toggle.includes(".close()"), "second click must close the customer window");
+  assert(toggle.includes("customerDisplayWindow = null"), "closed window reference must be cleared");
 });
 
 await check("source: cart sync architecture unchanged", () => {
@@ -708,10 +709,14 @@ await check("store copy and product names use locale-aware fallbacks", () => {
   assert(displayClient.includes("localizedProductName(item, locale)"), "customer display must use localized product names");
 });
 
-await check("active QR opens selector, valid sources only, catalog hydrates without POS", () => {
+await check("QR main button is a true show/hide toggle", () => {
   assert(qrToggle.includes("getCustomerDisplayQrCatalogAction"), "header must hydrate the shared QR catalog");
-  assert(qrToggle.includes("setOpen((current) => !current)"), "QR button must open the selector, not toggle hide");
-  assert(!/intent\.visible \? hideQr\(\)/.test(qrToggle), "visible QR must not hide on the header button");
+  assert(qrToggle.includes("function toggleQr()"), "QR button toggle handler missing");
+  assert(qrToggle.includes("if (intent.visible)"), "visible QR must hide on the header button");
+  assert(qrToggle.includes("if (banks.length === 1)"), "single QR option must show immediately");
+  assert(qrToggle.includes("setOpen(true)"), "multiple/zero QR options must open selector");
+  assert(qrToggle.includes("hideCustomerDisplayQr"), "hide must clear the shared intent");
+  assert(readFileSync(join(root, "features/pos/customer-display-qr.ts"), "utf8").includes('bankId: "", visible: false'), "hide must clear selected bank");
   assert(qrToggle.includes('data-cd-qr-hide="true"'), "Hide QR must live inside the selector");
   assert(qrToggle.includes("ui.show.qr") && qrToggle.includes("data-cd-qr-toggle"), "QR button label/state missing");
   assert(qrToggle.includes("data-cd-qr-icon") && qrToggle.includes("logoUrl"), "provider icons missing");

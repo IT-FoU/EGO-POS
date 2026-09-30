@@ -86,9 +86,21 @@ export function CustomerDisplayQrToggle() {
   }
 
   function hideQr() {
-    hideCustomerDisplayQr(intent.bankId);
-    setIntent({ bankId: intent.bankId, visible: false });
+    hideCustomerDisplayQr();
+    setIntent({ bankId: "", visible: false });
     setOpen(false);
+  }
+
+  function toggleQr() {
+    if (intent.visible) {
+      hideQr();
+      return;
+    }
+    if (banks.length === 1) {
+      selectBank(banks[0]!);
+      return;
+    }
+    setOpen(true);
   }
 
   return (
@@ -103,7 +115,7 @@ export function CustomerDisplayQrToggle() {
         }
         data-cd-qr-toggle={intent.visible ? "active" : "idle"}
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleQr}
       >
         <QrCode className="size-4 shrink-0" aria-hidden="true" />
         <span className="hidden truncate sm:inline">{buttonLabel}</span>
