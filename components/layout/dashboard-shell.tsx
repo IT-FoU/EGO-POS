@@ -18,7 +18,7 @@ import {
   Truck,
   Users,
 } from "lucide-react";
-import { NotificationCenter } from "@/components/layout/notification-center";
+import { NotificationCenterLive } from "@/components/layout/notification-center-live";
 import { CustomerDisplayToggle } from "@/components/layout/customer-display-toggle";
 import { CustomerDisplayQrToggle } from "@/components/layout/customer-display-qr-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
@@ -240,7 +240,7 @@ export function DashboardShell({
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <NotificationCenter locale={locale} />
+              <NotificationCenterLive locale={locale} />
               <CustomerDisplayQrToggle />
               <CustomerDisplayToggle />
               <FullScreenToggle locale={locale} />

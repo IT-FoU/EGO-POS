@@ -44,7 +44,8 @@ export function writeCustomerDisplayQrIntent(intent: CustomerDisplayQrIntent) {
 }
 
 export function hideCustomerDisplayQr(bankId = "") {
-  writeCustomerDisplayQrIntent({ bankId, visible: false });
+  void bankId;
+  writeCustomerDisplayQrIntent({ bankId: "", visible: false });
 }
 
 export function readCustomerDisplayQrCatalog(): QrBank[] {

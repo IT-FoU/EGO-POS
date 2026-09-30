@@ -2,7 +2,7 @@
 
 import { tPos } from "@/lib/i18n/pos-copy";
 import { t } from "@/lib/i18n/ui";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Maximize2, Monitor } from "lucide-react";
 import {
   openCustomerDisplayPopup,
@@ -10,13 +10,17 @@ import {
   requestCustomerDisplayFullscreen,
 } from "@/features/pos/customer-display-window";
 
+let customerDisplayWindow: Window | null = null;
+
 export function CustomerDisplayToggle() {
-  const displayWindow = useRef<Window | null>(null);
   const [hint, setHint] = useState<string | null>(null);
 
   function openOrReuse() {
+    if (customerDisplayWindow && !customerDisplayWindow.closed) {
+      return customerDisplayWindow;
+    }
     const popup = openCustomerDisplayPopup();
-    displayWindow.current = popup;
+    customerDisplayWindow = popup;
     if (!popup) {
       setHint(t("ui.allow.window.management.to.open.customer.di"));
       return null;
@@ -25,6 +29,12 @@ export function CustomerDisplayToggle() {
   }
 
   function openCustomerDisplay() {
+    if (customerDisplayWindow && !customerDisplayWindow.closed) {
+      customerDisplayWindow.close();
+      customerDisplayWindow = null;
+      setHint(null);
+      return;
+    }
     const popup = openOrReuse();
     if (!popup) {
       return;

@@ -1,55 +1,45 @@
 "use client";
 
-import { tPos } from "@/lib/i18n/pos-copy";
-import { t } from "@/lib/i18n/ui";
-import { useMemo, useState } from "react";
+import { fillPosCopy, tPos } from "@/lib/i18n/pos-copy";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bell, CalendarClock, CreditCard, Info, PackageX, TrendingDown, Truck, } from "lucide-react";
+import { Bell, CalendarClock, CreditCard, PackageCheck, PackageX, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
-type NotificationSeverity = "info" | "warning" | "critical";
-type NotificationItem = {
-    href?: string;
-    message: string;
-    severity: NotificationSeverity;
-    title: string;
-    type: string;
-};
-const labels = {
-    en: {
-        empty: "No urgent alerts",
-        title: "Notifications",
-    },
-    lo: {
-        empty: tPos("ui.no.urgent.alerts", "lo"),
-        title: tPos("ui.notifications", "lo"),
-    },
-};
-const severityClass: Record<NotificationSeverity, string> = {
-    critical: "border-danger/40 bg-danger/10 text-danger",
-    info: "border-primary/40 bg-primary/10 text-primary",
-    warning: "border-warning/40 bg-warning/10 text-warning",
-};
-const iconByType = {
-    cashDifference: AlertTriangle,
-    credit: CreditCard,
-    deadStock: PackageX,
-    due: Truck,
-    expired: PackageX,
-    expiry: CalendarClock,
-    lowStock: AlertTriangle,
-    lowSales: TrendingDown,
-    membershipExpired: CreditCard,
-    subscriptionExpired: CalendarClock,
-    system: Info,
-};
-export function NotificationCenter({ locale: localeProp }: {
+import type { NotificationCategory, NotificationItem } from "@/features/notifications/notification-types";
+
+const severityClass = "border-warning/40 bg-warning/10 text-warning";
+const iconByCategory = {
+  low_stock: PackageCheck,
+  near_expiry: CalendarClock,
+  out_of_stock: PackageX,
+  membership_expiring: CreditCard,
+  promotion_starting: Percent,
+  promotion_ending: Percent,
+} satisfies Record<NotificationCategory, typeof PackageCheck>;
+
+function categoryLabel(category: NotificationCategory, locale: string) {
+  return tPos(`ui.notification.category.${category}`, locale);
+}
+
+function notificationTitle(category: NotificationCategory, locale: string) {
+  return tPos(`ui.notification.title.${category}`, locale);
+}
+
+function notificationMessage(item: NotificationItem, locale: string) {
+  return fillPosCopy(tPos(`ui.notification.message.${item.category}`, locale), {
+    days: item.daysRemaining ?? 0,
+    name: item.entityName ?? "",
+  });
+}
+export { NotificationCenterLive as NotificationCenter } from "@/components/layout/notification-center-live"; /*
+function LegacyNotificationCenter({ locale: localeProp }: {
     locale?: string;
 }) {
     const locale = useAppLocale(localeProp);
     const [isOpen, setIsOpen] = useState(false);
-    const copy = locale === "lo" ? labels.lo : labels.en;
-    const notifications = useMemo<NotificationItem[]>(() => [
+const title = tPos("ui.notifications", locale);
+    const notifications = [] as NotificationItem[];
         {
             href: "/inventory",
             message: t("ui.several.demo.items.are.below.minimum.stock.l"),
@@ -174,3 +164,4 @@ export function NotificationCenter({ locale: localeProp }: {
         </div>) : null}
     </div>);
 }
+*/
