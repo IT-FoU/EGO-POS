@@ -82,6 +82,28 @@ enum BillingCycle {
   yearly
 }
 
+/// What happens after the entitlement and any grace period are both over.
+/// POS does not enforce BLOCK_ACCESS until a future rollout flag is turned on.
+enum PlanExpiryBehavior {
+  block_access
+  fallback_to_free
+}
+
+enum SaaSPaymentMethod {
+  static_qr
+  dynamic_qr
+  bank_transfer
+  card
+}
+
+enum SaaSPaymentReviewStatus {
+  draft
+  submitted
+  approved
+  rejected
+  cancelled
+}
+
 enum CashTransactionType {
   cash_in
   cash_out
@@ -266,6 +288,8 @@ model Company {
   storeActivityLogs StoreActivityLog[]
   settings       CompanySetting?
   subscriptions  SaaSSubscription[]
+  saasPaymentRecords SaaSPaymentRecord[]
+  saasAccountExtensions SaaSAccountExtension[]
   notifications  Notification[]
   approvals      Approval[]
   approvalRules  ApprovalRule[]
@@ -1907,36 +1931,99 @@ model ApprovalRule {
 }
 
 model Plan {
-  id              String   @id @default(cuid())
-  planName        String   @unique @map("plan_name")
-  monthlyPrice    Decimal  @default(0) @map("monthly_price") @db.Decimal(18, 2)
-  yearlyPrice     Decimal  @default(0) @map("yearly_price") @db.Decimal(18, 2)
-  maxProducts     Int?     @map("max_products")
-  maxCashiers     Int?     @map("max_cashiers")
-  maxBranches     Int?     @map("max_branches")
-  maxReports      Int?     @map("max_reports")
-  maxPromotions   Int?     @map("max_promotions")
-  customLogo      Boolean  @default(false) @map("custom_logo")
-  removeWatermark Boolean  @default(false) @map("remove_watermark")
-  isActive        Boolean  @default(true) @map("is_active")
-  companies       Company[]
-  subscriptions   SaaSSubscription[]
+  id                     String              @id @default(cuid())
+  planName               String              @unique @map("plan_name")
+  monthlyPrice           Decimal             @default(0) @map("monthly_price") @db.Decimal(18, 2)
+  yearlyPrice            Decimal             @default(0) @map("yearly_price") @db.Decimal(18, 2)
+  /// Configurable entitlement length in whole calendar days. Null means "not set".
+  /// Free plans with null are given the documented unconfigured default at read time.
+  /// Changing this value must not rewrite company registration or subscription start dates.
+  durationDays           Int?                @map("duration_days")
+  expiryBehavior         PlanExpiryBehavior  @default(fallback_to_free) @map("expiry_behavior")
+  gracePeriodDays        Int                 @default(0) @map("grace_period_days")
+  autoRenewAvailable     Boolean             @default(false) @map("auto_renew_available")
+  /// Future allow-list such as ["static_qr","bank_transfer"]. No gateway secrets.
+  enabledPaymentMethods  Json?               @map("enabled_payment_methods")
+  maxProducts            Int?                @map("max_products")
+  maxCashiers            Int?                @map("max_cashiers")
+  maxBranches            Int?                @map("max_branches")
+  maxReports             Int?                @map("max_reports")
+  maxPromotions          Int?                @map("max_promotions")
+  customLogo             Boolean             @default(false) @map("custom_logo")
+  removeWatermark        Boolean             @default(false) @map("remove_watermark")
+  isActive               Boolean             @default(true) @map("is_active")
+  companies              Company[]
+  subscriptions          SaaSSubscription[]
+  paymentRecords         SaaSPaymentRecord[]
 
   @@map("plans")
 }
 
 model SaaSSubscription {
-  id           String             @id @default(cuid())
-  companyId    String             @map("company_id")
-  planId       String             @map("plan_id")
-  startDate    DateTime           @map("start_date")
-  endDate      DateTime?          @map("end_date")
-  billingCycle BillingCycle       @map("billing_cycle")
-  status       SubscriptionStatus @default(active)
-  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  plan         Plan               @relation(fields: [planId], references: [id])
+  id            String             @id @default(cuid())
+  companyId     String             @map("company_id")
+  planId        String             @map("plan_id")
+  /// Entitlement period start. Duration edits must not rewrite this.
+  startDate     DateTime           @map("start_date")
+  /// Optional cache of the derived expiry. Reads recompute from the anchor, duration, and extra days.
+  endDate       DateTime?          @map("end_date")
+  /// Copy of the company registration instant. Not a second source of truth for the countdown.
+  registeredAt  DateTime?          @map("registered_at")
+  /// Account-specific bonus days. Does not change the global plan or the registration date.
+  extraDays     Int                @default(0) @map("extra_days")
+  autoRenew     Boolean            @default(false) @map("auto_renew")
+  billingCycle  BillingCycle       @map("billing_cycle")
+  status        SubscriptionStatus @default(active)
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan          Plan               @relation(fields: [planId], references: [id])
+  paymentRecords SaaSPaymentRecord[]
+  accountExtensions SaaSAccountExtension[]
 
+  @@index([companyId])
   @@map("subscriptions")
+}
+
+/// Future manual-review and provider-confirmed billing records. No card data or gateway secrets.
+model SaaSPaymentRecord {
+  id                String                  @id @default(cuid())
+  companyId         String                  @map("company_id")
+  planId            String?                 @map("plan_id")
+  subscriptionId    String?                 @map("subscription_id")
+  amount            Decimal                 @db.Decimal(18, 2)
+  currency          CurrencyCode            @default(LAK)
+  paymentMethod     SaaSPaymentMethod       @map("payment_method")
+  paymentReference  String?                 @map("payment_reference")
+  submittedAt       DateTime?               @map("submitted_at")
+  reviewedAt        DateTime?               @map("reviewed_at")
+  reviewedById      String?                 @map("reviewed_by_id")
+  status            SaaSPaymentReviewStatus @default(draft)
+  metadata          Json?
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan              Plan?                   @relation(fields: [planId], references: [id], onDelete: SetNull)
+  subscription      SaaSSubscription?       @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  reviewedBy        SuperAdmin?             @relation("SaaSPaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@map("saas_payment_records")
+}
+
+/// Audit ledger for per-account day grants. The running total lives on subscriptions.extra_days.
+model SaaSAccountExtension {
+  id             String            @id @default(cuid())
+  companyId      String            @map("company_id")
+  subscriptionId String?           @map("subscription_id")
+  additionalDays Int               @map("additional_days")
+  reason         String?
+  createdById    String?           @map("created_by_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  company        Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subscription   SaaSSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  createdBy      SuperAdmin?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@map("saas_account_extensions")
 }
 
 model SuperAdmin {
@@ -1949,6 +2036,8 @@ model SuperAdmin {
   createdAt DateTime @default(now()) @map("created_at")
   accessLogs CompanyAccessLog[]
   platformAuditLogs PlatformAuditLog[]
+  reviewedSaaSPayments SaaSPaymentRecord[] @relation("SaaSPaymentReviewer")
+  grantedSaaSExtensions SaaSAccountExtension[]
 
   @@map("super_admins")
 }
