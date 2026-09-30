@@ -18,11 +18,7 @@ export async function updateActiveCompanySession(userId: string, companyId: stri
   const cookieStore = await cookies();
   const requestHeaders = await headers();
   const token = await getToken({
-    req: {
-      headers: {
-        cookie: requestHeaders.get("cookie") ?? cookieStore.toString(),
-      },
-    } as never,
+    req: { headers: requestHeaders } as never,
     secret,
   });
 
