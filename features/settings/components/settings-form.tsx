@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Banknote, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { updateSettingsAction } from "@/features/settings/actions";
+import { ACTIVE_COMPANY_NAME_CHANGE_EVENT } from "@/lib/auth/active-company-name";
 import type { CurrencyCode, SettingsFormData } from "@/features/settings/types";
 import {
   archiveQrPaymentBankAction,
@@ -234,6 +235,11 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
                 receiptPrintMode: printMode,
                 requireCashShiftBeforeSale: saved.requireCashShiftBeforeSale !== false,
             });
+            window.dispatchEvent(
+                new CustomEvent(ACTIVE_COMPANY_NAME_CHANGE_EVENT, {
+                    detail: { name: saved.companyName },
+                }),
+            );
             setMessage({ text: tSettings("saved", locale), tone: "success" });
             router.refresh();
         });

@@ -29,6 +29,10 @@ import { LogoContainer } from "@/components/brand/logo-container";
 import { COMPANY_LOGO_CHANGE_EVENT, readCompanyLogoUrl } from "@/features/brand/company-logo";
 import { APP_NAME, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
+import {
+  ACTIVE_COMPANY_NAME_CHANGE_EVENT,
+  resolveActiveCompanyName,
+} from "@/lib/auth/active-company-name";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
@@ -114,7 +118,7 @@ export function DashboardShell({
   const headerSpacerRef = useRef<HTMLDivElement>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [storeName, setStoreName] = useState(
-    normalizeStoreName(session.user.activeCompanyName ?? "Business"),
+    resolveActiveCompanyName(session.user.activeCompanyName),
   );
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const locale = useAppLocale(session.user.locale);
@@ -157,11 +161,19 @@ export function DashboardShell({
   }, [pendingHref]);
 
   useEffect(() => {
-    if (session.user.activeCompanyName) {
-      setStoreName(normalizeStoreName(session.user.activeCompanyName));
-    }
+    setStoreName(resolveActiveCompanyName(session.user.activeCompanyName));
     setLogoUrl(readCompanyLogoUrl() || null);
   }, [session.user.activeCompanyName]);
+
+  useEffect(() => {
+    function refreshStoreName(event: Event) {
+      const nextName = (event as CustomEvent<{ name?: string }>).detail?.name;
+      if (nextName) setStoreName(nextName);
+    }
+
+    window.addEventListener(ACTIVE_COMPANY_NAME_CHANGE_EVENT, refreshStoreName);
+    return () => window.removeEventListener(ACTIVE_COMPANY_NAME_CHANGE_EVENT, refreshStoreName);
+  }, []);
 
   useEffect(() => {
     function refreshLogo() {
@@ -230,7 +242,7 @@ export function DashboardShell({
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold">
-                <span className="min-w-0 truncate">{storeName}</span>
+                <span className="min-w-0 truncate" title={storeName}>{storeName}</span>
                 {planStatus ? (
                   <>
                     <span className="text-muted-foreground">|</span>
@@ -287,8 +299,4 @@ export function DashboardShell({
       </div>
     </div>
   );
-}
-
-function normalizeStoreName(name: string) {
-  return name.replace(/\s+(Mini Mart|Pharmacy|Restaurant|Coffee Shop|Beauty Salon|Clothing)\s*$/i, "").trim();
 }

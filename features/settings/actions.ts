@@ -2,13 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { getCurrentSession } from "@/lib/auth/session";
+import { updateActiveCompanySession } from "@/lib/auth/update-active-company-session";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import { updatePrismaSettings } from "@/features/settings/prisma-repository";
 import type { SettingsFormData } from "@/features/settings/types";
 
 export async function updateSettingsAction(input: Partial<SettingsFormData>) {
   try {
-    const settings = await updatePrismaSettings(input, await requireWritePermission(WRITE_PERMISSIONS.settingsManage));
+    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const settings = await updatePrismaSettings(input, tenant);
+    const session = await getCurrentSession();
+    if (session?.user?.id) {
+      try {
+        await updateActiveCompanySession(session.user.id, tenant.companyId, session, settings.companyName);
+      } catch {
+        // The database value is authoritative; the client publishes it after this action succeeds.
+      }
+    }
     revalidatePath("/settings");
     revalidatePath("/dashboard");
     revalidatePath("/pos");
