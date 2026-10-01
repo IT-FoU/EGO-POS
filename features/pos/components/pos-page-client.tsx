@@ -104,6 +104,7 @@ import {
 import { RECENT_SALES_DEFAULT_LIMIT } from "@/features/pos/recent-sales-query";
 import { cancelHeldBill, createHeldBill, fetchHeldBills, resumeHeldBill } from "@/features/pos/held-bills-client";
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
+import { readCartPanelState, writeCartPanelState } from "@/features/pos/cart-panel-state";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
 import { readCompanyLogoUrl } from "@/features/brand/company-logo";
 import {
@@ -336,6 +337,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     useEffect(() => {
         setBillNo(nextSaleNo);
     }, [nextSaleNo]);
+    useEffect(() => {
+        setCartCollapsed(readCartPanelState() === "collapsed");
+    }, []);
     useLayoutEffect(() => {
         if (cartCollapsed || !productGridVisible) {
             setCartOverlayMaxHeightPx(null);
@@ -932,6 +936,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             window.localStorage.setItem(POS_PRODUCT_GRID_VISIBILITY_KEY, next ? "visible" : "hidden");
             return next;
         });
+    }
+    function setCartPanelCollapsed(next: boolean) {
+        setCartCollapsed(next);
+        writeCartPanelState(next ? "collapsed" : "expanded");
     }
     function setPosUnitDisplayMode(mode: PosUnitDisplayMode) {
         setUnitDisplayMode(mode);
@@ -2003,7 +2011,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 <span className="shrink-0">{cartItems.length} {t("ui.items")}</span>
                 <span className="min-w-0 truncate text-xl font-black text-[#FACC15]">{formatLak(totalAmount)} LAK</span>
               </div>
-              <button className="grid size-11 shrink-0 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setCartCollapsed(false)} aria-label={t("ui.expand.cart")}>
+              <button className="grid size-11 shrink-0 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setCartPanelCollapsed(false)} aria-label={t("ui.expand.cart")}>
                 <ChevronDown className="size-5" aria-hidden="true"/>
               </button>
             </div>) : (<>
@@ -2014,7 +2022,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
               </div>
               <div className="flex items-center gap-2">
                 <div className="hidden text-right text-lg font-black text-[#FACC15] sm:block">{formatLak(totalAmount)} LAK</div>
-                <button className="grid size-11 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setCartCollapsed((current) => !current)} aria-label={cartCollapsed ? t("ui.expand.cart") : t("ui.collapse.cart")}>
+                <button className="grid size-11 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary transition hover:bg-primary hover:text-primary-foreground" type="button" onClick={() => setCartPanelCollapsed(true)} aria-label={cartCollapsed ? t("ui.expand.cart") : t("ui.collapse.cart")}>
                   {cartCollapsed ? <ChevronDown className="size-5" aria-hidden="true"/> : <ChevronUp className="size-5" aria-hidden="true"/>}
                 </button>
               </div>
