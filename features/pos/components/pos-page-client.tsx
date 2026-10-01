@@ -249,6 +249,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [heldBillsOpen, setHeldBillsOpen] = useState(false);
     const [memberSearchOpen, setMemberSearchOpen] = useState(false);
     const [cartCollapsed, setCartCollapsed] = useState(false);
+    const [cartPanelStateReady, setCartPanelStateReady] = useState(false);
     const cartPanelRef = useRef<HTMLElement>(null);
     const [cartOverlayMaxHeightPx, setCartOverlayMaxHeightPx] = useState<number | null>(null);
     const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
@@ -339,6 +340,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }, [nextSaleNo]);
     useEffect(() => {
         setCartCollapsed(readCartPanelState() === "collapsed");
+        setCartPanelStateReady(true);
     }, []);
     useLayoutEffect(() => {
         if (cartCollapsed || !productGridVisible) {
@@ -1991,6 +1993,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
         <aside className={cn(
           "order-3 flex min-w-0 flex-col gap-3",
+          !cartPanelStateReady && "invisible",
           productGridVisible && "xl:order-none xl:col-start-2 xl:row-start-1",
           productGridVisible && (cartCollapsed ? "xl:h-full xl:self-stretch" : "xl:self-start"),
         )}>
