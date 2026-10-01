@@ -1,24 +1,46 @@
 import { computeCashSessionTotalsForShifts } from "@/features/cash-sessions/prisma-repository";
+import { readRequireCashShiftBeforeSaleFromJson } from "@/features/products/unit-pricing-defaults";
 import {
   loadDashboardCriticalSalesKpis,
   resolveDashboardCriticalContext,
 } from "@/features/dashboard/critical-queries";
+import {
+  buildDashboardPromotionSummary,
+  promotionSoonWindow,
+  type DashboardPromotionSummary,
+} from "@/features/dashboard/dashboard-promotion-analytics";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 import {
+  businessDayLabel,
   businessHour,
+  businessMonthLabel,
   startOfBusinessDay,
   startOfBusinessMonth,
   startOfBusinessWeek,
   startOfBusinessYear,
 } from "@/lib/datetime/business-timezone";
+import {
+  availableStock,
+  classifyStockNotification,
+  membershipExpiringDays,
+  promotionWindowDays,
+} from "@/features/notifications/notification-types";
 
 export type DashboardAlertSeverity = "info" | "warning" | "critical";
+export type DashboardAlertCode =
+  | "low_stock"
+  | "near_expiry"
+  | "out_of_stock"
+  | "membership_expiring"
+  | "promotion_starting"
+  | "promotion_ending";
 
 export type DashboardAlert = {
+  code?: DashboardAlertCode;
   href?: string;
   message: string;
   severity: DashboardAlertSeverity;
@@ -27,10 +49,13 @@ export type DashboardAlert = {
   value?: string;
 };
 
-export type TodaySalesPoint = {
-  hour: string;
+export type DashboardSalesPoint = {
+  hour?: string;
+  label: string;
   salesLak: number;
 };
+
+export type TodaySalesPoint = DashboardSalesPoint;
 
 export type TopSellingProduct = {
   name: string;
@@ -62,6 +87,7 @@ export type DashboardCurrencyBreakdown = {
 };
 
 export type DashboardRangeKey = "custom" | "month" | "today" | "week" | "year";
+export type DashboardTrendGranularity = "day" | "hour" | "month";
 
 export type DashboardDateRange = {
   end?: Date;
@@ -69,11 +95,18 @@ export type DashboardDateRange = {
   start?: Date;
 };
 
+export type DashboardPromotionSlice = {
+  dataStatus: DashboardSnapshot["dataStatus"];
+  period: DashboardSnapshot["period"];
+  summary: DashboardPromotionSummary;
+};
+
 export type ShiftSummary = {
+  cashierName: string;
   cashierId: string;
   closedAt: string | null;
-  countedCashLak: number;
-  differenceLak: number;
+  countedCashLak: number | null;
+  differenceLak: number | null;
   expectedCashLak: number;
   openedAt: string;
   openingCashLak: number;
@@ -117,6 +150,7 @@ export type DashboardSnapshot = {
     voidCount: number;
   };
   hourlySales: TodaySalesPoint[];
+  salesTrend: DashboardSalesPoint[];
   lowStockItems: DashboardLowStockItem[];
   recentSales: DashboardRecentSale[];
   period: {
@@ -124,15 +158,21 @@ export type DashboardSnapshot = {
     key: DashboardRangeKey;
     label: string;
     start: string;
+    trendGranularity: DashboardTrendGranularity;
   };
   shift: {
     cashInLak: number;
     cashOutLak: number;
     cashSalesLak: number;
+    cashierName: string | null;
+    countedCashLak: number | null;
+    differenceLak: number | null;
     expectedCashLak: number;
+    hasActiveCashSession: boolean;
     openedAt: string | null;
     openingCashLak: number;
     qrTransferSalesLak: number;
+    requireCashShiftBeforeSale: boolean;
     status: "not_started" | "open" | "closed";
   };
   summary: {
@@ -203,6 +243,12 @@ function emptySnapshot(errorMessage?: string): DashboardSnapshot {
     },
     hourlySales: Array.from({ length: 24 }, (_, hour) => ({
       hour: `${String(hour).padStart(2, "0")}:00`,
+      label: `${String(hour).padStart(2, "0")}:00`,
+      salesLak: 0,
+    })),
+    salesTrend: Array.from({ length: 24 }, (_, hour) => ({
+      hour: `${String(hour).padStart(2, "0")}:00`,
+      label: `${String(hour).padStart(2, "0")}:00`,
       salesLak: 0,
     })),
     lowStockItems: [],
@@ -212,15 +258,21 @@ function emptySnapshot(errorMessage?: string): DashboardSnapshot {
       key: "today",
       label,
       start: start.toISOString(),
+      trendGranularity: "hour",
     },
     shift: {
       cashInLak: 0,
       cashOutLak: 0,
       cashSalesLak: 0,
+      cashierName: null,
+      countedCashLak: null,
+      differenceLak: null,
       expectedCashLak: 0,
+      hasActiveCashSession: false,
       openedAt: null,
       openingCashLak: 0,
       qrTransferSalesLak: 0,
+      requireCashShiftBeforeSale: true,
       status: "not_started",
     },
     summary: {
@@ -307,6 +359,60 @@ function resolveDateRange(range: DashboardDateRange) {
   };
 
   return { end, label: labels[range.key], start };
+}
+
+function trendGranularityForRange(range: DashboardDateRange, start: Date, end: Date): DashboardTrendGranularity {
+  if (range.key === "today") return "hour";
+  if (range.key === "year") return "month";
+  const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
+  if (range.key === "custom" && days <= 1) return "hour";
+  if (days > 31) return "month";
+  return "day";
+}
+
+export function buildDashboardSalesTrend(
+  sales: Array<{ createdAt: Date; totalAmount: unknown }>,
+  range: DashboardDateRange,
+  start: Date,
+  end: Date,
+): { granularity: DashboardTrendGranularity; points: DashboardSalesPoint[] } {
+  const granularity = trendGranularityForRange(range, start, end);
+  const totals = new Map<string, number>();
+
+  for (const sale of sales) {
+    const key =
+      granularity === "hour"
+        ? String(businessHour(sale.createdAt)).padStart(2, "0") + ":00"
+        : granularity === "month"
+          ? businessMonthLabel(sale.createdAt)
+          : businessDayLabel(sale.createdAt);
+    totals.set(key, (totals.get(key) ?? 0) + amount(sale.totalAmount));
+  }
+
+  if (granularity === "hour") {
+    return {
+      granularity,
+      points: Array.from({ length: 24 }, (_, hour) => {
+        const label = `${String(hour).padStart(2, "0")}:00`;
+        return { hour: label, label, salesLak: totals.get(label) ?? 0 };
+      }),
+    };
+  }
+
+  const points: DashboardSalesPoint[] = [];
+  if (granularity === "day") {
+    for (let cursor = new Date(start); cursor < end; cursor = new Date(cursor.getTime() + 86_400_000)) {
+      const label = businessDayLabel(cursor);
+      points.push({ label, salesLak: totals.get(label) ?? 0 });
+    }
+  } else {
+    for (let cursor = new Date(start); cursor < end; cursor = startOfBusinessMonth(new Date(cursor.getTime() + 32 * 86_400_000))) {
+      const label = businessMonthLabel(cursor);
+      points.push({ label, salesLak: totals.get(label) ?? 0 });
+    }
+  }
+
+  return { granularity, points };
 }
 
 function plusDays(date: Date, days: number) {
@@ -440,6 +546,22 @@ export async function getMiniMartDashboardSecondarySnapshot(
   }
 }
 
+export async function getMiniMartDashboardPromotionSnapshot(
+  range: DashboardDateRange,
+): Promise<DashboardPromotionSlice> {
+  const { requireSession } = await import("@/lib/auth/session");
+  const session = await requireSession();
+  const tenant = tenantFromSession(session);
+  await assertPermission(tenant, READ_PERMISSIONS.dashboardView);
+
+  try {
+    return await loadDashboardPromotionSlice(tenant, range, prisma);
+  } catch (error) {
+    logDashboardQueryFailure("getMiniMartDashboardPromotionSnapshot", "dashboardPromotions", error);
+    return emptyPromotionSlice(range, "Promotion data could not be loaded.");
+  }
+}
+
 /*
  * Dashboard calculation contract
  * - Revenue, transaction count, profit, COGS, payment totals, and top products
@@ -523,7 +645,34 @@ function emptySecondarySlice(errorMessage?: string): DashboardSecondarySlice {
   };
 }
 
+function emptyPromotionSlice(range: DashboardDateRange, errorMessage?: string): DashboardPromotionSlice {
+  const { end, label, start } = resolveDateRange(range);
+  return {
+    dataStatus: {
+      hasError: Boolean(errorMessage),
+      isPartial: Boolean(errorMessage),
+      message: errorMessage,
+    },
+    period: {
+      end: end.toISOString(),
+      key: range.key,
+      label,
+      start: start.toISOString(),
+      trendGranularity: trendGranularityForRange(range, start, end),
+    },
+    summary: {
+      activeCount: 0,
+      endingSoonCount: 0,
+      promotionDiscountLak: 0,
+      startingSoonCount: 0,
+      topPromotions: [],
+      usageCount: 0,
+    },
+  };
+}
+
 type DashBalance = {
+  productId: string;
   product: {
     costPriceLak: unknown;
     minStock: unknown;
@@ -532,6 +681,7 @@ type DashBalance = {
     units?: Array<{ costPriceLak: unknown; isBaseUnit?: boolean }>;
   };
   quantity: unknown;
+  warehouseId: string;
 };
 
 type DashTxn = { amount: unknown; transactionType: string };
@@ -552,6 +702,15 @@ export async function getPrismaDashboardSecondarySnapshot(
 ): Promise<DashboardSecondarySlice> {
   await assertPermission(tenant, READ_PERMISSIONS.dashboardView, client);
   return loadDashboardSecondarySlice(tenant, range, client, context);
+}
+
+export async function getPrismaDashboardPromotionSnapshot(
+  tenant: TenantContext,
+  range: DashboardDateRange,
+  client: any = prisma,
+): Promise<DashboardPromotionSlice> {
+  await assertPermission(tenant, READ_PERMISSIONS.dashboardView, client);
+  return loadDashboardPromotionSlice(tenant, range, client);
 }
 
 export async function getPrismaDashboardSnapshot(
@@ -585,20 +744,27 @@ async function loadDashboardCriticalSnapshot(
     loadDashboardCriticalSalesKpis(scope, { dateFrom: start, dateTo }, db),
   )).kpis;
 
-  const sessionRows = await timedDashboardLoad("critical-cash-sessions", () =>
-    db.cashSession.findMany({
-      include: { transactions: true },
-      orderBy: { openedAt: "asc" },
-      where: {
-        branchId: scope.branchId,
-        companyId: tenant.companyId,
-        OR: [
-          { cashierId: tenant.userId, closedAt: null },
-          { openedAt: { gte: start, lt: end } },
-        ],
-      },
-    }),
-  ) as Array<Record<string, any>>;
+  const [sessionRows, companySettings] = await timedDashboardLoad("critical-cash-sessions", () =>
+    Promise.all([
+      db.cashSession.findMany({
+        include: { transactions: true },
+        orderBy: { openedAt: "asc" },
+        where: {
+          branchId: scope.branchId,
+          companyId: tenant.companyId,
+          OR: [
+            { cashierId: tenant.userId, closedAt: null },
+            { openedAt: { gte: start, lt: end } },
+          ],
+        },
+      }),
+      db.companySetting.findUnique({
+        select: { unitPricingDefaults: true },
+        where: { companyId: tenant.companyId },
+      }),
+    ]),
+  ) as [Array<Record<string, any>>, Record<string, any> | null];
+  const requireCashShiftBeforeSale = readRequireCashShiftBeforeSaleFromJson(companySettings?.unitPricingDefaults);
   const currentShift = [...sessionRows]
     .filter((shift) => !shift.closedAt && shift.cashierId === tenant.userId)
     .sort((left, right) => new Date(right.openedAt).getTime() - new Date(left.openedAt).getTime())[0] ?? null;
@@ -651,13 +817,9 @@ async function loadDashboardCriticalSnapshot(
   );
   await timedDashboardLoad("critical-complete", async () => undefined);
   const currentShiftTotals = currentShift ? totalsByShiftId.get(String(currentShift.id)) ?? null : null;
-  const expectedCashLak = currentShiftTotals?.expectedCashLak ?? openingCashLak;
-  const hourlySales = emptySnapshot().hourlySales.map((point, hour) => ({
-    ...point,
-    salesLak: salesKpis.nettedSales
-      .filter((sale) => businessHour(sale.createdAt) === hour)
-      .reduce((total, sale) => total + amount(sale.totalAmount), 0),
-  }));
+  const expectedCashLak = currentShiftTotals?.expectedCashLak ?? 0;
+  const salesTrend = buildDashboardSalesTrend(salesKpis.nettedSales, range, start, end);
+  const trendPoints = salesTrend.points;
   const topProducts = salesKpis.productRows.slice(0, 10);
   const recentSales = salesKpis.nettedSales.slice(0, 20).map((sale) => ({
     createdAt: sale.createdAt.toISOString(),
@@ -697,15 +859,41 @@ async function loadDashboardCriticalSnapshot(
         total: Array.from(methodTotals.values()).reduce((sum, total) => sum + total, 0),
       };
     });
+  const cashierIds = Array.from(new Set(todayShifts.map((shift) => String(shift.cashierId))));
+  const cashiers = cashierIds.length
+    ? await timedDashboardLoad("critical-cashier-names", () =>
+        db.user.findMany({
+          select: { fullName: true, id: true, username: true },
+          where: {
+            companies: { some: { companyId: tenant.companyId } },
+            id: { in: cashierIds },
+          },
+        }),
+      )
+    : [];
+  const cashierNameById = new Map(
+    (cashiers as Array<{ fullName?: string | null; id: string; username?: string | null }>).map((user) => [
+      String(user.id),
+      user.fullName || user.username || String(user.id),
+    ]),
+  );
   const shiftSummaries: ShiftSummary[] = (todayShifts as Array<Record<string, any>>).map((shift) => {
     const totals = totalsByShiftId.get(String(shift.id));
-    const counted = amount(shift.closingCash);
-    const shiftExpectedCashLak = amount(shift.expectedCash) || totals?.expectedCashLak || 0;
+    const counted = shift.closingCash == null ? null : amount(shift.closingCash);
+    const shiftExpectedCashLak = shift.expectedCash == null
+      ? totals?.expectedCashLak ?? 0
+      : amount(shift.expectedCash);
+    const difference = shift.cashDifference == null
+      ? counted == null
+        ? null
+        : counted - shiftExpectedCashLak
+      : amount(shift.cashDifference);
     return {
+      cashierName: cashierNameById.get(String(shift.cashierId)) ?? String(shift.cashierId),
       cashierId: shift.cashierId,
       closedAt: shift.closedAt?.toISOString() ?? null,
       countedCashLak: counted,
-      differenceLak: amount(shift.cashDifference) || counted - shiftExpectedCashLak,
+      differenceLak: difference,
       expectedCashLak: shiftExpectedCashLak,
       openedAt: shift.openedAt.toISOString(),
       openingCashLak: amount(shift.openingCash),
@@ -715,6 +903,9 @@ async function loadDashboardCriticalSnapshot(
   const closeDayExpectedCashLak = shiftSummaries.length > 0
     ? shiftSummaries.reduce((total, shift) => total + shift.expectedCashLak, 0)
     : expectedCashLak;
+  const currentShiftSummary = currentShift
+    ? shiftSummaries.find((shift) => shift.cashierId === currentShift.cashierId && shift.closedAt === null) ?? null
+    : null;
 
   return {
     alerts: [],
@@ -740,9 +931,9 @@ async function loadDashboardCriticalSnapshot(
       voidCount: 0,
     },
     closeDay: {
-      cashCountedLak: shiftSummaries.reduce((total, shift) => total + shift.countedCashLak, 0),
+      cashCountedLak: shiftSummaries.reduce((total, shift) => total + (shift.countedCashLak ?? 0), 0),
       cashSalesLak,
-      differenceLak: shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0),
+      differenceLak: shiftSummaries.reduce((total, shift) => total + (shift.differenceLak ?? 0), 0),
       expectedCashLak: closeDayExpectedCashLak,
       profitLak: profitTodayLak,
       qrTransferSalesLak,
@@ -752,7 +943,8 @@ async function loadDashboardCriticalSnapshot(
       totalSalesLak: salesTodayLak,
       voidCount: 0,
     },
-    hourlySales,
+    hourlySales: trendPoints,
+    salesTrend: trendPoints,
     lowStockItems: [],
     paymentBreakdown,
     currencyBreakdown,
@@ -761,16 +953,22 @@ async function loadDashboardCriticalSnapshot(
       key: range.key,
       label,
       start: start.toISOString(),
+      trendGranularity: salesTrend.granularity,
     },
     recentSales,
     shift: {
       cashInLak,
       cashOutLak,
       cashSalesLak: currentShiftTotals?.cashSalesLak ?? 0,
+      cashierName: currentShiftSummary?.cashierName ?? null,
+      countedCashLak: currentShiftSummary?.countedCashLak ?? null,
+      differenceLak: currentShiftSummary?.differenceLak ?? null,
       expectedCashLak,
+      hasActiveCashSession: Boolean(currentShift),
       openedAt: currentShift?.openedAt.toISOString() ?? null,
       openingCashLak,
       qrTransferSalesLak: currentShiftTotals?.nonCashSalesLak ?? 0,
+      requireCashShiftBeforeSale,
       status: currentShift ? "open" : "not_started",
     },
     summary: {
@@ -793,6 +991,69 @@ async function loadDashboardCriticalSnapshot(
   };
 }
 
+async function loadDashboardPromotionSlice(
+  tenant: TenantContext,
+  range: DashboardDateRange,
+  client: any,
+): Promise<DashboardPromotionSlice> {
+  const db = client as any;
+  const scope = await resolveTenantScope(tenant, client);
+  const { end, label, start } = resolveDateRange(range);
+  const now = new Date();
+  const soon = promotionSoonWindow(now);
+  const [promotions, usages] = await Promise.all([
+    db.promotion.findMany({
+      select: {
+        endDate: true,
+        id: true,
+        isActive: true,
+        promotionName: true,
+        startDate: true,
+        status: true,
+      },
+      where: {
+        companyId: scope.companyId,
+        isActive: true,
+        status: { in: ["active", "scheduled"] },
+        OR: [
+          { startDate: { lte: now }, endDate: { gte: now } },
+          { startDate: { gte: now, lt: soon.end } },
+          { endDate: { gte: now, lt: soon.end } },
+        ],
+      },
+    }),
+    db.promotionUsage.findMany({
+      select: {
+        discountAmountLak: true,
+        promotion: { select: { promotionName: true, status: true } },
+        promotionId: true,
+        saleId: true,
+      },
+      where: {
+        companyId: scope.companyId,
+        sale: {
+          branchId: scope.branchId,
+          companyId: scope.companyId,
+          createdAt: { gte: start, lt: end },
+          saleStatus: { in: [...REPORT_SALE_STATUSES] },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    dataStatus: { hasError: false, isPartial: false },
+    period: {
+      end: end.toISOString(),
+      key: range.key,
+      label,
+      start: start.toISOString(),
+      trendGranularity: trendGranularityForRange(range, start, end),
+    },
+    summary: buildDashboardPromotionSummary(promotions, usages, now),
+  };
+}
+
 async function loadDashboardSecondarySlice(
   tenant: TenantContext,
   range: DashboardDateRange,
@@ -803,34 +1064,48 @@ async function loadDashboardSecondarySlice(
   await timedDashboardLoad("secondary-start", async () => undefined);
   const scope = await timedDashboardLoad("secondary-scope", () => resolveTenantScope(tenant, client));
   const { end, start } = resolveDateRange(range);
-  const nearExpiryEnd = plusDays(start, 30);
-  const deadStockCutoff = plusDays(new Date(), -30);
-  const historicalStart = plusDays(start, -30);
+  const now = new Date();
   const branchWhere = { branchId: scope.branchId };
-  const warehouseWhere = { warehouseId: scope.warehouseId };
   const reportSaleWhere = {
     ...branchWhere,
     companyId: tenant.companyId,
     createdAt: { gte: start, lt: end },
     saleStatus: { in: [...REPORT_SALE_STATUSES] },
   };
+  const branchWarehouseRows = await timedDashboardLoad("secondary-warehouses", () =>
+    db.warehouse.findMany({
+      select: { id: true },
+      where: {
+        branchId: scope.branchId,
+        companyId: tenant.companyId,
+        id: { in: scope.warehouseIds },
+      },
+    }),
+  );
+  const branchWarehouseIds = new Set(
+    (branchWarehouseRows as Array<{ id: string }>).map((warehouse) => String(warehouse.id)),
+  );
+  const branchWarehouseFilter = { in: Array.from(branchWarehouseIds) };
 
   const [
     inventoryBalances,
+    reservations,
     nearExpiryCount,
     expiredCount,
     customerCredit,
     supplierPayables,
-    deadStockProducts,
-    historicalSales,
     promotionDiscount,
     loyaltyRedeemed,
     voidCount,
+    memberships,
+    promotions,
   ] = await timedDashboardLoad("secondary-reads", () =>
     Promise.all([
       db.inventoryBalance.findMany({
         select: {
+          productId: true,
           quantity: true,
+          warehouseId: true,
           product: {
             select: {
               costPriceLak: true,
@@ -842,21 +1117,29 @@ async function loadDashboardSecondarySlice(
           },
         },
         where: {
-          ...warehouseWhere,
+          warehouseId: branchWarehouseFilter,
           companyId: tenant.companyId,
+        },
+      }),
+      db.stockReservation.findMany({
+        select: { baseQuantity: true, productId: true, warehouseId: true },
+        where: {
+          companyId: tenant.companyId,
+          status: "ACTIVE",
+          warehouseId: branchWarehouseFilter,
         },
       }),
       db.inventoryLot.count({
         where: {
-          ...warehouseWhere,
           companyId: tenant.companyId,
-          expiryDate: { gte: start, lt: nearExpiryEnd },
+          expiryDate: { gte: startOfBusinessDay(now), lt: plusDays(startOfBusinessDay(now), 31) },
           quantity: { gt: 0 },
+          warehouseId: branchWarehouseFilter,
         },
       }),
       db.inventoryLot.count({
         where: {
-          ...warehouseWhere,
+          warehouseId: branchWarehouseFilter,
           companyId: tenant.companyId,
           expiryDate: { lt: start },
           quantity: { gt: 0 },
@@ -875,30 +1158,6 @@ async function loadDashboardSecondarySlice(
         _sum: { balanceAmount: true },
         where: {
           companyId: tenant.companyId,
-        },
-      }),
-      db.product.count({
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          isActive: true,
-          saleItems: {
-            none: {
-              sale: {
-                createdAt: { gte: deadStockCutoff },
-                saleStatus: { in: [...REPORT_SALE_STATUSES] },
-              },
-            },
-          },
-        },
-      }),
-      db.sale.aggregate({
-        _sum: { totalAmount: true },
-        where: {
-          ...branchWhere,
-          companyId: tenant.companyId,
-          createdAt: { gte: historicalStart, lt: start },
-          saleStatus: { in: [...REPORT_SALE_STATUSES] },
         },
       }),
       db.saleItem.aggregate({
@@ -921,10 +1180,55 @@ async function loadDashboardSecondarySlice(
           saleStatus: "cancelled",
         },
       }),
+      db.customerSubscription.findMany({
+        select: {
+          customer: { select: { fullName: true, status: true } },
+          endDate: true,
+          id: true,
+          plan: { select: { subscriptionType: true } },
+          status: true,
+        },
+        where: {
+          customer: { companyId: tenant.companyId, status: "active" },
+          status: "active",
+        },
+        orderBy: { endDate: "asc" },
+        take: 100,
+      }),
+      db.promotion.findMany({
+        select: {
+          endDate: true,
+          id: true,
+          isActive: true,
+          promotionName: true,
+          startDate: true,
+          status: true,
+        },
+        where: {
+          companyId: tenant.companyId,
+          status: { in: ["active", "scheduled"] },
+          OR: [
+            { startDate: { gte: new Date(now.getTime() - 86_400_000), lte: new Date(now.getTime() + 7 * 86_400_000) } },
+            { endDate: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) } },
+          ],
+        },
+        orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
+        take: 100,
+      }),
     ]),
   );
 
-  const inventoryRows = inventoryBalances as DashBalance[];
+  const inventoryRows = (inventoryBalances as DashBalance[]).filter((row) =>
+    branchWarehouseIds.has(String(row.warehouseId)),
+  );
+  const reservedByProduct = new Map<string, number>();
+  for (const row of reservations as Array<{ baseQuantity: unknown; productId: string; warehouseId: string }>) {
+    if (!branchWarehouseIds.has(String(row.warehouseId))) continue;
+    reservedByProduct.set(
+      String(row.productId),
+      (reservedByProduct.get(String(row.productId)) ?? 0) + amount(row.baseQuantity),
+    );
+  }
   const promotionDiscountLak = amount(promotionDiscount._sum.promotionDiscount);
   const loyaltyRedeemedLak = amount(loyaltyRedeemed._sum.amountLak);
   const inventoryValueLak = Math.round(
@@ -940,106 +1244,107 @@ async function loadDashboardSecondarySlice(
   if (missingInventoryCosts) {
     inventoryWarnings.push("Some inventory items are missing product cost; inventory value may be partial.");
   }
-  const selectedDays = Math.max(Math.ceil((end.getTime() - start.getTime()) / 86_400_000), 1);
-  const historicalAverageLak = amount(historicalSales._sum.totalAmount) / 30;
-  const selectedDailyAverageLak = context.salesTodayLak / selectedDays;
-  const lowSalesPercent =
-    historicalAverageLak > 0 && selectedDailyAverageLak < historicalAverageLak
-      ? Math.round(((historicalAverageLak - selectedDailyAverageLak) / historicalAverageLak) * 100)
-      : 0;
-  const lowStockProducts = inventoryRows.filter(
-    (balance) => amount(balance.quantity) <= amount(balance.product.minStock),
-  );
-  const lowStockItems = lowStockProducts
-    .map((balance) => ({
+  const stockByProduct = new Map<string, { minStock: number; name: string; onHand: number }>();
+  for (const balance of inventoryRows) {
+    const productId = String(balance.productId);
+    const current = stockByProduct.get(productId) ?? {
       minStock: amount(balance.product.minStock),
       name: balance.product.nameEn || balance.product.nameLo,
-      quantity: amount(balance.quantity),
+      onHand: 0,
+    };
+    current.onHand += amount(balance.quantity);
+    stockByProduct.set(productId, current);
+  }
+  const stockRows = Array.from(stockByProduct.entries()).map(([productId, stock]) => ({
+    available: availableStock(stock.onHand, reservedByProduct.get(productId) ?? 0),
+    ...stock,
+  }));
+  const lowStockRows = stockRows.filter((row) => classifyStockNotification(row.available, row.minStock) === "low_stock");
+  const outOfStockRows = stockRows.filter((row) => classifyStockNotification(row.available, row.minStock) === "out_of_stock");
+  const lowStockItems = lowStockRows
+    .map((row) => ({
+      minStock: row.minStock,
+      name: row.name,
+      quantity: row.available,
     }))
     .sort((left, right) => left.quantity - right.quantity)
     .slice(0, 20);
-  const shiftSummaries = context.shiftSummaries;
+  const membershipItems = (memberships as Array<Record<string, any>>).filter((subscription) =>
+    subscription.customer?.status === "active" &&
+    /month|year|day|week|time/i.test(String(subscription.plan?.subscriptionType ?? "")) &&
+    membershipExpiringDays(subscription.endDate, now) !== null,
+  );
+  const promotionAlerts: DashboardAlert[] = [];
+  for (const promotion of promotions as Array<Record<string, any>>) {
+    if (!promotion.isActive) continue;
+    const startsIn = promotionWindowDays(promotion.startDate, now);
+    const endsIn = promotionWindowDays(promotion.endDate, now);
+    if (startsIn !== null && new Date(promotion.startDate).getTime() >= now.getTime()) {
+      promotionAlerts.push({
+        code: "promotion_starting",
+        href: "/promotions",
+        message: "",
+        severity: "info",
+        title: "",
+        type: "Promotion",
+        value: String(startsIn),
+      });
+    } else if (endsIn !== null) {
+      promotionAlerts.push({
+        code: "promotion_ending",
+        href: "/promotions",
+        message: "",
+        severity: "warning",
+        title: "",
+        type: "Promotion",
+        value: String(endsIn),
+      });
+    }
+  }
   const alerts: DashboardAlert[] = [
-    deadStockProducts > 0
+    lowStockRows.length > 0
       ? {
-          href: "/inventory",
-          message: "Products not sold for more than 30 days",
+          code: "low_stock",
+          href: "/inventory/reorder",
+          message: "",
           severity: "warning" as const,
-          title: "Dead Stock",
+          title: "",
           type: "Inventory",
-          value: String(deadStockProducts),
-        }
-      : null,
-    lowSalesPercent > 0
-      ? {
-          href: "/reports/sales",
-          message: "Sales lower than expected",
-          severity: "warning" as const,
-          title: "Low Sales Warning",
-          type: "Sales",
-          value: `${lowSalesPercent}% below average`,
-        }
-      : null,
-    lowStockProducts.length > 0
-      ? {
-          href: "/inventory",
-          message: `${lowStockProducts.length} products need stock review.`,
-          severity: "warning" as const,
-          title: "Low stock",
-          type: "Inventory",
-          value: String(lowStockProducts.length),
+          value: String(lowStockRows.length),
         }
       : null,
     nearExpiryCount > 0
       ? {
+          code: "near_expiry",
           href: "/inventory",
-          message: `${nearExpiryCount} lots expire within 30 days.`,
+          message: "",
           severity: "warning" as const,
-          title: "Near expiry",
+          title: "",
           type: "Expiry",
           value: String(nearExpiryCount),
         }
       : null,
-    expiredCount > 0
+    outOfStockRows.length > 0
       ? {
-          href: "/inventory",
-          message: `${expiredCount} expired lots should be reviewed.`,
+          code: "out_of_stock",
+          href: "/inventory/reorder",
+          message: "",
           severity: "critical" as const,
-          title: "Expired products",
-          type: "Expiry",
-          value: String(expiredCount),
+          title: "",
+          type: "Inventory",
+          value: String(outOfStockRows.length),
         }
       : null,
-    amount(supplierPayables._sum.balanceAmount) > 0
-      ? {
-          href: "/purchasing/payables",
-          message: `${amount(supplierPayables._sum.balanceAmount).toLocaleString("en-US")} LAK due to suppliers.`,
-          severity: "warning" as const,
-          title: "Supplier due",
-          type: "Payables",
-          value: formatLak(amount(supplierPayables._sum.balanceAmount)),
-        }
-      : null,
-    amount(customerCredit._sum.outstandingBalance) > 0
-      ? {
-          href: "/customers",
-          message: `${amount(customerCredit._sum.outstandingBalance).toLocaleString("en-US")} LAK customer credit outstanding.`,
-          severity: "info" as const,
-          title: "Customer credit due",
-          type: "Credit",
-          value: formatLak(amount(customerCredit._sum.outstandingBalance)),
-        }
-      : null,
-    shiftSummaries.some((shift) => shift.differenceLak !== 0)
-      ? {
-          href: "/dashboard",
-          message: "Cash count does not match expected amount",
-          severity: "critical" as const,
-          title: "Cash Difference",
-          type: "Cash",
-          value: formatLak(shiftSummaries.reduce((total, shift) => total + shift.differenceLak, 0)),
-        }
-      : null,
+    ...membershipItems.map((subscription) => ({
+      code: "membership_expiring" as const,
+      href: "/membership-levels",
+      message: "",
+      severity: "warning" as const,
+      title: "",
+      type: "Membership",
+      value: String(membershipExpiringDays(subscription.endDate, now) ?? ""),
+    })),
+    ...promotionAlerts,
   ].filter(Boolean) as DashboardAlert[];
 
   await timedDashboardLoad("secondary-complete", async () => undefined);
@@ -1050,7 +1355,7 @@ async function loadDashboardSecondarySlice(
       customerCreditDueLak: amount(customerCredit._sum.outstandingBalance),
       expiredProducts: expiredCount,
       inventoryValueLak,
-      lowStockProducts: lowStockProducts.length,
+      lowStockProducts: lowStockRows.length + outOfStockRows.length,
       loyaltyRedeemedLak,
       nearExpiryProducts: nearExpiryCount,
       promotionDiscountLak,

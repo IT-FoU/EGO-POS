@@ -54,8 +54,8 @@ export function CloseDayPanel({ closeDay }: {
                       <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                         <SummaryLine label="Opening cash" value={`${formatLak(shift.openingCashLak)} LAK`}/>
                         <SummaryLine label="Expected cash" value={`${formatLak(shift.expectedCashLak)} LAK`}/>
-                        <SummaryLine label="Counted cash" value={`${formatLak(shift.countedCashLak)} LAK`}/>
-                        <SummaryLine label="Difference" value={`${formatLak(shift.differenceLak)} LAK`}/>
+                        <SummaryLine label="Counted cash" value={shift.countedCashLak === null ? "-" : `${formatLak(shift.countedCashLak)} LAK`}/>
+                        <SummaryLine label="Difference" value={shift.differenceLak === null ? "-" : `${formatLak(shift.differenceLak)} LAK`}/>
                       </div>
                     </div>))}
                 </div>)}

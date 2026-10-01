@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -30,6 +30,8 @@ type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "
 
 type DashboardInteractionsClientProps = {
   alertsSlot?: ReactNode;
+  insightsSlot?: ReactNode;
+  promotionSlot?: ReactNode;
   canViewProfit: boolean;
   copy: DashboardCopy;
   customEnd: string;
@@ -44,6 +46,11 @@ type DetailPanel = {
   table?: Array<{ label: string; meta?: string; value: string }>;
   title: string;
 };
+
+const dashboardDisplayClass =
+  "transition duration-150 hover:border-primary hover:shadow-sm";
+const dashboardActionClass =
+  "cursor-pointer transition duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50";
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(value));
@@ -64,6 +71,8 @@ function formatDateTime(value: string | null) {
 
 export function DashboardInteractionsClient({
   alertsSlot,
+  insightsSlot,
+  promotionSlot,
   canViewProfit,
   copy: _ssrCopy,
   customEnd,
@@ -76,8 +85,10 @@ export function DashboardInteractionsClient({
   const [detail, setDetail] = useState<DetailKind | null>(null);
   const periodStart = snapshot.period.start;
   const totalPaymentsLak = snapshot.paymentBreakdown.reduce((total, payment) => total + payment.totalLak, 0);
-  const maxHourlySales = Math.max(...snapshot.hourlySales.map((point) => point.salesLak), 1);
-  const hasSalesData = snapshot.hourlySales.some((point) => point.salesLak > 0);
+  const trendPoints = snapshot.salesTrend ?? snapshot.hourlySales;
+  const maxTrendSales = Math.max(...trendPoints.map((point) => point.salesLak), 1);
+  const hasSalesData = trendPoints.some((point) => point.salesLak > 0);
+  const hasDashboardError = snapshot.dataStatus.hasError;
   const averageBillLak =
     snapshot.cards.totalBillsToday > 0 ? snapshot.cards.salesTodayLak / snapshot.cards.totalBillsToday : 0;
   const profitMargin = snapshot.cards.salesTodayLak > 0
@@ -102,38 +113,46 @@ export function DashboardInteractionsClient({
 
   const metrics = [
     {
-      detail: "sales" as const,
       helper: formatRangeLabel(snapshot.period.key, copy),
       icon: WalletCards,
       label: copy.todaySales,
       value: formatMoney(snapshot.cards.salesTodayLak),
     },
     {
-      detail: "profit" as const,
       helper: copy.totalProfit,
       icon: TrendingUp,
       label: copy.todayProfit,
-      value: canViewProfit ? formatMoney(snapshot.cards.profitTodayLak) : "****",
+      value: canViewProfit ? (hasDashboardError ? copy.unavailable : formatMoney(snapshot.cards.profitTodayLak)) : "****",
     },
     {
-      detail: "sales" as const,
       helper: copy.averageBill,
       icon: ShoppingCart,
       label: copy.averageBill,
-      value: formatMoney(averageBillLak),
+      value: hasDashboardError ? copy.unavailable : formatMoney(averageBillLak),
     },
     {
-      detail: "cash_session" as const,
       helper: copy.cashSessionStatus,
       icon: Banknote,
       label: copy.cashDrawerExpected,
-      value: formatMoney(snapshot.shift.expectedCashLak),
+      value: hasDashboardError ? copy.unavailable : cashSessionValue(snapshot, copy),
     },
   ];
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <section className="rounded-lg border border-border bg-card p-5">
+      {snapshot.dataStatus.hasError ? (
+        <DataStatusBanner message={copy.dashboardUnavailable} tone="error" />
+      ) : snapshot.dataStatus.isPartial ? (
+        <DataStatusBanner
+          message={
+            snapshot.dataStatus.warnings?.some((warning) => warning.includes("sale lines"))
+              ? copy.grossProfitWarning
+              : copy.dashboardPartialWarning
+          }
+          tone="warning"
+        />
+      ) : null}
+      <section className={`${dashboardDisplayClass} rounded-lg border border-border bg-card p-5`}>
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-primary">{storeName}</p>
@@ -165,27 +184,32 @@ export function DashboardInteractionsClient({
             icon={metric.icon}
             key={metric.label}
             label={metric.label}
-            onClick={() => setDetail(metric.detail)}
             value={metric.value}
           />
         ))}
       </section>
 
-      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
+      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
         <Panel
           actionLabel={copy.viewDetails}
           onAction={() => setDetail("sales")}
-          subtitle={snapshot.period.label}
-          title={copy.salesTrend}
+          subtitle={formatRangeLabel(snapshot.period.key, copy)}
+          title={trendTitle(snapshot.period.trendGranularity, copy)}
         >
-          {hasSalesData ? (
-            <HourlyChart maxHourlySales={maxHourlySales} points={snapshot.hourlySales} />
+          {hasDashboardError ? (
+            <EmptyState compact icon={AlertTriangle} title={copy.unavailable} description={copy.dashboardUnavailable} />
+          ) : hasSalesData ? (
+            <SalesTrendChart maxSales={maxTrendSales} points={trendPoints} />
           ) : (
-            <EmptyState icon={WalletCards} title={copy.emptySales} description={copy.reportNote} />
+            <EmptyState
+              icon={WalletCards}
+              title={copy.emptySales}
+              description={trendEmptyDescription(snapshot.period.trendGranularity, copy)}
+            />
           )}
         </Panel>
 
-        <div className="grid min-w-0 gap-5">
+        <div className="grid min-w-0 content-start gap-5">
           <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("payment")} title={copy.paymentBreakdown}>
             {snapshot.paymentBreakdown.length === 0 ? (
               <EmptyState compact icon={CreditCard} title={copy.noPaymentData} description={copy.paymentBreakdown} />
@@ -207,21 +231,21 @@ export function DashboardInteractionsClient({
           </Panel>
 
           <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("cash_session")} title={copy.cashSessionStatus}>
-            <div className="grid gap-3">
-              <CashLine label={copy.status} value={formatShiftStatus(snapshot.shift.status, copy)} />
-              <CashLine label={copy.openTime} value={formatDateTime(snapshot.shift.openedAt)} />
-              <CashLine label={copy.cashExpected} value={formatMoney(snapshot.shift.expectedCashLak)} />
-            </div>
+            <CashSessionSummary snapshot={snapshot} copy={copy} />
           </Panel>
         </div>
       </section>
 
-      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
-        <Panel actionLabel={copy.viewMore} onAction={() => setDetail("top_products")} title={copy.bestSellers}>
+      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]">
+        <Panel actionLabel={copy.viewMore} onAction={() => setDetail("top_products")} title={copy.bestSellersByRevenue}>
           <BestSellersList copy={copy} products={snapshot.topProducts.slice(0, 10)} />
         </Panel>
-        {alertsSlot ?? <ImportantAlertsCard alerts={snapshot.alerts} />}
+        {alertsSlot ?? <ImportantAlertsCard alerts={snapshot.alerts} dataStatus={snapshot.dataStatus} />}
       </section>
+
+      {insightsSlot}
+
+      {promotionSlot}
 
       <DetailDrawer content={activeDetail} copy={copy} onClose={() => setDetail(null)} />
     </div>
@@ -232,32 +256,26 @@ function MetricCard({
   helper,
   icon: Icon,
   label,
-  onClick,
   value,
 }: {
   helper: string;
   icon: LucideIcon;
   label: string;
-  onClick: () => void;
   value: string;
 }) {
   return (
-    <button
-      className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
-      type="button"
-      onClick={onClick}
-    >
+    <div className={`${dashboardDisplayClass} flex min-h-[124px] min-w-0 flex-col justify-between rounded-lg border border-border bg-card p-4 text-left`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <div className="mt-2 truncate text-2xl font-semibold">{value}</div>
-          <p className="mt-2 text-xs text-muted-foreground">{helper}</p>
-        </div>
-        <div className="grid size-10 shrink-0 place-items-center rounded-md border border-primary/40 bg-primary/10 text-primary">
-          <Icon className="size-5" aria-hidden="true" />
+        <p className="min-w-0 break-words text-sm font-medium leading-5 text-muted-foreground">{label}</p>
+        <div className="grid size-9 shrink-0 place-items-center rounded-md border border-primary/40 bg-primary/10 text-primary">
+          <Icon className="size-4" aria-hidden="true" />
         </div>
       </div>
-    </button>
+      <div className="mt-3 min-w-0">
+        <div className="whitespace-nowrap text-xl font-semibold tracking-tight sm:text-2xl">{value}</div>
+        <p className="mt-1 min-h-4 break-words text-xs leading-4 text-muted-foreground">{helper}</p>
+      </div>
+    </div>
   );
 }
 
@@ -275,39 +293,46 @@ function Panel({
   title: string;
 }) {
   return (
-    <article className="min-w-0 rounded-lg border border-border bg-card p-5">
+    <article className={`${dashboardDisplayClass} min-w-0 rounded-lg border border-border bg-card p-5`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           {subtitle ? <p className="text-sm font-medium text-primary">{subtitle}</p> : null}
           <h2 className={subtitle ? "mt-1 text-xl font-semibold" : "text-xl font-semibold"}>{title}</h2>
         </div>
-        <button className="text-sm font-semibold text-primary hover:underline" type="button" onClick={onAction}>
+        <button
+          className={`${dashboardActionClass} rounded-sm px-2 py-1 text-sm font-semibold text-primary hover:bg-primary/10 hover:text-foreground hover:underline`}
+          type="button"
+          onClick={onAction}
+        >
           {actionLabel}
         </button>
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="mt-4">{children}</div>
     </article>
   );
 }
 
-function HourlyChart({
-  maxHourlySales,
+function SalesTrendChart({
+  maxSales,
   points,
 }: {
-  maxHourlySales: number;
+  maxSales: number;
   points: DashboardSnapshot["hourlySales"];
 }) {
+  const needsNarrowRangeScroll = points.length >= 24;
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex h-56 min-w-[760px] items-end gap-2 border-b border-border px-1">
+      <div className={`flex h-56 ${needsNarrowRangeScroll ? "min-w-[680px] sm:min-w-0" : "min-w-full"} items-end gap-1 border-b border-border px-1 sm:gap-2`}>
         {points.map((point) => (
-          <div className="flex min-w-7 flex-1 flex-col items-center gap-2" key={point.hour}>
+          <div className="flex min-w-7 flex-1 flex-col items-center gap-2" key={point.label}>
             <div
+              aria-label={`${point.label}: ${formatMoney(point.salesLak)}`}
               className="w-full rounded-t-md bg-primary transition hover:opacity-80"
-              style={{ height: `${Math.max((point.salesLak / maxHourlySales) * 180, 4)}px` }}
-              title={`${point.hour}: ${formatMoney(point.salesLak)}`}
+              role="img"
+              style={{ height: `${point.salesLak > 0 ? (point.salesLak / maxSales) * 180 : 0}px` }}
+              title={`${point.label}: ${formatMoney(point.salesLak)}`}
             />
-            <span className="text-xs text-muted-foreground">{point.hour.slice(0, 2)}</span>
+            <span className="whitespace-nowrap text-[10px] text-muted-foreground sm:text-xs">{point.label}</span>
           </div>
         ))}
       </div>
@@ -322,15 +347,17 @@ function BestSellersList({ copy, products }: { copy: DashboardCopy; products: Da
 
   return (
     <div className="grid gap-2">
-      <p className="text-xs text-muted-foreground" title={copy.productRevenueHelper}>
-        {copy.productRevenue}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground" title={copy.productRevenueHelper}>
+          {copy.productRevenue}
+        </p>
+        <span className="text-xs text-muted-foreground">{copy.topTen}</span>
+      </div>
       {products.map((product, index) => (
-        <div className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-[64px_minmax(0,1fr)_120px_140px] sm:items-center" key={product.name}>
-          <span className="font-semibold text-primary">#{index + 1}</span>
-          <span className="min-w-0 truncate font-semibold" title={product.name}>{product.name}</span>
-          <span className="text-sm text-muted-foreground sm:text-right">{formatNumber(product.quantity)} {copy.unitsSold}</span>
-          <span className="font-semibold sm:text-right" title={copy.productRevenueHelper}>{formatMoney(product.totalLak)}</span>
+        <div className={`${dashboardDisplayClass} grid min-w-0 grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border bg-background p-3`} key={product.name}>
+          <span className="grid size-7 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">#{index + 1}</span>
+          <span className="min-w-0 break-words font-semibold" title={product.name}>{product.name}</span>
+          <span className="shrink-0 text-right font-semibold" title={copy.productRevenueHelper}>{formatMoney(product.totalLak)}</span>
         </div>
       ))}
     </div>
@@ -339,14 +366,22 @@ function BestSellersList({ copy, products }: { copy: DashboardCopy; products: Da
 
 function PaymentProgress({ method, percent, totalLak }: { method: string; percent: number; totalLak: number }) {
   return (
-    <div className="rounded-md border border-border bg-background p-3">
+    <div className={`${dashboardDisplayClass} rounded-md border border-border bg-background p-3`}>
       <div className="flex items-center justify-between gap-3 text-sm">
-        <span className="font-semibold">{method}</span>
-        <span className="font-semibold">{formatMoney(totalLak)}</span>
+        <span className="min-w-0 break-words font-semibold">{method}</span>
+        <span className="shrink-0 text-right font-semibold">{formatMoney(totalLak)}</span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+      <div
+        aria-label={`${method}: ${percent}%`}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={percent}
+        className="mt-3 h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+      >
         <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
       </div>
+      <div className="mt-1 text-right text-xs text-muted-foreground">{percent}%</div>
     </div>
   );
 }
@@ -361,7 +396,7 @@ function MiniStatus({
   value: string;
 }) {
   return (
-    <div className="rounded-md border border-border bg-background px-4 py-3">
+    <div className={`${dashboardDisplayClass} rounded-md border border-border bg-background px-4 py-3`}>
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={tone === "success" ? "mt-1 font-semibold text-success" : "mt-1 font-semibold"}>{value}</div>
     </div>
@@ -370,9 +405,60 @@ function MiniStatus({
 
 function CashLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3">
+    <div className={`${dashboardDisplayClass} flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3`}>
       <span className="min-w-0 text-sm text-muted-foreground">{label}</span>
       <span className="shrink-0 font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function DataStatusBanner({ message, tone }: { message: string; tone: "error" | "warning" }) {
+  return (
+    <div
+      className={`${dashboardDisplayClass} ${
+        tone === "error"
+          ? "rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+          : "rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm text-primary"
+      }`}
+      role="status"
+    >
+      {message}
+    </div>
+  );
+}
+
+function cashSessionValue(snapshot: DashboardSnapshot, copy: DashboardCopy) {
+  if (snapshot.shift.hasActiveCashSession) {
+    return formatMoney(snapshot.shift.expectedCashLak);
+  }
+  return snapshot.shift.requireCashShiftBeforeSale ? copy.noOpenCashSession : copy.noActiveCashSession;
+}
+
+function CashSessionSummary({ copy, snapshot }: { copy: DashboardCopy; snapshot: DashboardSnapshot }) {
+  if (!snapshot.shift.hasActiveCashSession) {
+    return (
+      <EmptyState
+        compact
+        icon={Banknote}
+        title={snapshot.shift.requireCashShiftBeforeSale ? copy.noOpenCashSession : copy.noActiveCashSession}
+        description={copy.cashSessionStatus}
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <CashLine label={copy.status} value={formatShiftStatus(snapshot.shift.status, copy)} />
+      <CashLine label={copy.cashier} value={snapshot.shift.cashierName ?? copy.currentCashier} />
+      <CashLine label={copy.openTime} value={formatDateTime(snapshot.shift.openedAt)} />
+      <CashLine label={copy.openingCash} value={formatMoney(snapshot.shift.openingCashLak)} />
+      <CashLine label={copy.cashExpected} value={formatMoney(snapshot.shift.expectedCashLak)} />
+      {snapshot.shift.countedCashLak !== null ? (
+        <CashLine label={copy.countedCash} value={formatMoney(snapshot.shift.countedCashLak)} />
+      ) : null}
+      {snapshot.shift.differenceLak !== null ? (
+        <CashLine label={copy.variance} value={formatMoney(snapshot.shift.differenceLak)} />
+      ) : null}
     </div>
   );
 }
@@ -389,7 +475,13 @@ function EmptyState({
   title: string;
 }) {
   return (
-    <div className={compact ? "rounded-md border border-dashed border-border bg-background p-4 text-center" : "grid min-h-56 place-items-center rounded-md border border-dashed border-border bg-background p-5 text-center"}>
+    <div
+      className={`${dashboardDisplayClass} ${
+        compact
+          ? "rounded-md border border-dashed border-border bg-background p-4 text-center"
+          : "grid min-h-56 place-items-center rounded-md border border-dashed border-border bg-background p-5 text-center"
+      }`}
+    >
       <div>
         <Icon className="mx-auto size-9 text-muted-foreground" aria-hidden="true" />
         <div className="mt-3 font-semibold">{title}</div>
@@ -397,6 +489,18 @@ function EmptyState({
       </div>
     </div>
   );
+}
+
+function trendTitle(granularity: DashboardSnapshot["period"]["trendGranularity"], copy: DashboardCopy) {
+  if (granularity === "day") return copy.dailySales;
+  if (granularity === "month") return copy.monthlySales;
+  return copy.hourlySales;
+}
+
+function trendEmptyDescription(granularity: DashboardSnapshot["period"]["trendGranularity"], copy: DashboardCopy) {
+  if (granularity === "day") return copy.reportNoteDaily;
+  if (granularity === "month") return copy.reportNoteMonthly;
+  return copy.reportNoteHourly;
 }
 
 function DetailDrawer({
@@ -408,34 +512,74 @@ function DetailDrawer({
   copy: DashboardCopy;
   onClose: () => void;
 }) {
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!content) return;
+    const previousActiveElement = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusableElements = Array.from(
+        drawerRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (focusableElements.length === 0) return;
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     }
 
+    document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement?.isConnected) {
+        previousActiveElement.focus();
+      }
+    };
   }, [content, onClose]);
 
   if (!content) return null;
 
   return (
-    <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72">
-      <section className="flex h-full w-full max-w-none flex-col overflow-x-hidden border-l border-border bg-card shadow-2xl">
+    <div className="fixed inset-y-0 left-0 right-0 z-50 overflow-x-hidden bg-black/45 lg:left-72" role="presentation">
+      <section
+        aria-labelledby="dashboard-detail-title"
+        aria-modal="true"
+        className="flex h-full w-full max-w-none flex-col overflow-x-hidden border-l border-border bg-card shadow-2xl"
+        ref={drawerRef}
+        role="dialog"
+        tabIndex={-1}
+      >
       <header className="sticky top-0 z-20 border-b border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-primary">{copy.detail}</p>
-            <h2 className="mt-1 text-2xl font-semibold">{content.title}</h2>
+            <h2 className="mt-1 text-2xl font-semibold" id="dashboard-detail-title">{content.title}</h2>
             {content.description ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{content.description}</p> : null}
           </div>
           <button
             aria-label={copy.close}
-            className="grid size-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition hover:text-foreground"
+            className={`${dashboardActionClass} grid size-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground hover:border-primary hover:bg-primary/10 hover:text-foreground`}
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
           >
@@ -455,7 +599,7 @@ function DetailDrawer({
         {content.table?.length ? (
           <div className="mt-5 overflow-hidden rounded-lg border border-border">
             {content.table.map((row) => (
-              <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border p-3 last:border-b-0" key={`${row.label}-${row.value}-${row.meta ?? ""}`}>
+              <div className={`${dashboardDisplayClass} flex min-w-0 items-center justify-between gap-3 border-b border-border p-3 last:border-b-0`} key={`${row.label}-${row.value}-${row.meta ?? ""}`}>
                 <div className="min-w-0">
                   <div className="truncate font-semibold">{row.label}</div>
                   {row.meta ? <div className="mt-1 text-sm text-muted-foreground">{row.meta}</div> : null}
@@ -473,7 +617,7 @@ function DetailDrawer({
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3">
+    <div className={`${dashboardDisplayClass} flex items-center justify-between gap-3 rounded-md border border-border bg-background p-3`}>
       <span className="min-w-0 text-sm text-muted-foreground">{label}</span>
       <span className="shrink-0 text-right font-semibold">{value}</span>
     </div>
@@ -506,9 +650,9 @@ function buildDetailPanel({
         { label: copy.cash, value: formatMoney(snapshot.shift.cashSalesLak) },
         { label: copy.qrTransfer, value: formatMoney(snapshot.shift.qrTransferSalesLak) },
       ],
-      table: snapshot.hourlySales
+      table: (snapshot.salesTrend ?? snapshot.hourlySales)
         .filter((point) => point.salesLak > 0)
-        .map((point) => ({ label: point.hour, meta: copy.salesTrend, value: formatMoney(point.salesLak) })),
+        .map((point) => ({ label: point.label, meta: trendTitle(snapshot.period.trendGranularity, copy), value: formatMoney(point.salesLak) })),
       title: copy.salesDetails,
     };
   }
@@ -518,7 +662,7 @@ function buildDetailPanel({
       description: copy.profitHelperNote,
       rows: canViewProfit
         ? [
-            { label: copy.todayProfit, value: formatMoney(snapshot.cards.profitTodayLak) },
+            { label: copy.todayProfit, value: snapshot.dataStatus.hasError ? copy.unavailable : formatMoney(snapshot.cards.profitTodayLak) },
             { label: copy.totalSales, value: formatMoney(snapshot.cards.salesTodayLak) },
             { label: copy.cogs, value: formatMoney(snapshot.cards.cogsLak) },
             { label: copy.discount, value: formatMoney(snapshot.cards.discountLak) },
@@ -548,9 +692,16 @@ function buildDetailPanel({
     return {
       rows: [
         { label: copy.status, value: formatShiftStatus(snapshot.shift.status, copy) },
+        { label: copy.cashier, value: snapshot.shift.cashierName ?? copy.currentCashier },
         { label: copy.openTime, value: formatDateTime(snapshot.shift.openedAt) },
         { label: copy.startingCash, value: formatMoney(snapshot.shift.openingCashLak) },
-        { label: copy.cashExpected, value: formatMoney(snapshot.shift.expectedCashLak) },
+        { label: copy.cashExpected, value: cashSessionValue(snapshot, copy) },
+        ...(snapshot.shift.countedCashLak === null
+          ? []
+          : [{ label: copy.countedCash, value: formatMoney(snapshot.shift.countedCashLak) }]),
+        ...(snapshot.shift.differenceLak === null
+          ? []
+          : [{ label: copy.variance, value: formatMoney(snapshot.shift.differenceLak) }]),
         { label: copy.cashSales, value: formatMoney(snapshot.shift.cashSalesLak) },
         { label: copy.cashOut, value: formatMoney(snapshot.shift.cashOutLak) },
       ],
@@ -563,10 +714,10 @@ function buildDetailPanel({
       description: copy.productRevenueHelper,
       table: snapshot.topProducts.map((product, index) => ({
         label: `${index + 1}. ${product.name}`,
-        meta: `${formatNumber(product.quantity)} ${copy.unitsSold}`,
+        meta: copy.productRevenue,
         value: formatMoney(product.totalLak),
       })),
-      title: copy.bestSellers,
+      title: copy.bestSellersByRevenue,
     };
   }
 
@@ -601,7 +752,13 @@ function formatRangeLabel(range: DashboardRangeKey, copy: DashboardCopy) {
   return copy.today;
 }
 
-function ImportantAlertsCard({ alerts }: { alerts: DashboardAlert[] }) {
+function ImportantAlertsCard({
+  alerts,
+  dataStatus,
+}: {
+  alerts: DashboardAlert[];
+  dataStatus?: DashboardSnapshot["dataStatus"];
+}) {
   const locale = useAppLocale();
   const view = buildImportantAlertsView(alerts, locale);
   const [open, setOpen] = useState(false);
@@ -619,12 +776,14 @@ function ImportantAlertsCard({ alerts }: { alerts: DashboardAlert[] }) {
   return (
     <>
       <Panel actionLabel={view.viewDetails} onAction={() => setOpen(true)} title={view.title}>
-        {view.items.length === 0 ? (
+        {dataStatus?.hasError ? (
+          <EmptyState compact icon={AlertTriangle} title={view.copy.unavailable} description={view.copy.dashboardUnavailable} />
+        ) : view.items.length === 0 ? (
           <EmptyState compact icon={AlertTriangle} title={view.emptyTitle} description={view.emptyDescription} />
         ) : (
           <div className="grid gap-3">
             {view.items.slice(0, 5).map((alert) => (
-              <div className="rounded-md border border-border bg-background p-3" key={`${alert.type}-${alert.title}`}>
+              <div className={`${dashboardDisplayClass} rounded-md border border-border border-l-4 bg-background p-3 ${alertSeverityClasses(alert.severity)}`} key={`${alert.type}-${alert.title}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{alert.type}</span>
                   <span className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold">{alert.severityLabel}</span>
@@ -642,16 +801,24 @@ function ImportantAlertsCard({ alerts }: { alerts: DashboardAlert[] }) {
   );
 }
 
+function alertSeverityClasses(severity: DashboardAlert["severity"]) {
+  if (severity === "critical") return "border-l-destructive";
+  if (severity === "warning") return "border-l-primary";
+  return "border-l-muted-foreground";
+}
+
 export function DashboardAlertsClient({
   alerts,
+  dataStatus,
   initialLocale,
 }: {
   alerts: DashboardAlert[];
+  dataStatus?: DashboardSnapshot["dataStatus"];
   initialLocale?: string | null;
 }) {
   return (
     <AppLocaleProvider initialLocale={initialLocale}>
-      <ImportantAlertsCard alerts={alerts} />
+      <ImportantAlertsCard alerts={alerts} dataStatus={dataStatus} />
     </AppLocaleProvider>
   );
 }
@@ -660,7 +827,7 @@ function ImportantAlertsFallbackCard() {
   const locale = useAppLocale();
   const copy = getDashboardCopy(locale);
   return (
-    <article className="min-w-0 rounded-lg border border-border bg-card p-5">
+    <article className={`${dashboardDisplayClass} min-w-0 rounded-lg border border-border bg-card p-5`}>
       <h2 className="text-xl font-semibold">{copy.importantAlerts}</h2>
       <div className="mt-5 grid gap-3">
         <div className="h-20 rounded-md border border-border bg-background" />

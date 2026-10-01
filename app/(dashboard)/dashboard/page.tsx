@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { DashboardAlertsLoader } from "@/features/dashboard/components/dashboard-alerts-loader";
+import { DashboardMemberCustomerLoader } from "@/features/dashboard/components/dashboard-member-customer-loader";
+import { DashboardPromotionLoader } from "@/features/dashboard/components/dashboard-promotion-loader";
 import {
   DashboardAlertsFallback,
   DashboardInteractionsClient,
@@ -89,6 +91,20 @@ export default async function DashboardPage({
       copy={copy}
       customEnd={customEnd}
       customStart={customStart}
+      insightsSlot={
+        <Suspense
+          fallback={<div className="h-96 animate-pulse rounded-lg border border-border bg-card" aria-hidden="true" />}
+        >
+          <DashboardMemberCustomerLoader />
+        </Suspense>
+      }
+      promotionSlot={
+        <Suspense
+          fallback={<div className="h-52 animate-pulse rounded-lg border border-border bg-card" aria-hidden="true" />}
+        >
+          <DashboardPromotionLoader dateRange={dateRange} />
+        </Suspense>
+      }
       snapshot={snapshot}
       storeName={session.user.activeCompanyName ?? copy.businessFallback}
     />

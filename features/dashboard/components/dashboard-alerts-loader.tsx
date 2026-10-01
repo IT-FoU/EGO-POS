@@ -22,5 +22,11 @@ export async function DashboardAlertsLoader({
   });
   const cookieStore = await cookies();
   const initialLocale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  return <DashboardAlertsClient alerts={secondary.alerts} initialLocale={initialLocale} />;
+  return (
+    <DashboardAlertsClient
+      alerts={secondary.alerts}
+      dataStatus={secondary.dataStatus}
+      initialLocale={initialLocale}
+    />
+  );
 }

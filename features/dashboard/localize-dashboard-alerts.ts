@@ -34,12 +34,8 @@ export function formatDashboardAlertSeverity(severity: DashboardAlertSeverity, c
 export function localizeDashboardAlert(alert: DashboardAlert, copy: DashboardCopy): DashboardAlert {
   const value = localizeAlertValue(alert.value, copy);
 
-  switch (alert.title) {
-    case "Dead Stock":
-      return { ...alert, message: copy.alertDeadStockMessage, title: copy.deadStock, type: copy.alertTypeInventory, value };
-    case "Low Sales Warning":
-      return { ...alert, message: copy.alertLowSalesMessage, title: copy.lowSalesWarning, type: copy.alertTypeSales, value };
-    case "Low stock":
+  switch (alert.code) {
+    case "low_stock":
       return {
         ...alert,
         message: fill(copy.alertLowStockMessage, { count: alert.value ?? "" }),
@@ -47,7 +43,15 @@ export function localizeDashboardAlert(alert: DashboardAlert, copy: DashboardCop
         type: copy.alertTypeInventory,
         value,
       };
-    case "Near expiry":
+    case "out_of_stock":
+      return {
+        ...alert,
+        message: fill(copy.alertOutOfStockMessage, { count: alert.value ?? "" }),
+        title: copy.outOfStock,
+        type: copy.alertTypeInventory,
+        value,
+      };
+    case "near_expiry":
       return {
         ...alert,
         message: fill(copy.alertNearExpiryMessage, { count: alert.value ?? "" }),
@@ -55,36 +59,28 @@ export function localizeDashboardAlert(alert: DashboardAlert, copy: DashboardCop
         type: copy.alertTypeExpiry,
         value,
       };
-    case "Expired products":
+    case "membership_expiring":
       return {
         ...alert,
-        message: fill(copy.alertExpiredMessage, { count: alert.value ?? "" }),
-        title: copy.expiredProducts,
-        type: copy.alertTypeExpiry,
+        message: fill(copy.alertMembershipExpiringMessage, { days: alert.value ?? "" }),
+        title: copy.membershipExpiring,
+        type: copy.alertTypeMembership,
         value,
       };
-    case "Supplier due":
+    case "promotion_starting":
       return {
         ...alert,
-        message: fill(copy.alertSupplierDueMessage, { amount: alert.value ?? "" }),
-        title: copy.supplierDue,
-        type: copy.alertTypePayables,
+        message: fill(copy.alertPromotionStartingMessage, { days: alert.value ?? "" }),
+        title: copy.promotionStarting,
+        type: copy.alertTypePromotion,
         value,
       };
-    case "Customer credit due":
+    case "promotion_ending":
       return {
         ...alert,
-        message: fill(copy.alertCustomerCreditMessage, { amount: alert.value ?? "" }),
-        title: copy.customerCreditDue,
-        type: copy.alertTypeCredit,
-        value,
-      };
-    case "Cash Difference":
-      return {
-        ...alert,
-        message: copy.alertCashDifferenceMessage,
-        title: copy.cashDifference,
-        type: copy.alertTypeCash,
+        message: fill(copy.alertPromotionEndingMessage, { days: alert.value ?? "" }),
+        title: copy.promotionEnding,
+        type: copy.alertTypePromotion,
         value,
       };
     default:
