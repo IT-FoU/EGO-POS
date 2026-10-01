@@ -19,6 +19,15 @@ function deliveryFor(path: string | undefined, signed: Map<string, string>) {
   return undefined;
 }
 
+function thumbnailDeliveryFor(path: string | undefined, signed: Map<string, string>) {
+  if (!path) return undefined;
+  if (isProductStoragePath(path)) {
+    const thumb = thumbPathFromMain(path);
+    return (thumb ? signed.get(thumb) : undefined) ?? signed.get(path);
+  }
+  return displayableProductImageRef(path);
+}
+
 function collectDeliveryPaths(imageUrl?: string | null) {
   const paths: string[] = [];
   if (isProductStoragePath(imageUrl)) {
@@ -89,10 +98,12 @@ export async function attachPosProductImageDelivery(products: PosProduct[]): Pro
   return products.map((product) => {
     const units = (product.units ?? []).map((unit) => ({
       ...unit,
+      imageThumbUrl: thumbnailDeliveryFor(unit.imageUrl, signed),
       imageUrl: resolveDisplayImage(unit.imageUrl, signed),
     }));
     const defaultUnit = units.find((unit) => unit.isDefaultSaleUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
     const productMain = resolveDisplayImage(product.productImageUrl, signed);
+    const productThumbnail = thumbnailDeliveryFor(product.productImageUrl, signed);
     const unitFallback = resolveDisplayImage(product.unitImageUrl, signed);
     // Combined cards read unitImageUrl; prefer main product image, then unit/default, then legacy display refs.
     const combinedImage = productMain ?? unitFallback ?? defaultUnit?.imageUrl;
@@ -100,6 +111,7 @@ export async function attachPosProductImageDelivery(products: PosProduct[]): Pro
     return {
       ...product,
       imageKey: compactProductImageKey(product.imageKey),
+      productThumbnailUrl: productThumbnail,
       productImageUrl: productMain ?? displayableProductImageRef(product.productImageUrl),
       unitImageUrl: combinedImage,
       units,

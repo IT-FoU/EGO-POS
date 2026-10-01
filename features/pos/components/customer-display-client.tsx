@@ -1,10 +1,11 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Gift, Maximize2, Minimize2, QrCode, ReceiptText, Sparkles, Store, Trophy } from "lucide-react";
+import { Gift, Maximize2, Minimize2, Package, QrCode, ReceiptText, Sparkles, Store, Trophy } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { formatLak } from "@/features/pos/format";
-import type { PosDisplayState } from "@/features/pos/types";
+import { resolveCustomerDisplayProductImage } from "@/features/pos/customer-display-product-image";
+import type { PosCartItem, PosDisplayState } from "@/features/pos/types";
 import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
   readCustomerDisplaySettingsFromStorage,
@@ -760,9 +761,12 @@ function ItemsList({ displayState }: { displayState: PosDisplayState }) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {displayState.items.map((item) => (
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b py-1.5" key={item.cartLineId ?? `${item.id}-${item.unitId ?? "default"}`} style={{ borderColor: theme.border }}>
-            <div className="min-w-0">
-              <div className="truncate text-[clamp(1rem,1.8vw,1.35rem)] font-bold">{localizedProductName(item, locale)}</div>
-              <div className="text-xs font-semibold" style={{ color: theme.secondaryText }}>{formatLak(item.priceLak)} LAK</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <CustomerDisplayProductImage item={item} label={localizedProductName(item, locale)} />
+              <div className="min-w-0">
+                <div className="truncate text-[clamp(1rem,1.8vw,1.35rem)] font-bold">{localizedProductName(item, locale)}</div>
+                <div className="text-xs font-semibold" style={{ color: theme.secondaryText }}>{formatLak(item.priceLak)} LAK</div>
+              </div>
             </div>
             <div className="text-[clamp(1.1rem,2vw,1.5rem)] font-black">x{item.quantity}</div>
             <div className="text-right text-[clamp(1.1rem,2vw,1.5rem)] font-black">{formatLak(item.priceLak * item.quantity)}</div>
@@ -770,6 +774,38 @@ function ItemsList({ displayState }: { displayState: PosDisplayState }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function CustomerDisplayProductImage({ item, label }: { item: PosCartItem; label: string }) {
+  const theme = useTheme();
+  const resolved = resolveCustomerDisplayProductImage(item);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [resolved.url]);
+
+  return (
+    <div
+      aria-label={resolved.url && !failed ? label : undefined}
+      className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border"
+      data-cd-product-image={resolved.source}
+      style={{ backgroundColor: theme.soft, borderColor: theme.border }}
+    >
+      {resolved.url && !failed ? (
+        <img
+          alt={label}
+          className="size-full object-contain"
+          decoding="async"
+          loading="lazy"
+          src={resolved.url}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <Package aria-hidden="true" className="size-7" style={{ color: theme.secondaryText }} />
+      )}
+    </div>
   );
 }
 

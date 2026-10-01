@@ -4,6 +4,7 @@ export type PosProductUnit = {
   conversionQty: number;
   costPriceLak: number;
   id: string;
+  imageThumbUrl?: string;
   imageUrl?: string;
   isBaseUnit: boolean;
   isDefaultSaleUnit: boolean;
@@ -25,6 +26,7 @@ export type PosProduct = {
   categoryName: string;
   imageKey: string;
   /** Main product image (not unit-specific). Used as fallback for unit cards. */
+  productThumbnailUrl?: string;
   productImageUrl?: string;
   unitImageUrl?: string;
   unitName: string;
