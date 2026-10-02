@@ -61,7 +61,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());
-    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | "taxChange" | "cashShiftOff" | null>(null);
+    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | "taxChange" | "cashShiftOff" | "loyaltyChange" | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const logoFileRef = useRef<File | null>(null);
     const [displaySettings, setDisplaySettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
@@ -69,6 +69,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
     const [settings, setSettings] = useState(initialSettings);
     const [baseline, setBaseline] = useState(initialSettings);
     const [taxConfirmLines, setTaxConfirmLines] = useState<string[]>([]);
+    const [loyaltyConfirmLines, setLoyaltyConfirmLines] = useState<string[]>([]);
     const [message, setMessage] = useState<{
         tone: "error" | "success";
         text: string;
@@ -251,6 +252,20 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
         }
         return lines;
     }
+    function buildLoyaltyConfirmLines() {
+        const lines: string[] = [];
+        if (settings.loyaltyEnabled !== baseline.loyaltyEnabled) {
+            lines.push(settings.loyaltyEnabled ? tSettings("loyaltyEnableConfirm", locale) : tSettings("loyaltyDisableConfirm", locale));
+        }
+        if (
+            Number(settings.loyaltySpendPerPointLak) !== Number(baseline.loyaltySpendPerPointLak) ||
+            Number(settings.loyaltyPointValueLak) !== Number(baseline.loyaltyPointValueLak) ||
+            Number(settings.loyaltyMinRedeemPoints) !== Number(baseline.loyaltyMinRedeemPoints)
+        ) {
+            lines.push(tSettings("loyaltyRateChangeConfirm", locale));
+        }
+        return lines;
+    }
     function commitSettingsSave() {
         setMessage(null);
         setSettingsConfirm(null);
@@ -338,6 +353,14 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
                 return;
             }
         }
+        if (section === "loyalty") {
+            const lines = buildLoyaltyConfirmLines();
+            if (lines.length) {
+                setLoyaltyConfirmLines(lines);
+                setSettingsConfirm("loyaltyChange");
+                return;
+            }
+        }
         commitSettingsSave();
     }
     function isSectionDirty() {
@@ -397,7 +420,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
       "roles": tSettings("rolesAndPermissions", locale),
       "approval-rules": tSettings("approvalRulesTitle", locale),
       "day-off": tSettings("dayOff", locale),
-      "ot": "OT",
+      "ot": tSettings("otSettingsTitle", locale),
       "loyalty": tSettings("loyaltyRules", locale),
     };
     const detailDescription: Record<SettingsDetailSection, { en: string; lo: string }> = {
@@ -659,13 +682,39 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
       />
       ) : null}
 
-      {section === "day-off" ? <DayOffSettingsPanel /> : null}
+      {section === "day-off" ? (
+        <DayOffSettingsPanel
+          employees={(initialStaffSnapshot?.staff ?? []).map((member) => ({
+            branchName: member.branchName,
+            fullName: member.fullName,
+            status: member.status,
+            userId: member.userId,
+            username: member.username,
+          }))}
+          locale={locale}
+        />
+      ) : null}
 
-      {section === "ot" ? <OtSettingsPanel /> : null}
+      {section === "ot" ? (
+        <OtSettingsPanel
+          employees={(initialStaffSnapshot?.staff ?? []).map((member) => ({
+            branchName: member.branchName,
+            fullName: member.fullName,
+            status: member.status,
+            userId: member.userId,
+            username: member.username,
+          }))}
+          locale={locale}
+        />
+      ) : null}
 
       {section === "loyalty" ? (
       <section className="rounded-lg border border-border bg-card p-5">
         <SectionTitle icon={Gift} title={tSettings("loyaltyRules", locale)}/>
+        <div className="mt-4 rounded-md border border-border bg-background px-3 py-2 text-sm" data-loyalty-summary>
+          {settings.loyaltyEnabled ? tSettings("loyaltyStatusOn", locale) : tSettings("loyaltyStatusOff", locale)}
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">{tSettings("loyaltyHelp", locale)}</p>
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Toggle label={tSettings("enableLoyalty", locale)} checked={settings.loyaltyEnabled} onChange={(value) => update("loyaltyEnabled", value)}/>
           <Field label={tSettings("spendLakPerPoint", locale)}>
@@ -732,11 +781,15 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             {settingsConfirm === "removeLogo" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyRemoveLogo}>{tSettings("remove", locale)}</button>) : null}
             {settingsConfirm === "resetThisPage" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAppearancePage}>{tSettings("resetThisPage", locale)}</button>) : null}
             {settingsConfirm === "resetAll" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAllDisplaySettings}>{tSettings("resetAllCustomerDisplay", locale)}</button>) : null}
-            {settingsConfirm === "taxChange" || settingsConfirm === "cashShiftOff" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSettingsSave}>{tSettings("applyChanges", locale)}</button>) : null}
-          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplay", locale) : settingsConfirm === "taxChange" ? tSettings("taxChangeConfirmTitle", locale) : tSettings("cashShiftDisableConfirmTitle", locale)}>
+            {settingsConfirm === "taxChange" || settingsConfirm === "cashShiftOff" || settingsConfirm === "loyaltyChange" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSettingsSave}>{tSettings("applyChanges", locale)}</button>) : null}
+          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplay", locale) : settingsConfirm === "taxChange" ? tSettings("taxChangeConfirmTitle", locale) : settingsConfirm === "loyaltyChange" ? tSettings("loyaltyChangeConfirmTitle", locale) : tSettings("cashShiftDisableConfirmTitle", locale)}>
           {settingsConfirm === "taxChange" ? (
             <ul className="grid gap-2 text-sm text-muted-foreground">
               {taxConfirmLines.map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          ) : settingsConfirm === "loyaltyChange" ? (
+            <ul className="grid gap-2 text-sm text-muted-foreground">
+              {loyaltyConfirmLines.map((line) => <li key={line}>{line}</li>)}
             </ul>
           ) : (
             <p className="text-sm text-muted-foreground">{settingsConfirm === "removeLogo" ? tSettings("removeLogoConfirm", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPageConfirm", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplayConfirm", locale) : tSettings("cashShiftDisableConfirmBody", locale)}</p>

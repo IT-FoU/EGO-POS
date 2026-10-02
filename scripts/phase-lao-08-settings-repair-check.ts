@@ -96,6 +96,7 @@ const allowlistedEnglishWords = new Set([
   "OTP",
   "SMTP",
   "Start",
+  "OT",
 ]);
 const leftoverEnglishPhrases = [
   "Close modal",
@@ -175,7 +176,8 @@ check(
   settingsForm.includes("receiptPrintModeLabel") &&
     settingsCopy.includes("roundingMethodLabel") &&
     settingsStaff.includes("localizeRoleTemplate") &&
-    settingsStaff.includes("localizeTerminalOption") &&
+    // Terminal assignment is deferred/hidden in Settings V2 Step 5; keep localization helper available in copy module.
+    (settingsStaff.includes("localizeTerminalOption") || !settingsStaff.includes('tSettings("terminal"')) &&
     settingsStaff.includes("localizePermissionModule") &&
     settingsStaff.includes("localizePermissionAction") &&
     storeActivity.includes("localizeActivityStatus") &&
@@ -289,7 +291,8 @@ check(
     settingsCopy.includes("roundingNearest") &&
     settingsStaff.includes('value="active"') &&
     settingsStaff.includes('value="inactive"') &&
-    settingsStaff.includes('["POS-01", "POS-02", "POS-03", "Back Office"]') &&
+    // Terminal options remain as internal defaults; Settings V2 Step 5 hides the assignment UX.
+    (settingsStaff.includes('["POS-01", "POS-02", "POS-03", "Back Office"]') || settingsStaff.includes('const DEFAULT_TERMINAL = "POS-01"')) &&
     permissionCatalog.includes('["Owner", "Manager", "Staff/Cashier", "Custom"]') &&
     !settingsActions.includes("settings-copy") &&
     !settingsRepo.includes("settings-copy") &&
