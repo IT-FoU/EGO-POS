@@ -20,7 +20,7 @@ export async function updateSettingsAction(input: Partial<SettingsFormData>) {
         // The database value is authoritative; the client publishes it after this action succeeds.
       }
     }
-    revalidatePath("/settings");
+    revalidatePath("/settings", "layout");
     revalidatePath("/dashboard");
     revalidatePath("/pos");
     return writeSuccess(settings);
@@ -37,7 +37,7 @@ export async function saveCompanyLogoAction(formData: FormData) {
       throw new Error("Image upload is empty.");
     }
     const businessLogoUrl = await replaceCompanyBusinessLogo(new Uint8Array(await file.arrayBuffer()), file.type, tenant);
-    revalidatePath("/settings");
+    revalidatePath("/settings", "layout");
     revalidatePath("/pos");
     revalidatePath("/dashboard");
     return writeSuccess({ businessLogoUrl });
@@ -50,7 +50,7 @@ export async function removeCompanyLogoAction() {
   try {
     const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
     await removeCompanyBusinessLogo(tenant);
-    revalidatePath("/settings");
+    revalidatePath("/settings", "layout");
     revalidatePath("/pos");
     revalidatePath("/dashboard");
     return writeSuccess({ businessLogoUrl: null });

@@ -21,7 +21,9 @@ function count(source: string, needle: string): number {
 
 const activity = read("features/store-activity/components/store-activity-logs-client.tsx");
 const settingsForm = read("features/settings/components/settings-form.tsx");
+const settingsQr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const staff = read("features/settings/components/staff-control-section.tsx");
+const settingsDetail = read("app/(dashboard)/settings/[section]/page.tsx");
 const largeDrawer = read("features/settings/components/settings-large-drawer.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
 const settingsActions = read("features/settings/actions.ts");
@@ -53,8 +55,8 @@ const drawerFn = activity.slice(drawerStart, gridStart);
 
 check(
   "1. Add Bank uses lg:left-72",
-  settingsForm.includes("<SettingsLargeDrawer") &&
-    settingsForm.includes('title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)}') &&
+  settingsQr.includes("<SettingsLargeDrawer") &&
+    settingsQr.includes('title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)}') &&
     largeDrawer.includes(overlay) &&
     largeDrawer.includes("lg:left-72") &&
     shell.includes('className="fixed inset-y-0 left-0 hidden w-72'),
@@ -62,23 +64,23 @@ check(
 
 check(
   "2. Edit Bank uses the same large drawer",
-  settingsForm.includes('tSettings("editBank"') &&
-    settingsForm.includes("editingBankId") &&
-    count(settingsForm, "<SettingsLargeDrawer") >= 2 &&
+  settingsQr.includes('tSettings("editBank"') &&
+    settingsQr.includes("editingBankId") &&
+    count(settingsQr, "<SettingsLargeDrawer") >= 2 &&
     !settingsForm.includes("function SettingsLargeDrawer("),
 );
 
 check(
   "3. Add QR Account uses lg:left-72",
-  settingsForm.includes('title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)}') &&
+  settingsQr.includes('title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)}') &&
     largeDrawer.includes("lg:left-72"),
 );
 
 check(
   "4. Edit QR Account uses the same large drawer",
-  settingsForm.includes('tSettings("editQrAccount"') &&
-    settingsForm.includes("editingAccountId") &&
-    settingsForm.includes("saveQrAccount"),
+  settingsQr.includes('tSettings("editQrAccount"') &&
+    settingsQr.includes("editingAccountId") &&
+    settingsQr.includes("saveQrAccount"),
 );
 
 check(
@@ -110,36 +112,36 @@ check(
 
 check(
   "8. no centered max-w-2xl remains for these three form families",
-  !settingsForm.slice(settingsForm.indexOf("{bankModalOpen"), settingsForm.indexOf("{bankToDelete")).includes("max-w-2xl") &&
-    !settingsForm.slice(settingsForm.indexOf("{accountModalOpen"), settingsForm.indexOf("{bankToDelete")).includes("SettingsDialog") &&
+  !settingsQr.slice(settingsQr.indexOf("{bankModalOpen"), settingsQr.indexOf("{bankToDelete")).includes("max-w-2xl") &&
+    !settingsQr.slice(settingsQr.indexOf("{accountModalOpen"), settingsQr.indexOf("{bankToDelete")).includes("SettingsDialog") &&
     !staff.includes("max-w-2xl") &&
     !staff.includes("place-items-center") &&
-    settingsForm.includes("<SettingsLargeDrawer") &&
+    settingsQr.includes("<SettingsLargeDrawer") &&
     staff.includes("<SettingsLargeDrawer"),
 );
 
 check(
   "9. Delete Bank remains small centered modal",
-  settingsForm.includes('title={tSettings("deleteBankTitle"') &&
-    settingsForm.includes("<AppSmallModal") &&
-    settingsForm.includes('size="sm"') &&
-    !settingsForm.includes("function SettingsDialog(") &&
-    !settingsForm.includes("max-w-2xl"),
+  settingsQr.includes('title={tSettings("deleteBankTitle"') &&
+    settingsQr.includes("<AppSmallModal") &&
+    settingsQr.includes('size="sm"') &&
+    !settingsQr.includes("function SettingsDialog(") &&
+    !settingsQr.includes("max-w-2xl"),
 );
 
 check(
   "10. Delete QR remains small centered modal",
-  settingsForm.includes('title={tSettings("deleteQrAccountTitle"') &&
-    settingsForm.includes("<AppSmallModal") &&
-    settingsForm.includes('size="sm"'),
+  settingsQr.includes('title={tSettings("deleteQrAccountTitle"') &&
+    settingsQr.includes("<AppSmallModal") &&
+    settingsQr.includes('size="sm"'),
 );
 
 check(
   "11. QR Preview remains small centered modal",
-  settingsForm.includes('title={tSettings("qrPreview"') &&
-    settingsForm.includes("{previewAccount ? (<AppSmallModal") &&
-    settingsForm.includes('size="sm"') &&
-    !settingsForm.includes("max-w-2xl"),
+  settingsQr.includes('title={tSettings("qrPreview"') &&
+    settingsQr.includes("{previewAccount ? (<AppSmallModal") &&
+    settingsQr.includes('size="sm"') &&
+    !settingsQr.includes("max-w-2xl"),
 );
 
 check(
@@ -163,10 +165,10 @@ check(
     staff.includes("saveStaffMemberAction") &&
     staff.includes("saveRolePermissionsAction") &&
     staff.includes("saveApprovalRuleAction") &&
-    settingsForm.includes("saveQrPaymentBankAction") &&
-    settingsForm.includes("saveQrPaymentAccountAction") &&
+    settingsQr.includes("saveQrPaymentBankAction") &&
+    settingsQr.includes("saveQrPaymentAccountAction") &&
     activity.includes("/api/store/activity-logs") &&
-    settingsPage.includes("<SettingsForm"),
+    settingsDetail.includes("<SettingsForm"),
 );
 
 check(

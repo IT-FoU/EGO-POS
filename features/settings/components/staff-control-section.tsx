@@ -58,16 +58,14 @@ function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: Staff
 }
 
 export function StaffControlSection({
-  currencySettings,
   initialSnapshot,
   locale,
-  loyaltyRules,
+  section,
   onNotify,
 }: {
-  currencySettings: React.ReactNode;
   initialSnapshot: StaffAccessSnapshot;
   locale: SupportedLocale;
-  loyaltyRules: React.ReactNode;
+  section: "staff" | "roles" | "approval-rules";
   onNotify: (message: { tone: "error" | "success"; text: string } | null) => void;
 }) {
   const router = useRouter();
@@ -244,9 +242,11 @@ export function StaffControlSection({
   return (
     <section className="rounded-lg border border-border bg-card p-5">
       <SectionTitle icon={ShieldCheck} title={tSettings("staffControl", locale)} />
-      <div className="mt-5 grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="mt-5 grid gap-4">
+        {section === "roles" || section === "approval-rules" ? (
         <aside className="rounded-lg border border-border bg-background p-4">
-          <h3 className="font-semibold">{tSettings("roleTemplates", locale)}</h3>
+          {section !== "approval-rules" ? <h3 className="font-semibold">{tSettings("roleTemplates", locale)}</h3> : null}
+          {section !== "approval-rules" ? (
           <div className="mt-4 grid gap-2">
             {ROLE_TEMPLATE_LABELS.map((template) => (
               <button
@@ -259,9 +259,13 @@ export function StaffControlSection({
               </button>
             ))}
           </div>
+          ) : null}
+          {section !== "approval-rules" ? (
           <button className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending || role === "Owner"} type="button" onClick={saveMatrix}>
             {fillSettingsCopy(tSettings("savePermissions", locale), { role: localizeRoleTemplate(role, locale) })}
           </button>
+          ) : null}
+          {section !== "roles" ? (
           <div className="mt-4 grid gap-3">
             {(Object.keys(APPROVAL_RULE_LABELS) as Array<keyof typeof APPROVAL_RULE_LABELS>).map((ruleKey) => {
               const rule = approvalRules.find((entry) => entry.ruleKey === ruleKey);
@@ -289,9 +293,12 @@ export function StaffControlSection({
               );
             })}
           </div>
+          ) : null}
         </aside>
+        ) : null}
 
         <div className="min-w-0">
+          {section === "staff" ? (
           <section className="mb-4 rounded-lg border border-border bg-background p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex items-center gap-2">
@@ -351,7 +358,9 @@ export function StaffControlSection({
               </table>
             </div>
           </section>
+          ) : null}
 
+          {section === "roles" ? (
           <div className="rounded-lg border border-border bg-background p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -383,10 +392,9 @@ export function StaffControlSection({
               </table>
             </div>
           </div>
+          ) : null}
 
-          <div className="mt-4">{loyaltyRules}</div>
-          <div className="mt-4">{currencySettings}</div>
-
+          {section === "approval-rules" ? (
           <section className="mt-4 rounded-lg border border-border bg-background p-4">
             <h3 className="font-semibold">{tSettings("pendingApprovalCenter", locale)}</h3>
             {pendingApprovals.length === 0 ? (
@@ -421,10 +429,11 @@ export function StaffControlSection({
               </div>
             )}
           </section>
+          ) : null}
         </div>
       </div>
 
-      {staffModalOpen ? (
+      {section === "staff" && staffModalOpen ? (
         <SettingsLargeDrawer
           closeLabel={tSettings("closeModal", locale)}
           title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)}

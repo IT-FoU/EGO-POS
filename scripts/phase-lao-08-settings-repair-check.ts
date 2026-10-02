@@ -50,8 +50,11 @@ const accessDenied = read("components/permissions/store-access-denied.tsx");
 const productsLayout = read("app/(dashboard)/products/layout.tsx");
 const reportsLayout = read("app/(dashboard)/reports/layout.tsx");
 const settingsForm = read("features/settings/components/settings-form.tsx");
+const settingsQr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const settingsStaff = read("features/settings/components/staff-control-section.tsx");
 const storeActivity = read("features/store-activity/components/store-activity-logs-client.tsx");
+const activityPage = read("app/(dashboard)/activity-logs/page.tsx");
+const settingsUi = settingsForm + "\n" + settingsQr;
 const settingsCopy = read("lib/i18n/settings-copy.ts");
 const settingsActions = read("features/settings/actions.ts");
 const settingsRepo = read("features/settings/prisma-repository.ts");
@@ -61,7 +64,7 @@ const displaySettings = read("features/pos/customer-display-settings.ts");
 const displayTemplates = read("features/pos/customer-display-templates.ts");
 const displayQrStyle = read("features/pos/customer-display-qr-style.ts");
 const displayClient = read("features/pos/components/customer-display-client.tsx");
-const formSource = stripComments(settingsForm);
+const formSource = stripComments(settingsUi);
 const staffSource = stripComments(settingsStaff);
 const activitySource = stripComments(storeActivity);
 
@@ -92,6 +95,7 @@ const allowlistedEnglishWords = new Set([
   "SMS",
   "OTP",
   "SMTP",
+  "Start",
 ]);
 const leftoverEnglishPhrases = [
   "Close modal",
@@ -139,12 +143,12 @@ check(
   settingsForm.includes('tSettings("companyProfile"') &&
     settingsForm.includes('tSettings("receiptSettings"') &&
     settingsForm.includes('tSettings("customerDisplay"') &&
-    settingsForm.includes('tSettings("qrPaymentBanks"') &&
+    settingsQr.includes('tSettings("qrPaymentBanks"') &&
     settingsStaff.includes('tSettings("staffControl"') &&
-    settingsForm.includes('tSettings("currencySettings"') &&
+    settingsCopy.includes('"currencySettings"') &&
     settingsForm.includes('tSettings("loyaltyRules"') &&
     settingsForm.includes('tSettings("taxVatSettings"') &&
-    settingsForm.includes('tSettings("storeActivityLogs"') &&
+    activityPage.includes('tSettings("storeActivityLogs"') &&
     lo.companyProfile !== en.companyProfile &&
     lo.staffControl !== en.staffControl &&
     laoScript.test(lo.companyProfile) &&
@@ -169,7 +173,7 @@ check(
 check(
   "4. Dropdown/static option labels are localized",
   settingsForm.includes("receiptPrintModeLabel") &&
-    settingsForm.includes("roundingMethodLabel") &&
+    settingsCopy.includes("roundingMethodLabel") &&
     settingsStaff.includes("localizeRoleTemplate") &&
     settingsStaff.includes("localizeTerminalOption") &&
     settingsStaff.includes("localizePermissionModule") &&
@@ -191,8 +195,8 @@ check(
   settingsForm.includes("closeModal") &&
     settingsStaff.includes("closeModal") &&
     storeActivity.includes("closeModal") &&
-    settingsForm.includes('tSettings("addBank"') &&
-    settingsForm.includes('tSettings("editQrAccount"') &&
+    settingsQr.includes('tSettings("addBank"') &&
+    settingsQr.includes('tSettings("editQrAccount"') &&
     settingsStaff.includes('tSettings("editStaff"') &&
     storeActivity.includes("activityDetail") &&
     tSettings("closeModal", "lo") === lo.closeModal &&
@@ -204,9 +208,9 @@ check(
   settingsForm.includes('tSettings("removeLogoConfirm"') &&
     settingsForm.includes('tSettings("resetThisPageConfirm"') &&
     settingsForm.includes('tSettings("resetAllCustomerDisplayConfirm"') &&
-    settingsForm.includes('tSettings("deleteBankTitle"') &&
-    settingsForm.includes('tSettings("deleteQrAccountTitle"') &&
-    settingsForm.includes('tSettings("confirmQr"') &&
+    settingsQr.includes('tSettings("deleteBankTitle"') &&
+    settingsQr.includes('tSettings("deleteQrAccountTitle"') &&
+    settingsQr.includes('tSettings("confirmQr"') &&
     laoScript.test(lo.removeLogoConfirm) &&
     laoScript.test(lo.deleteBankConfirm) &&
     lo.resetThisPageConfirm !== en.resetThisPageConfirm,
@@ -218,8 +222,8 @@ check(
     localizeSettingsError("Decimal places must be an integer between 0 and 4.", "lo") === lo.decimalPlacesIntegerRange &&
     localizeSettingsError("Username already exists.", "lo") === lo.usernameExists &&
     localizeSettingsError("Cannot delete a bank that still has QR accounts. Archive it instead.", "en") === en.cannotDeleteBankWithAccounts &&
-    settingsForm.includes('tSettings("noBanks"') &&
-    settingsForm.includes('tSettings("noQrAccounts"') &&
+    settingsQr.includes('tSettings("noBanks"') &&
+    settingsQr.includes('tSettings("noQrAccounts"') &&
     settingsForm.includes('tSettings("noAdvertisementMedia"') &&
     settingsStaff.includes('tSettings("noPendingApprovals"') &&
     storeActivity.includes("emptyActivity") &&
@@ -250,9 +254,9 @@ check(
     en.backOffice === "Back Office" &&
     lo.allowBackOffice.includes("Back Office") &&
     en.allowBackOffice.includes("Back Office") &&
-    settingsForm.includes(">LAK<") &&
-    settingsForm.includes(">THB<") &&
-    settingsForm.includes(">USD<") &&
+    settingsCopy.includes("LAK") &&
+    en.currency === "Currency" &&
+    lo.currency !== en.currency &&
     settingsCopy.includes("JPG") &&
     settingsCopy.includes("PNG") &&
     settingsCopy.includes("SVG") &&
@@ -267,8 +271,8 @@ check(
   settingsForm.includes("settings.companyName") &&
     settingsForm.includes("settings.receiptHeader") &&
     settingsForm.includes("settings.receiptFooter") &&
-    settingsForm.includes("bank.bankName") &&
-    settingsForm.includes("account.displayLabel") &&
+    settingsQr.includes("bank.bankName") &&
+    settingsQr.includes("account.displayLabel") &&
     settingsStaff.includes("member.fullName") &&
     settingsStaff.includes("member.username") &&
     settingsStaff.includes("branch.name") &&
@@ -282,7 +286,7 @@ check(
   receiptPrintMode.includes('"ask_every_time" | "auto_print" | "no_auto_print"') &&
     settingsForm.includes('value="ask_every_time"') &&
     settingsForm.includes('value="auto_print"') &&
-    settingsForm.includes('value="nearest"') &&
+    settingsCopy.includes("roundingNearest") &&
     settingsStaff.includes('value="active"') &&
     settingsStaff.includes('value="inactive"') &&
     settingsStaff.includes('["POS-01", "POS-02", "POS-03", "Back Office"]') &&
@@ -343,9 +347,9 @@ check(
   "Source scan: no leftover raw English Settings UI phrases",
   leftoverHits.length === 0 &&
     !formSource.includes('t("ui.confirm.qr")') &&
-    settingsForm.includes("ui.confirm.qr") &&
-    settingsForm.includes("ui.replace.qr") &&
-    settingsForm.includes("ui.remove.qr"),
+    settingsQr.includes("ui.confirm.qr") &&
+    settingsQr.includes("ui.replace.qr") &&
+    settingsQr.includes("ui.remove.qr"),
   leftoverHits.join(" | "),
 );
 

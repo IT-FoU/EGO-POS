@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
-import { SettingsForm } from "@/features/settings/components/settings-form";
+import { SettingsLanding } from "@/features/settings/components/settings-landing";
 import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
+import { APPROVAL_RULE_KEYS } from "@/features/access-control/permission-catalog";
 import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
 import { canManageStoreSettings } from "@/features/permissions/store-ui-permissions";
 import { requireSession } from "@/lib/auth/session";
@@ -31,14 +32,16 @@ export default async function SettingsPage() {
   ]);
 
   return (
-    <SettingsForm
-      initialBusinessLogoUrl={businessLogoUrl}
-      initialQrAccounts={qrSnapshot.accounts}
-      initialQrBanks={qrSnapshot.banks}
-      initialSettings={settings}
-      initialStaffSnapshot={staffSnapshot}
+    <SettingsLanding
+      facts={{
+        activeQrAccounts: qrSnapshot.accounts.filter((account) => account.isActive).length,
+        activeQrBanks: qrSnapshot.banks.filter((bank) => bank.isActive).length,
+        activeStaff: staffSnapshot.staff.filter((staff) => staff.status === "active").length,
+        approvalRulesEnabled: APPROVAL_RULE_KEYS.filter((ruleKey) => staffSnapshot.approvalRules.find((rule) => rule.ruleKey === ruleKey)?.isEnabled ?? true).length,
+        hasLogo: Boolean(businessLogoUrl),
+        settings,
+      }}
       locale={locale}
-      qrBranches={qrSnapshot.branches}
     />
   );
 }

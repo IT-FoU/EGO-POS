@@ -15,6 +15,7 @@ import {
   Package,
   Settings,
   ShoppingCart,
+  ScrollText,
   Truck,
   Users,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const navigation = [
   { key: "suppliers", href: "/suppliers", icon: Building2, locked: true },
   { key: "promotions", href: "/promotions", icon: Gift, locked: true },
   { key: "reports", href: "/reports", icon: BarChart3, locked: false },
+  { key: "activity", href: "/activity-logs", icon: ScrollText, locked: false },
   { key: "settings", href: "/settings", icon: Settings, locked: true },
 ];
 
@@ -69,6 +71,7 @@ const shellCopy: Record<SupportedLocale, {
   en: {
     lockedFeature: "Paid feature locked",
     nav: {
+      activity: tSettings("storeActivityLogs", "en"),
       customers: tCustomers("customers", "en"),
       dashboard: "Dashboard",
       inventory: tInventory("inventory", "en"),
@@ -85,6 +88,7 @@ const shellCopy: Record<SupportedLocale, {
   lo: {
     lockedFeature: "Paid feature locked",
     nav: {
+      activity: tSettings("storeActivityLogs", "lo"),
       customers: tCustomers("customers", "lo"),
       dashboard: "ໜ້າຫຼັກ",
       inventory: tInventory("inventory", "lo"),
