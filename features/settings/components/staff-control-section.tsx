@@ -8,22 +8,16 @@ import {
   deactivateStaffMemberAction,
   reactivateStaffMemberAction,
   saveApprovalRuleAction,
-  saveRolePermissionsAction,
   saveStaffMemberAction,
 } from "@/features/access-control/actions";
-import {
-  APPROVAL_RULE_LABELS,
-  PERMISSION_ACTION_LABELS,
-  PERMISSION_MODULE_LABELS,
-  ROLE_TEMPLATE_LABELS,
-  matrixToPermissionKeys,
-  type RoleTemplateLabel,
-} from "@/features/access-control/permission-catalog";
+import { APPROVAL_RULE_LABELS } from "@/features/access-control/permission-catalog";
 import { isAssignableStaffRole, NEW_STAFF_DEFAULTS, validateStaffAccountInput } from "@/features/access-control/staff-account";
+import { readStaffLastUsed, writeStaffLastUsed, type StaffLastUsedPreset } from "@/features/access-control/staff-presets";
 import type { StaffAccessSnapshot, StaffMemberRecord } from "@/features/access-control/types";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { SupportedLocale } from "@/lib/constants";
-import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, tSettings } from "@/lib/i18n/settings-copy";
+import { fillSettingsCopy, localizeApprovalRule, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, tSettings } from "@/lib/i18n/settings-copy";
+import { RolePermissionsPanel } from "@/features/settings/components/role-permissions-panel";
 import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
 
 type StaffDraft = {
@@ -40,6 +34,12 @@ type StaffDraft = {
   status: "active" | "disabled";
   username: string;
 };
+
+function roleOptionSummary(template: StaffAccessSnapshot["roles"][number]["templateKey"], locale: SupportedLocale) {
+  if (template === "Manager") return `${tSettings("backOfficeAccessSummary", locale)} · ${tSettings("broaderPermissions", locale)}`;
+  if (template === "Staff/Cashier") return `${tSettings("posFocused", locale)} · ${tSettings("limitedBackOffice", locale)}`;
+  return tSettings("customAccess", locale);
+}
 
 function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: StaffAccessSnapshot["roles"]): StaffDraft {
   const assignable = roles.filter((role) => isAssignableStaffRole(role));
@@ -60,12 +60,14 @@ function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: Staff
 }
 
 export function StaffControlSection({
+  actorIsOwner = false,
   actorUserId,
   initialSnapshot,
   locale,
   section,
   onNotify,
 }: {
+  actorIsOwner?: boolean;
   actorUserId?: string;
   initialSnapshot: StaffAccessSnapshot;
   locale: SupportedLocale;
@@ -74,9 +76,6 @@ export function StaffControlSection({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [role, setRole] = useState<RoleTemplateLabel>("Manager");
-  const [query, setQuery] = useState("");
-  const [matrix, setMatrix] = useState(initialSnapshot.matrix);
   const [staff, setStaff] = useState(initialSnapshot.staff);
   const [approvalRules, setApprovalRules] = useState(initialSnapshot.approvalRules);
   const [pendingApprovals, setPendingApprovals] = useState(initialSnapshot.pendingApprovals);
@@ -90,22 +89,16 @@ export function StaffControlSection({
   const [staffDraft, setStaffDraft] = useState<StaffDraft>(() => emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles));
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
   const [confirmReactivateId, setConfirmReactivateId] = useState<string | null>(null);
-  const [confirmPermissions, setConfirmPermissions] = useState(false);
   const [confirmApprovalRule, setConfirmApprovalRule] = useState<keyof typeof APPROVAL_RULE_LABELS | null>(null);
+  const [staffPreset, setStaffPreset] = useState<"customize" | "default" | "last-used">("default");
+  const [lastUsed, setLastUsed] = useState<StaffLastUsedPreset | null>(null);
 
   useEffect(() => {
-    setMatrix(initialSnapshot.matrix);
     setStaff(initialSnapshot.staff);
     setApprovalRules(initialSnapshot.approvalRules);
     setPendingApprovals(initialSnapshot.pendingApprovals);
   }, [initialSnapshot]);
 
-  const selectedRole = initialSnapshot.roles.find((entry) => entry.templateKey === role);
-  const filteredModules = PERMISSION_MODULE_LABELS.filter((module) => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return true;
-    return module.toLowerCase().includes(needle) || localizePermissionModule(module, locale).toLowerCase().includes(needle);
-  });
   const assignableRoles = initialSnapshot.roles.filter((entry) => isAssignableStaffRole(entry));
   const filteredStaff = staff.filter((member) => {
     if (staffStatusFilter !== "all" && member.status !== staffStatusFilter) return false;
@@ -141,45 +134,6 @@ export function StaffControlSection({
     });
   }
 
-  function togglePermission(module: (typeof PERMISSION_MODULE_LABELS)[number], actionLabel: (typeof PERMISSION_ACTION_LABELS)[number]) {
-    if (role === "Owner") {
-      onNotify({ text: tSettings("ownerFullAccess", locale), tone: "error" });
-      return;
-    }
-    setMatrix((current) => ({
-      ...current,
-      [role]: {
-        ...current[role],
-        [module]: {
-          ...current[role][module],
-          [actionLabel]: !current[role][module][actionLabel],
-        },
-      },
-    }));
-  }
-
-  function saveMatrix() {
-    if (!selectedRole || role === "Owner") {
-      return;
-    }
-    setConfirmPermissions(true);
-  }
-
-  function commitSaveMatrix() {
-    if (!selectedRole || role === "Owner") {
-      return;
-    }
-    setConfirmPermissions(false);
-    runMutation(
-      () =>
-        saveRolePermissionsAction({
-          permissions: matrixToPermissionKeys(matrix, role),
-          roleId: selectedRole.id,
-        }),
-      `${fillSettingsCopy(tSettings("permissionsSaved", locale), { role: localizeRoleTemplate(role, locale) })}`,
-    );
-  }
-
   function saveRule(ruleKey: keyof typeof APPROVAL_RULE_LABELS) {
     if (!approvalRules.find((rule) => rule.ruleKey === ruleKey)) return;
     setConfirmApprovalRule(ruleKey);
@@ -204,6 +158,8 @@ export function StaffControlSection({
 
   function openAddStaff() {
     setEditingStaffId(null);
+    setStaffPreset("default");
+    setLastUsed(readStaffLastUsed());
     setStaffDraft(emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles));
     setStaffModalOpen(true);
   }
@@ -258,9 +214,15 @@ export function StaffControlSection({
       onNotify({ text: tSettings("passwordsDoNotMatch", locale), tone: "error" });
       return;
     }
+    const creating = !editingStaffId;
+    const preset = {
+      allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
+      allowPosAccess: staffDraft.allowPosAccess,
+      roleId: staffDraft.roleId,
+    };
     runMutation(
-      () =>
-        saveStaffMemberAction({
+      async () => {
+        const result = await saveStaffMemberAction({
           allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
           allowPosAccess: staffDraft.allowPosAccess,
           assignedTerminal: staffDraft.assignedTerminal,
@@ -272,7 +234,10 @@ export function StaffControlSection({
           roleId: staffDraft.roleId,
           status: staffDraft.status,
           username: staffDraft.username.trim(),
-        }),
+        });
+        if (result.ok && creating) writeStaffLastUsed(preset);
+        return result;
+      },
       editingStaffId ? tSettings("staffUpdated", locale) : tSettings("staffCreated", locale),
     );
     setStaffModalOpen(false);
@@ -296,6 +261,23 @@ export function StaffControlSection({
     return member.branchName.trim() ? member.branchName : tSettings("unknownBranch", locale);
   }
 
+  function applyStaffPreset(mode: "default" | "last-used") {
+    setStaffPreset(mode);
+    if (mode === "default") {
+      const next = emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles);
+      setStaffDraft((current) => ({ ...current, allowBackOfficeAccess: next.allowBackOfficeAccess, allowPosAccess: next.allowPosAccess, roleId: next.roleId }));
+      return;
+    }
+    if (!lastUsed) return;
+    const roleStillExists = assignableRoles.some((role) => role.id === lastUsed.roleId);
+    setStaffDraft((current) => ({
+      ...current,
+      allowBackOfficeAccess: lastUsed.allowBackOfficeAccess,
+      allowPosAccess: lastUsed.allowPosAccess,
+      roleId: roleStillExists ? lastUsed.roleId : current.roleId,
+    }));
+  }
+
   function decideApproval(approvalId: string, status: "approved" | "rejected") {
     runMutation(() => decideApprovalAction({ approvalId, status }), status === "approved" ? tSettings("approvalApproved", locale) : tSettings("approvalRejected", locale));
   }
@@ -304,29 +286,8 @@ export function StaffControlSection({
     <section className="rounded-lg border border-border bg-card p-5">
       <SectionTitle icon={ShieldCheck} title={tSettings("staffControl", locale)} />
       <div className="mt-5 grid gap-4">
-        {section === "roles" || section === "approval-rules" ? (
+        {section === "approval-rules" ? (
         <aside className="rounded-lg border border-border bg-background p-4">
-          {section !== "approval-rules" ? <h3 className="font-semibold">{tSettings("roleTemplates", locale)}</h3> : null}
-          {section !== "approval-rules" ? (
-          <div className="mt-4 grid gap-2">
-            {ROLE_TEMPLATE_LABELS.map((template) => (
-              <button
-                className={role === template ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm font-semibold" : "rounded-md border border-border bg-card p-3 text-left text-sm font-semibold hover:border-primary"}
-                key={template}
-                type="button"
-                onClick={() => setRole(template)}
-              >
-                {localizeRoleTemplate(template, locale)}
-              </button>
-            ))}
-          </div>
-          ) : null}
-          {section !== "approval-rules" ? (
-          <button className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending || role === "Owner"} type="button" onClick={saveMatrix}>
-            {fillSettingsCopy(tSettings("savePermissions", locale), { role: localizeRoleTemplate(role, locale) })}
-          </button>
-          ) : null}
-          {section !== "roles" ? (
           <div className="mt-4 grid gap-3">
             {(Object.keys(APPROVAL_RULE_LABELS) as Array<keyof typeof APPROVAL_RULE_LABELS>).map((ruleKey) => {
               const rule = approvalRules.find((entry) => entry.ruleKey === ruleKey);
@@ -360,7 +321,6 @@ export function StaffControlSection({
               );
             })}
           </div>
-          ) : null}
         </aside>
         ) : null}
 
@@ -442,37 +402,7 @@ export function StaffControlSection({
           ) : null}
 
           {section === "roles" ? (
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h3 className="font-semibold">{tSettings("permissionMatrix", locale)}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">{tSettings("auditPermissionHelp", locale)}</p>
-              </div>
-              <input className="field-input md:w-72" placeholder={tSettings("searchModules", locale)} value={query} onChange={(event) => setQuery(event.target.value)} />
-            </div>
-            <div className="mt-4 max-w-full overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead className="border-b border-border text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-3">{tSettings("module", locale)}</th>
-                    {PERMISSION_ACTION_LABELS.map((action) => <th className="px-3 py-3 text-center" key={action}>{localizePermissionAction(action, locale)}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredModules.map((module) => (
-                    <tr className="border-b border-border last:border-b-0" key={module}>
-                      <td className="px-3 py-3 font-semibold">{localizePermissionModule(module, locale)}</td>
-                      {PERMISSION_ACTION_LABELS.map((action) => (
-                        <td className="px-3 py-3 text-center" key={action}>
-                          <input checked={matrix[role][module][action]} className="size-4 accent-primary disabled:opacity-50" disabled={role === "Owner" || isPending} type="checkbox" onChange={() => togglePermission(module, action)} />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            <RolePermissionsPanel actorIsOwner={actorIsOwner} locale={locale} snapshot={initialSnapshot} onNotify={onNotify} />
           ) : null}
 
           {section === "approval-rules" ? (
@@ -539,9 +469,27 @@ export function StaffControlSection({
               </Field>
             </FormSection>
             <FormSection title={tSettings("roleAndBranch", locale)}>
+              {!editingStaffId ? (
+                <fieldset className="grid gap-2 md:col-span-2">
+                  <legend className="text-sm font-semibold">{tSettings("staffPreset", locale)}</legend>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input checked={staffPreset === "default"} name="staff-preset" type="radio" onChange={() => applyStaffPreset("default")} />
+                    {tSettings("useRoleDefault", locale)}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input checked={staffPreset === "last-used"} disabled={!lastUsed} name="staff-preset" type="radio" onChange={() => applyStaffPreset("last-used")} />
+                    {tSettings("useLastUsed", locale)}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input checked={staffPreset === "customize"} name="staff-preset" type="radio" onChange={() => setStaffPreset("customize")} />
+                    {tSettings("customizeStaffAccess", locale)}
+                  </label>
+                  {staffPreset === "customize" ? <p className="text-xs text-muted-foreground">{tSettings("individualOverridesLater", locale)}</p> : null}
+                </fieldset>
+              ) : null}
               <Field label={tSettings("role", locale)}>
                 <select aria-label={tSettings("role", locale)} className="field-input" disabled={editingSelf} value={staffDraft.roleId} onChange={(event) => setStaffDraft((current) => ({ ...current, roleId: event.target.value }))}>
-                  {assignableRoles.map((entry) => <option key={entry.id} value={entry.id}>{localizeRoleTemplate(entry.name, locale)}</option>)}
+                  {assignableRoles.map((entry) => <option key={entry.id} value={entry.id}>{`${localizeRoleTemplate(entry.name, locale)} — ${roleOptionSummary(entry.templateKey, locale)}`}</option>)}
                 </select>
               </Field>
               <Field label={tSettings("branch", locale)}>
@@ -635,25 +583,6 @@ export function StaffControlSection({
           title={fillSettingsCopy(tSettings("reactivateStaffNamed", locale), { name: reactivateTarget?.fullName ?? "" })}
         >
           <p className="text-sm text-muted-foreground">{tSettings("reactivateStaffConfirm", locale)}</p>
-        </AppSmallModal>
-      ) : null}
-
-      {confirmPermissions ? (
-        <AppSmallModal
-          closeAriaLabel={tSettings("closeModal", locale)}
-          closeOnBackdrop={false}
-          closeOnEscape={false}
-          footer={(
-            <div className="flex justify-end gap-2">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setConfirmPermissions(false)}>{tSettings("cancel", locale)}</button>
-              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSaveMatrix}>{tSettings("applyChanges", locale)}</button>
-            </div>
-          )}
-          onClose={() => setConfirmPermissions(false)}
-          size="sm"
-          title={tSettings("savePermissionsConfirmTitle", locale)}
-        >
-          <p className="text-sm text-muted-foreground">{fillSettingsCopy(tSettings("savePermissionsConfirmBody", locale), { role: localizeRoleTemplate(role, locale) })}</p>
         </AppSmallModal>
       ) : null}
 

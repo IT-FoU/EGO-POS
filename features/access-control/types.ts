@@ -68,6 +68,7 @@ export type StaffAccessSnapshot = {
   approvalRules: ApprovalRuleRecord[];
   branches: BranchOption[];
   matrix: PermissionMatrix;
+  permissionKeysByRole?: Record<string, string[]>;
   pendingApprovals: PendingApprovalRecord[];
   roles: RoleTemplateRecord[];
   staff: StaffMemberRecord[];

@@ -52,6 +52,7 @@ const reportsLayout = read("app/(dashboard)/reports/layout.tsx");
 const settingsForm = read("features/settings/components/settings-form.tsx");
 const settingsQr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const settingsStaff = read("features/settings/components/staff-control-section.tsx");
+const rolePanel = read("features/settings/components/role-permissions-panel.tsx");
 const storeActivity = read("features/store-activity/components/store-activity-logs-client.tsx");
 const activityPage = read("app/(dashboard)/activity-logs/page.tsx");
 const settingsUi = settingsForm + "\n" + settingsQr;
@@ -179,7 +180,8 @@ check(
     // Terminal assignment is deferred/hidden in Settings V2 Step 5; keep localization helper available in copy module.
     (settingsStaff.includes("localizeTerminalOption") || !settingsStaff.includes('tSettings("terminal"')) &&
     settingsStaff.includes("localizePermissionModule") &&
-    settingsStaff.includes("localizePermissionAction") &&
+    rolePanel.includes("tSettings(item.labelKey") &&
+    rolePanel.includes("tSettings(entry.labelKey") &&
     storeActivity.includes("localizeActivityStatus") &&
     receiptPrintModeLabel("auto_print", "lo") === lo.autoPrint &&
     roundingMethodLabel("nearest", "en") === "Nearest" &&

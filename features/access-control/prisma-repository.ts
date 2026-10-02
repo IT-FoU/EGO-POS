@@ -228,6 +228,14 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
   ]);
 
   const mappedRoles = roles.map(mapRole);
+  const permissionKeysByRole: Record<string, string[]> = {};
+  for (const row of rolePermissionRows as Array<{ permission?: { key?: string }; roleId?: string }>) {
+    const roleId = String(row.roleId ?? "");
+    const key = String(row.permission?.key ?? "");
+    if (!roleId || !key) continue;
+    permissionKeysByRole[roleId] ??= [];
+    permissionKeysByRole[roleId].push(key);
+  }
   const matrix = buildMatrixFromRolePermissions(
     mappedRoles,
     rolePermissionRows.map((row: Record<string, unknown>) => ({
@@ -240,6 +248,7 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
     approvalRules: approvalRules.map(mapApprovalRule),
     branches,
     matrix,
+    permissionKeysByRole,
     pendingApprovals: pendingApprovals.map(mapPendingApproval),
     roles: mappedRoles,
     staff: staffRows.map(mapStaffMember),
@@ -621,7 +630,7 @@ export async function saveRolePermissions(input: SaveRolePermissionsInput, tenan
       if (!role) {
         throw new Error("Role was not found.");
       }
-      if (role.templateKey === "owner") {
+      if (isProtectedOwnerRole({ name: role.name, templateKey: role.templateKey })) {
         throw new Error("Owner permissions cannot be changed.");
       }
 
