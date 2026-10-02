@@ -22,7 +22,15 @@ function membershipPlanIsTimeBased(subscriptionType: unknown) {
   return /month|year|day|week|time/i.test(String(subscriptionType ?? ""));
 }
 
-export async function loadNotifications(tenant: TenantContext, now = new Date()): Promise<NotificationItem[]> {
+export async function loadNotifications(
+  tenant: TenantContext,
+  now = new Date(),
+  modules: { inventory?: boolean; membership?: boolean; promotions?: boolean } = {
+    inventory: true,
+    membership: true,
+    promotions: true,
+  },
+): Promise<NotificationItem[]> {
   const scope = await resolveTenantScope(tenant);
   const productWhere = {
     companyId: tenant.companyId,
@@ -32,24 +40,24 @@ export async function loadNotifications(tenant: TenantContext, now = new Date())
   };
 
   const [products, balances, reservations, lots, memberships, promotions] = await Promise.all([
-    db.product.findMany({
+    modules.inventory ? db.product.findMany({
       select: { id: true, minStock: true, nameEn: true, nameLo: true },
       where: productWhere,
       orderBy: { nameEn: "asc" },
-    }),
-    db.inventoryBalance.findMany({
+    }) : Promise.resolve([]),
+    modules.inventory ? db.inventoryBalance.findMany({
       select: { productId: true, quantity: true, warehouseId: true },
       where: { companyId: tenant.companyId, warehouseId: { in: scope.warehouseIds } },
-    }),
-    db.stockReservation.findMany({
+    }) : Promise.resolve([]),
+    modules.inventory ? db.stockReservation.findMany({
       select: { baseQuantity: true, productId: true, warehouseId: true },
       where: {
         companyId: tenant.companyId,
         status: "ACTIVE",
         warehouseId: { in: scope.warehouseIds },
       },
-    }),
-    db.inventoryLot.findMany({
+    }) : Promise.resolve([]),
+    modules.inventory ? db.inventoryLot.findMany({
       select: {
         expiryDate: true,
         id: true,
@@ -64,8 +72,8 @@ export async function loadNotifications(tenant: TenantContext, now = new Date())
       },
       orderBy: { expiryDate: "asc" },
       take: MAX_ITEMS_PER_CATEGORY * 2,
-    }),
-    db.customerSubscription.findMany({
+    }) : Promise.resolve([]),
+    modules.membership ? db.customerSubscription.findMany({
       select: {
         customer: { select: { companyId: true, fullName: true, id: true, status: true } },
         endDate: true,
@@ -79,8 +87,8 @@ export async function loadNotifications(tenant: TenantContext, now = new Date())
       },
       orderBy: { endDate: "asc" },
       take: MAX_ITEMS_PER_CATEGORY * 2,
-    }),
-    db.promotion.findMany({
+    }) : Promise.resolve([]),
+    modules.promotions ? db.promotion.findMany({
       select: {
         endDate: true,
         id: true,
@@ -99,7 +107,7 @@ export async function loadNotifications(tenant: TenantContext, now = new Date())
       },
       orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
       take: MAX_ITEMS_PER_CATEGORY * 2,
-    }),
+    }) : Promise.resolve([]),
   ]);
 
   const balanceByProduct = new Map<string, { onHand: number; reserved: number }>();

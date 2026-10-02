@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import { PosPageClient } from "@/features/pos/components/pos-page-client";
 import { getPosSnapshot } from "@/features/pos/pos-service";
 import { createPosPermissionPolicyFromDatabase } from "@/features/access-control/pos-policy-loader";
-import { AccountAccessDeniedError, requirePosAccess } from "@/lib/auth/account-access";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { requireModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { isDemoMode } from "@/lib/demo-mode";
@@ -12,7 +13,7 @@ import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 export default async function PosPage() {
   const session = await requireSession();
   try {
-    await requirePosAccess(tenantFromSession(session));
+    await requireModuleAccess(tenantFromSession(session), "pos");
   } catch (error) {
     if (!(error instanceof AccountAccessDeniedError)) throw error;
     const cookieStore = await cookies();

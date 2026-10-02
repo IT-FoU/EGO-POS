@@ -3,7 +3,8 @@ import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { ThemeProvider } from "@/components/theme-provider";
 import { loadBusinessPlanStatus } from "@/features/business-plan/load-business-plan-status";
-import { AccountAccessDeniedError, requireActiveMembership } from "@/lib/auth/account-access";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { readNavigationAccess } from "@/lib/auth/module-access";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { isDemoMode } from "@/lib/demo-mode";
 
@@ -13,10 +14,9 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
-  let allowBackOfficeAccess = false;
+  let visibleNavKeys: string[] = [];
   try {
-    const access = await requireActiveMembership(tenantFromSession(session));
-    allowBackOfficeAccess = access.allowBackOfficeAccess;
+    visibleNavKeys = (await readNavigationAccess(tenantFromSession(session))).visibleNavKeys;
   } catch (error) {
     if (error instanceof AccountAccessDeniedError) {
       return (
@@ -35,7 +35,7 @@ export default async function DashboardLayout({
 
   return (
     <ThemeProvider>
-      <DashboardShell allowBackOfficeAccess={allowBackOfficeAccess} demoMode={isDemoMode()} planStatus={planStatus} session={session}>
+      <DashboardShell demoMode={isDemoMode()} planStatus={planStatus} session={session} visibleNavKeys={visibleNavKeys}>
         {children}
       </DashboardShell>
     </ThemeProvider>

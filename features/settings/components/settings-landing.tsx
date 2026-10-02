@@ -20,7 +20,7 @@ export type SettingsLandingFacts = {
   activeStaff: number;
   approvalRulesEnabled: number;
   hasLogo: boolean;
-  settings: SettingsFormData;
+  settings: SettingsFormData | null;
 };
 
 type Scope = "branch" | "company" | "device";
@@ -44,17 +44,17 @@ const groups: Group[] = [
     id: "business",
     title: text("Business", "ທຸລະກິດ"),
     rows: [
-      { description: text("Store name and contact details", "ຊື່ຮ້ານ ແລະ ຂໍ້ມູນຕິດຕໍ່"), href: "/settings/company-profile", icon: Building2, keywords: "company profile business store contact address phone email ບໍລິສັດ ຮ້ານ", scope: "company", summary: ({ settings }) => settings.companyName, title: text("Company Profile", "ໂປຣໄຟລ໌ບໍລິສັດ") },
+      { description: text("Store name and contact details", "ຊື່ຮ້ານ ແລະ ຂໍ້ມູນຕິດຕໍ່"), href: "/settings/company-profile", icon: Building2, keywords: "company profile business store contact address phone email ບໍລິສັດ ຮ້ານ", scope: "company", summary: ({ settings }) => settings?.companyName ?? "", title: text("Company Profile", "ໂປຣໄຟລ໌ບໍລິສັດ") },
       { description: text("Image on receipts and customer screen", "ຮູບພາບໃນໃບບິນ ແລະ ຈໍລູກຄ້າ"), href: "/settings/business-logo", icon: Image, keywords: "business logo image receipt customer display ໂລໂກ້ ຮູບ", scope: "company", summary: ({ hasLogo }, locale) => hasLogo ? (locale === "lo" ? "ອັບໂຫຼດແລ້ວ" : "Uploaded") : (locale === "lo" ? "ຍັງບໍ່ໄດ້ຕັ້ງ" : "Not set"), title: text("Business Logo", "ໂລໂກ້ທຸລະກິດ") },
       { description: text("Current branch name and contact details", "ຊື່ ແລະ ຂໍ້ມູນຕິດຕໍ່ຂອງສາຂາປັດຈຸບັນ"), href: "/settings/branch-information", icon: MapPin, keywords: "branch information name phone address current branch ສາຂາ", scope: "branch", summary: (_, locale) => locale === "lo" ? "ສາຂາປັດຈຸບັນ" : "Current branch", title: text("Branch Information", "ຂໍ້ມູນສາຂາ") },
-      { description: text("How tax is calculated and printed", "ວິທີຄິດ ແລະ ພິມພາສີ"), href: "/settings/tax", icon: Percent, keywords: "tax vat rate inclusive receipt ພາສີ", scope: "company", summary: ({ settings }, locale) => settings.vatEnabled ? `${locale === "lo" ? "ເປີດ" : "On"} • ${settings.vatRate}%` : (locale === "lo" ? "ປິດ" : "Off"), title: text("Tax / VAT", "ພາສີ / VAT") },
+      { description: text("How tax is calculated and printed", "ວິທີຄິດ ແລະ ພິມພາສີ"), href: "/settings/tax", icon: Percent, keywords: "tax vat rate inclusive receipt ພາສີ", scope: "company", summary: ({ settings }, locale) => settings?.vatEnabled ? `${locale === "lo" ? "ເປີດ" : "On"} • ${settings.vatRate}%` : (locale === "lo" ? "ປິດ" : "Off"), title: text("Tax / VAT", "ພາສີ / VAT") },
     ],
   },
   {
     id: "pos-payments",
     title: text("POS & Payments", "POS ແລະ ການຊຳລະ"),
     rows: [
-      { description: text("Whether sales require an open shift", "ກຳນົດວ່າຕ້ອງເປີດກະກ່ອນຂາຍຫຼືບໍ່"), href: "/settings/cash-shift", icon: Banknote, keywords: "cash shift start work required sale ກະ ເງິນສົດ ເລີ່ມວຽກ", scope: "company", summary: ({ settings }, locale) => settings.requireCashShiftBeforeSale ? (locale === "lo" ? "ບັງຄັບ" : "Required") : (locale === "lo" ? "ບໍ່ບັງຄັບ" : "Not required"), title: text("Cash Shift", "ກະເງິນສົດ") },
+      { description: text("Whether sales require an open shift", "ກຳນົດວ່າຕ້ອງເປີດກະກ່ອນຂາຍຫຼືບໍ່"), href: "/settings/cash-shift", icon: Banknote, keywords: "cash shift start work required sale ກະ ເງິນສົດ ເລີ່ມວຽກ", scope: "company", summary: ({ settings }, locale) => settings?.requireCashShiftBeforeSale ? (locale === "lo" ? "ບັງຄັບ" : "Required") : (locale === "lo" ? "ບໍ່ບັງຄັບ" : "Not required"), title: text("Cash Shift", "ກະເງິນສົດ") },
       { description: text("Receipt text and printing behavior", "ຂໍ້ຄວາມໃບບິນ ແລະ ການພິມ"), href: "/settings/receipt", icon: ReceiptText, keywords: "receipt printing print header footer prefix auto ask ໃບບິນ ພິມ", scope: "company", summary: (_, locale, mode) => printModeLabel(mode, locale), title: text("Receipt & Printing", "ໃບບິນ ແລະ ການພິມ") },
       { description: text("Banks and branch QR accounts", "ທະນາຄານ ແລະ ບັນຊີ QR ປະຈຳສາຂາ"), href: "/settings/qr-payments", icon: QrCode, keywords: "qr payments bank account branch scan ຊຳລະ ທະນາຄານ ບັນຊີ", scope: "company", summary: ({ activeQrAccounts, activeQrBanks }, locale) => locale === "lo" ? `${activeQrBanks} ທະນາຄານ • ${activeQrAccounts} ບັນຊີ` : `${activeQrBanks} bank${activeQrBanks === 1 ? "" : "s"} • ${activeQrAccounts} account${activeQrAccounts === 1 ? "" : "s"}`, title: text("QR Payments", "ການຊຳລະ QR") },
       { description: text("Screen layout and media", "ຮູບແບບຈໍ ແລະ ສື່ໂຄສະນາ"), href: "/settings/customer-display", icon: MonitorPlay, keywords: "customer display screen ads media promotion monitor ຈໍລູກຄ້າ ໂຄສະນາ", scope: "device", summary: (_, locale) => locale === "lo" ? "ສະເພາະອຸປະກອນນີ້" : "This device only", title: text("Customer Display", "ຈໍລູກຄ້າ") },
@@ -75,7 +75,7 @@ const groups: Group[] = [
     id: "customers",
     title: text("Customers", "ລູກຄ້າ"),
     rows: [
-      { description: text("How points are earned and redeemed", "ວິທີໄດ້ ແລະ ແລກຄະແນນ"), href: "/settings/loyalty", icon: Gift, keywords: "loyalty points earn redeem customer ຄະແນນ ລູກຄ້າ", scope: "company", summary: ({ settings }, locale) => settings.loyaltyEnabled ? (locale === "lo" ? "ເປີດ" : "On") : (locale === "lo" ? "ປິດ" : "Off"), title: text("Loyalty", "ຄະແນນສະສົມ") },
+      { description: text("How points are earned and redeemed", "ວິທີໄດ້ ແລະ ແລກຄະແນນ"), href: "/settings/loyalty", icon: Gift, keywords: "loyalty points earn redeem customer ຄະແນນ ລູກຄ້າ", scope: "company", summary: ({ settings }, locale) => settings?.loyaltyEnabled ? (locale === "lo" ? "ເປີດ" : "On") : (locale === "lo" ? "ປິດ" : "Off"), title: text("Loyalty", "ຄະແນນສະສົມ") },
     ],
   },
   {
@@ -111,17 +111,18 @@ function matches(query: string, values: string[]) {
   return values.join(" ").toLocaleLowerCase().includes(query);
 }
 
-export function SettingsLanding({ facts, locale: initialLocale }: { facts: SettingsLandingFacts; locale: SupportedLocale }) {
+export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: { allowedHrefs: readonly string[]; facts: SettingsLandingFacts; locale: SupportedLocale }) {
   const locale = useAppLocale(initialLocale);
   const [query, setQuery] = useState("");
   const [printMode, setPrintMode] = useState<ReceiptPrintMode>("ask_every_time");
   useEffect(() => setPrintMode(readReceiptPrintModePreference()), []);
   const needle = query.trim().toLocaleLowerCase();
+  const allowed = useMemo(() => new Set(allowedHrefs), [allowedHrefs]);
   const filtered = useMemo(() => groups.map((group) => ({
     ...group,
-    rows: group.rows.filter((row) => !needle || matches(needle, [group.title.en, group.title.lo, row.title.en, row.title.lo, row.description.en, row.description.lo, row.keywords])),
-  })).filter((group) => group.rows.length > 0), [needle]);
-  const extraResults = needle ? searchExtras.filter((item) => matches(needle, [item.title.en, item.title.lo, item.description.en, item.description.lo, item.keywords])) : [];
+    rows: group.rows.filter((row) => allowed.has(row.href) && (!needle || matches(needle, [group.title.en, group.title.lo, row.title.en, row.title.lo, row.description.en, row.description.lo, row.keywords]))),
+  })).filter((group) => group.rows.length > 0), [allowed, needle]);
+  const extraResults = needle ? searchExtras.filter((item) => allowed.has(item.href) && matches(needle, [item.title.en, item.title.lo, item.description.en, item.description.lo, item.keywords])) : [];
   const explanationResults = needle ? explanations.filter((item) => matches(needle, [item.title.en, item.title.lo, item.description.en, item.description.lo, item.keywords])) : [];
   const hasResults = filtered.length + extraResults.length + explanationResults.length > 0;
 

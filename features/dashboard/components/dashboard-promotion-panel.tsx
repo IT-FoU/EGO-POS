@@ -15,7 +15,7 @@ const dashboardDisplayClass =
 const dashboardLinkClass =
   "cursor-pointer transition duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
-export function DashboardPromotionPanel({ snapshot }: { snapshot: DashboardPromotionSlice }) {
+export function DashboardPromotionPanel({ linkPromotions = true, snapshot }: { linkPromotions?: boolean; snapshot: DashboardPromotionSlice }) {
   const copy = getDashboardCopy(useAppLocale());
   const { summary } = snapshot;
   const rangeLabel = {
@@ -43,13 +43,15 @@ export function DashboardPromotionPanel({ snapshot }: { snapshot: DashboardPromo
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{copy.selectedBranchPeriod}: {rangeLabel}</p>
         </div>
-        <Link
-          className={`${dashboardLinkClass} inline-flex min-h-10 items-center gap-1 rounded-md px-3 text-sm font-medium text-primary outline-none hover:bg-primary/10 hover:text-foreground`}
-          href="/promotions"
-        >
-          {copy.viewPromotions}
-          <ArrowRight aria-hidden="true" className="h-4 w-4" />
-        </Link>
+        {linkPromotions ? (
+          <Link
+            className={`${dashboardLinkClass} inline-flex min-h-10 items-center gap-1 rounded-md px-3 text-sm font-medium text-primary outline-none hover:bg-primary/10 hover:text-foreground`}
+            href="/promotions"
+          >
+            {copy.viewPromotions}
+            <ArrowRight aria-hidden="true" className="h-4 w-4" />
+          </Link>
+        ) : null}
       </div>
 
       {snapshot.dataStatus.hasError ? (

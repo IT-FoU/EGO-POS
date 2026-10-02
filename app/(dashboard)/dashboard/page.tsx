@@ -10,12 +10,12 @@ import {
 } from "@/features/dashboard/components/dashboard-interactions-client";
 import {
   getMiniMartDashboardCriticalSnapshot,
-  shouldRouteToPos,
   type DashboardDateRange,
   type DashboardRangeKey,
 } from "@/features/dashboard/dashboard-service";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
-import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { readNavigationAccess, requireModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { getDashboardCopy } from "@/lib/i18n/dashboard-copy";
@@ -64,14 +64,17 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const tenant = tenantFromSession(session);
+  const navigation = await readNavigationAccess(tenant);
+  if (!navigation.visibleNavKeys.includes("dashboard")) {
+    if (navigation.landingPath && navigation.landingPath !== "/dashboard") redirect(navigation.landingPath);
+    return <StoreAccessDenied />;
+  }
   try {
-    await requireBackOfficeAccess(tenantFromSession(session));
+    await requireModuleAccess(tenant, "dashboard");
   } catch (error) {
     if (error instanceof AccountAccessDeniedError) return <StoreAccessDenied />;
     throw error;
-  }
-  if (shouldRouteToPos(session.user.roles ?? [])) {
-    redirect("/pos");
   }
 
   const cookieStore = await cookies();
@@ -104,14 +107,17 @@ export default async function DashboardPage({
         <Suspense
           fallback={<div className="h-96 animate-pulse rounded-lg border border-border bg-card" aria-hidden="true" />}
         >
-          <DashboardMemberCustomerLoader />
+          <DashboardMemberCustomerLoader
+            linkCustomers={navigation.visibleNavKeys.includes("customers")}
+            linkMembership={navigation.visibleNavKeys.includes("membership")}
+          />
         </Suspense>
       }
       promotionSlot={
         <Suspense
           fallback={<div className="h-52 animate-pulse rounded-lg border border-border bg-card" aria-hidden="true" />}
         >
-          <DashboardPromotionLoader dateRange={dateRange} />
+          <DashboardPromotionLoader dateRange={dateRange} linkPromotions={navigation.visibleNavKeys.includes("promotions")} />
         </Suspense>
       }
       snapshot={snapshot}

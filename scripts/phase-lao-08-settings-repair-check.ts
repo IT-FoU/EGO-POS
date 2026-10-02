@@ -325,7 +325,7 @@ check(
     settingsRepo.includes("getPrismaSettings") &&
     settingsPage.includes("locale={locale}") &&
     settingsLoading.includes("copy.loadingSettings") &&
-    settingsPage.includes("canManageStoreSettings"),
+    settingsPage.includes("readNavigationAccess"),
 );
 
 check(
@@ -340,7 +340,7 @@ check(
     tSettings("accessDeniedBody", "lo") === lo.accessDeniedBody &&
     laoScript.test(lo.accessDeniedTitle) &&
     laoScript.test(lo.accessDeniedBody) &&
-    productsLayout.includes("return <StoreAccessDenied />") &&
+    productsLayout.includes("ModuleAccessGate") && read("components/auth/module-access-gate.tsx").includes("return <StoreAccessDenied />") &&
     reportsLayout.includes("return <StoreAccessDenied />"),
 );
 

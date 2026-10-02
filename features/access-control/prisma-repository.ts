@@ -696,7 +696,7 @@ export async function decideApproval(input: DecideApprovalInput, tenant: TenantC
   return decideApprovalRequest(input, tenant);
 }
 
-async function getUserPermissionKeysUncached(tenant: TenantContext, client: any) {
+async function getUserPermissionKeysUncached(tenant: TenantContext, client: any): Promise<string[]> {
   let membership: TenantMembership;
   try {
     membership = await resolveTenantMembership(tenant, client);
@@ -726,24 +726,19 @@ async function getUserPermissionKeysUncached(tenant: TenantContext, client: any)
     },
   });
 
-  return Array.from(
-    new Set(
-      rows.flatMap((row: Record<string, unknown>) => {
-        const role = row.role as Record<string, unknown>;
-        const permissions = Array.isArray(role?.permissions) ? role.permissions : [];
-        return permissions.map((entry: Record<string, unknown>) =>
-          String((entry.permission as Record<string, unknown>)?.key ?? ""),
-        );
-      }),
-    ),
-  ).filter(Boolean);
+  const keys = rows.flatMap((row: Record<string, unknown>) => {
+    const role = row.role as Record<string, unknown>;
+    const permissions = (Array.isArray(role?.permissions) ? role.permissions : []) as Array<Record<string, unknown>>;
+    return permissions.map((entry) => String((entry.permission as Record<string, unknown> | undefined)?.key ?? ""));
+  });
+  return [...new Set(keys)].filter((key): key is string => typeof key === "string" && key.length > 0);
 }
 
-const getUserPermissionKeysCached = cache(async (companyId: string, userId: string) =>
+const getUserPermissionKeysCached = cache(async (companyId: string, userId: string): Promise<string[]> =>
   getUserPermissionKeysUncached({ companyId, userId }, db),
 );
 
-export async function getUserPermissionKeys(tenant: TenantContext, client: any = db) {
+export async function getUserPermissionKeys(tenant: TenantContext, client: any = db): Promise<string[]> {
   if (client === db) {
     return getUserPermissionKeysCached(tenant.companyId, tenant.userId);
   }

@@ -1,10 +1,10 @@
-import { BackOfficeAccessGate } from "@/components/auth/back-office-access-gate";
+import { ModuleAccessGate } from "@/components/auth/module-access-gate";
 import { OtApprovalsClient } from "@/features/ot/components/ot-approvals-client";
 
 export default function StaffOtPage() {
   return (
-    <BackOfficeAccessGate>
+    <ModuleAccessGate module="staff">
       <OtApprovalsClient />
-    </BackOfficeAccessGate>
+    </ModuleAccessGate>
   );
 }
