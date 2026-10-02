@@ -108,11 +108,24 @@ export function applyDefaultsToNewUnit<T extends Pick<ProductUnit, "unitName" | 
   };
 }
 
+export function unitPricingDefaultsWithoutCashShift(current: unknown): Record<string, unknown> {
+  const base =
+    current && typeof current === "object" && !Array.isArray(current)
+      ? { ...(current as Record<string, unknown>) }
+      : {};
+  delete base[REQUIRE_CASH_SHIFT_JSON_KEY];
+  const pricing = parseUnitPricingDefaults(base);
+  return {
+    ...base,
+    units: pricing.units,
+    version: 1,
+  };
+}
+
 export function mergeUnitPricingDefaultsFromUnits(
   current: unknown,
   units: Array<{ markupPercent?: number; pricingMode?: string; roundingLak?: number; unitName: string }>,
 ): UnitPricingDefaultsMap & Record<string, unknown> {
-  const requireCashShift = readRequireCashShiftBeforeSaleFromJson(current);
   const next = parseUnitPricingDefaults(current);
   for (const unit of units) {
     const key = normalizeUnitTypeKey(unit.unitName);
@@ -123,8 +136,12 @@ export function mergeUnitPricingDefaultsFromUnits(
       roundingLak: normalizeRounding(unit.roundingLak),
     };
   }
-  return {
-    ...next,
-    [REQUIRE_CASH_SHIFT_JSON_KEY]: requireCashShift,
-  };
+  // Do not create or rewrite the cash-shift flag. Preserve a legacy key only.
+  if (current && typeof current === "object" && !Array.isArray(current) && REQUIRE_CASH_SHIFT_JSON_KEY in current) {
+    return {
+      ...next,
+      [REQUIRE_CASH_SHIFT_JSON_KEY]: (current as Record<string, unknown>)[REQUIRE_CASH_SHIFT_JSON_KEY],
+    };
+  }
+  return next;
 }

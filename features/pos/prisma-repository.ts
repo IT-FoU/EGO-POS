@@ -1,7 +1,8 @@
 import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
 import { getOpenAttendanceSession } from "@/features/attendance/prisma-repository";
 import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
-import { readRequireCashShiftBeforeSaleFromJson } from "@/features/products/unit-pricing-defaults";
+import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
+import { signCompanyLogoUrl } from "@/lib/storage/company-logo-storage";
 import { mapPaymentModeToSalePayments, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
 import type { PosCustomer } from "@/features/pos/types";
 import { getPrismaPosQrBanks } from "@/features/qr-payments/prisma-repository";
@@ -231,7 +232,11 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       ]),
   );
   const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
-  const requireCashShiftBeforeSale = readRequireCashShiftBeforeSaleFromJson(settings?.unitPricingDefaults);
+  const requireCashShiftBeforeSale = readCompanyRequireCashShift(settings);
+  const businessLogoUrl = await signCompanyLogoUrl(
+    settings?.logoObjectPath ? String(settings.logoObjectPath) : null,
+    scope.companyId,
+  );
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
   // Preview sale numbers are display-only. Checkout still issues/validates via resolvePosSaleNo.
   const nextSaleNo = "";
@@ -341,6 +346,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       receiptFooter: settings?.receiptFooter ?? undefined,
       receiptHeader: settings?.receiptHeader ?? undefined,
       receiptPrintMode: settings?.receiptPrintMode ?? "ask_every_time",
+      businessLogoUrl: businessLogoUrl ?? undefined,
       receiptPrefix,
       showLogoOnReceipt: settings?.showLogoOnReceipt ?? true,
       showTaxOnReceipt: settings?.showTaxOnReceipt ?? true,
@@ -366,6 +372,7 @@ export type CompletePrismaSaleInput = {
   items: Array<{ conversionQty?: number; costPrice?: number; productId: string; promotionDiscount?: number; promotionId?: string; quantity: number; sellingPrice: number; unitId?: string }>;
   paymentMode: PaymentMode;
   promotionCodes?: string[];
+  qrAccountId?: string | null;
   qrAmount: number;
   redeemPoints?: number;
   saleNo: string;
@@ -615,6 +622,20 @@ export async function writeCompletePrismaSale(
         });
       }
 
+      let verifiedQrAccountId: string | null = null;
+      if (input.qrAccountId && qrAmount > 0) {
+        const qrAccount = await tx.qrPaymentAccount.findFirst({
+          select: { id: true },
+          where: {
+            branchId: input.branchId,
+            companyId: tenant.companyId,
+            id: input.qrAccountId,
+            isActive: true,
+          },
+        });
+        verifiedQrAccountId = qrAccount ? String(qrAccount.id) : null;
+      }
+
       const sale = await tx.sale.create({
         data: {
           branchId: input.branchId,
@@ -632,6 +653,7 @@ export async function writeCompletePrismaSale(
               cardAmount,
               changeAmount,
               paymentMode: input.paymentMode,
+              qrAccountId: verifiedQrAccountId,
               qrAmount,
               transferAmount,
             }),

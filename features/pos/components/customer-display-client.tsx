@@ -34,7 +34,6 @@ import { t } from "@/lib/i18n/ui";
 import { cn } from "@/lib/utils";
 import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readJsonFromStorage } from "@/lib/demo/storage";
-import { readCompanyLogoUrl } from "@/features/brand/company-logo";
 
 const POS_DISPLAY_KEY = DemoStorageKeys.customerDisplayState;
 const ThemeContext = createContext<CustomerDisplayThemeTokens>(customerDisplayTemplateTokens("ocean-blue"));
@@ -75,13 +74,11 @@ export function CustomerDisplayClient() {
   const [displayState, setDisplayState] = useState<PosDisplayState>(emptyState);
   const [settings, setSettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
   const [slideIndex, setSlideIndex] = useState(0);
-  const [logoUrl, setLogoUrl] = useState("");
   const locale = useAppLocale();
 
   useEffect(() => {
     function readState() {
       setSettings(readCustomerDisplaySettingsFromStorage());
-      setLogoUrl(readCompanyLogoUrl());
       const storedState = readJsonFromStorage<PosDisplayState | null>(POS_DISPLAY_KEY, null);
       setDisplayState(storedState ? { ...emptyState, ...storedState } : emptyState);
     }
@@ -108,7 +105,7 @@ export function CustomerDisplayClient() {
   const hasActiveSale = displayState.items.length > 0 && displayState.displayMode !== "advertising" && !showThankYou;
   const showQr = Boolean(displayState.showQr && displayState.selectedQrBank);
   const storeName = resolveCustomerDisplayStoreName(displayState.storeName, settings.promotionMessages);
-  const resolvedLogo = displayState.storeLogoUrl || logoUrl;
+  const resolvedLogo = displayState.storeLogoUrl || "";
   const mode: TemplateMode = showThankYou ? "thank_you" : hasActiveSale ? "cart" : "idle";
 
   return (

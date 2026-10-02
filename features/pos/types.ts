@@ -117,6 +117,7 @@ export type QrBank = {
   accountNumber: string;
   displayLabel?: string;
   logoUrl?: string;
+  printOnReceipt?: boolean;
   qrImageUrl?: string;
   showOnCustomerDisplay?: boolean;
 };
@@ -129,6 +130,7 @@ export type PosReceiptSettings = {
   receiptFooter?: string;
   receiptHeader?: string;
   receiptPrintMode?: "ask_every_time" | "auto_print" | "no_auto_print";
+  businessLogoUrl?: string;
   receiptPrefix: string;
   showLogoOnReceipt: boolean;
   showTaxOnReceipt: boolean;

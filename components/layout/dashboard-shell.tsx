@@ -25,8 +25,6 @@ import { SignOutButton } from "@/components/layout/sign-out-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { FullScreenToggle } from "@/components/layout/full-screen-toggle";
 import { LanguageToggle } from "@/components/layout/language-toggle";
-import { LogoContainer } from "@/components/brand/logo-container";
-import { COMPANY_LOGO_CHANGE_EVENT, readCompanyLogoUrl } from "@/features/brand/company-logo";
 import { APP_NAME, SLOGAN } from "@/lib/constants";
 import type { SupportedLocale } from "@/lib/constants";
 import {
@@ -120,7 +118,6 @@ export function DashboardShell({
   const [storeName, setStoreName] = useState(
     resolveActiveCompanyName(session.user.activeCompanyName),
   );
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const locale = useAppLocale(session.user.locale);
 
   useLayoutEffect(() => {
@@ -162,7 +159,6 @@ export function DashboardShell({
 
   useEffect(() => {
     setStoreName(resolveActiveCompanyName(session.user.activeCompanyName));
-    setLogoUrl(readCompanyLogoUrl() || null);
   }, [session.user.activeCompanyName]);
 
   useEffect(() => {
@@ -175,18 +171,6 @@ export function DashboardShell({
     return () => window.removeEventListener(ACTIVE_COMPANY_NAME_CHANGE_EVENT, refreshStoreName);
   }, []);
 
-  useEffect(() => {
-    function refreshLogo() {
-      setLogoUrl(readCompanyLogoUrl() || null);
-    }
-    window.addEventListener("storage", refreshLogo);
-    window.addEventListener(COMPANY_LOGO_CHANGE_EVENT, refreshLogo);
-    return () => {
-      window.removeEventListener("storage", refreshLogo);
-      window.removeEventListener(COMPANY_LOGO_CHANGE_EVENT, refreshLogo);
-    };
-  }, []);
-
   const copy = shellCopy[locale];
   const visibleNavigation = useMemo(
     () => navigation.filter((item) => canViewStoreNavigationItem(session.user.roles, item.key)),
@@ -197,12 +181,9 @@ export function DashboardShell({
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-border bg-card lg:flex lg:flex-col">
         <div className="border-b border-border p-6">
-          <div className="flex items-center gap-3">
-            <LogoContainer fallbackName={storeName} logoUrl={logoUrl} size={56} variant="sidebar" />
-            <div>
-              <div className="text-lg font-semibold">{APP_NAME}</div>
-              <div className="text-xs text-muted-foreground">{SLOGAN}</div>
-            </div>
+          <div>
+            <div className="text-lg font-semibold">{APP_NAME}</div>
+            <div className="text-xs text-muted-foreground">{SLOGAN}</div>
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4">

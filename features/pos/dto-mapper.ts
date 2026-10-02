@@ -1,3 +1,4 @@
+import { qrAccountReference } from "@/features/pos/receipt-qr";
 import type { PaymentMode, PosCustomer, PosProduct } from "@/features/pos/types";
 import { compactProductImageKey } from "@/lib/storage/product-image-ref";
 
@@ -102,6 +103,7 @@ export function mapPaymentModeToSalePayments({
   cashAmount,
   changeAmount,
   paymentMode,
+  qrAccountId,
   qrAmount,
   transferAmount = 0,
 }: {
@@ -109,16 +111,21 @@ export function mapPaymentModeToSalePayments({
   cashAmount: number;
   changeAmount: number;
   paymentMode: PaymentMode;
+  qrAccountId?: string | null;
   qrAmount: number;
   transferAmount?: number;
 }) {
+  const qrReference = qrAccountId ? qrAccountReference(qrAccountId) : undefined;
+  const withQrReference = <T extends { paymentMethod: string }>(payment: T) =>
+    payment.paymentMethod === "qr" && qrReference ? { ...payment, referenceNo: qrReference } : payment;
+
   if (paymentMode === "mixed") {
     return [
       { amount: cashAmount, changeAmount, paymentMethod: "cash" as const },
       { amount: qrAmount, changeAmount: 0, paymentMethod: "qr" as const },
       { amount: transferAmount, changeAmount: 0, paymentMethod: "transfer" as const },
       { amount: cardAmount, changeAmount: 0, paymentMethod: "visa" as const },
-    ].filter((payment) => payment.amount > 0);
+    ].filter((payment) => payment.amount > 0).map(withQrReference);
   }
 
   if (paymentMode === "transfer") {
@@ -130,10 +137,10 @@ export function mapPaymentModeToSalePayments({
   }
 
   return [
-    {
+    withQrReference({
       amount: paymentMode === "cash" ? cashAmount : qrAmount,
       changeAmount,
       paymentMethod: paymentMode,
-    },
+    }),
   ];
 }

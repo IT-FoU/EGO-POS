@@ -240,7 +240,8 @@ await check("source: settings expose templates, QR styles, and scoped resets", (
   assert(settingsForm.includes("resetAllDisplaySettings"), "Reset All Customer Display Settings missing");
   assert(settingsForm.includes("resetCustomerDisplayAppearanceSettings"), "appearance reset helper missing");
   assert(settingsForm.includes("resetAllCustomerDisplaySettings"), "full CD reset helper missing");
-  assert(settingsForm.includes("writeCompanyLogoUrl"), "company logo must persist to the existing storage key");
+  assert(settingsForm.includes("saveCompanyLogoAction"), "company logo must persist through the company asset action");
+  assert(!settingsForm.includes("writeCompanyLogoUrl"), "company logo must not use browser storage as canonical");
   assert(!settingsForm.includes("updateDisplayTheme"), "old four-theme setter must not remain");
 });
 
@@ -586,7 +587,8 @@ await check("company logo uses persisted source and customer fallback", () => {
   assert(!displayClient.includes("Upload Company Logo"), "customer screen must never show admin upload copy");
   assert(!displayClient.includes("[ Logo ]"), "customer screen must never show admin placeholder text");
   assert(displayClient.includes('variant="customer"'), "Customer Display must use customer logo variant");
-  assert(posClient.includes("readCompanyLogoUrl()"), "POS must publish the persisted company logo");
+  assert(posClient.includes("receiptSettings.businessLogoUrl"), "POS must publish the company business logo");
+  assert(!posClient.includes("readCompanyLogoUrl()"), "POS must not publish the browser-local logo");
 });
 
 await check("reset this page vs reset all stays Customer Display only", () => {
@@ -633,10 +635,11 @@ await check("company logo settings confirm before persist", () => {
   assert(cancelStagedImage(changed).saved === "data:image/png;base64,draft", "cancel must keep saved logo");
   assert(removeStagedImage().saved === null, "remove must clear logo");
   assert(settingsForm.includes("confirmLogo") && settingsForm.includes("removeLogo"), "settings logo actions missing");
-  assert(settingsForm.includes("writeCompanyLogoUrl") && settingsForm.includes("clearCompanyLogoUrl"), "logo persist helpers missing");
-  assert(!settingsForm.includes("writeCompanyLogoUrl(reader.result)"), "file pick must not auto-save");
+  assert(settingsForm.includes("saveCompanyLogoAction") && settingsForm.includes("removeCompanyLogoAction"), "logo persist actions missing");
+  assert(!settingsForm.includes("writeCompanyLogoUrl"), "logo must not write browser storage");
   assert(logoContainer.includes("settings") && SETTINGS_LOGO_PREVIEW_MAX_WIDTH === 200 && SETTINGS_LOGO_PREVIEW_MAX_HEIGHT === 120, "settings preview bounds missing");
-  assert(dashboardShell.includes('variant="sidebar"') && SIDEBAR_LOGO_MAX_SIZE === 56, "sidebar logo must be bounded");
+  assert(!dashboardShell.includes("readCompanyLogoUrl") && dashboardShell.includes("APP_NAME"), "sidebar keeps the EGO POS mark without the business logo");
+  assert(SIDEBAR_LOGO_MAX_SIZE === 56, "sidebar logo size constant remains");
   assert(typeof clearCompanyLogoUrl === "function", "clear helper missing");
 });
 

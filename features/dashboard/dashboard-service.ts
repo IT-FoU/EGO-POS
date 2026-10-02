@@ -1,5 +1,5 @@
 import { computeCashSessionTotalsForShifts } from "@/features/cash-sessions/prisma-repository";
-import { readRequireCashShiftBeforeSaleFromJson } from "@/features/products/unit-pricing-defaults";
+import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
 import {
   loadDashboardCriticalSalesKpis,
   resolveDashboardCriticalContext,
@@ -759,12 +759,12 @@ async function loadDashboardCriticalSnapshot(
         },
       }),
       db.companySetting.findUnique({
-        select: { unitPricingDefaults: true },
+        select: { requireCashShiftBeforeSale: true, unitPricingDefaults: true },
         where: { companyId: tenant.companyId },
       }),
     ]),
   ) as [Array<Record<string, any>>, Record<string, any> | null];
-  const requireCashShiftBeforeSale = readRequireCashShiftBeforeSaleFromJson(companySettings?.unitPricingDefaults);
+  const requireCashShiftBeforeSale = readCompanyRequireCashShift(companySettings);
   const currentShift = [...sessionRows]
     .filter((shift) => !shift.closedAt && shift.cashierId === tenant.userId)
     .sort((left, right) => new Date(right.openedAt).getTime() - new Date(left.openedAt).getTime())[0] ?? null;

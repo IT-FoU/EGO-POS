@@ -1,3 +1,4 @@
+import { parseQrAccountReference, resolveReceiptQrImage } from "@/features/pos/receipt-qr";
 import { reverseSaleLoyalty } from "@/features/loyalty/loyalty-service";
 import { computeCashRefundLak } from "@/features/cash-sessions/cash-session-calculator";
 import { createApprovalRequest } from "@/features/approvals/approval-engine";
@@ -168,6 +169,34 @@ export async function getPrismaSaleReceipt(
     throw new Error("Sale was not found.");
   }
 
+  const payments = await db.salePayment.findMany({
+    select: { paymentMethod: true, referenceNo: true },
+    where: { sale: { companyId: tenant.companyId }, saleId: sale.id },
+  });
+  const referencedAccountId = parseQrAccountReference(
+    payments.find((payment: { paymentMethod?: string; referenceNo?: string | null }) => payment.paymentMethod === "qr")?.referenceNo,
+  );
+  const account = referencedAccountId
+    ? await db.qrPaymentAccount.findFirst({
+        select: { id: true, printOnReceipt: true, qrImageUrl: true },
+        where: {
+          branchId: sale.branchId,
+          companyId: tenant.companyId,
+          id: referencedAccountId,
+        },
+      })
+    : null;
+  const receiptQrImageUrl = resolveReceiptQrImage({
+    account: account
+      ? {
+          id: String(account.id),
+          printOnReceipt: account.printOnReceipt === true,
+          qrImageUrl: account.qrImageUrl ? String(account.qrImageUrl) : null,
+        }
+      : null,
+    referencedAccountId,
+  });
+
   const receipt: PosReceiptSnapshot = {
     branchName: context.branchName,
     cartItems: sale.items,
@@ -180,6 +209,7 @@ export async function getPrismaSaleReceipt(
     paymentBreakdown: sale.paymentBreakdown ?? [],
     paymentMode: sale.paymentMode,
     receiptNo: sale.receiptNo,
+    receiptQrImageUrl,
     saleNo: sale.saleNo,
     showTaxOnReceipt: context.showTaxOnReceipt,
     subtotal: sale.subtotal,
