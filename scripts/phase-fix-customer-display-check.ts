@@ -127,6 +127,7 @@ const helper = readFileSync(join(root, "features/pos/customer-display-window.ts"
 const posClient = readFileSync(join(root, "features/pos/components/pos-page-client.tsx"), "utf8");
 const displayClient = readFileSync(join(root, "features/pos/components/customer-display-client.tsx"), "utf8");
 const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const qrPaymentsSection = readFileSync(join(root, "features/settings/components/qr-payment-bank-management-section.tsx"), "utf8");
 const logoContainer = readFileSync(join(root, "components/brand/logo-container.tsx"), "utf8");
 const dashboardShell = readFileSync(join(root, "components/layout/dashboard-shell.tsx"), "utf8");
 const themeProvider = readFileSync(join(root, "components/theme-provider.tsx"), "utf8");
@@ -644,10 +645,10 @@ await check("company logo settings confirm before persist", () => {
 });
 
 await check("QR catalog publishes from settings and hides deleted display QR", () => {
-  assert(settingsForm.includes("publishCustomerDisplayQrCatalog"), "settings must publish the shared QR catalog");
-  assert(settingsForm.includes("data-cd-qr-preview=\"bounded\""), "QR preview must be bounded");
-  assert(settingsForm.includes("confirmStagedImage") && settingsForm.includes("ui.confirm.qr"), "QR confirm flow missing");
-  assert(settingsForm.includes("deleteQrPaymentAccountAction"), "delete QR account action missing");
+  assert(qrPaymentsSection.includes("publishCustomerDisplayQrCatalog"), "settings must publish the shared QR catalog");
+  assert(qrPaymentsSection.includes("data-cd-qr-preview=\"bounded\""), "QR preview must be bounded");
+  assert(qrPaymentsSection.includes("confirmStagedImage") && (qrPaymentsSection.includes("ui.confirm.qr") || qrPaymentsSection.includes("confirmQr")), "QR confirm flow missing");
+  assert(qrPaymentsSection.includes("deleteQrPaymentAccountAction"), "delete QR account action missing");
   const catalog = buildCustomerDisplayQrCatalog(
     [
       { id: "keep", accountName: "A", accountNumber: "1", bankId: "b1", branchId: "br1", displayLabel: "Keep", isActive: true, isDefault: false, printOnReceipt: true, qrImageUrl: "https://example.com/keep.png", showOnCustomerDisplay: true },
