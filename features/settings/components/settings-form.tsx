@@ -32,6 +32,12 @@ import { AppSmallModal } from "@/components/ui/app-small-modal";
 import { Field, SectionTitle, Toggle } from "@/features/settings/components/settings-fields";
 import { ReceiptSettingsPreview } from "@/features/settings/components/receipt-settings-preview";
 import {
+  RECEIPT_PAPER_SIZE_OPTIONS,
+  asPaperSize,
+  validateCustomPaperDimensions,
+  type ReceiptPaperSize,
+} from "@/features/settings/receipt-layout";
+import {
   readReceiptPrintModePreference,
   writeReceiptPrintModePreference,
 } from "@/features/settings/receipt-print-mode";
@@ -242,6 +248,10 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
             return tSettings("loyaltyPointValueNegative", locale);
         if (section === "loyalty" && settings.loyaltyMinRedeemPoints < 1)
             return tSettings("minRedeemPointsMin", locale);
+        if (section === "receipt" && settings.receiptPaperSize === "custom") {
+            const custom = validateCustomPaperDimensions(settings.receiptCustomWidthMm, settings.receiptCustomHeightMm);
+            if (!custom.ok) return tSettings(custom.errorKey, locale);
+        }
         return null;
     }
     function buildTaxConfirmLines() {
@@ -302,6 +312,8 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
                     receiptFooter: settings.receiptFooter,
                     receiptHeader: settings.receiptHeader,
                     receiptPaperSize: settings.receiptPaperSize,
+                    receiptCustomWidthMm: settings.receiptCustomWidthMm,
+                    receiptCustomHeightMm: settings.receiptCustomHeightMm,
                     receiptPrefix: settings.receiptPrefix,
                     receiptShowAddress: settings.receiptShowAddress,
                     receiptShowBranchName: settings.receiptShowBranchName,
@@ -408,6 +420,8 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
                 (settings.receiptFooter ?? "") !== (baseline.receiptFooter ?? "") ||
                 settings.showLogoOnReceipt !== baseline.showLogoOnReceipt ||
                 settings.receiptPaperSize !== baseline.receiptPaperSize ||
+                Number(settings.receiptCustomWidthMm) !== Number(baseline.receiptCustomWidthMm) ||
+                Number(settings.receiptCustomHeightMm) !== Number(baseline.receiptCustomHeightMm) ||
                 settings.receiptShowAddress !== baseline.receiptShowAddress ||
                 settings.receiptShowBranchName !== baseline.receiptShowBranchName ||
                 settings.receiptShowCashier !== baseline.receiptShowCashier ||
@@ -569,25 +583,60 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
             <legend className="px-1 text-sm font-semibold">{tSettings("receiptPaperSize", locale)}</legend>
             <p className="mb-3 text-xs text-muted-foreground">{tSettings("receiptPaperSizeHelp", locale)}</p>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={tSettings("receiptPaperSize", locale)}>
-              {(["58mm", "80mm"] as const).map((size) => {
-                const selected = settings.receiptPaperSize === size;
+              {RECEIPT_PAPER_SIZE_OPTIONS.map((size) => {
+                const selected = asPaperSize(settings.receiptPaperSize) === size;
+                const label =
+                  size === "58mm" ? tSettings("receiptPaperSize58", locale)
+                  : size === "80mm" ? tSettings("receiptPaperSize80", locale)
+                  : size === "a5" ? tSettings("receiptPaperSizeA5", locale)
+                  : size === "a4" ? tSettings("receiptPaperSizeA4", locale)
+                  : tSettings("receiptPaperSizeCustom", locale);
                 return (
                   <button
                     aria-checked={selected}
                     aria-pressed={selected}
                     className={selected
-                      ? "h-11 min-w-[96px] rounded-md border border-primary bg-primary/10 px-4 text-sm font-semibold text-primary shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      : "h-11 min-w-[96px] rounded-md border border-border bg-background px-4 text-sm font-semibold transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"}
+                      ? "h-11 min-w-[88px] rounded-md border border-primary bg-primary/10 px-3 text-sm font-semibold text-primary shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      : "h-11 min-w-[88px] rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"}
                     key={size}
                     role="radio"
                     type="button"
-                    onClick={() => update("receiptPaperSize", size)}
+                    onClick={() => update("receiptPaperSize", size as ReceiptPaperSize)}
                   >
-                    {size === "58mm" ? tSettings("receiptPaperSize58", locale) : tSettings("receiptPaperSize80", locale)}
+                    {label}
                   </button>
                 );
               })}
             </div>
+            {asPaperSize(settings.receiptPaperSize) === "custom" ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Field label={`${tSettings("receiptCustomWidth", locale)} (${tSettings("receiptUnitMm", locale)})`}>
+                  <input
+                    aria-required="true"
+                    className="field-input"
+                    inputMode="decimal"
+                    min={40}
+                    step="0.1"
+                    type="number"
+                    value={settings.receiptCustomWidthMm}
+                    onChange={(event) => update("receiptCustomWidthMm", Number(event.target.value))}
+                  />
+                </Field>
+                <Field label={`${tSettings("receiptCustomHeight", locale)} (${tSettings("receiptUnitMm", locale)})`}>
+                  <input
+                    aria-required="true"
+                    className="field-input"
+                    inputMode="decimal"
+                    min={60}
+                    step="0.1"
+                    type="number"
+                    value={settings.receiptCustomHeightMm}
+                    onChange={(event) => update("receiptCustomHeightMm", Number(event.target.value))}
+                  />
+                </Field>
+                <p className="sm:col-span-2 text-xs text-muted-foreground">{tSettings("receiptCustomSizeHelp", locale)}</p>
+              </div>
+            ) : null}
           </fieldset>
 
           <Field label={tSettings("receiptPrefix", locale)}>

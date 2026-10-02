@@ -26,6 +26,8 @@ const DEFAULT_SETTINGS = {
   loyaltySpendPerPointLak: 10000,
   receiptPrefix: "INV",
   receiptPaperSize: DEFAULT_RECEIPT_LAYOUT.paperSize,
+  receiptCustomWidthMm: DEFAULT_RECEIPT_LAYOUT.customWidthMm,
+  receiptCustomHeightMm: DEFAULT_RECEIPT_LAYOUT.customHeightMm,
   receiptPrintMode: "ask_every_time" as const,
   receiptShowAddress: true,
   receiptShowBranchName: true,

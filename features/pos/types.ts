@@ -129,7 +129,9 @@ export type PosReceiptSettings = {
   profilePhone?: string;
   receiptFooter?: string;
   receiptHeader?: string;
-  receiptPaperSize?: "58mm" | "80mm";
+  receiptPaperSize?: import("@/features/settings/receipt-layout").ReceiptPaperSize;
+  receiptCustomWidthMm?: number;
+  receiptCustomHeightMm?: number;
   receiptPrintMode?: "ask_every_time" | "auto_print" | "no_auto_print";
   businessLogoUrl?: string;
   receiptPrefix: string;

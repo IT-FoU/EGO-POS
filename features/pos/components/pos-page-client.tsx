@@ -109,6 +109,12 @@ import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-
 import { receiptBusinessLogoSrc } from "@/features/pos/receipt-branding";
 import { receiptQrImageFromPayments, resolveReceiptQrImage } from "@/features/pos/receipt-qr";
 import {
+    asPaperSize,
+    isDocumentPaperSize,
+    resolvePreviewPaperStyle,
+    resolvePrintPageSizeCss,
+} from "@/features/settings/receipt-layout";
+import {
     CUSTOMER_DISPLAY_QR_EVENT,
     hideCustomerDisplayQr,
     readCustomerDisplayQrIntent,
@@ -3537,8 +3543,19 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     const showDateTime = receiptSettings.receiptShowDateTime !== false;
     const showHeader = receiptSettings.receiptShowHeader !== false;
     const showFooter = receiptSettings.receiptShowFooter !== false;
-    const paperSize = receiptSettings.receiptPaperSize === "58mm" ? "58mm" : "80mm";
-    const paperWidthPx = paperSize === "58mm" ? 220 : 302;
+    const paperSize = asPaperSize(receiptSettings.receiptPaperSize);
+    const documentLayout = isDocumentPaperSize(paperSize);
+    const previewBox = resolvePreviewPaperStyle(
+      paperSize,
+      receiptSettings.receiptCustomWidthMm,
+      receiptSettings.receiptCustomHeightMm,
+      documentLayout ? 560 : 420,
+    );
+    const printPageSize = resolvePrintPageSizeCss(
+      paperSize,
+      receiptSettings.receiptCustomWidthMm,
+      receiptSettings.receiptCustomHeightMm,
+    );
     const headerText = showHeader ? String(receiptSettings.receiptHeader ?? "").trim() : "";
     const companyTitle = showCompanyName ? String(receiptSettings.companyName ?? "").trim() : "";
     const receiptTitle = headerText || companyTitle;
@@ -3551,51 +3568,138 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     const emailText = showEmail ? String(receiptSettings.profileEmail ?? "").trim() : "";
     const taxNumberText = showTaxNumber ? String(receiptSettings.taxNumber ?? "").trim() : "";
     return (<PosWorkspaceModal headerClassName="print:hidden" onBack={onBack} onClose={onClose} title={t("ui.receipt.preview")}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            @page { size: ${printPageSize}; margin: 8mm; }
+            body * { visibility: hidden !important; }
+            [data-receipt-paper], [data-receipt-paper] * { visibility: visible !important; }
+            [data-receipt-paper] {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              max-width: none !important;
+              height: auto !important;
+              box-shadow: none !important;
+              border: none !important;
+            }
+          }
+        ` }}/>
         <div
-          className="mx-auto rounded-md border border-neutral-300 bg-white p-5 font-mono text-sm text-neutral-900 shadow-sm print:border-0 print:shadow-none"
+          className={cn(
+            "mx-auto rounded-md border border-neutral-300 bg-white p-5 text-sm text-neutral-900 shadow-sm print:border-0 print:shadow-none",
+            documentLayout ? "overflow-auto" : "font-mono",
+          )}
           data-receipt-paper
+          data-receipt-paper-layout={documentLayout ? "document" : "thermal"}
           data-receipt-paper-size={paperSize}
-          style={{ maxWidth: "100%", width: paperWidthPx }}
+          style={{
+            height: previewBox.heightPx === "auto" ? "auto" : previewBox.heightPx,
+            maxWidth: "100%",
+            width: previewBox.widthPx,
+          }}
         >
-          <div className="text-center">
-            {logoSrc ? <img alt="" className="mx-auto mb-2 max-h-16 w-auto object-contain" src={logoSrc}/> : null}
-            {receiptTitle ? <div className="text-lg font-bold">{receiptTitle}</div> : null}
-            {headerText && companyTitle && headerText !== companyTitle ? <div>{companyTitle}</div> : null}
-            {addressText ? <div>{addressText}</div> : null}
-            {phoneText ? <div>{phoneText}</div> : null}
-            {emailText ? <div>{emailText}</div> : null}
-            {taxNumberText ? <div>{t("ui.tax.label")} {taxNumberText}</div> : null}
-            {showBranchName && branchName.trim() ? <div>{branchName}</div> : null}
-            {showReceiptNumber ? <div>{t("ui.bill.label")} {saleNo}</div> : null}
-            {showReceiptNumber ? <div>{t("ui.receipt.label")} {receiptNo}</div> : null}
-            <div>{t("ui.customer.label")} {customerName}</div>
-            {showCashier && cashierName.trim() ? <div>{t("ui.cashier")}{cashierName}</div> : null}
-            {showDateTime ? <div>{formatReceiptDateTime(createdAt)}</div> : null}
-          </div>
-          <div className="my-4 border-t border-dashed border-neutral-400"/>
-          <div className="flex flex-col gap-3">
-            {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-neutral-300 p-3 text-sm text-neutral-600">{t("ui.no.receipt.items")}</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
-                <div className="flex justify-between gap-3">
-                  <span>{localizedProductName(item)}{item.unitName ? ` — ${item.unitName}` : ""}</span>
-                  <span>{formatLak(item.priceLak * item.quantity)}</span>
-                </div>
-                <div className="text-neutral-600">{item.quantity} x {formatLak(item.priceLak)} LAK{item.unitName ? ` / ${item.unitName}` : ""}</div>
-              </div>))}
-          </div>
-          <div className="my-4 border-t border-dashed border-neutral-400"/>
-          <ReceiptRow label="Subtotal" value={subtotal}/>
-          <ReceiptRow label="Discount" value={-discountTotal}/>
-          {showTaxOnReceipt ? <ReceiptRow label="Tax" value={taxAmount}/> : null}
-          <ReceiptRow label="Total" value={totalAmount} strong/>
-          {(paymentBreakdown?.length ?? 0) > 1
-            ? paymentBreakdown!.map((row) => (
-                <ReceiptRow key={`${row.method}-${row.amountLak}`} label={`Paid ${String(row.method).toUpperCase()}`} value={row.amountLak}/>
-              ))
-            : <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>}
-          <ReceiptRow label="Change" value={changeAmount}/>
-          <div className="my-4 border-t border-dashed border-neutral-400"/>
-          {footerText ? <div className="text-center">{footerText}</div> : null}
-          {receiptQrImageUrl ? <img alt="" className="mx-auto mt-3 max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
+          {documentLayout ? (
+            <div className="flex min-h-full flex-col gap-4">
+              <div className="space-y-1">
+                {logoSrc ? <img alt="" className="mb-2 max-h-16 w-auto object-contain" src={logoSrc}/> : null}
+                {receiptTitle ? <div className="text-lg font-bold">{receiptTitle}</div> : null}
+                {headerText && companyTitle && headerText !== companyTitle ? <div>{companyTitle}</div> : null}
+                {showBranchName && branchName.trim() ? <div>{branchName}</div> : null}
+                {addressText ? <div>{addressText}</div> : null}
+                {phoneText ? <div>{phoneText}</div> : null}
+                {emailText ? <div>{emailText}</div> : null}
+                {taxNumberText ? <div>{t("ui.tax.label")} {taxNumberText}</div> : null}
+              </div>
+              <div className="space-y-1 border-t border-neutral-300 pt-3">
+                {showReceiptNumber ? <div>{t("ui.bill.label")} {saleNo}</div> : null}
+                {showReceiptNumber ? <div>{t("ui.receipt.label")} {receiptNo}</div> : null}
+                <div>{t("ui.customer.label")} {customerName}</div>
+                {showCashier && cashierName.trim() ? <div>{t("ui.cashier")}{cashierName}</div> : null}
+                {showDateTime ? <div>{formatReceiptDateTime(createdAt)}</div> : null}
+              </div>
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-400 text-xs uppercase tracking-wide text-neutral-600">
+                    <th className="py-2 pr-2 font-semibold">Item</th>
+                    <th className="py-2 pr-2 text-right font-semibold">Qty</th>
+                    <th className="py-2 pr-2 text-right font-semibold">Price</th>
+                    <th className="py-2 text-right font-semibold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cartItems.length === 0 ? (
+                    <tr><td className="py-3 text-neutral-600" colSpan={4}>{t("ui.no.receipt.items")}</td></tr>
+                  ) : cartItems.map((item, index) => (
+                    <tr className="border-b border-neutral-200" key={cartLineKey(item, index)}>
+                      <td className="py-2 pr-2 align-top">{localizedProductName(item)}{item.unitName ? ` — ${item.unitName}` : ""}</td>
+                      <td className="py-2 pr-2 text-right align-top">{item.quantity}</td>
+                      <td className="py-2 pr-2 text-right align-top">{formatLak(item.priceLak)}</td>
+                      <td className="py-2 text-right align-top">{formatLak(item.priceLak * item.quantity)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="ml-auto w-full max-w-xs space-y-1 border-t border-neutral-300 pt-3">
+                <ReceiptRow label="Subtotal" value={subtotal}/>
+                <ReceiptRow label="Discount" value={-discountTotal}/>
+                {showTaxOnReceipt ? <ReceiptRow label="Tax" value={taxAmount}/> : null}
+                <ReceiptRow label="Total" value={totalAmount} strong/>
+                {(paymentBreakdown?.length ?? 0) > 1
+                  ? paymentBreakdown!.map((row) => (
+                      <ReceiptRow key={`${row.method}-${row.amountLak}`} label={`Paid ${String(row.method).toUpperCase()}`} value={row.amountLak}/>
+                    ))
+                  : <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>}
+                <ReceiptRow label="Change" value={changeAmount}/>
+              </div>
+              <div className="mt-auto space-y-2 border-t border-neutral-300 pt-3">
+                {footerText ? <div>{footerText}</div> : null}
+                {receiptQrImageUrl ? <img alt="" className="max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="text-center">
+                {logoSrc ? <img alt="" className="mx-auto mb-2 max-h-16 w-auto object-contain" src={logoSrc}/> : null}
+                {receiptTitle ? <div className="text-lg font-bold">{receiptTitle}</div> : null}
+                {headerText && companyTitle && headerText !== companyTitle ? <div>{companyTitle}</div> : null}
+                {addressText ? <div>{addressText}</div> : null}
+                {phoneText ? <div>{phoneText}</div> : null}
+                {emailText ? <div>{emailText}</div> : null}
+                {taxNumberText ? <div>{t("ui.tax.label")} {taxNumberText}</div> : null}
+                {showBranchName && branchName.trim() ? <div>{branchName}</div> : null}
+                {showReceiptNumber ? <div>{t("ui.bill.label")} {saleNo}</div> : null}
+                {showReceiptNumber ? <div>{t("ui.receipt.label")} {receiptNo}</div> : null}
+                <div>{t("ui.customer.label")} {customerName}</div>
+                {showCashier && cashierName.trim() ? <div>{t("ui.cashier")}{cashierName}</div> : null}
+                {showDateTime ? <div>{formatReceiptDateTime(createdAt)}</div> : null}
+              </div>
+              <div className="my-4 border-t border-dashed border-neutral-400"/>
+              <div className="flex flex-col gap-3">
+                {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-neutral-300 p-3 text-sm text-neutral-600">{t("ui.no.receipt.items")}</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
+                    <div className="flex justify-between gap-3">
+                      <span>{localizedProductName(item)}{item.unitName ? ` — ${item.unitName}` : ""}</span>
+                      <span>{formatLak(item.priceLak * item.quantity)}</span>
+                    </div>
+                    <div className="text-neutral-600">{item.quantity} x {formatLak(item.priceLak)} LAK{item.unitName ? ` / ${item.unitName}` : ""}</div>
+                  </div>))}
+              </div>
+              <div className="my-4 border-t border-dashed border-neutral-400"/>
+              <ReceiptRow label="Subtotal" value={subtotal}/>
+              <ReceiptRow label="Discount" value={-discountTotal}/>
+              {showTaxOnReceipt ? <ReceiptRow label="Tax" value={taxAmount}/> : null}
+              <ReceiptRow label="Total" value={totalAmount} strong/>
+              {(paymentBreakdown?.length ?? 0) > 1
+                ? paymentBreakdown!.map((row) => (
+                    <ReceiptRow key={`${row.method}-${row.amountLak}`} label={`Paid ${String(row.method).toUpperCase()}`} value={row.amountLak}/>
+                  ))
+                : <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>}
+              <ReceiptRow label="Change" value={changeAmount}/>
+              <div className="my-4 border-t border-dashed border-neutral-400"/>
+              {footerText ? <div className="text-center">{footerText}</div> : null}
+              {receiptQrImageUrl ? <img alt="" className="mx-auto mt-3 max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
+            </>
+          )}
         </div>
         <button className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={async () => {
             if (!onReprint()) return;
