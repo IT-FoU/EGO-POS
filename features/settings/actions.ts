@@ -5,7 +5,7 @@ import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permission
 import { getCurrentSession } from "@/lib/auth/session";
 import { updateActiveCompanySession } from "@/lib/auth/update-active-company-session";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
-import { updatePrismaSettings } from "@/features/settings/prisma-repository";
+import { getCompanyBusinessLogoUrl, removeCompanyBusinessLogo, replaceCompanyBusinessLogo, updatePrismaSettings } from "@/features/settings/prisma-repository";
 import type { SettingsFormData } from "@/features/settings/types";
 
 export async function updateSettingsAction(input: Partial<SettingsFormData>) {
@@ -24,6 +24,45 @@ export async function updateSettingsAction(input: Partial<SettingsFormData>) {
     revalidatePath("/dashboard");
     revalidatePath("/pos");
     return writeSuccess(settings);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function saveCompanyLogoAction(formData: FormData) {
+  try {
+    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      throw new Error("Image upload is empty.");
+    }
+    const businessLogoUrl = await replaceCompanyBusinessLogo(new Uint8Array(await file.arrayBuffer()), file.type, tenant);
+    revalidatePath("/settings");
+    revalidatePath("/pos");
+    revalidatePath("/dashboard");
+    return writeSuccess({ businessLogoUrl });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function removeCompanyLogoAction() {
+  try {
+    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    await removeCompanyBusinessLogo(tenant);
+    revalidatePath("/settings");
+    revalidatePath("/pos");
+    revalidatePath("/dashboard");
+    return writeSuccess({ businessLogoUrl: null });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function readCompanyBusinessLogoAction() {
+  try {
+    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    return writeSuccess({ businessLogoUrl: await getCompanyBusinessLogoUrl(tenant.companyId) });
   } catch (error) {
     return writeFailure(error);
   }

@@ -137,7 +137,7 @@ check(
 const assertSrc = read("features/cash-sessions/prisma-repository.ts");
 check(
   "17. Sale assert respects requireCashShiftBeforeSale === false",
-  assertSrc.includes("readRequireCashShiftBeforeSaleFromJson") &&
+  assertSrc.includes("readCompanyRequireCashShift") &&
     assertSrc.includes("=== false") &&
     assertSrc.includes("return null") &&
     assertSrc.includes("An open cash session is required before completing a sale."),
@@ -163,12 +163,13 @@ check("21. Recovery hint + End Work for attendance", views.includes("ui.shift.re
 const settingsForm = read("features/settings/components/settings-form.tsx");
 check("22. Settings form toggle present", settingsForm.includes("requireCashShiftBeforeSale"));
 
-const migration = "prisma/migrations/20260924100000_require_cash_shift_before_sale/migration.sql";
+const migration = "prisma/migrations/20261002010000_settings_v2_logo_and_cash_shift/migration.sql";
 check(
-  "23. No DDL migration needed (JSON persistence)",
+  "23. Canonical cash-shift column backfills missing as ON and false as OFF",
   existsSync(join(ROOT, migration)) &&
-    read(migration).includes("No DDL required") &&
-    read(migration).includes("__requireCashShiftBeforeSale"),
+    read(migration).includes("require_cash_shift_before_sale") &&
+    read(migration).includes("THEN false") &&
+    read(migration).includes("THEN true"),
 );
 check(
   "24. JSON helpers preserve flag through unit-pricing merge",
@@ -180,8 +181,8 @@ const currentRoute = read("app/api/pos/cash-sessions/current/route.ts");
 check("25. Current session API returns attendance + setting", currentRoute.includes("attendanceOpen") && currentRoute.includes("requireCashShiftBeforeSale"));
 
 check(
-  "26. Sale assert reads unitPricingDefaults JSON flag",
-  assertSrc.includes("unitPricingDefaults") && assertSrc.includes("readRequireCashShiftBeforeSaleFromJson"),
+  "26. Sale assert reads canonical company cash-shift field",
+  assertSrc.includes("requireCashShiftBeforeSale") && assertSrc.includes("readCompanyRequireCashShift"),
 );
 check(
   "26b. Cash In/Out still use getScopedSession (open required)",

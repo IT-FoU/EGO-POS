@@ -83,6 +83,7 @@ export type PosReceiptSnapshot = {
   paymentBreakdown?: PosSalePaymentBreakdown[];
   paymentMode: PaymentMode;
   receiptNo: string;
+  receiptQrImageUrl?: string | null;
   saleNo: string;
   showTaxOnReceipt: boolean;
   subtotal: number;

@@ -2,11 +2,10 @@ import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import type { SettingsFormData } from "@/features/settings/types";
-import {
-  parseRequireCashShiftBeforeSaleFlag,
-  readRequireCashShiftBeforeSaleFromJson,
-  withRequireCashShiftBeforeSale,
-} from "@/features/products/unit-pricing-defaults";
+import { parseRequireCashShiftBeforeSaleFlag, unitPricingDefaultsWithoutCashShift } from "@/features/products/unit-pricing-defaults";
+import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
+import { clearStoredLogo, storeReplacementLogo } from "@/features/brand/company-logo-service";
+import { signCompanyLogoUrl } from "@/lib/storage/company-logo-storage";
 
 const db = prisma as any;
 
@@ -119,9 +118,9 @@ export function taxAndLoyaltyFromSettingsRow(settings: SettingsRow | null | unde
   };
 }
 
-/** Missing / unset => ON (strict default). Stored in unit_pricing_defaults JSON (no DDL). */
+/** Canonical company boolean. JSON is only a fallback when the column is absent. */
 export function requireCashShiftBeforeSaleFromOpsRow(ops: SettingsRow | null | undefined) {
-  return readRequireCashShiftBeforeSaleFromJson(ops?.unitPricingDefaults ?? ops);
+  return readCompanyRequireCashShift(ops);
 }
 
 function mapSettings(company: SettingsRow): SettingsFormData {
@@ -141,7 +140,7 @@ function mapSettings(company: SettingsRow): SettingsFormData {
     profilePhone: settings.profilePhone ?? undefined,
     receiptFooter: settings.receiptFooter ?? undefined,
     receiptHeader: settings.receiptHeader ?? undefined,
-    receiptPrintMode: settings.receiptPrintMode ?? DEFAULT_SETTINGS.receiptPrintMode,
+    receiptPrintMode: DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: settings.receiptPrefix ?? DEFAULT_SETTINGS.receiptPrefix,
     requireCashShiftBeforeSale: DEFAULT_SETTINGS.requireCashShiftBeforeSale,
     roundingMethod: settings.roundingMethod ?? DEFAULT_SETTINGS.roundingMethod,
@@ -173,6 +172,14 @@ export async function getPrismaSettings(tenant: TenantContext) {
   };
 }
 
+export async function getCompanyBusinessLogoUrl(companyId: string) {
+  const settings = await db.companySetting.findUnique({
+    select: { logoObjectPath: true },
+    where: { companyId },
+  });
+  return signCompanyLogoUrl(settings?.logoObjectPath ? String(settings.logoObjectPath) : null, companyId);
+}
+
 export async function updatePrismaSettings(input: Partial<SettingsFormData>, tenant: TenantContext) {
   const current = await getPrismaSettings(tenant);
   const normalized = normalizeSettingsInput(mergeSettingsInput(current, input));
@@ -181,10 +188,12 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
     throw new Error("Company name is required.");
   }
 
+  const { receiptPrintMode: _devicePrintMode, ...companyPayload } = normalized;
+
   return withTenantTransaction({
     action: "update",
     module: "settings",
-    newData: normalized,
+    newData: companyPayload,
     tenant,
     write: async (tx) => {
       const company = await tx.company.findFirstOrThrow({
@@ -206,12 +215,7 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         select: { unitPricingDefaults: true },
         where: { companyId: company.id },
       });
-      // Persist explicit boolean into JSON in the same upsert as other settings fields.
-      // OFF must write false — never omit the key (missing means legacy ON).
-      const nextDefaults = withRequireCashShiftBeforeSale(
-        existingSettings?.unitPricingDefaults,
-        normalized.requireCashShiftBeforeSale,
-      );
+      const nextDefaults = unitPricingDefaultsWithoutCashShift(existingSettings?.unitPricingDefaults);
 
       await tx.companySetting.upsert({
         create: {
@@ -229,6 +233,7 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
           receiptFooter: normalized.receiptFooter,
           receiptHeader: normalized.receiptHeader,
           receiptPrefix: normalized.receiptPrefix,
+          requireCashShiftBeforeSale: normalized.requireCashShiftBeforeSale,
           roundingMethod: normalized.roundingMethod,
           showLogoOnReceipt: normalized.showLogoOnReceipt,
           showTaxOnReceipt: normalized.showTaxOnReceipt,
@@ -252,6 +257,7 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
           receiptFooter: normalized.receiptFooter,
           receiptHeader: normalized.receiptHeader,
           receiptPrefix: normalized.receiptPrefix,
+          requireCashShiftBeforeSale: normalized.requireCashShiftBeforeSale,
           roundingMethod: normalized.roundingMethod,
           showLogoOnReceipt: normalized.showLogoOnReceipt,
           showTaxOnReceipt: normalized.showTaxOnReceipt,
@@ -269,7 +275,11 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         where: { id: company.id },
       });
 
-      const persistedFlag = requireCashShiftBeforeSaleFromOpsRow(updatedCompany.settings);
+      const persistedFlag = updatedCompany.settings?.requireCashShiftBeforeSale === false
+        ? false
+        : updatedCompany.settings?.requireCashShiftBeforeSale === true
+          ? true
+          : requireCashShiftBeforeSaleFromOpsRow(updatedCompany.settings);
       // Fail closed if OFF was requested but JSON still reads as ON (false lost).
       if (persistedFlag !== normalized.requireCashShiftBeforeSale) {
         throw new Error(
@@ -282,6 +292,59 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         requireCashShiftBeforeSale: persistedFlag,
       };
     },
+  });
+}
+
+async function assertCompanyMember(tenant: TenantContext) {
+  const company = await db.company.findFirst({
+    where: {
+      id: tenant.companyId,
+      members: { some: { status: "active", userId: tenant.userId } },
+    },
+    select: { id: true },
+  });
+  if (!company) throw new Error("Company settings not found.");
+  return company;
+}
+
+export async function replaceCompanyBusinessLogo(bytes: Uint8Array, declaredMime: string | null, tenant: TenantContext) {
+  await assertCompanyMember(tenant);
+  const existing = await db.companySetting.findUnique({
+    select: { logoObjectPath: true },
+    where: { companyId: tenant.companyId },
+  });
+  const path = await storeReplacementLogo({
+    bytes,
+    companyId: tenant.companyId,
+    declaredMime,
+    persistPath: async (nextPath) => {
+      await db.companySetting.upsert({
+        create: { companyId: tenant.companyId, logoObjectPath: nextPath },
+        update: { logoObjectPath: nextPath },
+        where: { companyId: tenant.companyId },
+      });
+    },
+    previousPath: existing?.logoObjectPath ? String(existing.logoObjectPath) : null,
+  });
+  return signCompanyLogoUrl(path, tenant.companyId);
+}
+
+export async function removeCompanyBusinessLogo(tenant: TenantContext) {
+  await assertCompanyMember(tenant);
+  await clearStoredLogo({
+    clearPath: async () => {
+      const existing = await db.companySetting.findUnique({
+        select: { logoObjectPath: true },
+        where: { companyId: tenant.companyId },
+      });
+      if (!existing) return null;
+      await db.companySetting.update({
+        data: { logoObjectPath: null },
+        where: { companyId: tenant.companyId },
+      });
+      return existing.logoObjectPath ? String(existing.logoObjectPath) : null;
+    },
+    companyId: tenant.companyId,
   });
 }
 

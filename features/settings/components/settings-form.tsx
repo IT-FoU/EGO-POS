@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Banknote, CheckCircle2, ClipboardCheck, Edit3, Eye, Gift, ImagePlus, KeyRound, MonitorPlay, Percent, Plus, QrCode, ReceiptText, Save, ScrollText, ShieldCheck, Trash2, Users, WalletCards, X, type LucideIcon } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
-import { updateSettingsAction } from "@/features/settings/actions";
+import { removeCompanyLogoAction, saveCompanyLogoAction, updateSettingsAction } from "@/features/settings/actions";
 import { ACTIVE_COMPANY_NAME_CHANGE_EVENT } from "@/lib/auth/active-company-name";
 import type { CurrencyCode, SettingsFormData } from "@/features/settings/types";
 import {
@@ -22,7 +22,6 @@ import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "
 import { DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, resetAllCustomerDisplaySettings, resetCustomerDisplayAppearanceSettings, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
 import { CUSTOMER_DISPLAY_TEMPLATE_OPTIONS } from "@/features/pos/customer-display-templates";
 import { CUSTOMER_DISPLAY_QR_STYLE_OPTIONS, type CustomerDisplayQrStyle } from "@/features/pos/customer-display-qr-style";
-import { clearCompanyLogoUrl, readCompanyLogoUrl, writeCompanyLogoUrl } from "@/features/brand/company-logo";
 import {
   cancelStagedImage,
   confirmStagedImage,
@@ -46,7 +45,8 @@ import {
   readReceiptPrintModePreference,
   writeReceiptPrintModePreference,
 } from "@/features/settings/receipt-print-mode";
-export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches, }: {
+export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts, initialQrBanks, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches, }: {
+    initialBusinessLogoUrl?: string | null;
     initialQrAccounts: QrPaymentAccountRecord[];
     initialQrBanks: QrPaymentBankRecord[];
     initialSettings: SettingsFormData;
@@ -60,6 +60,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
     const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());
     const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
+    const logoFileRef = useRef<File | null>(null);
     const [displaySettings, setDisplaySettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
     const [promotionDraft, setPromotionDraft] = useState("");
     const [settings, setSettings] = useState(initialSettings);
@@ -73,8 +74,8 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             receiptPrintMode: readReceiptPrintModePreference(current.receiptPrintMode),
         }));
         setDisplaySettings(readCustomerDisplaySettingsFromStorage());
-        setLogoStage(emptyStagedImage(readCompanyLogoUrl() || null));
-    }, []);
+        setLogoStage(emptyStagedImage(initialBusinessLogoUrl));
+    }, [initialBusinessLogoUrl]);
     function update<K extends keyof SettingsFormData>(key: K, value: SettingsFormData[K]) {
         setSettings((current) => ({ ...current, [key]: value }));
     }
@@ -85,6 +86,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
             return;
         }
         try {
+            logoFileRef.current = file;
             const dataUrl = await readImageFileAsDataUrl(file);
             setLogoStage((current) => selectStagedImage(current, dataUrl));
             setMessage({ text: tSettings("logoPreviewReady", locale), tone: "success" });
@@ -93,25 +95,45 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         }
     }
     function confirmLogo() {
+        const file = logoFileRef.current;
         const next = confirmStagedImage(logoStage);
-        if (!next.saved) {
+        if (!file || !next.saved) {
             return;
         }
-        writeCompanyLogoUrl(next.saved);
-        setLogoStage(next);
-        setMessage({ text: tSettings("saved", locale), tone: "success" });
+        const formData = new FormData();
+        formData.set("file", file);
+        startTransition(async () => {
+            const result = await saveCompanyLogoAction(formData);
+            if (!result.ok || !result.data) {
+                setMessage({ text: localizeSettingsError(result.error, locale), tone: "error" });
+                return;
+            }
+            logoFileRef.current = null;
+            const savedUrl = result.data.businessLogoUrl || next.saved;
+            setLogoStage(emptyStagedImage(savedUrl));
+            setMessage({ text: tSettings("saved", locale), tone: "success" });
+        });
     }
     function cancelLogoDraft() {
+        logoFileRef.current = null;
         setLogoStage((current) => cancelStagedImage(current));
     }
     function removeLogo() {
         setSettingsConfirm("removeLogo");
     }
     function applyRemoveLogo() {
-        clearCompanyLogoUrl();
-        setLogoStage(removeStagedImage());
-        setMessage({ text: tSettings("remove", locale), tone: "success" });
-        setSettingsConfirm(null);
+        startTransition(async () => {
+            const result = await removeCompanyLogoAction();
+            if (!result.ok) {
+                setMessage({ text: localizeSettingsError(result.error, locale), tone: "error" });
+                setSettingsConfirm(null);
+                return;
+            }
+            logoFileRef.current = null;
+            setLogoStage(removeStagedImage());
+            setMessage({ text: tSettings("remove", locale), tone: "success" });
+            setSettingsConfirm(null);
+        });
     }
     function persistCustomerDisplaySettings(nextSettings: CustomerDisplaySettings) {
         setDisplaySettings(nextSettings);
@@ -219,16 +241,17 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
         startTransition(async () => {
             // Send 0/1 — never omit the field when OFF. Boolean false can be dropped by
             // some server-action serializers; 0 survives and parses as OFF explicitly.
+            const printMode = settings.receiptPrintMode;
+            writeReceiptPrintModePreference(printMode);
+            const { receiptPrintMode: _devicePrintMode, ...companySettings } = settings;
             const result = await updateSettingsAction({
-                ...settings,
+                ...companySettings,
                 requireCashShiftBeforeSale: (settings.requireCashShiftBeforeSale === false ? 0 : 1) as unknown as boolean,
             });
             if (!result.ok || !result.data) {
                 setMessage({ text: localizeSettingsError(result.error, locale), tone: "error" });
                 return;
             }
-            const printMode = settings.receiptPrintMode;
-            writeReceiptPrintModePreference(printMode);
             const saved = result.data as SettingsFormData;
             setSettings({
                 ...saved,
@@ -270,7 +293,7 @@ export function SettingsForm({ initialQrAccounts, initialQrBanks, initialSetting
               <LogoContainer fallbackName={settings.companyName} logoUrl={previewStagedImage(logoStage)} size={96} variant="settings"/>
               <div className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
                 {tSettings("companyLogo", locale)}
-                <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={logoInputRef} type="file" onChange={(event) => void chooseLogoFile(event)}/>
+                <input accept="image/png,image/jpeg,image/webp" className="hidden" ref={logoInputRef} type="file" onChange={(event) => void chooseLogoFile(event)}/>
                 <span className="text-xs leading-5 text-muted-foreground">{tSettings("logoFormatHelp", locale)}</span>
                 <div className="flex flex-wrap gap-2">
                   {/* Source markers: ui.confirm.logo ui.remove.logo */}

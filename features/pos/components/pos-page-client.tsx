@@ -106,7 +106,8 @@ import { cancelHeldBill, createHeldBill, fetchHeldBills, resumeHeldBill } from "
 import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCartPanelState, writeCartPanelState } from "@/features/pos/cart-panel-state";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
-import { readCompanyLogoUrl } from "@/features/brand/company-logo";
+import { receiptBusinessLogoSrc } from "@/features/pos/receipt-branding";
+import { receiptQrImageFromPayments, resolveReceiptQrImage } from "@/features/pos/receipt-qr";
 import {
     CUSTOMER_DISPLAY_QR_EVENT,
     hideCustomerDisplayQr,
@@ -150,6 +151,7 @@ type ReceiptSnapshot = {
     paymentBreakdown?: Array<{ amountLak: number; method: string }>;
     paymentMode: PaymentMode;
     receiptNo: string;
+    receiptQrImageUrl?: string | null;
     /** STEP 8: persisted DB sale id for canonical audited reprint. Absent in demo mode. */
     saleId?: string;
     saleNo: string;
@@ -797,13 +799,13 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             promotionDiscountLak: promotionDiscountTotal,
             selectedQrBank: customerQrVisible ? selectedQrBank : null,
             showQr: customerQrVisible && Boolean(selectedQrBank),
-            storeLogoUrl: readCompanyLogoUrl() || "",
+            storeLogoUrl: receiptSettings.businessLogoUrl || "",
             storeName: receiptSettings.companyName,
             subtotalLak: subtotal,
             totalLak: totalAmount,
         };
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
-    }, [appliedPromotions, cartItems, customerDisplayMode, customerQrVisible, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
+    }, [appliedPromotions, cartItems, customerDisplayMode, customerQrVisible, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.businessLogoUrl, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
     function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
         const saleUnit = selectedUnit ?? resolvePosSaleUnits(product)[0];
         const unitProduct = saleUnit ? productWithSaleUnit(product, saleUnit) : product;
@@ -1209,6 +1211,18 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             paidAmount: payment.paidAmount,
             paymentMode,
             receiptNo: `RCPT-${saleNo}`,
+            receiptQrImageUrl: payment.qrAmount > 0
+                ? resolveReceiptQrImage({
+                    account: selectedQrBank
+                        ? {
+                            id: selectedQrBank.id,
+                            printOnReceipt: selectedQrBank.printOnReceipt === true,
+                            qrImageUrl: selectedQrBank.qrImageUrl,
+                        }
+                        : null,
+                    referencedAccountId: selectedQrBank?.id,
+                })
+                : null,
             saleNo,
             subtotal,
             taxAmount,
@@ -1280,6 +1294,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                     unitId: item.unitId,
                 })),
                 paymentMode,
+                qrAccountId: payment.qrAmount > 0 ? selectedQrBank?.id : undefined,
                 qrAmount: payment.qrAmount,
                 redeemPoints: effectiveRedeemPoints,
                 saleNo,
@@ -1300,11 +1315,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             }
             const assignedSaleNo = result.data?.saleNo ?? saleNo;
             const receipt = result.data
-                ? receiptSnapshotFromPersistedSale(result.data, {
-                    branchName,
-                    cashierName,
-                    customerName: selectedCustomer?.name ?? t("ui.guest"),
-                })
+                ? {
+                    ...receiptSnapshotFromPersistedSale(result.data, {
+                        branchName,
+                        cashierName,
+                        customerName: selectedCustomer?.name ?? t("ui.guest"),
+                    }),
+                    receiptQrImageUrl: receiptQrImageFromPayments(result.data.payments, availableQrBanks),
+                }
                 : buildReceiptSnapshot(payment, assignedSaleNo);
             setLastReceipt(receipt);
             setSaleCompletedReceipt(receipt);
@@ -1617,7 +1635,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             promotionDiscountLak: promotionDiscountTotal,
             selectedQrBank: null,
             showQr: false,
-            storeLogoUrl: readCompanyLogoUrl() || "",
+            storeLogoUrl: receiptSettings.businessLogoUrl || "",
             storeName: receiptSettings.companyName,
             subtotalLak: subtotal,
             totalLak: totalAmount,
@@ -2466,7 +2484,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setReceiptOpen(false);
             setReceiptAutoPrint(false);
             if (!recentSalesOpen) setMoreMenuOpen(false);
-        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentBreakdown={lastReceipt.paymentBreakdown} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptSettings={receiptSettings} saleId={lastReceipt.saleId} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
+        }} onReprint={() => enforcePosAction("reprint_receipt")} paidAmount={lastReceipt.paidAmount} paymentBreakdown={lastReceipt.paymentBreakdown} paymentMode={lastReceipt.paymentMode} receiptNo={lastReceipt.receiptNo} receiptQrImageUrl={lastReceipt.receiptQrImageUrl} receiptSettings={receiptSettings} saleId={lastReceipt.saleId} saleNo={lastReceipt.saleNo} showTaxOnReceipt={receiptSettings.showTaxOnReceipt} subtotal={lastReceipt.subtotal} taxAmount={lastReceipt.taxAmount} totalAmount={lastReceipt.totalAmount}/>) : null}
     </div>);
 }
 function Panel({ children, className, ref }: {
@@ -3464,7 +3482,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
         </div>
     </PosWorkspaceModal>);
 }
-function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, isFirstPrint = false, onBack, onClose, onReprint, paidAmount, paymentBreakdown, paymentMode, receiptNo, receiptSettings, saleId, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
+function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems, changeAmount, createdAt, customerName, discountTotal, isFirstPrint = false, onBack, onClose, onReprint, paidAmount, paymentBreakdown, paymentMode, receiptNo, receiptQrImageUrl = null, receiptSettings, saleId, saleNo, showTaxOnReceipt, subtotal, taxAmount, totalAmount, }: {
     autoPrint?: boolean;
     branchName: string;
     cashierName: string;
@@ -3482,6 +3500,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     paymentBreakdown?: Array<{ amountLak: number; method: string }>;
     paymentMode: PaymentMode;
     receiptNo: string;
+    receiptQrImageUrl?: string | null;
     receiptSettings: PosReceiptSettings;
     /** STEP 8: persisted sale id — enables canonical audited reprint. */
     saleId?: string;
@@ -3509,9 +3528,11 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     }, [autoPrint, autoPrintStarted, onReprint]);
     const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
     const receiptFooter = receiptSettings.receiptFooter || t("ui.thank.you");
+    const logoSrc = receiptBusinessLogoSrc(receiptSettings.showLogoOnReceipt, receiptSettings.businessLogoUrl);
     return (<PosWorkspaceModal headerClassName="print:hidden" onBack={onBack} onClose={onClose} title={t("ui.receipt.preview")}>
         <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
           <div className="text-center">
+            {logoSrc ? <img alt="" className="mx-auto mb-2 max-h-16 w-auto object-contain" src={logoSrc}/> : null}
             <div className="text-lg font-bold">{receiptTitle}</div>
             {receiptSettings.profileAddress ? <div>{receiptSettings.profileAddress}</div> : null}
             {receiptSettings.profilePhone ? <div>{receiptSettings.profilePhone}</div> : null}
@@ -3547,6 +3568,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
           <ReceiptRow label="Change" value={changeAmount}/>
           <div className="my-4 border-t border-dashed border-border"/>
           <div className="text-center">{receiptFooter}</div>
+          {receiptQrImageUrl ? <img alt="" className="mx-auto mt-3 max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
         </div>
         <button className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={async () => {
             if (!onReprint()) return;

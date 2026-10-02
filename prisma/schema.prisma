@@ -327,6 +327,8 @@ model CompanySetting {
   loyaltySpendPerPointLak  Decimal      @default(10000) @map("loyalty_spend_per_point_lak") @db.Decimal(18, 2)
   loyaltyPointValueLak     Decimal      @default(1000) @map("loyalty_point_value_lak") @db.Decimal(18, 2)
   loyaltyMinRedeemPoints   Int          @default(1) @map("loyalty_min_redeem_points")
+  logoObjectPath           String?      @map("logo_object_path")
+  requireCashShiftBeforeSale Boolean   @default(true) @map("require_cash_shift_before_sale")
   createdAt                DateTime     @default(now()) @map("created_at")
   updatedAt                DateTime     @updatedAt @map("updated_at")
   company                  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)

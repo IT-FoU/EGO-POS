@@ -1,6 +1,6 @@
 import { getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
 import { getOpenAttendanceSession } from "@/features/attendance/prisma-repository";
-import { readRequireCashShiftBeforeSaleFromJson } from "@/features/products/unit-pricing-defaults";
+import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
 import { runRead } from "@/lib/api/write-response";
 import { READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
@@ -13,14 +13,14 @@ export async function GET() {
       getOpenCashSession(tenant),
       getOpenAttendanceSession(tenant),
       db.companySetting.findUnique({
-        select: { unitPricingDefaults: true },
+        select: { requireCashShiftBeforeSale: true, unitPricingDefaults: true },
         where: { companyId: tenant.companyId },
       }),
     ]);
     return {
       attendanceCashSessionId: attendance?.cashSessionId ?? null,
       attendanceOpen: attendance?.status === "open",
-      requireCashShiftBeforeSale: readRequireCashShiftBeforeSaleFromJson(settings?.unitPricingDefaults),
+      requireCashShiftBeforeSale: readCompanyRequireCashShift(settings),
       session,
     };
   }, READ_PERMISSIONS.posCashSessionView);

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
-import { getPrismaSettings } from "@/features/settings/prisma-repository";
+import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
 import { SettingsForm } from "@/features/settings/components/settings-form";
 import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
 import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
@@ -23,14 +23,16 @@ export default async function SettingsPage() {
     );
   }
   const tenant = tenantFromSession(session);
-  const [settings, qrSnapshot, staffSnapshot] = await Promise.all([
+  const [settings, businessLogoUrl, qrSnapshot, staffSnapshot] = await Promise.all([
     getPrismaSettings(tenant),
+    getCompanyBusinessLogoUrl(tenant.companyId),
     getQrPaymentSettingsSnapshot(tenant),
     getStaffAccessSnapshot(tenant),
   ]);
 
   return (
     <SettingsForm
+      initialBusinessLogoUrl={businessLogoUrl}
       initialQrAccounts={qrSnapshot.accounts}
       initialQrBanks={qrSnapshot.banks}
       initialSettings={settings}
