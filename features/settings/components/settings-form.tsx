@@ -30,10 +30,12 @@ import {
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import { Field, SectionTitle, Toggle } from "@/features/settings/components/settings-fields";
+import { ReceiptSettingsPreview } from "@/features/settings/components/receipt-settings-preview";
 import {
   readReceiptPrintModePreference,
   writeReceiptPrintModePreference,
 } from "@/features/settings/receipt-print-mode";
+import { MAX_SOURCE_IMAGE_BYTES } from "@/lib/storage/image-validate";
 
 const QrPaymentBankManagementSection = dynamic(() => import("@/features/settings/components/qr-payment-bank-management-section").then((module) => module.QrPaymentBankManagementSection));
 const StaffControlSection = dynamic(() => import("@/features/settings/components/staff-control-section").then((module) => module.StaffControlSection));
@@ -59,24 +61,29 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());
-    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | null>(null);
+    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | "taxChange" | "cashShiftOff" | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const logoFileRef = useRef<File | null>(null);
     const [displaySettings, setDisplaySettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
     const [promotionDraft, setPromotionDraft] = useState("");
     const [settings, setSettings] = useState(initialSettings);
+    const [baseline, setBaseline] = useState(initialSettings);
+    const [taxConfirmLines, setTaxConfirmLines] = useState<string[]>([]);
     const [message, setMessage] = useState<{
         tone: "error" | "success";
         text: string;
     } | null>(null);
     useEffect(() => {
-        setSettings((current) => ({
-            ...current,
-            receiptPrintMode: readReceiptPrintModePreference(current.receiptPrintMode),
-        }));
+        const next = {
+            ...initialSettings,
+            receiptPrintMode: readReceiptPrintModePreference(initialSettings.receiptPrintMode),
+            requireCashShiftBeforeSale: initialSettings.requireCashShiftBeforeSale !== false,
+        };
+        setSettings(next);
+        setBaseline(next);
         setDisplaySettings(readCustomerDisplaySettingsFromStorage());
         setLogoStage(emptyStagedImage(initialBusinessLogoUrl));
-    }, [initialBusinessLogoUrl]);
+    }, [initialBusinessLogoUrl, initialSettings]);
     function update<K extends keyof SettingsFormData>(key: K, value: SettingsFormData[K]) {
         setSettings((current) => ({ ...current, [key]: value }));
     }
@@ -87,6 +94,10 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             return;
         }
         try {
+            if (file.size > MAX_SOURCE_IMAGE_BYTES) {
+                setMessage({ text: tSettings("logoTooLarge", locale), tone: "error" });
+                return;
+            }
             logoFileRef.current = file;
             const dataUrl = await readImageFileAsDataUrl(file);
             setLogoStage((current) => selectStagedImage(current, dataUrl));
@@ -136,23 +147,22 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             setSettingsConfirm(null);
         });
     }
-    function persistCustomerDisplaySettings(nextSettings: CustomerDisplaySettings) {
+    function persistCustomerDisplaySettings(nextSettings: CustomerDisplaySettings, notify = true) {
         setDisplaySettings(nextSettings);
         writeCustomerDisplaySettingsToStorage(nextSettings);
+        if (notify) setMessage({ text: tSettings("savedOnThisDevice", locale), tone: "success" });
     }
     function updateDisplayTemplate(template: CustomerDisplayTemplate) {
         persistCustomerDisplaySettings({ ...displaySettings, template });
-        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function updateDisplayQrStyle(qrDisplayStyle: CustomerDisplayQrStyle) {
         persistCustomerDisplaySettings({ ...displaySettings, qrDisplayStyle });
-        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function resetAppearancePage() {
         setSettingsConfirm("resetThisPage");
     }
     function applyResetAppearancePage() {
-        persistCustomerDisplaySettings(resetCustomerDisplayAppearanceSettings(displaySettings));
+        persistCustomerDisplaySettings(resetCustomerDisplayAppearanceSettings(displaySettings), false);
         setMessage({ text: tSettings("resetThisPageSuccess", locale), tone: "success" });
         setSettingsConfirm(null);
     }
@@ -160,7 +170,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
         setSettingsConfirm("resetAll");
     }
     function applyResetAllDisplaySettings() {
-        persistCustomerDisplaySettings(resetAllCustomerDisplaySettings());
+        persistCustomerDisplaySettings(resetAllCustomerDisplaySettings(), false);
         setMessage({ text: tSettings("resetAllCustomerDisplaySuccess", locale), tone: "success" });
         setSettingsConfirm(null);
     }
@@ -178,7 +188,6 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             promotionMessages: [...displaySettings.promotionMessages, messageText].slice(-8),
         });
         setPromotionDraft("");
-        setMessage({ text: tSettings("saved", locale), tone: "success" });
     }
     function deletePromotionMessage(index: number) {
         persistCustomerDisplaySettings({
@@ -207,7 +216,6 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
                 ...displaySettings,
                 media: [media, ...displaySettings.media].slice(0, 12),
             });
-            setMessage({ text: tSettings("saved", locale), tone: "success" });
         };
         reader.readAsDataURL(file);
     }
@@ -230,13 +238,22 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             return tSettings("minRedeemPointsMin", locale);
         return null;
     }
-    function saveSettings() {
-        const validationError = validate();
-        if (validationError) {
-            setMessage({ text: validationError, tone: "error" });
-            return;
+    function buildTaxConfirmLines() {
+        const lines: string[] = [];
+        if (settings.vatEnabled !== baseline.vatEnabled) {
+            lines.push(settings.vatEnabled ? tSettings("taxEnableConfirm", locale) : tSettings("taxDisableConfirm", locale));
         }
+        if (settings.taxInclusive !== baseline.taxInclusive) {
+            lines.push(settings.taxInclusive ? tSettings("taxInclusiveConfirm", locale) : tSettings("taxExclusiveConfirm", locale));
+        }
+        if (Number(settings.vatRate) !== Number(baseline.vatRate)) {
+            lines.push(tSettings("taxRateChangeConfirm", locale));
+        }
+        return lines;
+    }
+    function commitSettingsSave() {
         setMessage(null);
+        setSettingsConfirm(null);
         startTransition(async () => {
             const printMode = settings.receiptPrintMode;
             let payload: Partial<SettingsFormData>;
@@ -256,7 +273,6 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
                     vatRate: settings.vatRate,
                 };
             } else if (section === "cash-shift") {
-                // Send 0/1 so an explicit false survives server-action serialization.
                 payload = {
                     requireCashShiftBeforeSale: (settings.requireCashShiftBeforeSale === false ? 0 : 1) as unknown as boolean,
                 };
@@ -282,11 +298,13 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
                 return;
             }
             const saved = result.data as SettingsFormData;
-            setSettings({
+            const next = {
                 ...saved,
                 receiptPrintMode: printMode,
                 requireCashShiftBeforeSale: saved.requireCashShiftBeforeSale !== false,
-            });
+            };
+            setSettings(next);
+            setBaseline(next);
             if (section === "company-profile") {
                 window.dispatchEvent(
                     new CustomEvent(ACTIVE_COMPANY_NAME_CHANGE_EVENT, {
@@ -297,6 +315,74 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             setMessage({ text: tSettings("saved", locale), tone: "success" });
             router.refresh();
         });
+    }
+    function saveSettings() {
+        const validationError = validate();
+        if (validationError) {
+            setMessage({ text: validationError, tone: "error" });
+            return;
+        }
+        if (section === "tax") {
+            const lines = buildTaxConfirmLines();
+            if (lines.length) {
+                setTaxConfirmLines(lines);
+                setSettingsConfirm("taxChange");
+                return;
+            }
+        }
+        if (section === "cash-shift") {
+            const wasRequired = baseline.requireCashShiftBeforeSale !== false;
+            const nowRequired = settings.requireCashShiftBeforeSale !== false;
+            if (wasRequired && !nowRequired) {
+                setSettingsConfirm("cashShiftOff");
+                return;
+            }
+        }
+        commitSettingsSave();
+    }
+    function isSectionDirty() {
+        if (section === "company-profile") {
+            return (
+                settings.companyName !== baseline.companyName ||
+                (settings.profileAddress ?? "") !== (baseline.profileAddress ?? "") ||
+                (settings.profileEmail ?? "") !== (baseline.profileEmail ?? "") ||
+                (settings.profilePhone ?? "") !== (baseline.profilePhone ?? "") ||
+                (settings.taxNumber ?? "") !== (baseline.taxNumber ?? "")
+            );
+        }
+        if (section === "tax") {
+            return (
+                settings.vatEnabled !== baseline.vatEnabled ||
+                settings.taxInclusive !== baseline.taxInclusive ||
+                settings.showTaxOnReceipt !== baseline.showTaxOnReceipt ||
+                Number(settings.vatRate) !== Number(baseline.vatRate)
+            );
+        }
+        if (section === "cash-shift") {
+            return (settings.requireCashShiftBeforeSale !== false) !== (baseline.requireCashShiftBeforeSale !== false);
+        }
+        if (section === "receipt") {
+            return (
+                settings.receiptPrefix !== baseline.receiptPrefix ||
+                (settings.receiptHeader ?? "") !== (baseline.receiptHeader ?? "") ||
+                (settings.receiptFooter ?? "") !== (baseline.receiptFooter ?? "") ||
+                settings.showLogoOnReceipt !== baseline.showLogoOnReceipt
+            );
+        }
+        if (section === "loyalty") {
+            return (
+                settings.loyaltyEnabled !== baseline.loyaltyEnabled ||
+                settings.loyaltyMinRedeemPoints !== baseline.loyaltyMinRedeemPoints ||
+                settings.loyaltyPointValueLak !== baseline.loyaltyPointValueLak ||
+                settings.loyaltySpendPerPointLak !== baseline.loyaltySpendPerPointLak
+            );
+        }
+        return false;
+    }
+    function updatePrintMode(value: SettingsFormData["receiptPrintMode"]) {
+        update("receiptPrintMode", value);
+        writeReceiptPrintModePreference(value);
+        setMessage({ text: tSettings("savedOnThisDevice", locale), tone: "success" });
     }
     const canSaveCompanySettings = ["company-profile", "tax", "cash-shift", "receipt", "loyalty"].includes(section);
     const detailTitle: Record<SettingsDetailSection, string> = {
@@ -346,7 +432,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
           </div>
         </div>
         {canSaveCompanySettings ? (
-        <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60" disabled={isPending} type="button" onClick={saveSettings}>
+        <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60" disabled={isPending || !isSectionDirty()} type="button" onClick={saveSettings}>
           <Save aria-hidden="true"/>
           {isPending ? tSettings("saving", locale) : tSettings("saveSettings", locale)}
         </button>
@@ -370,16 +456,17 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
               <div className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
                 {tSettings("companyLogo", locale)}
                 <input accept="image/png,image/jpeg,image/webp" className="hidden" ref={logoInputRef} type="file" onChange={(event) => void chooseLogoFile(event)}/>
-                <span className="text-xs leading-5 text-muted-foreground">{tSettings("logoFormatHelp", locale)}</span>
+                <span className="text-xs leading-5 text-muted-foreground">{tSettings("businessLogoUsageHelp", locale)}</span>
+                <span className="text-xs leading-5 text-muted-foreground">{tSettings("logoSizeHelp", locale)}</span>
                 <div className="flex flex-wrap gap-2">
                   {/* Source markers: ui.confirm.logo ui.remove.logo */}
                   {isStagedImageDirty(logoStage) ? (<>
-                    <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={confirmLogo}>{tSettings("confirm", locale)}</button>
-                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{tSettings("change", locale)}</button>
-                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={cancelLogoDraft}>{tSettings("cancel", locale)}</button>
+                    <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending} type="button" onClick={confirmLogo}>{isPending ? tSettings("uploadingLogo", locale) : tSettings("confirm", locale)}</button>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-60" disabled={isPending} type="button" onClick={() => logoInputRef.current?.click()}>{tSettings("change", locale)}</button>
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-60" disabled={isPending} type="button" onClick={cancelLogoDraft}>{tSettings("cancel", locale)}</button>
                   </>) : (<>
-                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => logoInputRef.current?.click()}>{logoStage.saved ? tSettings("change", locale) : tSettings("chooseLogo", locale)}</button>
-                    {logoStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger" type="button" onClick={removeLogo}>{tSettings("remove", locale)}</button> : null}
+                    <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-60" disabled={isPending} type="button" onClick={() => logoInputRef.current?.click()}>{logoStage.saved ? tSettings("change", locale) : tSettings("chooseLogo", locale)}</button>
+                    {logoStage.saved ? <button className="h-10 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger disabled:opacity-60" disabled={isPending} type="button" onClick={removeLogo}>{tSettings("remove", locale)}</button> : null}
                   </>)}
                 </div>
               </div>
@@ -437,12 +524,15 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
               <span className="text-sm text-muted-foreground">{tSettings("printBehaviorThisBrowser", locale)}</span>
             </div>
             <Field label={tSettings("receiptPrintMode", locale)}>
-              <select className="field-input" value={settings.receiptPrintMode} onChange={(event) => update("receiptPrintMode", event.target.value as SettingsFormData["receiptPrintMode"])}>
+              <select className="field-input" value={settings.receiptPrintMode} onChange={(event) => updatePrintMode(event.target.value as SettingsFormData["receiptPrintMode"])}>
                 <option value="ask_every_time">{receiptPrintModeLabel("ask_every_time", locale)}</option>
                 <option value="auto_print">{receiptPrintModeLabel("auto_print", locale)}</option>
                 <option value="no_auto_print">{receiptPrintModeLabel("no_auto_print", locale)}</option>
               </select>
             </Field>
+          </div>
+          <div className="md:col-span-2">
+            <ReceiptSettingsPreview businessLogoUrl={previewStagedImage(logoStage) || initialBusinessLogoUrl} locale={locale} settings={settings}/>
           </div>
         </div>
       </section>
@@ -474,6 +564,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
               {tSettings("resetThisPage", locale)}
             </button>
           </div>
+          <p className="text-xs leading-5 text-muted-foreground">{tSettings("adsInsideCustomerDisplayHelp", locale)}</p>
           <div>
             <div className="text-sm font-semibold">{tSettings("displayTemplate", locale)}</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -593,6 +684,13 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
       {section === "tax" ? (
       <section className="rounded-lg border border-border bg-card p-5">
         <SectionTitle icon={Percent} title={tSettings("taxVatSettings", locale)}/>
+        <div className="mt-4 rounded-md border border-border bg-background px-3 py-2 text-sm" data-tax-summary>
+          {settings.vatEnabled
+            ? (locale === "lo"
+              ? `ເປີດ • ${settings.vatRate}% • ${settings.taxInclusive ? "ລວມພາສີ" : "ແຍກພາສີ"}`
+              : `On • ${settings.vatRate}% • ${settings.taxInclusive ? "Inclusive" : "Exclusive"}`)
+            : (locale === "lo" ? "ປິດ" : "Off")}
+        </div>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
           <Toggle label={tSettings("enableVat", locale)} checked={settings.vatEnabled} onChange={(value) => update("vatEnabled", value)}/>
           <Toggle label={tSettings("taxInclusive", locale)} checked={settings.taxInclusive} onChange={(value) => update("taxInclusive", value)}/>
@@ -601,18 +699,29 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             <input className="field-input" max="100" min="0" step="0.01" type="number" value={settings.vatRate} onChange={(event) => update("vatRate", Number(event.target.value))}/>
           </Field>
         </div>
+        <div className="mt-4 grid gap-2 text-sm text-muted-foreground">
+          <p>{tSettings("taxHelpInclusive", locale)}</p>
+          <p>{tSettings("taxHelpExclusive", locale)}</p>
+        </div>
       </section>
       ) : null}
 
       {section === "cash-shift" ? (
       <section className="rounded-lg border border-border bg-card p-5">
         <SectionTitle icon={Banknote} title={tSettings("requireCashShiftBeforeSale", locale)}/>
+        <div className="mt-4 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium" data-cash-shift-summary>
+          {settings.requireCashShiftBeforeSale !== false
+            ? (locale === "lo" ? "ບັງຄັບ" : "Required")
+            : (locale === "lo" ? "ບໍ່ບັງຄັບ" : "Not required")}
+        </div>
         <div className="mt-5 grid gap-4">
           <Toggle
             label={tSettings("requireCashShiftBeforeSale", locale)}
             checked={settings.requireCashShiftBeforeSale !== false}
             onChange={(value) => update("requireCashShiftBeforeSale", value)}
           />
+          <p className="text-sm text-muted-foreground">{tSettings("cashShiftOnHelp", locale)}</p>
+          <p className="text-sm text-muted-foreground">{tSettings("cashShiftOffHelp", locale)}</p>
           <p className="text-sm text-muted-foreground">{tSettings("requireCashShiftBeforeSaleHelp", locale)}</p>
         </div>
       </section>
@@ -623,8 +732,15 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
             {settingsConfirm === "removeLogo" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyRemoveLogo}>{tSettings("remove", locale)}</button>) : null}
             {settingsConfirm === "resetThisPage" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAppearancePage}>{tSettings("resetThisPage", locale)}</button>) : null}
             {settingsConfirm === "resetAll" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAllDisplaySettings}>{tSettings("resetAllCustomerDisplay", locale)}</button>) : null}
-          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : tSettings("resetAllCustomerDisplay", locale)}>
-          <p className="text-sm text-muted-foreground">{settingsConfirm === "removeLogo" ? tSettings("removeLogoConfirm", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPageConfirm", locale) : tSettings("resetAllCustomerDisplayConfirm", locale)}</p>
+            {settingsConfirm === "taxChange" || settingsConfirm === "cashShiftOff" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSettingsSave}>{tSettings("applyChanges", locale)}</button>) : null}
+          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplay", locale) : settingsConfirm === "taxChange" ? tSettings("taxChangeConfirmTitle", locale) : tSettings("cashShiftDisableConfirmTitle", locale)}>
+          {settingsConfirm === "taxChange" ? (
+            <ul className="grid gap-2 text-sm text-muted-foreground">
+              {taxConfirmLines.map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">{settingsConfirm === "removeLogo" ? tSettings("removeLogoConfirm", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPageConfirm", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplayConfirm", locale) : tSettings("cashShiftDisableConfirmBody", locale)}</p>
+          )}
           {settingsConfirm === "resetAll" ? (<p className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>) : null}
         </AppSmallModal>) : null}
     </div>);

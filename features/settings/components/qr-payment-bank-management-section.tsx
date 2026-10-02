@@ -409,7 +409,7 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
           </div>))}
       </div>
 
-      {bankModalOpen ? (<SettingsLargeDrawer closeLabel={tSettings("closeModal", locale)} title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)} footer={<DialogActions locale={locale} onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel={tSettings("saveBank", locale)}/>}>
+      {bankModalOpen ? (<SettingsLargeDrawer closeLabel={tSettings("closeModal", locale)} title={editingBankId ? tSettings("editBank", locale) : tSettings("addBank", locale)} onClose={() => setBankModalOpen(false)} footer={<DialogActions disabled={isPending} locale={locale} onCancel={() => setBankModalOpen(false)} onSave={saveBank} saveLabel={isPending ? tSettings("saving", locale) : tSettings("saveBank", locale)}/>}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={tSettings("bankName", locale)}>
               <input className="field-input" value={bankDraft.bankName} onChange={(event) => setBankDraft((current) => ({ ...current, bankName: event.target.value }))}/>
@@ -430,11 +430,12 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
                   void readImageFileAsDataUrl(file).then((url) => setBankDraft((current) => ({ ...current, logoUrl: url }))).catch(() => onNotify({ text: tSettings("imageTypeError", locale), tone: "error" }));
                 }}/>
               </Field>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{tSettings("bankLogoHelp", locale)}</p>
             </div>
           </div>
         </SettingsLargeDrawer>) : null}
 
-      {accountModalOpen ? (<SettingsLargeDrawer closeLabel={tSettings("closeModal", locale)} title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)} footer={<DialogActions locale={locale} onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel={tSettings("saveQrAccount", locale)}/>}>
+      {accountModalOpen ? (<SettingsLargeDrawer closeLabel={tSettings("closeModal", locale)} title={editingAccountId ? tSettings("editQrAccount", locale) : tSettings("addQrAccount", locale)} onClose={() => setAccountModalOpen(false)} footer={<DialogActions disabled={isPending} locale={locale} onCancel={() => setAccountModalOpen(false)} onSave={saveQrAccount} saveLabel={isPending ? tSettings("saving", locale) : tSettings("saveQrAccount", locale)}/>}>
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label={tSettings("bank", locale)}>
               <select className="field-input" value={accountDraft.bankId} onChange={(event) => setAccountDraft((current) => ({ ...current, bankId: event.target.value }))}>
@@ -471,6 +472,7 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
                     ) : <QrCode className="size-10 text-muted-foreground" aria-hidden="true"/>}
                   </div>
                   <div className="grid min-w-0 flex-1 gap-2">
+                    <p className="text-xs leading-5 text-muted-foreground">{tSettings("qrImageHelp", locale)}</p>
                     <input accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" ref={qrImageInputRef} type="file" onChange={(event) => void chooseQrImage(event)}/>
                     <div className="flex flex-wrap gap-2">
                       {/* Source markers: ui.confirm.qr ui.replace.qr ui.remove.qr */}
@@ -503,7 +505,7 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setAccountToDelete(null)}>{tSettings("cancel", locale)}</button>
             <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={confirmDeleteAccount}>{tSettings("delete", locale)}</button>
           </div>} onClose={() => setAccountToDelete(null)} size="sm" title={tSettings("deleteQrAccountTitle", locale)}>
-          <p className="text-sm text-muted-foreground">{tSettings("deleteQrAccountConfirm", locale)}</p>
+          <p className="text-sm text-muted-foreground">{fillSettingsCopy(tSettings("deleteQrAccountNamed", locale), { label: accountToDelete.displayLabel || accountToDelete.accountName })}</p>
         </AppSmallModal>) : null}
 
       {previewAccount ? (<AppSmallModal closeAriaLabel={tSettings("closeModal", locale)} closeOnBackdrop={true} closeOnEscape={true} footer={<div className="flex justify-end">

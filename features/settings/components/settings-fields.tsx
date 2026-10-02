@@ -5,7 +5,8 @@ import { CheckCircle2, type LucideIcon } from "lucide-react";
 import type { SupportedLocale } from "@/lib/constants";
 import { tSettings } from "@/lib/i18n/settings-copy";
 
-export function DialogActions({ locale, onCancel, onSave, saveLabel }: {
+export function DialogActions({ disabled = false, locale, onCancel, onSave, saveLabel }: {
+  disabled?: boolean;
   locale: SupportedLocale;
   onCancel: () => void;
   onSave: () => void;
@@ -13,8 +14,8 @@ export function DialogActions({ locale, onCancel, onSave, saveLabel }: {
 }) {
   return (
     <div className="flex justify-end gap-2">
-      <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={onCancel}>{tSettings("cancel", locale)}</button>
-      <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={onSave}>
+      <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" disabled={disabled} type="button" onClick={onCancel}>{tSettings("cancel", locale)}</button>
+      <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={disabled} type="button" onClick={onSave}>
         <CheckCircle2 className="size-4" aria-hidden="true"/>
         {saveLabel}
       </button>

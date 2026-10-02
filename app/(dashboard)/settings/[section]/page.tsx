@@ -31,9 +31,10 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
   const tenant = tenantFromSession(session);
   const needsQr = section === "qr-payments";
   const needsStaff = section === "staff" || section === "roles" || section === "approval-rules";
+  const needsLogo = section === "business-logo" || section === "receipt";
   const [settings, businessLogoUrl, qrSnapshot, staffSnapshot] = await Promise.all([
     getPrismaSettings(tenant),
-    section === "business-logo" ? getCompanyBusinessLogoUrl(tenant.companyId) : Promise.resolve(null),
+    needsLogo ? getCompanyBusinessLogoUrl(tenant.companyId) : Promise.resolve(null),
     needsQr ? getQrPaymentSettingsSnapshot(tenant) : Promise.resolve(null),
     needsStaff ? getStaffAccessSnapshot(tenant) : Promise.resolve(undefined),
   ]);
