@@ -138,7 +138,8 @@ check("28. explicit false survives reload", readCompanyRequireCashShift({ requir
 const settingsForm = read("features/settings/components/settings-form.tsx");
 check(
   "29. print mode not written to company settings",
-  settingsForm.includes("const { receiptPrintMode: _devicePrintMode, ...companySettings } = settings") &&
+  settingsForm.includes("writeReceiptPrintModePreference") &&
+    !settingsForm.includes("payload = {\n                    receiptPrintMode") &&
     settingsRepo.includes("receiptPrintMode: _devicePrintMode") &&
     !read("prisma/schema.prisma").includes("receiptPrintMode"),
 );
