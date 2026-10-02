@@ -17,8 +17,10 @@ export type SettingsFormData = {
   profilePhone?: string;
   receiptFooter?: string;
   receiptHeader?: string;
-  /** Layout width for preview / print CSS only — not physical printer binding. */
+  /** Layout for preview / print CSS only — not physical printer binding. */
   receiptPaperSize: ReceiptPaperSize;
+  receiptCustomWidthMm: number;
+  receiptCustomHeightMm: number;
   receiptPrintMode: ReceiptPrintMode;
   receiptPrefix: string;
   receiptShowAddress: boolean;

@@ -47,7 +47,7 @@ check("1. no migration files for receipt visibility", !layout.includes("prisma m
 check("2. layout stored in unitPricingDefaults JSON", repo.includes("withReceiptLayoutPrefs") && repo.includes("parseReceiptLayoutPrefs"));
 check("3. white receipt paper preview", preview.includes('bg-white') && preview.includes("data-receipt-paper") && preview.includes("text-neutral-900"));
 check("4. paper size 58/80 widths differ", RECEIPT_PAPER_WIDTH_PX["58mm"] < RECEIPT_PAPER_WIDTH_PX["80mm"]);
-check("5. preview uses paper width", preview.includes("RECEIPT_PAPER_WIDTH_PX") && preview.includes("data-receipt-paper-size"));
+check("5. preview uses paper width", preview.includes("resolvePreviewPaperStyle") && preview.includes("data-receipt-paper-size"));
 check("6. live show/hide company name", preview.includes("receiptShowCompanyName") && form.includes("showStoreNameOnReceipt"));
 check("7. live show/hide branch", preview.includes("receiptShowBranchName") && form.includes("showBranchNameOnReceipt"));
 check("8. contact visibility controls", form.includes("showAddressOnReceipt") && form.includes("showPhoneOnReceipt") && form.includes("showEmailOnReceipt"));
