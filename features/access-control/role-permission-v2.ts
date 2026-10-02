@@ -194,6 +194,8 @@ export function permissionKeysForDraft(draft: RolePermissionDraft, currentKeys: 
   const next = new Set(currentKeys.filter((key) => !ownedKeys.has(key) && !disabledPrefixes.some((prefix) => key.startsWith(prefix))));
   for (const entry of ROLE_PERMISSION_MODULES) {
     if (!draft[entry.id]?.enabled) continue;
+    const gate = entry.permissions.find((item) => !item.deferred && item.writeKeys.length > 0);
+    for (const key of gate?.writeKeys ?? []) next.add(key);
     for (const item of entry.permissions) {
       if (item.deferred || !draft[entry.id].advanced[item.id]) continue;
       for (const key of item.writeKeys) next.add(key);
@@ -208,7 +210,9 @@ export function setRoleModuleEnabled(draft: RolePermissionDraft, moduleId: strin
   if (!current) return next;
   current.enabled = enabled;
   if (enabled && !Object.values(current.advanced).some(Boolean)) {
-    current.advanced = { ...recommendedRoleDraft(template)[moduleId].advanced };
+    const recommended = recommendedRoleDraft(template)[moduleId]?.advanced ?? {};
+    const gate = ROLE_PERMISSION_MODULES.find((entry) => entry.id === moduleId)?.permissions.find((item) => !item.deferred);
+    current.advanced = Object.values(recommended).some(Boolean) || !gate ? { ...recommended } : { ...recommended, [gate.id]: true };
   }
   return next;
 }
