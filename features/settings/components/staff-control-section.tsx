@@ -19,14 +19,12 @@ import {
   matrixToPermissionKeys,
   type RoleTemplateLabel,
 } from "@/features/access-control/permission-catalog";
-import { isAssignableStaffRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
+import { isAssignableStaffRole, NEW_STAFF_DEFAULTS, validateStaffAccountInput } from "@/features/access-control/staff-account";
 import type { StaffAccessSnapshot, StaffMemberRecord } from "@/features/access-control/types";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { SupportedLocale } from "@/lib/constants";
 import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, tSettings } from "@/lib/i18n/settings-copy";
 import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
-
-const DEFAULT_TERMINAL = "POS-01";
 
 type StaffDraft = {
   allowBackOfficeAccess: boolean;
@@ -47,16 +45,16 @@ function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: Staff
   const assignable = roles.filter((role) => isAssignableStaffRole(role));
   const cashierRole = assignable.find((role) => role.templateKey === "Staff/Cashier") ?? assignable[0];
   return {
-    allowBackOfficeAccess: false,
-    allowPosAccess: true,
-    assignedTerminal: DEFAULT_TERMINAL,
+    allowBackOfficeAccess: NEW_STAFF_DEFAULTS.allowBackOfficeAccess,
+    allowPosAccess: NEW_STAFF_DEFAULTS.allowPosAccess,
+    assignedTerminal: NEW_STAFF_DEFAULTS.assignedTerminal,
     branchId: branches[0]?.id ?? "",
     confirmPassword: "",
     fullName: "",
     password: "",
-    requirePasswordChange: true,
+    requirePasswordChange: NEW_STAFF_DEFAULTS.requirePasswordChange,
     roleId: cashierRole?.id ?? "",
-    status: "active",
+    status: NEW_STAFF_DEFAULTS.status,
     username: "",
   };
 }
@@ -237,8 +235,12 @@ export function StaffControlSection({
   }, [staffModalOpen, editingStaffId]);
 
   function saveStaff() {
-    if (!staffDraft.branchId || !staffDraft.roleId) {
-      onNotify({ text: tSettings("requiredFieldMissing", locale), tone: "error" });
+    if (!staffDraft.roleId) {
+      onNotify({ text: tSettings("staffRoleRequired", locale), tone: "error" });
+      return;
+    }
+    if (!staffDraft.branchId) {
+      onNotify({ text: tSettings("branchRequired", locale), tone: "error" });
       return;
     }
     try {

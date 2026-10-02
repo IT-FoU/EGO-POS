@@ -1,6 +1,6 @@
 import { hash } from "bcryptjs";
 import { staffStatusForDisplay, staffStatusForStorage } from "@/lib/auth/account-access";
-import { isProtectedOwnerRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
+import { assertStaffAccessFlags, CANONICAL_ASSIGNABLE_ROLES, isProtectedOwnerRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
 import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -149,7 +149,39 @@ export async function getPosPolicyApprovalRules(tenant: TenantContext, client: a
   return approvalRules.map(mapApprovalRule);
 }
 
+export async function ensureAssignableStaffRoles(companyId: string, dbClient: any = db) {
+  const existing = await dbClient.role.findMany({ where: { companyId } });
+  const missing = CANONICAL_ASSIGNABLE_ROLES.filter((role) =>
+    !existing.some((row: { name?: string | null; templateKey?: string | null }) =>
+      String(row.templateKey ?? "") === role.templateKey || String(row.name ?? "").trim().toLowerCase() === role.name.toLowerCase(),
+    ),
+  );
+  if (missing.length === 0) return;
+
+  await ensureAccessControlCatalog(dbClient);
+  const created: Partial<Record<RoleTemplateLabel, { id: string }>> = {};
+  for (const role of missing) {
+    try {
+      const row = await dbClient.role.create({
+        data: {
+          companyId,
+          description: role.description,
+          isSystem: true,
+          name: role.name,
+          templateKey: role.templateKey,
+        },
+      });
+      created[role.label] = { id: String(row.id) };
+    } catch (error) {
+      const existingRole = await dbClient.role.findFirst({ where: { companyId, name: role.name } });
+      if (!existingRole) throw error;
+    }
+  }
+  await seedRoleTemplatePermissions(companyId, created, dbClient, { skipCatalogEnsure: true });
+}
+
 export async function getStaffAccessSnapshot(tenant: TenantContext, client: any = db): Promise<StaffAccessSnapshot> {
+  await ensureAssignableStaffRoles(tenant.companyId, client);
   const [branches, roles, staffRows, approvalRules, pendingApprovals, rolePermissionRows] = await Promise.all([
     client.branch.findMany({
       orderBy: [{ isMainBranch: "desc" }, { name: "asc" }],
@@ -237,6 +269,7 @@ function staffAuditData(input: {
 }
 
 export async function saveStaffMember(input: SaveStaffMemberInput, tenant: TenantContext) {
+  assertStaffAccessFlags(input);
   const branchId = stringValue(input.branchId);
   const roleId = stringValue(input.roleId);
   const identity = validateStaffAccountInput({
@@ -247,8 +280,11 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
   });
   const { fullName, password, username } = identity;
 
-  if (!branchId || !roleId) {
-    throw new Error("Staff name, username, branch, and role are required.");
+  if (!roleId) {
+    throw new Error("A staff role is required.");
+  }
+  if (!branchId) {
+    throw new Error("Branch is required.");
   }
   const storedStatus = staffStatusForStorage(input.status);
   const previousAudit = input.id ? {} : undefined;

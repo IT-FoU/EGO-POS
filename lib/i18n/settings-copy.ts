@@ -530,6 +530,8 @@ const en = {
   "allRoles": "All roles",
   "allBranches": "All branches",
   "passwordResetHelp": "Enter a new password. The current password stays hidden.",
+  "staffRoleRequired": "A staff role is required.",
+  "staffAccessFlagsRequired": "POS Access and Back Office Access are required.",
 };
 
 const lo = {
@@ -1062,6 +1064,8 @@ const lo = {
   "allRoles": "ທຸກບົດບາດ",
   "allBranches": "ທຸກສາຂາ",
   "passwordResetHelp": "ໃສ່ລະຫັດຜ່ານໃໝ່. ລະຫັດປັດຈຸບັນຈະບໍ່ສະແດງ.",
+  "staffRoleRequired": "ຕ້ອງເລືອກບົດບາດພະນັກງານ.",
+  "staffAccessFlagsRequired": "ຕ້ອງລະບຸການເຂົ້າ POS ແລະ Back Office.",
 };
 
 export type SettingsCopyKey = keyof typeof en;
@@ -1253,6 +1257,8 @@ const knownErrors: Record<string, SettingsCopyKey> = {
   "Username is too long.": "usernameTooLong",
   "Password must be at least 8 characters.": "passwordTooShort",
   "Password is too long.": "passwordTooLong",
+  "A staff role is required.": "staffRoleRequired",
+  "POS Access and Back Office Access are required.": "staffAccessFlagsRequired",
   "Owner cannot be deactivated.": "ownerCannotDeactivate",
   "Role was not found.": "roleNotFound",
   "Owner permissions cannot be changed.": "ownerPermissionsLocked",

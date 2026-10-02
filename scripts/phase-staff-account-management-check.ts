@@ -3,7 +3,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isAssignableStaffRole, validateStaffAccountInput } from "../features/access-control/staff-account";
+import { assertStaffAccessFlags, CANONICAL_ASSIGNABLE_ROLES, isAssignableStaffRole, NEW_STAFF_DEFAULTS, validateStaffAccountInput } from "../features/access-control/staff-account";
 import { staffStatusForDisplay, staffStatusForStorage } from "../lib/auth/account-access";
 import { settingsCopyKeyParity, tSettings } from "../lib/i18n/settings-copy";
 
@@ -49,6 +49,11 @@ check("17. both-access warning is present", staffUi.includes("bothAccessOffWarni
 check("18. effective access summary is present", staffUi.includes('tSettings("effectiveAccess"'));
 check("19. reactivate action uses staff edit permission", actions.includes("reactivateStaffMemberAction") && actions.includes("WRITE_PERMISSIONS.staffManage"));
 check("20. EN and LO staff copy match", settingsCopyKeyParity() && tSettings("posAccessHelp", "en").includes("POS") && tSettings("posAccessHelp", "lo") !== tSettings("posAccessHelp", "en") && tSettings("disabled", "lo") !== "Disabled");
+check("21. false access flags are valid", (() => { try { assertStaffAccessFlags({ allowBackOfficeAccess: false, allowPosAccess: false }); return true; } catch { return false; } })());
+check("22. missing access flags are rejected", (() => { try { assertStaffAccessFlags({ allowBackOfficeAccess: undefined, allowPosAccess: false }); return false; } catch { return true; } })());
+check("23. new staff defaults are cashier-safe", NEW_STAFF_DEFAULTS.allowPosAccess === true && NEW_STAFF_DEFAULTS.allowBackOfficeAccess === false && NEW_STAFF_DEFAULTS.status === "active");
+check("24. canonical roles exclude owner", CANONICAL_ASSIGNABLE_ROLES.every((role) => role.templateKey !== "manager" || role.name === "Manager") && !CANONICAL_ASSIGNABLE_ROLES.some((role) => role.name === "Owner" || role.templateKey === "cashier" && role.label !== "Staff/Cashier") && CANONICAL_ASSIGNABLE_ROLES.some((role) => role.templateKey === "cashier") && CANONICAL_ASSIGNABLE_ROLES.some((role) => role.templateKey === "manager"));
+check("25. staff page ensures assignable roles", repo.includes("ensureAssignableStaffRoles") && repo.includes("assertStaffAccessFlags") && !repo.includes("if (!input.allowPosAccess)") && !repo.includes("if (!allowPosAccess)"));
 
 console.log(`\nStaff account management: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
