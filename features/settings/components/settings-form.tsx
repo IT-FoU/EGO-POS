@@ -49,12 +49,13 @@ export type SettingsDetailSection =
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
   | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
     initialActiveBranch?: import("@/features/settings/branch-information").ActiveBranchInformation | null;
     initialBusinessLogoUrl?: string | null;
     initialHelpContext?: import("@/features/settings/components/help-support-panel").HelpSystemContext | null;
     initialQrAccounts?: QrPaymentAccountRecord[];
     initialQrBanks?: QrPaymentBankRecord[];
+    initialReceiptPreviewQrUrl?: string | null;
     initialSettings: SettingsFormData;
     initialStaffSnapshot?: StaffAccessSnapshot;
     locale: SupportedLocale;
@@ -300,7 +301,19 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
                 payload = {
                     receiptFooter: settings.receiptFooter,
                     receiptHeader: settings.receiptHeader,
+                    receiptPaperSize: settings.receiptPaperSize,
                     receiptPrefix: settings.receiptPrefix,
+                    receiptShowAddress: settings.receiptShowAddress,
+                    receiptShowBranchName: settings.receiptShowBranchName,
+                    receiptShowCashier: settings.receiptShowCashier,
+                    receiptShowCompanyName: settings.receiptShowCompanyName,
+                    receiptShowDateTime: settings.receiptShowDateTime,
+                    receiptShowEmail: settings.receiptShowEmail,
+                    receiptShowFooter: settings.receiptShowFooter,
+                    receiptShowHeader: settings.receiptShowHeader,
+                    receiptShowPhone: settings.receiptShowPhone,
+                    receiptShowReceiptNumber: settings.receiptShowReceiptNumber,
+                    receiptShowTaxNumber: settings.receiptShowTaxNumber,
                     showLogoOnReceipt: settings.showLogoOnReceipt,
                 };
             } else {
@@ -393,7 +406,19 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
                 settings.receiptPrefix !== baseline.receiptPrefix ||
                 (settings.receiptHeader ?? "") !== (baseline.receiptHeader ?? "") ||
                 (settings.receiptFooter ?? "") !== (baseline.receiptFooter ?? "") ||
-                settings.showLogoOnReceipt !== baseline.showLogoOnReceipt
+                settings.showLogoOnReceipt !== baseline.showLogoOnReceipt ||
+                settings.receiptPaperSize !== baseline.receiptPaperSize ||
+                settings.receiptShowAddress !== baseline.receiptShowAddress ||
+                settings.receiptShowBranchName !== baseline.receiptShowBranchName ||
+                settings.receiptShowCashier !== baseline.receiptShowCashier ||
+                settings.receiptShowCompanyName !== baseline.receiptShowCompanyName ||
+                settings.receiptShowDateTime !== baseline.receiptShowDateTime ||
+                settings.receiptShowEmail !== baseline.receiptShowEmail ||
+                settings.receiptShowFooter !== baseline.receiptShowFooter ||
+                settings.receiptShowHeader !== baseline.receiptShowHeader ||
+                settings.receiptShowPhone !== baseline.receiptShowPhone ||
+                settings.receiptShowReceiptNumber !== baseline.receiptShowReceiptNumber ||
+                settings.receiptShowTaxNumber !== baseline.receiptShowTaxNumber
             );
         }
         if (section === "loyalty") {
@@ -539,10 +564,55 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
             <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">{tSettings("scopeCompany", locale)}</span>
             <span className="text-sm text-muted-foreground">{tSettings("receiptContentShared", locale)}</span>
           </div>
+
+          <fieldset className="md:col-span-2 rounded-md border border-border p-3">
+            <legend className="px-1 text-sm font-semibold">{tSettings("receiptPaperSize", locale)}</legend>
+            <p className="mb-3 text-xs text-muted-foreground">{tSettings("receiptPaperSizeHelp", locale)}</p>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={tSettings("receiptPaperSize", locale)}>
+              {(["58mm", "80mm"] as const).map((size) => {
+                const selected = settings.receiptPaperSize === size;
+                return (
+                  <button
+                    aria-checked={selected}
+                    aria-pressed={selected}
+                    className={selected
+                      ? "h-11 min-w-[96px] rounded-md border border-primary bg-primary/10 px-4 text-sm font-semibold text-primary shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      : "h-11 min-w-[96px] rounded-md border border-border bg-background px-4 text-sm font-semibold transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"}
+                    key={size}
+                    role="radio"
+                    type="button"
+                    onClick={() => update("receiptPaperSize", size)}
+                  >
+                    {size === "58mm" ? tSettings("receiptPaperSize58", locale) : tSettings("receiptPaperSize80", locale)}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
           <Field label={tSettings("receiptPrefix", locale)}>
             <input className="field-input font-mono" required value={settings.receiptPrefix} onChange={(event) => update("receiptPrefix", event.target.value)}/>
           </Field>
-          <Toggle label={tSettings("showLogoOnReceipt", locale)} checked={settings.showLogoOnReceipt} onChange={(value) => update("showLogoOnReceipt", value)}/>
+
+          <div className="md:col-span-2">
+            <div className="mb-2 text-sm font-semibold">{tSettings("receiptVisibility", locale)}</div>
+            <p className="mb-3 text-xs text-muted-foreground">{tSettings("receiptVisibilityHelp", locale)}</p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Toggle label={tSettings("showLogoOnReceipt", locale)} checked={settings.showLogoOnReceipt} onChange={(value) => update("showLogoOnReceipt", value)}/>
+              <Toggle label={tSettings("showStoreNameOnReceipt", locale)} checked={settings.receiptShowCompanyName} onChange={(value) => update("receiptShowCompanyName", value)}/>
+              <Toggle label={tSettings("showBranchNameOnReceipt", locale)} checked={settings.receiptShowBranchName} onChange={(value) => update("receiptShowBranchName", value)}/>
+              <Toggle label={tSettings("showAddressOnReceipt", locale)} checked={settings.receiptShowAddress} onChange={(value) => update("receiptShowAddress", value)}/>
+              <Toggle label={tSettings("showPhoneOnReceipt", locale)} checked={settings.receiptShowPhone} onChange={(value) => update("receiptShowPhone", value)}/>
+              <Toggle label={tSettings("showEmailOnReceipt", locale)} checked={settings.receiptShowEmail} onChange={(value) => update("receiptShowEmail", value)}/>
+              <Toggle label={tSettings("showTaxNumberOnReceipt", locale)} checked={settings.receiptShowTaxNumber} onChange={(value) => update("receiptShowTaxNumber", value)}/>
+              <Toggle label={tSettings("showCashierOnReceipt", locale)} checked={settings.receiptShowCashier} onChange={(value) => update("receiptShowCashier", value)}/>
+              <Toggle label={tSettings("showReceiptNumberOnReceipt", locale)} checked={settings.receiptShowReceiptNumber} onChange={(value) => update("receiptShowReceiptNumber", value)}/>
+              <Toggle label={tSettings("showDateTimeOnReceipt", locale)} checked={settings.receiptShowDateTime} onChange={(value) => update("receiptShowDateTime", value)}/>
+              <Toggle label={tSettings("showHeaderOnReceipt", locale)} checked={settings.receiptShowHeader} onChange={(value) => update("receiptShowHeader", value)}/>
+              <Toggle label={tSettings("showFooterOnReceipt", locale)} checked={settings.receiptShowFooter} onChange={(value) => update("receiptShowFooter", value)}/>
+            </div>
+          </div>
+
           <div className="md:col-span-2">
             <Field label={tSettings("receiptHeader", locale)}>
               <input className="field-input" value={settings.receiptHeader ?? ""} onChange={(event) => update("receiptHeader", event.target.value)}/>
@@ -567,7 +637,13 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
             </Field>
           </div>
           <div className="md:col-span-2">
-            <ReceiptSettingsPreview businessLogoUrl={previewStagedImage(logoStage) || initialBusinessLogoUrl} locale={locale} settings={settings}/>
+            <ReceiptSettingsPreview
+              branchName={initialActiveBranch?.name ?? null}
+              businessLogoUrl={previewStagedImage(logoStage) || initialBusinessLogoUrl}
+              locale={locale}
+              previewQrImageUrl={initialReceiptPreviewQrUrl}
+              settings={settings}
+            />
           </div>
         </div>
       </section>

@@ -3526,36 +3526,63 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
         }, 250);
         return () => window.clearTimeout(timeout);
     }, [autoPrint, autoPrintStarted, onReprint]);
-    const receiptTitle = receiptSettings.receiptHeader || receiptSettings.companyName;
-    const receiptFooter = receiptSettings.receiptFooter || t("ui.thank.you");
+    const showCompanyName = receiptSettings.receiptShowCompanyName !== false;
+    const showBranchName = receiptSettings.receiptShowBranchName !== false;
+    const showAddress = receiptSettings.receiptShowAddress !== false;
+    const showPhone = receiptSettings.receiptShowPhone !== false;
+    const showEmail = receiptSettings.receiptShowEmail !== false;
+    const showTaxNumber = receiptSettings.receiptShowTaxNumber !== false;
+    const showCashier = receiptSettings.receiptShowCashier !== false;
+    const showReceiptNumber = receiptSettings.receiptShowReceiptNumber !== false;
+    const showDateTime = receiptSettings.receiptShowDateTime !== false;
+    const showHeader = receiptSettings.receiptShowHeader !== false;
+    const showFooter = receiptSettings.receiptShowFooter !== false;
+    const paperSize = receiptSettings.receiptPaperSize === "58mm" ? "58mm" : "80mm";
+    const paperWidthPx = paperSize === "58mm" ? 220 : 302;
+    const headerText = showHeader ? String(receiptSettings.receiptHeader ?? "").trim() : "";
+    const companyTitle = showCompanyName ? String(receiptSettings.companyName ?? "").trim() : "";
+    const receiptTitle = headerText || companyTitle;
+    const footerText = showFooter
+      ? (String(receiptSettings.receiptFooter ?? "").trim() || t("ui.thank.you"))
+      : "";
     const logoSrc = receiptBusinessLogoSrc(receiptSettings.showLogoOnReceipt, receiptSettings.businessLogoUrl);
+    const addressText = showAddress ? String(receiptSettings.profileAddress ?? "").trim() : "";
+    const phoneText = showPhone ? String(receiptSettings.profilePhone ?? "").trim() : "";
+    const emailText = showEmail ? String(receiptSettings.profileEmail ?? "").trim() : "";
+    const taxNumberText = showTaxNumber ? String(receiptSettings.taxNumber ?? "").trim() : "";
     return (<PosWorkspaceModal headerClassName="print:hidden" onBack={onBack} onClose={onClose} title={t("ui.receipt.preview")}>
-        <div className="rounded-md border border-border bg-background p-5 font-mono text-sm">
+        <div
+          className="mx-auto rounded-md border border-neutral-300 bg-white p-5 font-mono text-sm text-neutral-900 shadow-sm print:border-0 print:shadow-none"
+          data-receipt-paper
+          data-receipt-paper-size={paperSize}
+          style={{ maxWidth: "100%", width: paperWidthPx }}
+        >
           <div className="text-center">
             {logoSrc ? <img alt="" className="mx-auto mb-2 max-h-16 w-auto object-contain" src={logoSrc}/> : null}
-            <div className="text-lg font-bold">{receiptTitle}</div>
-            {receiptSettings.profileAddress ? <div>{receiptSettings.profileAddress}</div> : null}
-            {receiptSettings.profilePhone ? <div>{receiptSettings.profilePhone}</div> : null}
-            {receiptSettings.profileEmail ? <div>{receiptSettings.profileEmail}</div> : null}
-            {receiptSettings.taxNumber ? <div>{t("ui.tax.label")} {receiptSettings.taxNumber}</div> : null}
-            <div>{branchName}</div>
-            <div>{t("ui.bill.label")} {saleNo}</div>
-            <div>{t("ui.receipt.label")} {receiptNo}</div>
+            {receiptTitle ? <div className="text-lg font-bold">{receiptTitle}</div> : null}
+            {headerText && companyTitle && headerText !== companyTitle ? <div>{companyTitle}</div> : null}
+            {addressText ? <div>{addressText}</div> : null}
+            {phoneText ? <div>{phoneText}</div> : null}
+            {emailText ? <div>{emailText}</div> : null}
+            {taxNumberText ? <div>{t("ui.tax.label")} {taxNumberText}</div> : null}
+            {showBranchName && branchName.trim() ? <div>{branchName}</div> : null}
+            {showReceiptNumber ? <div>{t("ui.bill.label")} {saleNo}</div> : null}
+            {showReceiptNumber ? <div>{t("ui.receipt.label")} {receiptNo}</div> : null}
             <div>{t("ui.customer.label")} {customerName}</div>
-            <div>{t("ui.cashier")}{cashierName}</div>
-            <div>{formatReceiptDateTime(createdAt)}</div>
+            {showCashier && cashierName.trim() ? <div>{t("ui.cashier")}{cashierName}</div> : null}
+            {showDateTime ? <div>{formatReceiptDateTime(createdAt)}</div> : null}
           </div>
-          <div className="my-4 border-t border-dashed border-border"/>
+          <div className="my-4 border-t border-dashed border-neutral-400"/>
           <div className="flex flex-col gap-3">
-            {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{t("ui.no.receipt.items")}</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
+            {cartItems.length === 0 ? (<div className="rounded-md border border-dashed border-neutral-300 p-3 text-sm text-neutral-600">{t("ui.no.receipt.items")}</div>) : cartItems.map((item, index) => (<div key={cartLineKey(item, index)}>
                 <div className="flex justify-between gap-3">
                   <span>{localizedProductName(item)}{item.unitName ? ` — ${item.unitName}` : ""}</span>
                   <span>{formatLak(item.priceLak * item.quantity)}</span>
                 </div>
-                <div className="text-muted-foreground">{item.quantity} x {formatLak(item.priceLak)} LAK{item.unitName ? ` / ${item.unitName}` : ""}</div>
+                <div className="text-neutral-600">{item.quantity} x {formatLak(item.priceLak)} LAK{item.unitName ? ` / ${item.unitName}` : ""}</div>
               </div>))}
           </div>
-          <div className="my-4 border-t border-dashed border-border"/>
+          <div className="my-4 border-t border-dashed border-neutral-400"/>
           <ReceiptRow label="Subtotal" value={subtotal}/>
           <ReceiptRow label="Discount" value={-discountTotal}/>
           {showTaxOnReceipt ? <ReceiptRow label="Tax" value={taxAmount}/> : null}
@@ -3566,8 +3593,8 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
               ))
             : <ReceiptRow label={`Paid ${paymentMode.toUpperCase()}`} value={paidAmount}/>}
           <ReceiptRow label="Change" value={changeAmount}/>
-          <div className="my-4 border-t border-dashed border-border"/>
-          <div className="text-center">{receiptFooter}</div>
+          <div className="my-4 border-t border-dashed border-neutral-400"/>
+          {footerText ? <div className="text-center">{footerText}</div> : null}
           {receiptQrImageUrl ? <img alt="" className="mx-auto mt-3 max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
         </div>
         <button className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground print:hidden" type="button" onClick={async () => {
