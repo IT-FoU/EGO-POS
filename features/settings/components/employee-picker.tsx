@@ -6,7 +6,7 @@ import { tSettings } from "@/lib/i18n/settings-copy";
 export type EmployeePickerOption = {
   branchName?: string;
   fullName: string;
-  status?: "active" | "inactive";
+  status?: "active" | "disabled" | "inactive";
   userId: string;
   username?: string;
 };
@@ -32,8 +32,8 @@ export function EmployeePicker({
 }) {
   const sorted = [...employees].sort((a, b) => {
     if (preferActive) {
-      const aActive = a.status !== "inactive" ? 0 : 1;
-      const bActive = b.status !== "inactive" ? 0 : 1;
+      const aActive = a.status === "active" || !a.status ? 0 : 1;
+      const bActive = b.status === "active" || !b.status ? 0 : 1;
       if (aActive !== bActive) return aActive - bActive;
     }
     return a.fullName.localeCompare(b.fullName);
@@ -63,7 +63,7 @@ export function EmployeePicker({
         )}
         {sorted.map((employee) => {
           const secondary = [employee.username, employee.branchName].filter(Boolean).join(" · ");
-          const inactive = employee.status === "inactive" ? ` (${tSettings("inactive", locale)})` : "";
+          const inactive = employee.status && employee.status !== "active" ? ` (${tSettings("disabled", locale)})` : "";
           return (
             <option key={employee.userId} value={employee.userId}>
               {employee.fullName}

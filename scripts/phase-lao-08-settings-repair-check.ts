@@ -290,7 +290,7 @@ check(
     settingsForm.includes('value="auto_print"') &&
     settingsCopy.includes("roundingNearest") &&
     settingsStaff.includes('value="active"') &&
-    settingsStaff.includes('value="inactive"') &&
+    settingsStaff.includes('value="disabled"') &&
     // Terminal options remain as internal defaults; Settings V2 Step 5 hides the assignment UX.
     (settingsStaff.includes('["POS-01", "POS-02", "POS-03", "Back Office"]') || settingsStaff.includes('const DEFAULT_TERMINAL = "POS-01"')) &&
     permissionCatalog.includes('["Owner", "Manager", "Staff/Cashier", "Custom"]') &&

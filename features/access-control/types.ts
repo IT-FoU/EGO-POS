@@ -23,7 +23,7 @@ export type StaffMemberRecord = {
   roleId: string;
   roleName: string;
   roleTemplate: RoleTemplateLabel;
-  status: "active" | "inactive";
+  status: "active" | "disabled";
   userId: string;
   username: string;
 };
@@ -83,7 +83,7 @@ export type SaveStaffMemberInput = {
   password?: string;
   requirePasswordChange: boolean;
   roleId: string;
-  status: "active" | "inactive";
+  status: "active" | "disabled";
   username: string;
 };
 

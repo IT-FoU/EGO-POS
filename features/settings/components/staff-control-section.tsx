@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, KeyRound, Plus, ShieldCheck, type LucideIcon } from "lucide-react";
 import {
   decideApprovalAction,
   deactivateStaffMemberAction,
+  reactivateStaffMemberAction,
   saveApprovalRuleAction,
   saveRolePermissionsAction,
   saveStaffMemberAction,
@@ -18,7 +19,8 @@ import {
   matrixToPermissionKeys,
   type RoleTemplateLabel,
 } from "@/features/access-control/permission-catalog";
-import type { StaffAccessSnapshot } from "@/features/access-control/types";
+import { isAssignableStaffRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
+import type { StaffAccessSnapshot, StaffMemberRecord } from "@/features/access-control/types";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { SupportedLocale } from "@/lib/constants";
 import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, tSettings } from "@/lib/i18n/settings-copy";
@@ -37,12 +39,13 @@ type StaffDraft = {
   password: string;
   requirePasswordChange: boolean;
   roleId: string;
-  status: "active" | "inactive";
+  status: "active" | "disabled";
   username: string;
 };
 
 function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: StaffAccessSnapshot["roles"]): StaffDraft {
-  const cashierRole = roles.find((role) => role.templateKey === "Staff/Cashier") ?? roles[0];
+  const assignable = roles.filter((role) => isAssignableStaffRole(role));
+  const cashierRole = assignable.find((role) => role.templateKey === "Staff/Cashier") ?? assignable[0];
   return {
     allowBackOfficeAccess: false,
     allowPosAccess: true,
@@ -59,11 +62,13 @@ function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: Staff
 }
 
 export function StaffControlSection({
+  actorUserId,
   initialSnapshot,
   locale,
   section,
   onNotify,
 }: {
+  actorUserId?: string;
   initialSnapshot: StaffAccessSnapshot;
   locale: SupportedLocale;
   section: "staff" | "roles" | "approval-rules";
@@ -78,10 +83,15 @@ export function StaffControlSection({
   const [approvalRules, setApprovalRules] = useState(initialSnapshot.approvalRules);
   const [pendingApprovals, setPendingApprovals] = useState(initialSnapshot.pendingApprovals);
   const [staffQuery, setStaffQuery] = useState("");
+  const [staffStatusFilter, setStaffStatusFilter] = useState<"all" | "active" | "disabled">("all");
+  const [staffRoleFilter, setStaffRoleFilter] = useState("all");
+  const [staffBranchFilter, setStaffBranchFilter] = useState("all");
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const [staffModalOpen, setStaffModalOpen] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [staffDraft, setStaffDraft] = useState<StaffDraft>(() => emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles));
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+  const [confirmReactivateId, setConfirmReactivateId] = useState<string | null>(null);
   const [confirmPermissions, setConfirmPermissions] = useState(false);
   const [confirmApprovalRule, setConfirmApprovalRule] = useState<keyof typeof APPROVAL_RULE_LABELS | null>(null);
 
@@ -98,7 +108,11 @@ export function StaffControlSection({
     if (!needle) return true;
     return module.toLowerCase().includes(needle) || localizePermissionModule(module, locale).toLowerCase().includes(needle);
   });
+  const assignableRoles = initialSnapshot.roles.filter((entry) => isAssignableStaffRole(entry));
   const filteredStaff = staff.filter((member) => {
+    if (staffStatusFilter !== "all" && member.status !== staffStatusFilter) return false;
+    if (staffRoleFilter !== "all" && member.roleId !== staffRoleFilter) return false;
+    if (staffBranchFilter !== "all" && member.branchId !== staffBranchFilter) return false;
     const needle = staffQuery.trim().toLowerCase();
     if (!needle) return true;
     return [
@@ -112,6 +126,9 @@ export function StaffControlSection({
       .toLowerCase()
       .includes(needle);
   });
+  const editingSelf = Boolean(editingStaffId && actorUserId && staff.find((member) => member.id === editingStaffId)?.userId === actorUserId);
+  const deactivateTarget = staff.find((member) => member.id === confirmDeactivateId);
+  const reactivateTarget = staff.find((member) => member.id === confirmReactivateId);
 
   function runMutation(action: () => Promise<{ error?: string; ok: boolean }>, successMessage: string) {
     onNotify(null);
@@ -214,13 +231,25 @@ export function StaffControlSection({
     setStaffModalOpen(true);
   }
 
+  useEffect(() => {
+    if (!staffModalOpen) return;
+    nameInputRef.current?.focus();
+  }, [staffModalOpen, editingStaffId]);
+
   function saveStaff() {
-    if (!staffDraft.fullName.trim() || !staffDraft.username.trim() || !staffDraft.branchId || !staffDraft.roleId) {
+    if (!staffDraft.branchId || !staffDraft.roleId) {
       onNotify({ text: tSettings("requiredFieldMissing", locale), tone: "error" });
       return;
     }
-    if (!editingStaffId && !staffDraft.password.trim()) {
-      onNotify({ text: tSettings("passwordRequired", locale), tone: "error" });
+    try {
+      validateStaffAccountInput({
+        fullName: staffDraft.fullName,
+        password: staffDraft.password,
+        passwordRequired: !editingStaffId,
+        username: staffDraft.username,
+      });
+    } catch (error) {
+      onNotify({ text: localizeSettingsError(error instanceof Error ? error.message : "", locale), tone: "error" });
       return;
     }
     if (staffDraft.password && staffDraft.password !== staffDraft.confirmPassword) {
@@ -254,6 +283,15 @@ export function StaffControlSection({
   function commitDisableStaff(memberId: string) {
     setConfirmDeactivateId(null);
     runMutation(() => deactivateStaffMemberAction(memberId), tSettings("staffDeactivated", locale));
+  }
+
+  function commitReactivateStaff(memberId: string) {
+    setConfirmReactivateId(null);
+    runMutation(() => reactivateStaffMemberAction(memberId), tSettings("staffReactivated", locale));
+  }
+
+  function branchLabel(member: Pick<StaffMemberRecord, "branchName">) {
+    return member.branchName.trim() ? member.branchName : tSettings("unknownBranch", locale);
   }
 
   function decideApproval(approvalId: string, status: "approved" | "rejected") {
@@ -330,18 +368,33 @@ export function StaffControlSection({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex items-center gap-2">
                 <KeyRound className="size-4 text-primary" aria-hidden="true" />
-                <h3 className="font-semibold">{tSettings("login", locale)}</h3>
+                <h3 className="font-semibold">{tSettings("staff", locale)}</h3>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input className="field-input h-10 sm:w-64" placeholder={tSettings("searchStaff", locale)} value={staffQuery} onChange={(event) => setStaffQuery(event.target.value)} />
+                <input aria-label={tSettings("searchStaff", locale)} className="field-input h-10 sm:w-64" placeholder={tSettings("searchStaff", locale)} value={staffQuery} onChange={(event) => setStaffQuery(event.target.value)} />
                 <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={openAddStaff}>
                   <Plus className="size-4" aria-hidden="true" />
                   {tSettings("addStaff", locale)}
                 </button>
               </div>
             </div>
-            <div className="mt-4 max-w-full overflow-x-auto">
-              <table className="w-full min-w-[820px] text-left text-sm">
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <select aria-label={tSettings("status", locale)} className="field-input h-10" value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value as "all" | "active" | "disabled")}>
+                <option value="all">{tSettings("allStatuses", locale)}</option>
+                <option value="active">{tSettings("active", locale)}</option>
+                <option value="disabled">{tSettings("disabled", locale)}</option>
+              </select>
+              <select aria-label={tSettings("role", locale)} className="field-input h-10" value={staffRoleFilter} onChange={(event) => setStaffRoleFilter(event.target.value)}>
+                <option value="all">{tSettings("allRoles", locale)}</option>
+                {initialSnapshot.roles.map((entry) => <option key={entry.id} value={entry.id}>{localizeRoleTemplate(entry.name, locale)}</option>)}
+              </select>
+              <select aria-label={tSettings("branch", locale)} className="field-input h-10" value={staffBranchFilter} onChange={(event) => setStaffBranchFilter(event.target.value)}>
+                <option value="all">{tSettings("allBranches", locale)}</option>
+                {initialSnapshot.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
+            </div>
+            <div className="mt-4 hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-3">{tSettings("staff", locale)}</th>
@@ -359,30 +412,29 @@ export function StaffControlSection({
                       <td className="px-3 py-3 font-semibold">{member.fullName}</td>
                       <td className="px-3 py-3 font-mono text-xs">{member.username}</td>
                       <td className="px-3 py-3">{localizeRoleTemplate(member.roleName, locale)}</td>
-                      <td className="px-3 py-3">{member.branchName}</td>
-                      <td className="px-3 py-3 text-xs">
-                        <span className={member.allowPosAccess ? "mr-1 rounded-full bg-success/10 px-2 py-1 text-success" : "mr-1 rounded-full bg-muted px-2 py-1 text-muted-foreground"}>{tSettings("pos", locale)}</span>
-                        <span className={member.allowBackOfficeAccess ? "rounded-full bg-primary/10 px-2 py-1 text-primary" : "rounded-full bg-muted px-2 py-1 text-muted-foreground"}>{tSettings("backOffice", locale)}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className={member.status === "active" ? "rounded-full bg-success/10 px-2 py-1 text-xs font-semibold text-success" : "rounded-full bg-danger/10 px-2 py-1 text-xs font-semibold text-danger"}>{localizeStaffStatus(member.status, locale)}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        {!member.isOwner ? (
-                          <div className="flex flex-wrap gap-2">
-                            <button className="h-8 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => openEditStaff(member.id)}>{tSettings("edit", locale)}</button>
-                            {member.status === "active" ? (
-                              <button className="h-8 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger" type="button" onClick={() => disableStaff(member.id)}>{tSettings("deactivate", locale)}</button>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{tSettings("owner", locale)}</span>
-                        )}
-                      </td>
+                      <td className="px-3 py-3">{branchLabel(member)}</td>
+                      <td className="px-3 py-3"><AccessMarks locale={locale} member={member} /></td>
+                      <td className="px-3 py-3"><StatusBadge locale={locale} member={member} /></td>
+                      <td className="px-3 py-3"><StaffActions locale={locale} member={member} onDeactivate={disableStaff} onEdit={openEditStaff} onReactivate={setConfirmReactivateId} /></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="mt-4 grid gap-3 md:hidden">
+              {filteredStaff.map((member) => (
+                <article className="rounded-lg border border-border bg-card p-3" key={member.id}>
+                  <div className="font-semibold">{member.fullName}</div>
+                  <div className="mt-1 font-mono text-xs text-muted-foreground">{member.username}</div>
+                  <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div><dt className="text-xs text-muted-foreground">{tSettings("role", locale)}</dt><dd>{localizeRoleTemplate(member.roleName, locale)}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">{tSettings("branch", locale)}</dt><dd>{branchLabel(member)}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">{tSettings("access", locale)}</dt><dd><AccessMarks locale={locale} member={member} /></dd></div>
+                    <div><dt className="text-xs text-muted-foreground">{tSettings("status", locale)}</dt><dd><StatusBadge locale={locale} member={member} /></dd></div>
+                  </dl>
+                  <div className="mt-3"><StaffActions locale={locale} member={member} onDeactivate={disableStaff} onEdit={openEditStaff} onReactivate={setConfirmReactivateId} /></div>
+                </article>
+              ))}
             </div>
           </section>
           ) : null}
@@ -475,31 +527,73 @@ export function StaffControlSection({
             </>
           )}
         >
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={tSettings("fullName", locale)}><input className="field-input" value={staffDraft.fullName} onChange={(event) => setStaffDraft((current) => ({ ...current, fullName: event.target.value }))} /></Field>
-            <Field label={tSettings("username", locale)}><input className="field-input" value={staffDraft.username} onChange={(event) => setStaffDraft((current) => ({ ...current, username: event.target.value }))} /></Field>
-            <Field label={tSettings("role", locale)}>
-              <select className="field-input" value={staffDraft.roleId} onChange={(event) => setStaffDraft((current) => ({ ...current, roleId: event.target.value }))}>
-                {initialSnapshot.roles.filter((entry) => entry.templateKey !== "Owner").map((entry) => <option key={entry.id} value={entry.id}>{localizeRoleTemplate(entry.name, locale)}</option>)}
-              </select>
-            </Field>
-            <Field label={tSettings("branch", locale)}>
-              <select className="field-input" value={staffDraft.branchId} onChange={(event) => setStaffDraft((current) => ({ ...current, branchId: event.target.value }))}>
-                {initialSnapshot.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-              </select>
-            </Field>
-            <Field label={tSettings("status", locale)}>
-              <select className="field-input" value={staffDraft.status} onChange={(event) => setStaffDraft((current) => ({ ...current, status: event.target.value as StaffDraft["status"] }))}>
-                <option value="active">{tSettings("active", locale)}</option>
-                <option value="inactive">{tSettings("inactive", locale)}</option>
-              </select>
-            </Field>
-            <Field label={editingStaffId ? tSettings("newPasswordOptional", locale) : tSettings("password", locale)}><input className="field-input" type="password" value={staffDraft.password} onChange={(event) => setStaffDraft((current) => ({ ...current, password: event.target.value }))} /></Field>
-            <Field label={tSettings("confirmPassword", locale)}><input className="field-input" type="password" value={staffDraft.confirmPassword} onChange={(event) => setStaffDraft((current) => ({ ...current, confirmPassword: event.target.value }))} /></Field>
-            <div className="grid gap-3 rounded-lg border border-border bg-background p-4 md:col-span-2 sm:grid-cols-2">
-              <label className="flex items-center gap-2 text-sm"><input checked={staffDraft.allowPosAccess} className="size-4 accent-primary" type="checkbox" onChange={(event) => setStaffDraft((current) => ({ ...current, allowPosAccess: event.target.checked }))} />{tSettings("allowPos", locale)}</label>
-              <label className="flex items-center gap-2 text-sm"><input checked={staffDraft.allowBackOfficeAccess} className="size-4 accent-primary" type="checkbox" onChange={(event) => setStaffDraft((current) => ({ ...current, allowBackOfficeAccess: event.target.checked }))} />{tSettings("allowBackOffice", locale)}</label>
-            </div>
+          <div className="grid gap-6">
+            <FormSection title={tSettings("basicInformation", locale)}>
+              <Field label={tSettings("fullName", locale)}>
+                <input ref={nameInputRef} autoComplete="name" className="field-input" required value={staffDraft.fullName} onChange={(event) => setStaffDraft((current) => ({ ...current, fullName: event.target.value }))} />
+              </Field>
+              <Field label={tSettings("username", locale)}>
+                <input autoComplete="username" className="field-input" required value={staffDraft.username} onChange={(event) => setStaffDraft((current) => ({ ...current, username: event.target.value }))} />
+              </Field>
+            </FormSection>
+            <FormSection title={tSettings("roleAndBranch", locale)}>
+              <Field label={tSettings("role", locale)}>
+                <select aria-label={tSettings("role", locale)} className="field-input" disabled={editingSelf} value={staffDraft.roleId} onChange={(event) => setStaffDraft((current) => ({ ...current, roleId: event.target.value }))}>
+                  {assignableRoles.map((entry) => <option key={entry.id} value={entry.id}>{localizeRoleTemplate(entry.name, locale)}</option>)}
+                </select>
+              </Field>
+              <Field label={tSettings("branch", locale)}>
+                <select aria-label={tSettings("branch", locale)} className="field-input" value={staffDraft.branchId} onChange={(event) => setStaffDraft((current) => ({ ...current, branchId: event.target.value }))}>
+                  {initialSnapshot.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </select>
+              </Field>
+            </FormSection>
+            <FormSection title={tSettings("access", locale)}>
+              <AccessSwitch
+                checked={staffDraft.allowPosAccess}
+                description={tSettings("posAccessHelp", locale)}
+                disabled={editingSelf}
+                label={tSettings("posAccess", locale)}
+                onChange={(allowPosAccess) => setStaffDraft((current) => ({ ...current, allowPosAccess }))}
+              />
+              <AccessSwitch
+                checked={staffDraft.allowBackOfficeAccess}
+                description={tSettings("backOfficeAccessHelp", locale)}
+                disabled={editingSelf}
+                label={tSettings("backOfficeAccess", locale)}
+                onChange={(allowBackOfficeAccess) => setStaffDraft((current) => ({ ...current, allowBackOfficeAccess }))}
+              />
+              {!staffDraft.allowPosAccess && !staffDraft.allowBackOfficeAccess ? (
+                <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground md:col-span-2" role="alert">{tSettings("bothAccessOffWarning", locale)}</p>
+              ) : null}
+            </FormSection>
+            <FormSection title={tSettings("accountStatus", locale)}>
+              <Field label={tSettings("accountStatus", locale)}>
+                <select aria-label={tSettings("accountStatus", locale)} className="field-input" value={staffDraft.status} onChange={(event) => setStaffDraft((current) => ({ ...current, status: event.target.value as StaffDraft["status"] }))}>
+                  <option value="active">{tSettings("active", locale)}</option>
+                  <option value="disabled">{tSettings("disabled", locale)}</option>
+                </select>
+              </Field>
+            </FormSection>
+            <FormSection title={tSettings("securitySection", locale)}>
+              <p className="text-xs leading-5 text-muted-foreground md:col-span-2">{editingStaffId ? tSettings("passwordResetHelp", locale) : tSettings("passwordRequired", locale)}</p>
+              <Field label={editingStaffId ? tSettings("newPassword", locale) : tSettings("password", locale)}>
+                <input autoComplete="new-password" className="field-input" type="password" value={staffDraft.password} onChange={(event) => setStaffDraft((current) => ({ ...current, password: event.target.value }))} />
+              </Field>
+              <Field label={tSettings("confirmNewPassword", locale)}>
+                <input autoComplete="new-password" className="field-input" type="password" value={staffDraft.confirmPassword} onChange={(event) => setStaffDraft((current) => ({ ...current, confirmPassword: event.target.value }))} />
+              </Field>
+            </FormSection>
+            <section className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">{tSettings("effectiveAccess", locale)}</h3>
+              <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs text-muted-foreground">{tSettings("pos", locale)}</dt><dd>{staffDraft.allowPosAccess ? tSettings("allowed", locale) : tSettings("blocked", locale)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">{tSettings("backOffice", locale)}</dt><dd>{staffDraft.allowBackOfficeAccess ? tSettings("allowed", locale) : tSettings("backOfficeModulesBlocked", locale)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">{tSettings("role", locale)}</dt><dd>{localizeRoleTemplate(assignableRoles.find((entry) => entry.id === staffDraft.roleId)?.name ?? "", locale)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">{tSettings("branch", locale)}</dt><dd>{initialSnapshot.branches.find((branch) => branch.id === staffDraft.branchId)?.name || tSettings("unknownBranch", locale)}</dd></div>
+              </dl>
+              <p className="mt-3 text-xs text-muted-foreground">{tSettings("currentRoleAccess", locale)}</p>
+            </section>
           </div>
         </SettingsLargeDrawer>
       ) : null}
@@ -517,9 +611,28 @@ export function StaffControlSection({
           )}
           onClose={() => setConfirmDeactivateId(null)}
           size="sm"
-          title={tSettings("deactivateStaffTitle", locale)}
+          title={fillSettingsCopy(tSettings("deactivateStaffNamed", locale), { name: deactivateTarget?.fullName ?? "" })}
         >
-          <p className="text-sm text-muted-foreground">{tSettings("deactivateStaffConfirm", locale)}</p>
+          <p className="text-sm text-muted-foreground">{tSettings("deactivateStaffHistory", locale)}</p>
+        </AppSmallModal>
+      ) : null}
+
+      {confirmReactivateId ? (
+        <AppSmallModal
+          closeAriaLabel={tSettings("closeModal", locale)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setConfirmReactivateId(null)}>{tSettings("cancel", locale)}</button>
+              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => commitReactivateStaff(confirmReactivateId)}>{tSettings("reactivate", locale)}</button>
+            </div>
+          )}
+          onClose={() => setConfirmReactivateId(null)}
+          size="sm"
+          title={fillSettingsCopy(tSettings("reactivateStaffNamed", locale), { name: reactivateTarget?.fullName ?? "" })}
+        >
+          <p className="text-sm text-muted-foreground">{tSettings("reactivateStaffConfirm", locale)}</p>
         </AppSmallModal>
       ) : null}
 
@@ -570,4 +683,99 @@ function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }
 
 function Field({ children, label }: { children: React.ReactNode; label: string }) {
   return <label className="grid gap-2 text-sm"><span className="font-medium">{label}</span>{children}</label>;
+}
+
+function FormSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <section className="grid gap-4">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <div className="grid gap-4 md:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function AccessSwitch({
+  checked,
+  description,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  description: string;
+  disabled?: boolean;
+  label: string;
+  onChange: (value: boolean) => void;
+}) {
+  const labelId = useId();
+  const descriptionId = useId();
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background p-4 md:col-span-2">
+      <div>
+        <div className="text-sm font-semibold" id={labelId}>{label}</div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground" id={descriptionId}>{description}</p>
+      </div>
+      <button
+        aria-checked={checked}
+        aria-describedby={descriptionId}
+        aria-labelledby={labelId}
+        className={checked ? "relative h-7 w-12 shrink-0 rounded-full bg-primary disabled:opacity-50" : "relative h-7 w-12 shrink-0 rounded-full bg-muted disabled:opacity-50"}
+        disabled={disabled}
+        role="switch"
+        type="button"
+        onClick={() => onChange(!checked)}
+      >
+        <span className={checked ? "absolute top-0.5 left-5 size-6 rounded-full bg-primary-foreground" : "absolute top-0.5 left-0.5 size-6 rounded-full bg-foreground"} />
+      </button>
+    </div>
+  );
+}
+
+function AccessMarks({ locale, member }: { locale: SupportedLocale; member: StaffMemberRecord }) {
+  return (
+    <div className="grid gap-1 text-xs">
+      <span>{tSettings("pos", locale)} {member.allowPosAccess ? "✓" : "—"} <span className="sr-only">{member.allowPosAccess ? tSettings("allowed", locale) : tSettings("blocked", locale)}</span></span>
+      <span>{tSettings("backOffice", locale)} {member.allowBackOfficeAccess ? "✓" : "—"} <span className="sr-only">{member.allowBackOfficeAccess ? tSettings("allowed", locale) : tSettings("blocked", locale)}</span></span>
+    </div>
+  );
+}
+
+function StatusBadge({ locale, member }: { locale: SupportedLocale; member: StaffMemberRecord }) {
+  if (member.isOwner) {
+    return <span className="rounded-full border border-border px-2 py-1 text-xs font-semibold">{tSettings("protected", locale)}</span>;
+  }
+  return <span className={member.status === "active" ? "rounded-full bg-success/10 px-2 py-1 text-xs font-semibold text-success" : "rounded-full bg-danger/10 px-2 py-1 text-xs font-semibold text-danger"}>{localizeStaffStatus(member.status, locale)}</span>;
+}
+
+function StaffActions({
+  locale,
+  member,
+  onDeactivate,
+  onEdit,
+  onReactivate,
+}: {
+  locale: SupportedLocale;
+  member: StaffMemberRecord;
+  onDeactivate: (id: string) => void;
+  onEdit: (id: string) => void;
+  onReactivate: (id: string) => void;
+}) {
+  if (member.isOwner) {
+    return (
+      <div className="flex flex-wrap gap-2 text-xs font-semibold">
+        <span className="rounded-full border border-border px-2 py-1">{tSettings("owner", locale)}</span>
+        <span className="rounded-full border border-border px-2 py-1">{tSettings("protected", locale)}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button aria-label={`${tSettings("edit", locale)} ${member.fullName}`} className="h-8 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => onEdit(member.id)}>{tSettings("edit", locale)}</button>
+      {member.status === "active" ? (
+        <button aria-label={`${tSettings("deactivate", locale)} ${member.fullName}`} className="h-8 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger" type="button" onClick={() => onDeactivate(member.id)}>{tSettings("deactivate", locale)}</button>
+      ) : (
+        <button aria-label={`${tSettings("reactivate", locale)} ${member.fullName}`} className="h-8 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => onReactivate(member.id)}>{tSettings("reactivate", locale)}</button>
+      )}
+    </div>
+  );
 }

@@ -59,6 +59,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
 
   return (
     <SettingsForm
+      actorUserId={session.user.id}
       initialActiveBranch={activeBranch}
       initialBusinessLogoUrl={businessLogoUrl}
       initialHelpContext={

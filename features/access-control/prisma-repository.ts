@@ -1,5 +1,6 @@
 import { hash } from "bcryptjs";
-import { isProtectedOwnerRole, staffStatusForDisplay, staffStatusForStorage } from "@/lib/auth/account-access";
+import { staffStatusForDisplay, staffStatusForStorage } from "@/lib/auth/account-access";
+import { isProtectedOwnerRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
 import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -59,7 +60,7 @@ function mapStaffMember(row: Record<string, unknown>): StaffMemberRecord {
     allowPosAccess: Boolean(row.allowPosAccess ?? true),
     assignedTerminal: String(row.assignedTerminal ?? "POS-01"),
     branchId: String(row.branchId ?? ""),
-    branchName: String(branch?.name ?? "Unassigned"),
+    branchName: branch?.name ? String(branch.name) : "",
     fullName: String(user?.fullName ?? ""),
     id: String(row.id),
     isOwner: Boolean(row.isOwner),
@@ -213,20 +214,60 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
   };
 }
 
+function staffAuditData(input: {
+  allowBackOfficeAccess: boolean;
+  allowPosAccess: boolean;
+  branchId: string;
+  fullName: string;
+  passwordReset?: boolean;
+  roleId: string;
+  status: "active" | "disabled";
+  username: string;
+}) {
+  return {
+    allowBackOfficeAccess: input.allowBackOfficeAccess,
+    allowPosAccess: input.allowPosAccess,
+    branchId: input.branchId,
+    fullName: input.fullName,
+    passwordReset: Boolean(input.passwordReset),
+    roleId: input.roleId,
+    status: input.status,
+    username: input.username,
+  };
+}
+
 export async function saveStaffMember(input: SaveStaffMemberInput, tenant: TenantContext) {
-  const fullName = stringValue(input.fullName).trim();
-  const username = stringValue(input.username).trim();
   const branchId = stringValue(input.branchId);
   const roleId = stringValue(input.roleId);
+  const identity = validateStaffAccountInput({
+    fullName: stringValue(input.fullName),
+    password: input.password,
+    passwordRequired: !input.id,
+    username: stringValue(input.username),
+  });
+  const { fullName, password, username } = identity;
 
-  if (!fullName || !username || !branchId || !roleId) {
+  if (!branchId || !roleId) {
     throw new Error("Staff name, username, branch, and role are required.");
   }
+  const storedStatus = staffStatusForStorage(input.status);
+  const previousAudit = input.id ? {} : undefined;
+  const nextAudit = staffAuditData({
+    allowBackOfficeAccess: Boolean(input.allowBackOfficeAccess),
+    allowPosAccess: Boolean(input.allowPosAccess),
+    branchId,
+    fullName,
+    passwordReset: Boolean(password),
+    roleId,
+    status: storedStatus,
+    username,
+  });
 
   return withTenantTransaction({
     action: input.id ? "update" : "create",
     module: "staff",
-    newData: { ...input, password: input.password ? "[redacted]" : undefined },
+    newData: nextAudit,
+    oldData: previousAudit,
     tenant,
     write: async (tx) => {
       const branch = await tx.branch.findFirst({
@@ -245,7 +286,6 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       if (isProtectedOwnerRole(role)) {
         throw new Error("You do not have permission to assign this role.");
       }
-      const storedStatus = staffStatusForStorage(input.status);
 
       if (input.id) {
         const membership = await tx.companyUser.findFirst({
@@ -281,10 +321,24 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           throw new Error("You do not have permission to change your own access.");
         }
 
+        Object.assign(previousAudit!, staffAuditData({
+          allowBackOfficeAccess: Boolean(membership.allowBackOfficeAccess),
+          allowPosAccess: Boolean(membership.allowPosAccess),
+          branchId: String(membership.branchId ?? ""),
+          fullName: String(membership.user.fullName ?? ""),
+          roleId: currentRoleId,
+          status: staffStatusForStorage(String(membership.status ?? "active")),
+          username: String(membership.user.username ?? ""),
+        }));
+
         const duplicate = await tx.user.findFirst({
           where: {
             id: { not: membership.userId },
-            OR: [{ username }, { email: username }],
+            OR: [
+              { username: { equals: username, mode: "insensitive" } },
+              { email: { equals: username, mode: "insensitive" } },
+              { email: { equals: `${username}@staff.local`, mode: "insensitive" } },
+            ],
           },
         });
         if (duplicate) {
@@ -296,8 +350,12 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           status: storedStatus,
           username,
         };
-        if (input.password?.trim()) {
-          userUpdate.passwordHash = await hash(input.password.trim(), 12);
+        const previousGeneratedEmail = `${String(membership.user.username ?? "")}@staff.local`;
+        if (!membership.user.email || membership.user.email === previousGeneratedEmail) {
+          userUpdate.email = `${username}@staff.local`;
+        }
+        if (password) {
+          userUpdate.passwordHash = await hash(password, 12);
         }
 
         await tx.user.update({
@@ -311,7 +369,6 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
             allowPosAccess: input.allowPosAccess,
             assignedTerminal: input.assignedTerminal,
             branchId,
-            requirePasswordChange: input.requirePasswordChange,
             status: storedStatus,
           },
           where: { id: membership.id },
@@ -356,12 +413,18 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       }
 
       const duplicate = await tx.user.findFirst({
-        where: { OR: [{ username }, { email: username }] },
+        where: {
+          OR: [
+            { username: { equals: username, mode: "insensitive" } },
+            { email: { equals: username, mode: "insensitive" } },
+            { email: { equals: `${username}@staff.local`, mode: "insensitive" } },
+          ],
+        },
       });
       if (duplicate) {
         throw new Error("Username already exists.");
       }
-      if (!input.password?.trim()) {
+      if (!password) {
         throw new Error("Password is required for new staff.");
       }
 
@@ -369,7 +432,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         data: {
           email: `${username}@staff.local`,
           fullName,
-          passwordHash: await hash(input.password.trim(), 12),
+          passwordHash: await hash(password, 12),
           preferredLocale: "en",
           status: storedStatus,
           username,
@@ -419,9 +482,9 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
 
 export async function deactivateStaffMember(membershipId: string, tenant: TenantContext) {
   return withTenantTransaction({
-    action: "archive",
+    action: "deactivate",
     module: "staff",
-    newData: { membershipId },
+    newData: { membershipId, status: "disabled" },
     tenant,
     write: async (tx) => {
       const membership = await tx.companyUser.findFirst({
@@ -458,6 +521,52 @@ export async function deactivateStaffMember(membershipId: string, tenant: Tenant
         ...membership,
         status: "disabled",
         user: { ...membership.user, status: "disabled" },
+      });
+    },
+  });
+}
+
+export async function reactivateStaffMember(membershipId: string, tenant: TenantContext) {
+  return withTenantTransaction({
+    action: "reactivate",
+    module: "staff",
+    newData: { membershipId, status: "active" },
+    tenant,
+    write: async (tx) => {
+      const membership = await tx.companyUser.findFirst({
+        include: {
+          branch: { select: { id: true, name: true } },
+          user: {
+            include: {
+              roles: {
+                include: { role: true },
+                where: { companyId: tenant.companyId },
+              },
+            },
+          },
+        },
+        where: { companyId: tenant.companyId, id: membershipId },
+      });
+      if (!membership) {
+        throw new Error("Staff member was not found.");
+      }
+      if (membership.isOwner) {
+        throw new Error("Owner membership cannot be edited from staff management.");
+      }
+
+      await tx.companyUser.update({
+        data: { status: "active" },
+        where: { id: membershipId },
+      });
+      await tx.user.update({
+        data: { status: "active" },
+        where: { id: membership.userId },
+      });
+
+      return mapStaffMember({
+        ...membership,
+        status: "active",
+        user: { ...membership.user, status: "active" },
       });
     },
   });
