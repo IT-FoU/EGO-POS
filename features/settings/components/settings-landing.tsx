@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import {
-  Banknote, Building2, CalendarOff, ChevronRight, Clock3, Gift, Image,
-  MonitorPlay, Percent, QrCode, ReceiptText, Search, ShieldCheck, Users,
+  Banknote, Building2, CalendarOff, ChevronRight, CircleHelp, Clock3, Gift, Image,
+  MapPin, MonitorPlay, Percent, QrCode, ReceiptText, Search, ShieldCheck, Users,
   UserRoundCog, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -21,7 +21,7 @@ export type SettingsLandingFacts = {
   settings: SettingsFormData;
 };
 
-type Scope = "company" | "device";
+type Scope = "branch" | "company" | "device";
 type Localized = { en: string; lo: string };
 type Row = {
   description: Localized;
@@ -44,6 +44,7 @@ const groups: Group[] = [
     rows: [
       { description: text("Store name and contact details", "ຊື່ຮ້ານ ແລະ ຂໍ້ມູນຕິດຕໍ່"), href: "/settings/company-profile", icon: Building2, keywords: "company profile business store contact address phone email ບໍລິສັດ ຮ້ານ", scope: "company", summary: ({ settings }) => settings.companyName, title: text("Company Profile", "ໂປຣໄຟລ໌ບໍລິສັດ") },
       { description: text("Image on receipts and customer screen", "ຮູບພາບໃນໃບບິນ ແລະ ຈໍລູກຄ້າ"), href: "/settings/business-logo", icon: Image, keywords: "business logo image receipt customer display ໂລໂກ້ ຮູບ", scope: "company", summary: ({ hasLogo }, locale) => hasLogo ? (locale === "lo" ? "ອັບໂຫຼດແລ້ວ" : "Uploaded") : (locale === "lo" ? "ຍັງບໍ່ໄດ້ຕັ້ງ" : "Not set"), title: text("Business Logo", "ໂລໂກ້ທຸລະກິດ") },
+      { description: text("Current branch name and contact details", "ຊື່ ແລະ ຂໍ້ມູນຕິດຕໍ່ຂອງສາຂາປັດຈຸບັນ"), href: "/settings/branch-information", icon: MapPin, keywords: "branch information name phone address current branch ສາຂາ", scope: "branch", summary: (_, locale) => locale === "lo" ? "ສາຂາປັດຈຸບັນ" : "Current branch", title: text("Branch Information", "ຂໍ້ມູນສາຂາ") },
       { description: text("How tax is calculated and printed", "ວິທີຄິດ ແລະ ພິມພາສີ"), href: "/settings/tax", icon: Percent, keywords: "tax vat rate inclusive receipt ພາສີ", scope: "company", summary: ({ settings }, locale) => settings.vatEnabled ? `${locale === "lo" ? "ເປີດ" : "On"} • ${settings.vatRate}%` : (locale === "lo" ? "ປິດ" : "Off"), title: text("Tax / VAT", "ພາສີ / VAT") },
     ],
   },
@@ -59,11 +60,11 @@ const groups: Group[] = [
   },
   {
     id: "staff",
-    title: text("Staff", "ພະນັກງານ"),
+    title: text("Staff & Security", "ພະນັກງານ ແລະ ຄວາມປອດໄພ"),
     rows: [
-      { description: text("People who can sign in", "ຜູ້ທີ່ສາມາດເຂົ້າລະບົບ"), href: "/settings/staff", icon: Users, keywords: "staff people login user employee ພະນັກງານ ເຂົ້າລະບົບ", scope: "company", summary: ({ activeStaff }, locale) => locale === "lo" ? `${activeStaff} ຄົນໃຊ້ງານ` : `${activeStaff} active`, title: text("Staff", "ພະນັກງານ") },
-      { description: text("What each role can do", "ສິ່ງທີ່ແຕ່ລະບົດບາດເຮັດໄດ້"), href: "/settings/roles", icon: ShieldCheck, keywords: "roles permissions owner manager cashier access ບົດບາດ ສິດ", scope: "company", summary: (_, locale) => locale === "lo" ? "ເຈົ້າຂອງຖືກປົກປ້ອງ" : "Owner protected", title: text("Roles & Permissions", "ບົດບາດ ແລະ ສິດ") },
-      { description: text("When manager approval is required", "ເມື່ອໃດຕ້ອງຂໍອະນຸມັດ"), href: "/settings/approval-rules", icon: UserRoundCog, keywords: "approval rules manager discount refund purchasing ອະນຸມັດ ກົດ", scope: "company", summary: ({ approvalRulesEnabled }, locale) => locale === "lo" ? `${approvalRulesEnabled} ລາຍການເປີດໃຊ້` : `${approvalRulesEnabled} enabled`, title: text("Approval Rules", "ກົດການອະນຸມັດ") },
+      { description: text("People who can sign in", "ຜູ້ທີ່ສາມາດເຂົ້າລະບົບ"), href: "/settings/staff", icon: Users, keywords: "staff people login user employee security ພະນັກງານ ເຂົ້າລະບົບ ຄວາມປອດໄພ", scope: "company", summary: ({ activeStaff }, locale) => locale === "lo" ? `${activeStaff} ຄົນໃຊ້ງານ` : `${activeStaff} active`, title: text("Staff", "ພະນັກງານ") },
+      { description: text("What each role can do", "ສິ່ງທີ່ແຕ່ລະບົດບາດເຮັດໄດ້"), href: "/settings/roles", icon: ShieldCheck, keywords: "roles permissions owner manager cashier access security ບົດບາດ ສິດ ຄວາມປອດໄພ", scope: "company", summary: (_, locale) => locale === "lo" ? "ເຈົ້າຂອງຖືກປົກປ້ອງ" : "Owner protected", title: text("Roles & Permissions", "ບົດບາດ ແລະ ສິດ") },
+      { description: text("When manager approval is required", "ເມື່ອໃດຕ້ອງຂໍອະນຸມັດ"), href: "/settings/approval-rules", icon: UserRoundCog, keywords: "approval rules manager discount refund purchasing security ອະນຸມັດ ກົດ ຄວາມປອດໄພ", scope: "company", summary: ({ approvalRulesEnabled }, locale) => locale === "lo" ? `${approvalRulesEnabled} ລາຍການເປີດໃຊ້` : `${approvalRulesEnabled} enabled`, title: text("Approval Rules", "ກົດການອະນຸມັດ") },
       { description: text("Weekly day off and quota", "ວັນພັກປະຈຳອາທິດ ແລະ ໂຄຕາ"), href: "/settings/day-off", icon: CalendarOff, keywords: "day off leave holiday quota weekly ວັນພັກ ລາພັກ", scope: "company", summary: (_, locale) => locale === "lo" ? "ນະໂຍບາຍພັກພະນັກງານ" : "Staff leave policy", title: text("Day Off", "ວັນພັກ") },
       { description: text("Overtime time windows", "ຊ່ວງເວລາເຮັດວຽກລ່ວງເວລາ"), href: "/settings/ot", icon: Clock3, keywords: "ot overtime time window ລ່ວງເວລາ", scope: "company", summary: (_, locale) => locale === "lo" ? "ຊ່ວງເວລາ OT" : "OT time windows", title: text("OT", "OT") },
     ],
@@ -73,6 +74,13 @@ const groups: Group[] = [
     title: text("Customers", "ລູກຄ້າ"),
     rows: [
       { description: text("How points are earned and redeemed", "ວິທີໄດ້ ແລະ ແລກຄະແນນ"), href: "/settings/loyalty", icon: Gift, keywords: "loyalty points earn redeem customer ຄະແນນ ລູກຄ້າ", scope: "company", summary: ({ settings }, locale) => settings.loyaltyEnabled ? (locale === "lo" ? "ເປີດ" : "On") : (locale === "lo" ? "ປິດ" : "Off"), title: text("Loyalty", "ຄະແນນສະສົມ") },
+    ],
+  },
+  {
+    id: "help",
+    title: text("Help & Support", "ຊ່ວຍເຫຼືອ ແລະ ສະໜັບສະໜູນ"),
+    rows: [
+      { description: text("Help topics and system information", "ຫົວຂໍ້ຊ່ວຍເຫຼືອ ແລະ ຂໍ້ມູນລະບົບ"), href: "/settings/help", icon: CircleHelp, keywords: "help support about version system information ຊ່ວຍເຫຼືອ ສະໜັບສະໜູນ ເວີຊັນ", scope: "company", summary: (_, locale) => locale === "lo" ? "ຊ່ວຍເຫຼືອ ແລະ ຂໍ້ມູນ" : "Help and About", title: text("Help & Support", "ຊ່ວຍເຫຼືອ ແລະ ສະໜັບສະໜູນ") },
     ],
   },
 ];
@@ -87,6 +95,7 @@ const explanations = [
   { description: text("Use the LO / EN control in the page header.", "ໃຊ້ປຸ່ມ LO / EN ຢູ່ສ່ວນຫົວໜ້າ."), keywords: "language lao english en lo ພາສາ ລາວ ອັງກິດ", title: text("Language", "ພາສາ") },
   { description: text("POS currently uses LAK; currency and decimals are not editable here.", "POS ໃຊ້ LAK ໃນປັດຈຸບັນ; ບໍ່ສາມາດປ່ຽນສະກຸນເງິນ ຫຼື ທົດສະນິຍົມຢູ່ນີ້."), keywords: "currency lak decimal rounding ສະກຸນເງິນ ທົດສະນິຍົມ", title: text("Currency", "ສະກຸນເງິນ") },
   { description: text("Alerts remain active; no category toggle exists.", "ການແຈ້ງເຕືອນຍັງເຮັດວຽກ; ຍັງບໍ່ມີປຸ່ມປິດເປີດຕາມປະເພດ."), keywords: "notification alerts low stock ແຈ້ງເຕືອນ ສິນຄ້າໃກ້ໝົດ", title: text("Notifications", "ການແຈ້ງເຕືອນ") },
+  { description: text("Support ticket submission is not available yet.", "ຍັງບໍ່ສາມາດສົ່ງບັດສະໜັບສະໜູນໄດ້ເທື່ອ."), keywords: "problem bug feedback feature request ticket support ບັນຫາ ບັກ ຄຳຕິຊົມ ຄຳຂໍຟີເຈີ", title: text("Support tickets", "ບັດສະໜັບສະໜູນ") },
   { description: text("This is not a configurable setting in this release.", "ລາຍການນີ້ຍັງບໍ່ແມ່ນການຕັ້ງຄ່າໃນລຸ້ນນີ້."), keywords: "hours business hours holiday printer payroll terminal session timeout pin ເວລາເປີດຮ້ານ ວັນພັກ ເຄື່ອງພິມ ເງິນເດືອນ", title: text("Not available in this release", "ຍັງບໍ່ມີໃນລຸ້ນນີ້") },
 ] as const;
 
@@ -139,7 +148,7 @@ export function SettingsLanding({ facts, locale: initialLocale }: { facts: Setti
                   <span className="grid min-w-0 flex-1 gap-1">
                     <span className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="font-semibold">{localized(row.title, locale)}</span>
-                      <span className="rounded-full border border-border bg-background px-2 py-0.5 text-xs font-semibold text-muted-foreground">{row.scope === "device" ? (locale === "lo" ? "ອຸປະກອນນີ້" : "This device") : (locale === "lo" ? "ບໍລິສັດ" : "Company")}</span>
+                      <span className="rounded-full border border-border bg-background px-2 py-0.5 text-xs font-semibold text-muted-foreground">{row.scope === "device" ? (locale === "lo" ? "ອຸປະກອນນີ້" : "This device") : row.scope === "branch" ? (locale === "lo" ? "ສາຂາ" : "Branch") : (locale === "lo" ? "ບໍລິສັດ" : "Company")}</span>
                     </span>
                     <span className="text-sm leading-5 text-muted-foreground">{localized(row.description, locale)}</span>
                     <span className="text-sm font-medium text-foreground">{row.summary(facts, locale, printMode)}</span>
