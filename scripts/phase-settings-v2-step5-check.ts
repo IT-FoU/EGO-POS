@@ -14,6 +14,8 @@ function check(name: string, fn: () => void) {
 }
 
 const staffControl = read("features/settings/components/staff-control-section.tsx");
+const rolePanel = read("features/settings/components/role-permissions-panel.tsx");
+const roleModel = read("features/access-control/role-permission-v2.ts");
 const dayOff = read("features/day-off/components/day-off-settings-panel.tsx");
 const ot = read("features/ot/components/ot-settings-panel.tsx");
 const picker = read("features/settings/components/employee-picker.tsx");
@@ -30,10 +32,10 @@ check("2. staff create/edit allowed fields present", () => {
   assert(staffControl.includes("fullName") && staffControl.includes("username") && staffControl.includes("roleId") && staffControl.includes("branchId"), "staff fields missing");
 });
 check("3. deactivate confirmation", () => {
-  assert(staffControl.includes("deactivateStaffTitle") && staffControl.includes("confirmDeactivateId"), "deactivate confirm missing");
+  assert(staffControl.includes("deactivateStaffNamed") && staffControl.includes("confirmDeactivateId"), "deactivate confirm missing");
 });
 check("4. owner protection", () => {
-  assert(staffControl.includes("member.isOwner") && staffControl.includes('role === "Owner"') && accessRepo.includes("Owner cannot"), "owner protection missing");
+  assert(staffControl.includes("member.isOwner") && staffControl.includes("isAssignableStaffRole") && rolePanel.includes('templateKey === "Owner"') && accessRepo.includes("isProtectedOwnerRole"), "owner protection missing");
 });
 check("5. terminal management not exposed", () => {
   assert(!staffControl.includes("TERMINAL_OPTIONS") && !staffControl.includes('tSettings("terminal"'), "terminal still exposed");
@@ -43,28 +45,28 @@ check("6. PIN/session timeout absent", () => {
   assert(!staffControl.toLowerCase().includes("session timeout") && !staffControl.includes("PIN"), "pin/timeout unexpectedly present");
 });
 check("7. roles load", () => {
-  assert(staffControl.includes("ROLE_TEMPLATE_LABELS") && staffControl.includes("permissionMatrix"), "roles matrix missing");
+  assert(staffControl.includes("RolePermissionsPanel") && rolePanel.includes("moduleAccess"), "role cards missing");
 });
-check("8. Owner protected in matrix", () => {
-  assert(staffControl.includes('disabled={role === "Owner"') && staffControl.includes("ownerFullAccess"), "owner matrix lock missing");
+check("8. Owner protected in role detail", () => {
+  assert(rolePanel.includes('templateKey === "Owner"') && rolePanel.includes("roleFullAccess") && !rolePanel.includes("min-w-[820px]"), "owner role lock missing");
 });
 check("9. Manager/Cashier/Custom editable path", () => {
-  assert(staffControl.includes("saveRolePermissionsAction") && staffControl.includes("commitSaveMatrix"), "role save path missing");
+  assert(rolePanel.includes("saveRolePermissionsAction") && rolePanel.includes("resetToDefault"), "role save path missing");
 });
-check("10. matrix values load", () => {
-  assert(staffControl.includes("initialSnapshot.matrix") && staffControl.includes("setMatrix"), "matrix load missing");
+check("10. role values load", () => {
+  assert(rolePanel.includes("permissionKeysByRole") && accessRepo.includes("permissionKeysByRole"), "role key load missing");
 });
 check("11. save role permissions", () => {
-  assert(staffControl.includes("saveRolePermissionsAction"), "save permissions action missing");
+  assert(rolePanel.includes("saveRolePermissionsAction"), "save permissions action missing");
 });
 check("12. permission confirmation", () => {
-  assert(staffControl.includes("savePermissionsConfirmTitle") && staffControl.includes("confirmPermissions"), "permission confirm missing");
+  assert(rolePanel.includes("savePermissionsConfirmTitle") && rolePanel.includes("confirmSave"), "permission confirm missing");
 });
 check("13. no permission-engine rewrite", () => {
-  assert(staffControl.includes("matrixToPermissionKeys") && !staffControl.includes("rewritePermissionEngine"), "unexpected permission rewrite");
+  assert(roleModel.includes("matrixToPermissionKeys") && !roleModel.includes("STORE_PERMISSION_MATRIX") && !staffControl.includes("rewritePermissionEngine"), "unexpected permission rewrite");
 });
 check("14. no self-escalation UI for Owner role assign", () => {
-  assert(staffControl.includes('templateKey !== "Owner"'), "owner assignable unexpectedly");
+  assert(staffControl.includes("isAssignableStaffRole"), "owner assignable unexpectedly");
 });
 check("15. approval rules load", () => {
   assert(staffControl.includes("approvalRules") && staffControl.includes("APPROVAL_RULE_LABELS"), "approval rules missing");

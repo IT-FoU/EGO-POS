@@ -55,7 +55,8 @@ export type SettingsDetailSection =
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
   | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ actorUserId, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+    actorIsOwner?: boolean;
     actorUserId?: string;
     initialActiveBranch?: import("@/features/settings/branch-information").ActiveBranchInformation | null;
     initialBusinessLogoUrl?: string | null;
@@ -823,6 +824,7 @@ export function SettingsForm({ actorUserId, initialActiveBranch = null, initialB
 
       {initialStaffSnapshot && ["staff", "roles", "approval-rules"].includes(section) ? (
       <StaffControlSection
+        actorIsOwner={actorIsOwner}
         actorUserId={actorUserId}
         initialSnapshot={initialStaffSnapshot}
         locale={locale}
