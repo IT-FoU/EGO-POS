@@ -1,3 +1,24 @@
+import type { RoleTemplateLabel } from "@/features/access-control/permission-catalog";
+
+export const NEW_STAFF_DEFAULTS = {
+  allowBackOfficeAccess: false,
+  allowPosAccess: true,
+  assignedTerminal: "POS-01",
+  requirePasswordChange: true,
+  status: "active" as const,
+};
+
+export const CANONICAL_ASSIGNABLE_ROLES: Array<{
+  description: string;
+  label: Exclude<RoleTemplateLabel, "Owner">;
+  name: string;
+  templateKey: "cashier" | "custom" | "manager";
+}> = [
+  { description: "Manager access with configurable permissions", label: "Manager", name: "Manager", templateKey: "manager" },
+  { description: "Cashier POS access", label: "Staff/Cashier", name: "Cashier", templateKey: "cashier" },
+  { description: "Custom configurable role", label: "Custom", name: "Custom", templateKey: "custom" },
+];
+
 export const STAFF_NAME_MAX_LENGTH = 120;
 export const STAFF_USERNAME_MAX_LENGTH = 64;
 export const STAFF_PASSWORD_MIN_LENGTH = 8;
@@ -54,4 +75,10 @@ export function validateStaffAccountInput(input: {
   }
 
   return { fullName, password: password || undefined, username };
+}
+
+export function assertStaffAccessFlags(input: { allowBackOfficeAccess: unknown; allowPosAccess: unknown }) {
+  if (typeof input.allowPosAccess !== "boolean" || typeof input.allowBackOfficeAccess !== "boolean") {
+    throw new Error("POS Access and Back Office Access are required.");
+  }
 }
