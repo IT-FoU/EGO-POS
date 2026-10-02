@@ -30,19 +30,21 @@ const activityPage = read("app/(dashboard)/activity-logs/page.tsx");
 const step2 = read("scripts/phase-settings-v2-step2-check.ts");
 const settingsCopy = read("lib/i18n/settings-copy.ts");
 
-const businessHrefs = ["/settings/company-profile", "/settings/business-logo", "/settings/tax"];
+const businessHrefs = ["/settings/company-profile", "/settings/business-logo", "/settings/branch-information", "/settings/tax"];
 const posHrefs = ["/settings/cash-shift", "/settings/receipt", "/settings/qr-payments", "/settings/customer-display"];
 const staffHrefs = ["/settings/staff", "/settings/roles", "/settings/approval-rules", "/settings/day-off", "/settings/ot"];
 const customerHrefs = ["/settings/loyalty"];
+const helpHrefs = ["/settings/help"];
 const loBusiness = "\u0e97\u0eb8\u0ea5\u0eb0\u0e81\u0eb4\u0e94";
 const loQrPay = "\u0e81\u0eb2\u0e99\u0e8a\u0eb3\u0ea5\u0eb0";
 const loSearch = "\u0e84\u0ebb\u0ec9\u0e99\u0eab\u0eb2\u0e95\u0eb1\u0ec9\u0e87\u0e84\u0ec8\u0eb2";
 
-check("1. Settings landing shows exactly 4 categories", (landing.match(/id: "/g) ?? []).length === 4 && landing.includes('id: "business"') && landing.includes('id: "pos-payments"') && landing.includes('id: "staff"') && landing.includes('id: "customers"'));
+check("1. Settings landing shows exactly 5 categories", (landing.match(/id: "/g) ?? []).length === 5 && landing.includes('id: "business"') && landing.includes('id: "pos-payments"') && landing.includes('id: "staff"') && landing.includes('id: "customers"') && landing.includes('id: "help"'));
 check("2. Business items correct", businessHrefs.every((href) => landing.includes(`href: "${href}"`)) && !landing.includes("/settings/currency") && !landing.includes("Business Hours"));
 check("3. POS & Payments items correct", posHrefs.every((href) => landing.includes(`href: "${href}"`)) && !landing.includes('href: "/settings/ads"'));
-check("4. Staff items correct", staffHrefs.every((href) => landing.includes(`href: "${href}"`)));
+check("4. Staff items correct", staffHrefs.every((href) => landing.includes(`href: "${href}"`)) && landing.includes("Staff & Security"));
 check("5. Customers only shows Loyalty", customerHrefs.every((href) => landing.includes(`href: "${href}"`)) && !landing.includes("/settings/membership") && !landing.includes("/settings/customer-rules"));
+check("5b. Help & Support category present", helpHrefs.every((href) => landing.includes(`href: "${href}"`)) && landing.includes("Help & Support"));
 check("6. Currency absent", !landing.includes("Currency Settings") && !form.includes("currencySettings") && !staff.includes("currencySettings"));
 check("7. Business Hours absent", !landing.includes("Business Hours") && !detailPage.includes("business-hours"));
 check("8. Notifications absent", !landing.includes('href: "/settings/notifications"'));
@@ -60,14 +62,14 @@ check("19. Cash Shift status", landing.includes("requireCashShiftBeforeSale") &&
 check("20. QR counts", landing.includes("activeQrBanks") && landing.includes("activeQrAccounts"));
 check("21. Staff active count", landing.includes("activeStaff"));
 check("22. Loyalty status", landing.includes("loyaltyEnabled"));
-check("23. direct route refresh works", detailPage.includes("sections.has") && businessHrefs.concat(posHrefs, staffHrefs, customerHrefs).every((href) => detailPage.includes(`"${href.replace("/settings/", "")}"`)));
+check("23. direct route refresh works", detailPage.includes("sections.has") && businessHrefs.concat(posHrefs, staffHrefs, customerHrefs, helpHrefs).every((href) => detailPage.includes(`"${href.replace("/settings/", "")}"`)));
 check("24. Back to Settings works", form.includes('href="/settings"') && form.includes("backToSettings") && settingsCopy.includes("Back to Settings"));
 check("25. global Save absent", !landing.includes("saveSettings") && !landing.includes("Save settings") && landingPage.includes("SettingsLanding"));
 check("26. print mode labeled This device", form.includes("scopeThisDevice") && form.includes("printBehaviorThisBrowser") && settingsCopy.includes("Print behavior is saved only in this browser."));
 check("27. Customer Display labeled This device", form.includes("customerDisplayThisBrowser") && landing.includes('scope: "device"'));
 check("28. sidebar EGO POS branding unchanged", shell.includes("APP_NAME") && shell.includes("SLOGAN") && !shell.includes("readCompanyLogoUrl"));
 check("29. header Company.name unchanged", shell.includes("resolveActiveCompanyName(session.user.activeCompanyName)"));
-check("30. EN copy", landing.includes("Business") && landing.includes("POS & Payments") && landing.includes("Customers") && landing.includes("Search settings"));
+check("30. EN copy", landing.includes("Business") && landing.includes("POS & Payments") && landing.includes("Customers") && landing.includes("Search settings") && landing.includes("Staff & Security"));
 check("31. LO copy", landing.includes(loBusiness) && landing.includes(loQrPay) && landing.includes(loSearch) && settingsCopy.includes(loBusiness) && settingsCopy.includes("backToSettings"));
 
 check("landing does not mount SettingsForm", !landingPage.includes("SettingsForm") && landingPage.includes("SettingsLanding"));

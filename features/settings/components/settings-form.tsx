@@ -41,14 +41,18 @@ const QrPaymentBankManagementSection = dynamic(() => import("@/features/settings
 const StaffControlSection = dynamic(() => import("@/features/settings/components/staff-control-section").then((module) => module.StaffControlSection));
 const DayOffSettingsPanel = dynamic(() => import("@/features/day-off/components/day-off-settings-panel").then((module) => module.DayOffSettingsPanel));
 const OtSettingsPanel = dynamic(() => import("@/features/ot/components/ot-settings-panel").then((module) => module.OtSettingsPanel));
+const BranchInformationPanel = dynamic(() => import("@/features/settings/components/branch-information-panel").then((module) => module.BranchInformationPanel));
+const HelpSupportPanel = dynamic(() => import("@/features/settings/components/help-support-panel").then((module) => module.HelpSupportPanel));
 
 export type SettingsDetailSection =
-  | "company-profile" | "business-logo" | "tax" | "cash-shift" | "receipt"
+  | "company-profile" | "business-logo" | "branch-information" | "tax" | "cash-shift" | "receipt"
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
-  | "day-off" | "ot" | "loyalty";
+  | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts = [], initialQrBanks = [], initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+    initialActiveBranch?: import("@/features/settings/branch-information").ActiveBranchInformation | null;
     initialBusinessLogoUrl?: string | null;
+    initialHelpContext?: import("@/features/settings/components/help-support-panel").HelpSystemContext | null;
     initialQrAccounts?: QrPaymentAccountRecord[];
     initialQrBanks?: QrPaymentBankRecord[];
     initialSettings: SettingsFormData;
@@ -411,6 +415,7 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
     const detailTitle: Record<SettingsDetailSection, string> = {
       "company-profile": tSettings("companyProfile", locale),
       "business-logo": tSettings("businessLogo", locale),
+      "branch-information": tSettings("branchInformation", locale),
       "tax": tSettings("taxVatSettings", locale),
       "cash-shift": tSettings("requireCashShiftBeforeSale", locale),
       "receipt": tSettings("receiptAndPrinting", locale),
@@ -422,10 +427,12 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
       "day-off": tSettings("dayOff", locale),
       "ot": tSettings("otSettingsTitle", locale),
       "loyalty": tSettings("loyaltyRules", locale),
+      "help": tSettings("helpAndSupport", locale),
     };
     const detailDescription: Record<SettingsDetailSection, { en: string; lo: string }> = {
       "company-profile": { en: "Store name and contact details.", lo: "ຊື່ຮ້ານ ແລະ ຂໍ້ມູນຕິດຕໍ່." },
       "business-logo": { en: "Image used on receipts and the customer display.", lo: "ຮູບພາບທີ່ໃຊ້ໃນໃບບິນ ແລະ ຈໍລູກຄ້າ." },
+      "branch-information": { en: "Name and contact details for the current branch only.", lo: "ຊື່ ແລະ ຂໍ້ມູນຕິດຕໍ່ຂອງສາຂາປັດຈຸບັນເທົ່ານັ້ນ." },
       "tax": { en: "Choose how VAT is calculated and shown.", lo: "ເລືອກວິທີຄິດ ແລະ ສະແດງ VAT." },
       "cash-shift": { en: "Control whether Pay requires an open shift.", lo: "ກຳນົດວ່າຕ້ອງເປີດກະກ່ອນຊຳລະຫຼືບໍ່." },
       "receipt": { en: "Manage company receipt content and this device's print behavior.", lo: "ຈັດການເນື້ອຫາໃບບິນ ແລະ ການພິມຂອງອຸປະກອນນີ້." },
@@ -437,10 +444,15 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
       "day-off": { en: "Manage weekly day off and leave quota.", lo: "ຈັດການວັນພັກປະຈຳອາທິດ ແລະ ໂຄຕາ." },
       "ot": { en: "Manage overtime time windows.", lo: "ຈັດການຊ່ວງເວລາເຮັດວຽກລ່ວງເວລາ." },
       "loyalty": { en: "Manage how points are earned and redeemed.", lo: "ຈັດການວິທີໄດ້ ແລະ ແລກຄະແນນ." },
+      "help": { en: "Help topics and safe system information for this store.", lo: "ຫົວຂໍ້ຊ່ວຍເຫຼືອ ແລະ ຂໍ້ມູນລະບົບທີ່ປອດໄພສຳລັບຮ້ານນີ້." },
     };
     const detailScope = section === "customer-display"
       ? tSettings("scopeThisDevice", locale)
-      : tSettings("scopeCompany", locale);
+      : section === "branch-information"
+        ? tSettings("scopeBranch", locale)
+        : section === "help"
+          ? tSettings("scopeCompany", locale)
+          : tSettings("scopeCompany", locale);
     return (<div className="flex flex-col gap-6">
       <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary hover:underline" href="/settings">
         <ArrowLeft className="size-4" aria-hidden="true" />
@@ -728,6 +740,14 @@ export function SettingsForm({ initialBusinessLogoUrl = null, initialQrAccounts 
           </Field>
         </div>
       </section>
+      ) : null}
+
+      {section === "branch-information" && initialActiveBranch ? (
+        <BranchInformationPanel initialBranch={initialActiveBranch} locale={locale} />
+      ) : null}
+
+      {section === "help" && initialHelpContext ? (
+        <HelpSupportPanel context={initialHelpContext} locale={locale} />
       ) : null}
 
       {section === "tax" ? (

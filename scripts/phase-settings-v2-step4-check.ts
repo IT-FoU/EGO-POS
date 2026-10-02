@@ -81,7 +81,7 @@ check("receipt preview component", existsSync(join(root, "features/settings/comp
 check("logo size help + too large", copy.includes("logoSizeHelp") && copy.includes("logoTooLarge") && form.includes("MAX_SOURCE_IMAGE_BYTES"));
 check("bank vs qr image clarity", qr.includes("bankLogoHelp") && qr.includes("qrImageHelp"));
 check("no new schema migration", !existsSync(join(root, "prisma/migrations/20261002040000_settings_v2_step4")));
-check("Step 2 + Step 3 checks remain", step2.includes("print mode not written") && step3.includes("Settings landing shows exactly 4 categories"));
+check("Step 2 + Step 3 checks remain", step2.includes("print mode not written") && step3.includes("Settings landing shows exactly 5 categories"));
 check("ads inside customer display", form.includes("adsInsideCustomerDisplayHelp") && form.includes("advertisementMedia"));
 check("detail loads logo for receipt", detail.includes('section === "business-logo" || section === "receipt"') || detail.includes("needsLogo"));
 

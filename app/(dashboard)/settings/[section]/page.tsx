@@ -4,6 +4,7 @@ import { StoreAccessDenied } from "@/components/permissions/store-access-denied"
 import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
 import { canManageStoreSettings } from "@/features/permissions/store-ui-permissions";
 import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
+import { getActiveBranchInformation } from "@/features/settings/branch-information";
 import { SettingsForm, type SettingsDetailSection } from "@/features/settings/components/settings-form";
 import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
 import { requireSession } from "@/lib/auth/session";
@@ -12,9 +13,9 @@ import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 import { tSettings } from "@/lib/i18n/settings-copy";
 
 const sections = new Set<SettingsDetailSection>([
-  "company-profile", "business-logo", "tax", "cash-shift", "receipt",
+  "company-profile", "business-logo", "branch-information", "tax", "cash-shift", "receipt",
   "qr-payments", "customer-display", "staff", "roles", "approval-rules",
-  "day-off", "ot", "loyalty",
+  "day-off", "ot", "loyalty", "help",
 ]);
 
 export default async function SettingsDetailPage({ params }: { params: Promise<{ section: string }> }) {
@@ -32,16 +33,40 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
   const needsQr = section === "qr-payments";
   const needsStaff = section === "staff" || section === "roles" || section === "approval-rules" || section === "day-off" || section === "ot";
   const needsLogo = section === "business-logo" || section === "receipt";
-  const [settings, businessLogoUrl, qrSnapshot, staffSnapshot] = await Promise.all([
+  const needsBranch = section === "branch-information" || section === "help";
+  const [settings, businessLogoUrl, qrSnapshot, staffSnapshot, activeBranch] = await Promise.all([
     getPrismaSettings(tenant),
     needsLogo ? getCompanyBusinessLogoUrl(tenant.companyId) : Promise.resolve(null),
     needsQr ? getQrPaymentSettingsSnapshot(tenant) : Promise.resolve(null),
     needsStaff ? getStaffAccessSnapshot(tenant) : Promise.resolve(undefined),
+    needsBranch ? getActiveBranchInformation(tenant) : Promise.resolve(null),
   ]);
+
+  if (section === "branch-information" && !activeBranch) {
+    return (
+      <StoreAccessDenied
+        description={tSettings("activeBranchMissingBody", locale)}
+        title={tSettings("activeBranchMissingTitle", locale)}
+      />
+    );
+  }
 
   return (
     <SettingsForm
+      initialActiveBranch={activeBranch}
       initialBusinessLogoUrl={businessLogoUrl}
+      initialHelpContext={
+        section === "help"
+          ? {
+              branchName: activeBranch?.name ?? "",
+              companyName: settings.companyName || session.user.activeCompanyName || "",
+              locale,
+              pagePath: "/settings/help",
+              userDisplayName: session.user.name || "",
+              username: session.user.username || "",
+            }
+          : null
+      }
       initialQrAccounts={qrSnapshot?.accounts}
       initialQrBanks={qrSnapshot?.banks}
       initialSettings={settings}

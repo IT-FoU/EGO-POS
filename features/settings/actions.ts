@@ -5,6 +5,7 @@ import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permission
 import { getCurrentSession } from "@/lib/auth/session";
 import { updateActiveCompanySession } from "@/lib/auth/update-active-company-session";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
+import { updateActiveBranchInformation } from "@/features/settings/branch-information";
 import { getCompanyBusinessLogoUrl, removeCompanyBusinessLogo, replaceCompanyBusinessLogo, updatePrismaSettings } from "@/features/settings/prisma-repository";
 import type { SettingsFormData } from "@/features/settings/types";
 
@@ -63,6 +64,35 @@ export async function readCompanyBusinessLogoAction() {
   try {
     const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
     return writeSuccess({ businessLogoUrl: await getCompanyBusinessLogoUrl(tenant.companyId) });
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+/**
+ * Updates only the session's active branch.
+ * Never accepts a client-supplied branchId.
+ */
+export async function updateActiveBranchInformationAction(input: {
+  address?: string | null;
+  name: string;
+  phone?: string | null;
+}) {
+  try {
+    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const branch = await updateActiveBranchInformation(
+      {
+        address: input.address,
+        name: input.name,
+        phone: input.phone,
+      },
+      tenant,
+    );
+    revalidatePath("/settings", "layout");
+    revalidatePath("/settings/branch-information");
+    revalidatePath("/dashboard");
+    revalidatePath("/pos");
+    return writeSuccess(branch);
   } catch (error) {
     return writeFailure(error);
   }
