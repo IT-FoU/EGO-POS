@@ -47,7 +47,7 @@ check("4. staff save rejects protected roles", staffRepo.includes("isProtectedOw
 check("5. self role change is rejected", staffRepo.includes("change your own role"));
 check("6. self access change is rejected", staffRepo.includes("change your own access"));
 check("7. deactivate stores disabled", staffRepo.includes('status: "disabled"') && !staffRepo.includes('status: "inactive"'));
-check("8. inactive display maps from disabled", staffStatusForDisplay("disabled") === "inactive" && staffStatusForDisplay("active") === "active");
+check("8. disabled display maps from disabled", staffStatusForDisplay("disabled") === "disabled" && staffStatusForDisplay("active") === "active");
 check("9. inactive form value stores disabled", staffStatusForStorage("inactive") === "disabled" && staffStatusForStorage("active") === "active");
 check("10. deleted is not used for deactivation", staffStatusForStorage("deleted") === "disabled");
 check("11. roles.manage no longer accepts staff.edit", !permissionKeysForCheck("roles.manage").includes("staff.edit") && catalog.includes('"roles.manage": ["roles.manage"]'));

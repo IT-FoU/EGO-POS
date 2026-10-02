@@ -6,6 +6,7 @@ import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import {
   deactivateStaffMember,
   decideApproval,
+  reactivateStaffMember,
   saveApprovalRule,
   saveRolePermissions,
   saveStaffMember,
@@ -35,6 +36,16 @@ export async function saveStaffMemberAction(input: SaveStaffMemberInput) {
 export async function deactivateStaffMemberAction(membershipId: string) {
   try {
     const data = await deactivateStaffMember(membershipId, await requireWritePermission(WRITE_PERMISSIONS.staffManage));
+    revalidateStaffPaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function reactivateStaffMemberAction(membershipId: string) {
+  try {
+    const data = await reactivateStaffMember(membershipId, await requireWritePermission(WRITE_PERMISSIONS.staffManage));
     revalidateStaffPaths();
     return writeSuccess(data);
   } catch (error) {

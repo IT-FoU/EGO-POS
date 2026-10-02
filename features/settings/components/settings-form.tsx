@@ -55,7 +55,8 @@ export type SettingsDetailSection =
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
   | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ actorUserId, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+    actorUserId?: string;
     initialActiveBranch?: import("@/features/settings/branch-information").ActiveBranchInformation | null;
     initialBusinessLogoUrl?: string | null;
     initialHelpContext?: import("@/features/settings/components/help-support-panel").HelpSystemContext | null;
@@ -822,6 +823,7 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
 
       {initialStaffSnapshot && ["staff", "roles", "approval-rules"].includes(section) ? (
       <StaffControlSection
+        actorUserId={actorUserId}
         initialSnapshot={initialStaffSnapshot}
         locale={locale}
         section={section as "staff" | "roles" | "approval-rules"}

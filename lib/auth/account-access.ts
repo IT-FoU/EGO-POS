@@ -56,19 +56,15 @@ const BACK_OFFICE_API_PREFIXES = [
   "/api/suppliers",
 ];
 
-export function isProtectedOwnerRole(role: { name?: string | null; templateKey?: string | null } | null | undefined) {
-  const templateKey = String(role?.templateKey ?? "").trim().toLowerCase();
-  const name = String(role?.name ?? "").trim().toLowerCase();
-  return templateKey === "owner" || name === "owner";
-}
+export { isProtectedOwnerRole } from "@/features/access-control/staff-account";
 
-/** UI may say inactive. The database enum stores disabled. */
+/** The database enum stores active or disabled. Legacy "inactive" still stores as disabled. */
 export function staffStatusForStorage(status: string | null | undefined): "active" | "disabled" {
   return String(status ?? "active").trim().toLowerCase() === "active" ? "active" : "disabled";
 }
 
-export function staffStatusForDisplay(status: string | null | undefined): "active" | "inactive" {
-  return String(status ?? "active").trim().toLowerCase() === "active" ? "active" : "inactive";
+export function staffStatusForDisplay(status: string | null | undefined): "active" | "disabled" {
+  return String(status ?? "active").trim().toLowerCase() === "active" ? "active" : "disabled";
 }
 
 export function accountGateForPermission(permission: string | null | undefined): AccountGate | null {
