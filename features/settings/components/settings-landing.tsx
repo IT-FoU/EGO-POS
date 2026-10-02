@@ -9,7 +9,9 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
+import { SettingsIndexScrollRestore } from "@/features/settings/components/settings-index-scroll-restore";
 import { readReceiptPrintModePreference } from "@/features/settings/receipt-print-mode";
+import { captureSettingsIndexScroll } from "@/features/settings/settings-index-scroll";
 import type { ReceiptPrintMode, SettingsFormData } from "@/features/settings/types";
 
 export type SettingsLandingFacts = {
@@ -125,6 +127,7 @@ export function SettingsLanding({ facts, locale: initialLocale }: { facts: Setti
 
   return (
     <div className="grid gap-6" data-settings-landing>
+      <SettingsIndexScrollRestore />
       <div>
         <h1 className="text-3xl font-semibold">{locale === "lo" ? "ຕັ້ງຄ່າ" : "Settings"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{locale === "lo" ? "ເລືອກຫົວຂໍ້ເພື່ອເປີດໜ້າລາຍລະອຽດ." : "Choose an item to open its detail page."}</p>
@@ -143,7 +146,7 @@ export function SettingsLanding({ facts, locale: initialLocale }: { facts: Setti
             {group.rows.map((row) => {
               const Icon = row.icon;
               return (
-                <Link className="group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 transition duration-150 hover:bg-background active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href}>
+                <Link className="group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 transition duration-150 hover:bg-background active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)}>
                   <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span>
                   <span className="grid min-w-0 flex-1 gap-1">
                     <span className="flex min-w-0 flex-wrap items-center gap-2">
