@@ -493,7 +493,7 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
           ? tSettings("scopeCompany", locale)
           : tSettings("scopeCompany", locale);
     return (<div className="flex flex-col gap-6">
-      <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary hover:underline" href="/settings">
+      <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary hover:underline" href="/settings" scroll={false}>
         <ArrowLeft className="size-4" aria-hidden="true" />
         {tSettings("backToSettings", locale)}
       </Link>
