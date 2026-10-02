@@ -7,6 +7,7 @@ import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repo
 import { getActiveBranchInformation } from "@/features/settings/branch-information";
 import { SettingsForm, type SettingsDetailSection } from "@/features/settings/components/settings-form";
 import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
+import { getReceiptPreviewQrImageUrl } from "@/features/settings/receipt-preview-qr";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
@@ -33,7 +34,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
   const needsQr = section === "qr-payments";
   const needsStaff = section === "staff" || section === "roles" || section === "approval-rules" || section === "day-off" || section === "ot";
   const needsLogo = section === "business-logo" || section === "receipt";
-  const needsBranch = section === "branch-information" || section === "help";
+  const needsBranch = section === "branch-information" || section === "help" || section === "receipt";
   const [settings, businessLogoUrl, qrSnapshot, staffSnapshot, activeBranch] = await Promise.all([
     getPrismaSettings(tenant),
     needsLogo ? getCompanyBusinessLogoUrl(tenant.companyId) : Promise.resolve(null),
@@ -41,6 +42,11 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
     needsStaff ? getStaffAccessSnapshot(tenant) : Promise.resolve(undefined),
     needsBranch ? getActiveBranchInformation(tenant) : Promise.resolve(null),
   ]);
+
+  const receiptPreviewQrUrl =
+    section === "receipt"
+      ? await getReceiptPreviewQrImageUrl(tenant, activeBranch?.id ?? tenant.branchId)
+      : null;
 
   if (section === "branch-information" && !activeBranch) {
     return (
@@ -69,6 +75,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
       }
       initialQrAccounts={qrSnapshot?.accounts}
       initialQrBanks={qrSnapshot?.banks}
+      initialReceiptPreviewQrUrl={receiptPreviewQrUrl}
       initialSettings={settings}
       initialStaffSnapshot={staffSnapshot}
       locale={locale}

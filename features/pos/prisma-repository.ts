@@ -2,6 +2,7 @@ import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cas
 import { getOpenAttendanceSession } from "@/features/attendance/prisma-repository";
 import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
 import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
+import { parseReceiptLayoutPrefs, receiptFormFieldsFromLayout } from "@/features/settings/receipt-layout";
 import { signCompanyLogoUrl } from "@/lib/storage/company-logo-storage";
 import { mapPaymentModeToSalePayments, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
 import type { PosCustomer } from "@/features/pos/types";
@@ -233,10 +234,18 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   );
   const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
   const requireCashShiftBeforeSale = readCompanyRequireCashShift(settings);
-  const businessLogoUrl = await signCompanyLogoUrl(
-    settings?.logoObjectPath ? String(settings.logoObjectPath) : null,
-    scope.companyId,
-  );
+  const receiptLayout = receiptFormFieldsFromLayout(parseReceiptLayoutPrefs(settings?.unitPricingDefaults));
+  const [businessLogoUrl, companyRow] = await Promise.all([
+    signCompanyLogoUrl(
+      settings?.logoObjectPath ? String(settings.logoObjectPath) : null,
+      scope.companyId,
+    ),
+    db.company.findFirst({
+      select: { name: true },
+      where: { id: scope.companyId },
+    }),
+  ]);
+  const companyName = String(companyRow?.name ?? "").trim() || "Business";
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
   // Preview sale numbers are display-only. Checkout still issues/validates via resolvePosSaleNo.
   const nextSaleNo = "";
@@ -299,7 +308,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           sessionId: null,
           status: "not_started" as const,
         },
-    companyName: "Business",
+    companyName,
     customers: [] as PosCustomer[],
     loyaltySettings: {
       loyaltyEnabled: taxAndLoyalty.loyaltyEnabled,
@@ -339,15 +348,27 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     })),
     qrBanks,
     receiptSettings: {
-      companyName: "Business",
+      companyName,
       profileAddress: settings?.profileAddress ?? undefined,
       profileEmail: settings?.profileEmail ?? undefined,
       profilePhone: settings?.profilePhone ?? undefined,
       receiptFooter: settings?.receiptFooter ?? undefined,
       receiptHeader: settings?.receiptHeader ?? undefined,
+      receiptPaperSize: receiptLayout.receiptPaperSize,
       receiptPrintMode: settings?.receiptPrintMode ?? "ask_every_time",
       businessLogoUrl: businessLogoUrl ?? undefined,
       receiptPrefix,
+      receiptShowAddress: receiptLayout.receiptShowAddress,
+      receiptShowBranchName: receiptLayout.receiptShowBranchName,
+      receiptShowCashier: receiptLayout.receiptShowCashier,
+      receiptShowCompanyName: receiptLayout.receiptShowCompanyName,
+      receiptShowDateTime: receiptLayout.receiptShowDateTime,
+      receiptShowEmail: receiptLayout.receiptShowEmail,
+      receiptShowFooter: receiptLayout.receiptShowFooter,
+      receiptShowHeader: receiptLayout.receiptShowHeader,
+      receiptShowPhone: receiptLayout.receiptShowPhone,
+      receiptShowReceiptNumber: receiptLayout.receiptShowReceiptNumber,
+      receiptShowTaxNumber: receiptLayout.receiptShowTaxNumber,
       showLogoOnReceipt: settings?.showLogoOnReceipt ?? true,
       showTaxOnReceipt: settings?.showTaxOnReceipt ?? true,
       taxNumber: settings?.taxNumber ?? undefined,

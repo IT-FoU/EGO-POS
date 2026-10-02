@@ -4,6 +4,13 @@ import { numberValue, optionalString, stringValue, withTenantTransaction } from 
 import type { SettingsFormData } from "@/features/settings/types";
 import { parseRequireCashShiftBeforeSaleFlag, unitPricingDefaultsWithoutCashShift } from "@/features/products/unit-pricing-defaults";
 import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
+import {
+  DEFAULT_RECEIPT_LAYOUT,
+  parseReceiptLayoutPrefs,
+  receiptFormFieldsFromLayout,
+  receiptLayoutFromFormFields,
+  withReceiptLayoutPrefs,
+} from "@/features/settings/receipt-layout";
 import { clearStoredLogo, storeReplacementLogo } from "@/features/brand/company-logo-service";
 import { signCompanyLogoUrl } from "@/lib/storage/company-logo-storage";
 
@@ -18,7 +25,19 @@ const DEFAULT_SETTINGS = {
   loyaltyPointValueLak: 1000,
   loyaltySpendPerPointLak: 10000,
   receiptPrefix: "INV",
+  receiptPaperSize: DEFAULT_RECEIPT_LAYOUT.paperSize,
   receiptPrintMode: "ask_every_time" as const,
+  receiptShowAddress: true,
+  receiptShowBranchName: true,
+  receiptShowCashier: true,
+  receiptShowCompanyName: true,
+  receiptShowDateTime: true,
+  receiptShowEmail: true,
+  receiptShowFooter: true,
+  receiptShowHeader: true,
+  receiptShowPhone: true,
+  receiptShowReceiptNumber: true,
+  receiptShowTaxNumber: true,
   requireCashShiftBeforeSale: true,
   roundingMethod: "nearest",
   showLogoOnReceipt: true,
@@ -86,6 +105,7 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
     profilePhone: optionalString(input.profilePhone),
     receiptFooter: optionalString(input.receiptFooter),
     receiptHeader: optionalString(input.receiptHeader),
+    ...receiptFormFieldsFromLayout(receiptLayoutFromFormFields(input)),
     receiptPrintMode: ["ask_every_time", "auto_print", "no_auto_print"].includes(String(input.receiptPrintMode))
       ? (String(input.receiptPrintMode) as SettingsFormData["receiptPrintMode"])
       : DEFAULT_SETTINGS.receiptPrintMode,
@@ -125,6 +145,7 @@ export function requireCashShiftBeforeSaleFromOpsRow(ops: SettingsRow | null | u
 
 function mapSettings(company: SettingsRow): SettingsFormData {
   const settings = company.settings ?? {};
+  const layout = parseReceiptLayoutPrefs(settings.unitPricingDefaults);
 
   return {
     baseCurrency: normalizeCurrency(settings.baseCurrency ?? company.baseCurrency),
@@ -140,6 +161,7 @@ function mapSettings(company: SettingsRow): SettingsFormData {
     profilePhone: settings.profilePhone ?? undefined,
     receiptFooter: settings.receiptFooter ?? undefined,
     receiptHeader: settings.receiptHeader ?? undefined,
+    ...receiptFormFieldsFromLayout(layout),
     receiptPrintMode: DEFAULT_SETTINGS.receiptPrintMode,
     receiptPrefix: settings.receiptPrefix ?? DEFAULT_SETTINGS.receiptPrefix,
     requireCashShiftBeforeSale: DEFAULT_SETTINGS.requireCashShiftBeforeSale,
@@ -215,7 +237,11 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         select: { unitPricingDefaults: true },
         where: { companyId: company.id },
       });
-      const nextDefaults = unitPricingDefaultsWithoutCashShift(existingSettings?.unitPricingDefaults);
+      const stripped = unitPricingDefaultsWithoutCashShift(existingSettings?.unitPricingDefaults);
+      const nextDefaults = withReceiptLayoutPrefs(
+        stripped,
+        receiptLayoutFromFormFields(normalized),
+      );
 
       await tx.companySetting.upsert({
         create: {
