@@ -183,6 +183,7 @@ export async function getPrismaSaleReceipt(
           branchId: sale.branchId,
           companyId: tenant.companyId,
           id: referencedAccountId,
+          isActive: true,
         },
       })
     : null;

@@ -32,6 +32,8 @@ export type SettingsFormData = {
   receiptShowFooter: boolean;
   receiptShowHeader: boolean;
   receiptShowPhone: boolean;
+  /** Layout gate. Account Print on Receipt remains a separate eligibility flag. */
+  receiptShowQr: boolean;
   receiptShowReceiptNumber: boolean;
   receiptShowTaxNumber: boolean;
   /** Default true: Pay requires Start Work (open cash + attendance). */

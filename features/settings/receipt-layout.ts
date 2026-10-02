@@ -20,6 +20,7 @@ export type ReceiptVisibilityPrefs = {
   showFooter: boolean;
   showHeader: boolean;
   showPhone: boolean;
+  showQr: boolean;
   showReceiptNumber: boolean;
   showTaxNumber: boolean;
 };
@@ -41,6 +42,8 @@ export const DEFAULT_RECEIPT_VISIBILITY: ReceiptVisibilityPrefs = {
   showFooter: true,
   showHeader: true,
   showPhone: true,
+  /** Missing stored value stays ON so existing eligible receipt QR keeps printing. */
+  showQr: true,
   showReceiptNumber: true,
   showTaxNumber: true,
 };
@@ -220,6 +223,7 @@ export function parseReceiptLayoutPrefs(value: unknown): ReceiptLayoutPrefs {
       showFooter: asBool(visRaw.showFooter, true),
       showHeader: asBool(visRaw.showHeader, true),
       showPhone: asBool(visRaw.showPhone, true),
+      showQr: asBool(visRaw.showQr, true),
       showReceiptNumber: asBool(visRaw.showReceiptNumber, true),
       showTaxNumber: asBool(visRaw.showTaxNumber, true),
     },
@@ -247,6 +251,7 @@ export function withReceiptLayoutPrefs(current: unknown, layout: ReceiptLayoutPr
         showFooter: layout.visibility.showFooter === true,
         showHeader: layout.visibility.showHeader === true,
         showPhone: layout.visibility.showPhone === true,
+        showQr: layout.visibility.showQr === true,
         showReceiptNumber: layout.visibility.showReceiptNumber === true,
         showTaxNumber: layout.visibility.showTaxNumber === true,
       },
@@ -267,6 +272,7 @@ export function receiptLayoutFromFormFields(input: {
   receiptShowFooter?: boolean | null;
   receiptShowHeader?: boolean | null;
   receiptShowPhone?: boolean | null;
+  receiptShowQr?: boolean | null;
   receiptShowReceiptNumber?: boolean | null;
   receiptShowTaxNumber?: boolean | null;
 }): ReceiptLayoutPrefs {
@@ -284,6 +290,7 @@ export function receiptLayoutFromFormFields(input: {
       showFooter: input.receiptShowFooter !== false,
       showHeader: input.receiptShowHeader !== false,
       showPhone: input.receiptShowPhone !== false,
+      showQr: input.receiptShowQr !== false,
       showReceiptNumber: input.receiptShowReceiptNumber !== false,
       showTaxNumber: input.receiptShowTaxNumber !== false,
     },
@@ -304,6 +311,7 @@ export function receiptFormFieldsFromLayout(layout: ReceiptLayoutPrefs) {
     receiptShowFooter: layout.visibility.showFooter,
     receiptShowHeader: layout.visibility.showHeader,
     receiptShowPhone: layout.visibility.showPhone,
+    receiptShowQr: layout.visibility.showQr,
     receiptShowReceiptNumber: layout.visibility.showReceiptNumber,
     receiptShowTaxNumber: layout.visibility.showTaxNumber,
   };

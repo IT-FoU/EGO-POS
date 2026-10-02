@@ -43,15 +43,16 @@ export function Field({ children, label }: { children: ReactNode; label: string 
   );
 }
 
-export function Toggle({ checked, label, onChange }: {
+export function Toggle({ checked, describedBy, label, onChange }: {
   checked: boolean;
+  describedBy?: string;
   label: string;
   onChange: (value: boolean) => void;
 }) {
   return (
     <label className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-sm font-medium">
       <span>{label}</span>
-      <input checked={checked} className="size-4 accent-primary" type="checkbox" onChange={(event) => onChange(event.target.checked)}/>
+      <input aria-describedby={describedBy} checked={checked} className="size-4 accent-primary" type="checkbox" onChange={(event) => onChange(event.target.checked)}/>
     </label>
   );
 }
