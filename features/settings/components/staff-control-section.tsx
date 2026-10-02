@@ -19,11 +19,12 @@ import {
   type RoleTemplateLabel,
 } from "@/features/access-control/permission-catalog";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
+import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { SupportedLocale } from "@/lib/constants";
-import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, localizeTerminalOption, tSettings } from "@/lib/i18n/settings-copy";
+import { fillSettingsCopy, localizeApprovalRule, localizePermissionAction, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, tSettings } from "@/lib/i18n/settings-copy";
 import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
 
-const TERMINAL_OPTIONS = ["POS-01", "POS-02", "POS-03", "Back Office"];
+const DEFAULT_TERMINAL = "POS-01";
 
 type StaffDraft = {
   allowBackOfficeAccess: boolean;
@@ -45,7 +46,7 @@ function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: Staff
   return {
     allowBackOfficeAccess: false,
     allowPosAccess: true,
-    assignedTerminal: "POS-01",
+    assignedTerminal: DEFAULT_TERMINAL,
     branchId: branches[0]?.id ?? "",
     confirmPassword: "",
     fullName: "",
@@ -80,6 +81,9 @@ export function StaffControlSection({
   const [staffModalOpen, setStaffModalOpen] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [staffDraft, setStaffDraft] = useState<StaffDraft>(() => emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles));
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+  const [confirmPermissions, setConfirmPermissions] = useState(false);
+  const [confirmApprovalRule, setConfirmApprovalRule] = useState<keyof typeof APPROVAL_RULE_LABELS | null>(null);
 
   useEffect(() => {
     setMatrix(initialSnapshot.matrix);
@@ -103,8 +107,6 @@ export function StaffControlSection({
       member.roleName,
       localizeRoleTemplate(member.roleName, locale),
       member.branchName,
-      member.assignedTerminal,
-      localizeTerminalOption(member.assignedTerminal, locale),
     ]
       .join(" ")
       .toLowerCase()
@@ -145,6 +147,14 @@ export function StaffControlSection({
     if (!selectedRole || role === "Owner") {
       return;
     }
+    setConfirmPermissions(true);
+  }
+
+  function commitSaveMatrix() {
+    if (!selectedRole || role === "Owner") {
+      return;
+    }
+    setConfirmPermissions(false);
     runMutation(
       () =>
         saveRolePermissionsAction({
@@ -156,8 +166,14 @@ export function StaffControlSection({
   }
 
   function saveRule(ruleKey: keyof typeof APPROVAL_RULE_LABELS) {
+    if (!approvalRules.find((rule) => rule.ruleKey === ruleKey)) return;
+    setConfirmApprovalRule(ruleKey);
+  }
+
+  function commitSaveRule(ruleKey: keyof typeof APPROVAL_RULE_LABELS) {
     const existing = approvalRules.find((rule) => rule.ruleKey === ruleKey);
     if (!existing) return;
+    setConfirmApprovalRule(null);
     runMutation(
       () =>
         saveApprovalRuleAction({
@@ -232,6 +248,11 @@ export function StaffControlSection({
   }
 
   function disableStaff(memberId: string) {
+    setConfirmDeactivateId(memberId);
+  }
+
+  function commitDisableStaff(memberId: string) {
+    setConfirmDeactivateId(null);
     runMutation(() => deactivateStaffMemberAction(memberId), tSettings("staffDeactivated", locale));
   }
 
@@ -281,10 +302,16 @@ export function StaffControlSection({
                     <option value="owner">{tSettings("ownerApproval", locale)}</option>
                   </select>
                   {ruleKey === "discount" ? (
-                    <input className="field-input mt-2 h-9 text-xs" min="0" type="number" value={rule?.thresholdPercent ?? 10} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, thresholdPercent: Number(event.target.value) } : entry))} />
+                    <label className="mt-2 grid gap-1 text-xs">
+                      <span className="font-medium">{tSettings("thresholdPercent", locale)}</span>
+                      <input className="field-input h-9 text-xs" min="0" type="number" value={rule?.thresholdPercent ?? 10} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, thresholdPercent: Number(event.target.value) } : entry))} />
+                    </label>
                   ) : null}
                   {ruleKey === "refund" || ruleKey === "purchasing" ? (
-                    <input className="field-input mt-2 h-9 text-xs" min="0" type="number" value={rule?.thresholdLak ?? 100000} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, thresholdLak: Number(event.target.value) } : entry))} />
+                    <label className="mt-2 grid gap-1 text-xs">
+                      <span className="font-medium">{tSettings("thresholdLak", locale)}</span>
+                      <input className="field-input h-9 text-xs" min="0" type="number" value={rule?.thresholdLak ?? 100000} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, thresholdLak: Number(event.target.value) } : entry))} />
+                    </label>
                   ) : null}
                   <button className="mt-2 h-8 w-full rounded-md border border-border text-xs font-semibold" disabled={isPending} type="button" onClick={() => saveRule(ruleKey)}>
                     {tSettings("saveRule", locale)}
@@ -314,14 +341,13 @@ export function StaffControlSection({
               </div>
             </div>
             <div className="mt-4 max-w-full overflow-x-auto">
-              <table className="w-full min-w-[920px] text-left text-sm">
+              <table className="w-full min-w-[820px] text-left text-sm">
                 <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-3">{tSettings("staff", locale)}</th>
                     <th className="px-3 py-3">{tSettings("username", locale)}</th>
                     <th className="px-3 py-3">{tSettings("role", locale)}</th>
                     <th className="px-3 py-3">{tSettings("branch", locale)}</th>
-                    <th className="px-3 py-3">{tSettings("terminal", locale)}</th>
                     <th className="px-3 py-3">{tSettings("access", locale)}</th>
                     <th className="px-3 py-3">{tSettings("status", locale)}</th>
                     <th className="px-3 py-3">{tSettings("actions", locale)}</th>
@@ -334,7 +360,6 @@ export function StaffControlSection({
                       <td className="px-3 py-3 font-mono text-xs">{member.username}</td>
                       <td className="px-3 py-3">{localizeRoleTemplate(member.roleName, locale)}</td>
                       <td className="px-3 py-3">{member.branchName}</td>
-                      <td className="px-3 py-3">{localizeTerminalOption(member.assignedTerminal, locale)}</td>
                       <td className="px-3 py-3 text-xs">
                         <span className={member.allowPosAccess ? "mr-1 rounded-full bg-success/10 px-2 py-1 text-success" : "mr-1 rounded-full bg-muted px-2 py-1 text-muted-foreground"}>{tSettings("pos", locale)}</span>
                         <span className={member.allowBackOfficeAccess ? "rounded-full bg-primary/10 px-2 py-1 text-primary" : "rounded-full bg-muted px-2 py-1 text-muted-foreground"}>{tSettings("backOffice", locale)}</span>
@@ -346,7 +371,9 @@ export function StaffControlSection({
                         {!member.isOwner ? (
                           <div className="flex flex-wrap gap-2">
                             <button className="h-8 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => openEditStaff(member.id)}>{tSettings("edit", locale)}</button>
-                            <button className="h-8 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger" type="button" onClick={() => disableStaff(member.id)}>{tSettings("deactivate", locale)}</button>
+                            {member.status === "active" ? (
+                              <button className="h-8 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger" type="button" onClick={() => disableStaff(member.id)}>{tSettings("deactivate", locale)}</button>
+                            ) : null}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">{tSettings("owner", locale)}</span>
@@ -461,11 +488,6 @@ export function StaffControlSection({
                 {initialSnapshot.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
               </select>
             </Field>
-            <Field label={tSettings("terminal", locale)}>
-              <select className="field-input" value={staffDraft.assignedTerminal} onChange={(event) => setStaffDraft((current) => ({ ...current, assignedTerminal: event.target.value }))}>
-                {TERMINAL_OPTIONS.map((terminal) => <option key={terminal} value={terminal}>{localizeTerminalOption(terminal, locale)}</option>)}
-              </select>
-            </Field>
             <Field label={tSettings("status", locale)}>
               <select className="field-input" value={staffDraft.status} onChange={(event) => setStaffDraft((current) => ({ ...current, status: event.target.value as StaffDraft["status"] }))}>
                 <option value="active">{tSettings("active", locale)}</option>
@@ -480,6 +502,63 @@ export function StaffControlSection({
             </div>
           </div>
         </SettingsLargeDrawer>
+      ) : null}
+
+      {confirmDeactivateId ? (
+        <AppSmallModal
+          closeAriaLabel={tSettings("closeModal", locale)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setConfirmDeactivateId(null)}>{tSettings("cancel", locale)}</button>
+              <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={() => commitDisableStaff(confirmDeactivateId)}>{tSettings("deactivate", locale)}</button>
+            </div>
+          )}
+          onClose={() => setConfirmDeactivateId(null)}
+          size="sm"
+          title={tSettings("deactivateStaffTitle", locale)}
+        >
+          <p className="text-sm text-muted-foreground">{tSettings("deactivateStaffConfirm", locale)}</p>
+        </AppSmallModal>
+      ) : null}
+
+      {confirmPermissions ? (
+        <AppSmallModal
+          closeAriaLabel={tSettings("closeModal", locale)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setConfirmPermissions(false)}>{tSettings("cancel", locale)}</button>
+              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSaveMatrix}>{tSettings("applyChanges", locale)}</button>
+            </div>
+          )}
+          onClose={() => setConfirmPermissions(false)}
+          size="sm"
+          title={tSettings("savePermissionsConfirmTitle", locale)}
+        >
+          <p className="text-sm text-muted-foreground">{fillSettingsCopy(tSettings("savePermissionsConfirmBody", locale), { role: localizeRoleTemplate(role, locale) })}</p>
+        </AppSmallModal>
+      ) : null}
+
+      {confirmApprovalRule ? (
+        <AppSmallModal
+          closeAriaLabel={tSettings("closeModal", locale)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setConfirmApprovalRule(null)}>{tSettings("cancel", locale)}</button>
+              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={() => commitSaveRule(confirmApprovalRule)}>{tSettings("applyChanges", locale)}</button>
+            </div>
+          )}
+          onClose={() => setConfirmApprovalRule(null)}
+          size="sm"
+          title={tSettings("saveApprovalConfirmTitle", locale)}
+        >
+          <p className="text-sm text-muted-foreground">{fillSettingsCopy(tSettings("saveApprovalConfirmBody", locale), { rule: localizeApprovalRule(confirmApprovalRule, locale) })}</p>
+        </AppSmallModal>
       ) : null}
     </section>
   );
