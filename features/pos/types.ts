@@ -144,6 +144,7 @@ export type PosReceiptSettings = {
   receiptShowFooter?: boolean;
   receiptShowHeader?: boolean;
   receiptShowPhone?: boolean;
+  receiptShowQr?: boolean;
   receiptShowReceiptNumber?: boolean;
   receiptShowTaxNumber?: boolean;
   showLogoOnReceipt: boolean;

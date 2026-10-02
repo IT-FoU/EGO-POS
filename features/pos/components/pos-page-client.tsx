@@ -107,7 +107,7 @@ import { getFollowingPosSaleNo } from "@/features/pos/sale-no";
 import { readCartPanelState, writeCartPanelState } from "@/features/pos/cart-panel-state";
 import { readCustomerDisplaySettingsFromStorage } from "@/features/pos/customer-display-settings";
 import { receiptBusinessLogoSrc } from "@/features/pos/receipt-branding";
-import { receiptQrImageFromPayments, resolveReceiptQrImage } from "@/features/pos/receipt-qr";
+import { receiptQrImageFromPayments, resolveReceiptQrImage, visibleReceiptQrImage } from "@/features/pos/receipt-qr";
 import {
     asPaperSize,
     isDocumentPaperSize,
@@ -3545,6 +3545,8 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
     const showFooter = receiptSettings.receiptShowFooter !== false;
     const paperSize = asPaperSize(receiptSettings.receiptPaperSize);
     const documentLayout = isDocumentPaperSize(paperSize);
+    const printedQrSrc = visibleReceiptQrImage(receiptQrImageUrl, receiptSettings.receiptShowQr);
+    const qrClass = documentLayout ? "max-h-28 max-w-28 object-contain" : "mx-auto mt-3 max-h-20 max-w-20 object-contain";
     const previewBox = resolvePreviewPaperStyle(
       paperSize,
       receiptSettings.receiptCustomWidthMm,
@@ -3654,7 +3656,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
               </div>
               <div className="mt-auto space-y-2 border-t border-neutral-300 pt-3">
                 {footerText ? <div>{footerText}</div> : null}
-                {receiptQrImageUrl ? <img alt="" className="max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
+                {printedQrSrc ? <img alt="" className={qrClass} src={printedQrSrc}/> : null}
               </div>
             </div>
           ) : (
@@ -3697,7 +3699,7 @@ function ReceiptPreview({ autoPrint = false, branchName, cashierName, cartItems,
               <ReceiptRow label="Change" value={changeAmount}/>
               <div className="my-4 border-t border-dashed border-neutral-400"/>
               {footerText ? <div className="text-center">{footerText}</div> : null}
-              {receiptQrImageUrl ? <img alt="" className="mx-auto mt-3 max-h-28 w-auto object-contain" src={receiptQrImageUrl}/> : null}
+              {printedQrSrc ? <img alt="" className={qrClass} src={printedQrSrc}/> : null}
             </>
           )}
         </div>

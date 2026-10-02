@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS = {
   receiptShowFooter: true,
   receiptShowHeader: true,
   receiptShowPhone: true,
+  receiptShowQr: true,
   receiptShowReceiptNumber: true,
   receiptShowTaxNumber: true,
   requireCashShiftBeforeSale: true,

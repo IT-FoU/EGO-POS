@@ -4,6 +4,7 @@ import type { SupportedLocale } from "@/lib/constants";
 import { tSettings } from "@/lib/i18n/settings-copy";
 import type { SettingsFormData } from "@/features/settings/types";
 import { receiptBusinessLogoSrc } from "@/features/pos/receipt-branding";
+import { visibleReceiptQrImage } from "@/features/pos/receipt-qr";
 import {
   asPaperSize,
   isDocumentPaperSize,
@@ -55,7 +56,8 @@ export function ReceiptSettingsPreview({
   const sampleDate = "02/10/2026 16:00";
   const sampleCashier = locale === "lo" ? "ຕົວຢ່າງພະນັກງານ" : "Sample Cashier";
   const resolvedBranch = (branchName ?? "").trim();
-  const qrSrc = String(previewQrImageUrl ?? "").trim() || null;
+  const qrSrc = visibleReceiptQrImage(previewQrImageUrl, settings.receiptShowQr);
+  const qrClass = documentLayout ? "max-h-28 max-w-28 object-contain" : "max-h-20 max-w-20 object-contain";
   const productA = locale === "lo" ? "ສິນຄ້າຕົວຢ່າງ A" : "Sample Product A";
   const productB = locale === "lo" ? "ສິນຄ້າຕົວຢ່າງ B" : "Sample Product B";
   const dimLabel = dims.continuous
@@ -149,7 +151,7 @@ export function ReceiptSettingsPreview({
       {qrSrc ? (
         <div className={documentLayout ? "mt-4 flex flex-col items-start gap-1" : "mt-3 flex flex-col items-center gap-1"}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img alt="" className="max-h-24 w-auto object-contain" src={qrSrc} />
+          <img alt="" className={qrClass} src={qrSrc} />
           <span className="text-[10px] text-neutral-600">{tSettings("receiptPreviewQrNote", locale)}</span>
         </div>
       ) : null}

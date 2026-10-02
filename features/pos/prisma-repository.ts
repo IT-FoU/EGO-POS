@@ -369,6 +369,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       receiptShowFooter: receiptLayout.receiptShowFooter,
       receiptShowHeader: receiptLayout.receiptShowHeader,
       receiptShowPhone: receiptLayout.receiptShowPhone,
+      receiptShowQr: receiptLayout.receiptShowQr,
       receiptShowReceiptNumber: receiptLayout.receiptShowReceiptNumber,
       receiptShowTaxNumber: receiptLayout.receiptShowTaxNumber,
       showLogoOnReceipt: settings?.showLogoOnReceipt ?? true,

@@ -324,6 +324,7 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
                     receiptShowFooter: settings.receiptShowFooter,
                     receiptShowHeader: settings.receiptShowHeader,
                     receiptShowPhone: settings.receiptShowPhone,
+                    receiptShowQr: settings.receiptShowQr,
                     receiptShowReceiptNumber: settings.receiptShowReceiptNumber,
                     receiptShowTaxNumber: settings.receiptShowTaxNumber,
                     showLogoOnReceipt: settings.showLogoOnReceipt,
@@ -431,6 +432,7 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
                 settings.receiptShowFooter !== baseline.receiptShowFooter ||
                 settings.receiptShowHeader !== baseline.receiptShowHeader ||
                 settings.receiptShowPhone !== baseline.receiptShowPhone ||
+                settings.receiptShowQr !== baseline.receiptShowQr ||
                 settings.receiptShowReceiptNumber !== baseline.receiptShowReceiptNumber ||
                 settings.receiptShowTaxNumber !== baseline.receiptShowTaxNumber
             );
@@ -659,7 +661,15 @@ export function SettingsForm({ initialActiveBranch = null, initialBusinessLogoUr
               <Toggle label={tSettings("showDateTimeOnReceipt", locale)} checked={settings.receiptShowDateTime} onChange={(value) => update("receiptShowDateTime", value)}/>
               <Toggle label={tSettings("showHeaderOnReceipt", locale)} checked={settings.receiptShowHeader} onChange={(value) => update("receiptShowHeader", value)}/>
               <Toggle label={tSettings("showFooterOnReceipt", locale)} checked={settings.receiptShowFooter} onChange={(value) => update("receiptShowFooter", value)}/>
+              <Toggle describedBy="receipt-show-qr-help" label={tSettings("showQrOnReceipt", locale)} checked={settings.receiptShowQr} onChange={(value) => update("receiptShowQr", value)}/>
             </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground" id="receipt-show-qr-help">{tSettings("showQrOnReceiptHelp", locale)}</p>
+            {settings.receiptShowQr && !initialReceiptPreviewQrUrl ? (
+              <p className="mt-2 text-xs leading-5 text-muted-foreground" role="status">
+                {tSettings("receiptQrNoneEligible", locale)}{" "}
+                <Link className="font-semibold text-primary underline" href="/settings/qr-payments">{tSettings("goToQrPayments", locale)}</Link>
+              </p>
+            ) : null}
           </div>
 
           <div className="md:col-span-2">

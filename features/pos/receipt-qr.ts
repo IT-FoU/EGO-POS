@@ -32,6 +32,16 @@ export function resolveReceiptQrImage(input: {
   return imageUrl || null;
 }
 
+/**
+ * Layout visibility is separate from the account Print on Receipt flag.
+ * Missing/undefined stays visible so older saved layouts keep current QR behavior.
+ */
+export function visibleReceiptQrImage(imageUrl: string | null | undefined, showQrOnReceipt: boolean | null | undefined) {
+  if (showQrOnReceipt === false) return null;
+  const src = String(imageUrl ?? "").trim();
+  return src || null;
+}
+
 export function receiptQrImageFromPayments(
   payments: Array<{ paymentMethod?: string | null; referenceNo?: string | null }> | null | undefined,
   accounts: ReceiptQrAccount[],
