@@ -12,5 +12,5 @@ export async function GET(request: Request) {
       return sale ? [sale] : [];
     }
     return lookupPrismaReturnableSale(tenant, search);
-  });
+  }, undefined, { request });
 }

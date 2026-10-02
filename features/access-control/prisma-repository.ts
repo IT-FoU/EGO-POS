@@ -1,4 +1,5 @@
 import { hash } from "bcryptjs";
+import { isProtectedOwnerRole, staffStatusForDisplay, staffStatusForStorage } from "@/lib/auth/account-access";
 import { cache } from "react";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -66,7 +67,7 @@ function mapStaffMember(row: Record<string, unknown>): StaffMemberRecord {
     roleId: String(role?.id ?? ""),
     roleName: String(role?.name ?? "Custom"),
     roleTemplate: mapTemplateLabel(role?.templateKey ? String(role.templateKey) : null, String(role?.name ?? "Custom")),
-    status: String(row.status ?? "active") === "inactive" ? "inactive" : "active",
+    status: staffStatusForDisplay(String(row.status ?? "active")),
     userId: String(user?.id ?? row.userId),
     username: String(user?.username ?? ""),
   };
@@ -241,6 +242,10 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       if (!role) {
         throw new Error("Role was not found for this company.");
       }
+      if (isProtectedOwnerRole(role)) {
+        throw new Error("You do not have permission to assign this role.");
+      }
+      const storedStatus = staffStatusForStorage(input.status);
 
       if (input.id) {
         const membership = await tx.companyUser.findFirst({
@@ -263,6 +268,18 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         if (membership.isOwner) {
           throw new Error("Owner membership cannot be edited from staff management.");
         }
+        const actor = await resolveTenantMembership(tenant, tx);
+        const currentRoleId = membership.user.roles[0]?.roleId ?? "";
+        if (membership.userId === actor.effectiveUserId && currentRoleId !== roleId) {
+          throw new Error("You do not have permission to change your own role.");
+        }
+        if (
+          membership.userId === actor.effectiveUserId &&
+          (Boolean(membership.allowPosAccess) !== Boolean(input.allowPosAccess) ||
+            Boolean(membership.allowBackOfficeAccess) !== Boolean(input.allowBackOfficeAccess))
+        ) {
+          throw new Error("You do not have permission to change your own access.");
+        }
 
         const duplicate = await tx.user.findFirst({
           where: {
@@ -276,7 +293,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
 
         const userUpdate: Record<string, unknown> = {
           fullName,
-          status: input.status,
+          status: storedStatus,
           username,
         };
         if (input.password?.trim()) {
@@ -295,7 +312,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
             assignedTerminal: input.assignedTerminal,
             branchId,
             requirePasswordChange: input.requirePasswordChange,
-            status: input.status,
+            status: storedStatus,
           },
           where: { id: membership.id },
         });
@@ -354,7 +371,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           fullName,
           passwordHash: await hash(input.password.trim(), 12),
           preferredLocale: "en",
-          status: input.status,
+          status: storedStatus,
           username,
         },
       });
@@ -367,7 +384,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           branchId,
           companyId: tenant.companyId,
           requirePasswordChange: input.requirePasswordChange,
-          status: input.status,
+          status: storedStatus,
           userId: user.id,
         },
       });
@@ -429,18 +446,18 @@ export async function deactivateStaffMember(membershipId: string, tenant: Tenant
       }
 
       await tx.companyUser.update({
-        data: { status: "inactive" },
+        data: { status: "disabled" },
         where: { id: membershipId },
       });
       await tx.user.update({
-        data: { status: "inactive" },
+        data: { status: "disabled" },
         where: { id: membership.userId },
       });
 
       return mapStaffMember({
         ...membership,
-        status: "inactive",
-        user: { ...membership.user, status: "inactive" },
+        status: "disabled",
+        user: { ...membership.user, status: "disabled" },
       });
     },
   });

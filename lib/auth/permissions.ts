@@ -1,5 +1,6 @@
 import { permissionKeysForCheck } from "@/features/access-control/permission-catalog";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
+import { accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 
 export const WRITE_PERMISSIONS = {
@@ -71,6 +72,7 @@ export class PermissionDeniedError extends Error {
 }
 
 export async function assertPermission(tenant: TenantContext, permission: PermissionKey, client?: any) {
+  await requireAccountGate(tenant, accountGateForPermission(permission), client);
   const grantedKeys = await getUserPermissionKeys(tenant, client);
   if (grantedKeys.includes("*")) {
     return;

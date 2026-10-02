@@ -1,3 +1,4 @@
+import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { resolveStoreRoleFromTenant } from "@/lib/auth/store-permission-guard";
@@ -8,6 +9,12 @@ import { DayOffApprovalsClient } from "@/features/day-off/components/day-off-app
 export default async function DayOffApprovalsPage() {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
+  try {
+    await requireBackOfficeAccess(tenant);
+  } catch (error) {
+    if (error instanceof AccountAccessDeniedError) return <StoreAccessDenied />;
+    throw error;
+  }
   const role = await resolveStoreRoleFromTenant(tenant);
   if (normalizeStoreRole(role) === STORE_ROLES.CASHIER) {
     return <StoreAccessDenied />;

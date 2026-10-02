@@ -10,6 +10,7 @@ import {
   getOwnShiftReport,
   listBranchShiftSessions,
 } from "@/features/reports/own-shift-report-service";
+import { AccountAccessDeniedError, requirePosAccess } from "@/lib/auth/account-access";
 import { requireApiSession, ApiUnauthorizedError } from "@/lib/auth/session";
 import { currentStoreUserFromSession } from "@/lib/auth/store-permission-guard";
 import { auditStoreAccessDenied } from "@/features/permissions/denied-audit";
@@ -24,7 +25,7 @@ function apiJsonFromError(error: unknown) {
       { status: 401 },
     );
   }
-  if (error instanceof PermissionMatrixDeniedError) {
+  if (error instanceof AccountAccessDeniedError || error instanceof PermissionMatrixDeniedError) {
     return NextResponse.json(
       {
         error: "Forbidden",
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
 
     const session = await requireApiSession();
     const tenant = tenantFromSession(session);
+    await requirePosAccess(tenant);
     const currentStoreUser = currentStoreUserFromSession(session, tenant);
 
     if (!canAccessOwnShiftReport(currentStoreUser.role)) {

@@ -105,11 +105,13 @@ const shellCopy: Record<SupportedLocale, {
 };
 
 export function DashboardShell({
+  allowBackOfficeAccess,
   children,
   demoMode: _demoMode,
   planStatus,
   session,
 }: {
+  allowBackOfficeAccess: boolean;
   children: React.ReactNode;
   demoMode: boolean;
   planStatus: BusinessPlanHeaderStatus | null;
@@ -177,8 +179,11 @@ export function DashboardShell({
 
   const copy = shellCopy[locale];
   const visibleNavigation = useMemo(
-    () => navigation.filter((item) => canViewStoreNavigationItem(session.user.roles, item.key)),
-    [session.user.roles],
+    () => navigation.filter((item) => {
+      if (!allowBackOfficeAccess && item.key !== "pos") return false;
+      return canViewStoreNavigationItem(session.user.roles, item.key);
+    }),
+    [allowBackOfficeAccess, session.user.roles],
   );
 
   return (

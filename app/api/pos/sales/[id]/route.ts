@@ -4,7 +4,7 @@ import { runRead } from "@/lib/api/write-response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
   return runRead(async (tenant) => {
     const policy = await buildPosPolicyForTenant(tenant);
@@ -14,5 +14,5 @@ export async function GET(_request: Request, context: RouteContext) {
       throw new Error("Sale was not found.");
     }
     return sale;
-  });
+  }, undefined, { request });
 }

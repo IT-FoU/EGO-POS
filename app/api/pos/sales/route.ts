@@ -22,15 +22,18 @@ export async function GET(request: Request) {
     ? clampRecentSalesLimit(Number(url.searchParams.get("limit")))
     : undefined;
 
-  return runRead((tenant) =>
-    listPrismaRecentSales(tenant, {
-      cursor,
-      dateFrom,
-      datePreset,
-      dateTo,
-      limit,
-      search,
-    }),
+  return runRead(
+    (tenant) =>
+      listPrismaRecentSales(tenant, {
+        cursor,
+        dateFrom,
+        datePreset,
+        dateTo,
+        limit,
+        search,
+      }),
+    undefined,
+    { request },
   );
 }
 
