@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import {
@@ -12,6 +13,14 @@ import {
 export async function GET(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
+  try {
+    await requireBackOfficeAccess(tenant);
+  } catch (error) {
+    if (error instanceof AccountAccessDeniedError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
   try {
@@ -33,6 +42,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
+  try {
+    await requireBackOfficeAccess(tenant);
+  } catch (error) {
+    if (error instanceof AccountAccessDeniedError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
   const body = (await request.json().catch(() => ({}))) as Record<string, any>;
 
   try {

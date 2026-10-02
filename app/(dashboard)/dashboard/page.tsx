@@ -14,7 +14,10 @@ import {
   type DashboardDateRange,
   type DashboardRangeKey,
 } from "@/features/dashboard/dashboard-service";
+import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
+import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
 import { requireSession } from "@/lib/auth/session";
+import { tenantFromSession } from "@/lib/db/write-context";
 import { getDashboardCopy } from "@/lib/i18n/dashboard-copy";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
@@ -61,6 +64,12 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  try {
+    await requireBackOfficeAccess(tenantFromSession(session));
+  } catch (error) {
+    if (error instanceof AccountAccessDeniedError) return <StoreAccessDenied />;
+    throw error;
+  }
   if (shouldRouteToPos(session.user.roles ?? [])) {
     redirect("/pos");
   }

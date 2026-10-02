@@ -178,7 +178,7 @@ export const PERMISSION_ALIAS_GROUPS: Record<string, string[]> = {
   "purchasing.edit": ["purchasing.edit", "purchasing.create"],
   "purchasing.payment": ["purchasing.edit", "purchasing.payment"],
   "purchasing.receive": ["purchasing.edit", "purchasing.receive"],
-  "roles.manage": ["staff.edit", "roles.manage"],
+  "roles.manage": ["roles.manage"],
   "settings.manage": ["settings.edit", "settings.manage"],
   "suppliers.create": ["purchasing.create", "suppliers.create"],
   "suppliers.delete": ["purchasing.delete", "suppliers.delete"],

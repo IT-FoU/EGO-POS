@@ -1,5 +1,6 @@
 import { InventoryCountConflictError } from "@/features/inventory/stock-count-errors";
 import { NextResponse } from "next/server";
+import { AccountAccessDeniedError, accountGateForApiPath, accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
 import { ApiUnauthorizedError, requireApiSession } from "@/lib/auth/session";
 import { tenantFromSession, writeFailure, writeSuccess, type TenantContext } from "@/lib/db/write-context";
 import { assertPermission, PermissionDeniedError, type PermissionKey } from "@/lib/auth/permissions";
@@ -17,14 +18,30 @@ type StoreActionResolver = StoreAction | StoreAction[] | ((body: Record<string, 
 
 type StorePermissionOptions = PermissionContext & {
   allowManagerPinApproval?: boolean;
+  request?: Request;
   storeAction?: StoreActionResolver;
 };
+
+function requestPath(request?: Request) {
+  if (!request) return "";
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return "";
+  }
+}
+
+async function enforceApiAccountGate(tenant: TenantContext, permission: PermissionKey | undefined, request?: Request) {
+  const pathGate = accountGateForApiPath(requestPath(request));
+  const permissionGate = accountGateForPermission(permission);
+  await requireAccountGate(tenant, pathGate ?? permissionGate);
+}
 
 function apiStatusFromError(error: unknown): number {
   if (error instanceof ApiUnauthorizedError) {
     return 401;
   }
-  if (error instanceof PermissionDeniedError || error instanceof PermissionMatrixDeniedError) {
+  if (error instanceof AccountAccessDeniedError || error instanceof PermissionDeniedError || error instanceof PermissionMatrixDeniedError) {
     return 403;
   }
   if (error instanceof InventoryCountConflictError) {
@@ -34,7 +51,7 @@ function apiStatusFromError(error: unknown): number {
 }
 
 export function apiJsonFromError(error: unknown) {
-  if (error instanceof PermissionDeniedError || error instanceof PermissionMatrixDeniedError) {
+  if (error instanceof AccountAccessDeniedError || error instanceof PermissionDeniedError || error instanceof PermissionMatrixDeniedError) {
     return NextResponse.json(
       {
         error: "Forbidden",
@@ -71,6 +88,7 @@ export async function runRead<T>(
   try {
     const session = await requireApiSession();
     const tenant = tenantFromSession(session);
+    await enforceApiAccountGate(tenant, permission, options.request);
     const storeActions = resolveStoreActions(options.storeAction, {});
     if (storeActions.length) {
       await requireStoreActionPermissions({ actions: storeActions, context: options, session, tenant });
@@ -93,6 +111,7 @@ export async function runWrite<T>(
   try {
     const session = await requireApiSession();
     const tenant = tenantFromSession(session);
+    await enforceApiAccountGate(tenant, permission, request ?? options.request);
     const body = request ? await request.json().catch(() => ({})) : {};
     const storeActions = resolveStoreActions(options.storeAction, body);
     let managerPinApproval = null;

@@ -2,7 +2,7 @@ import { getPrismaSaleReceipt } from "@/features/pos/post-sale-repository";
 import { getPrismaPosSnapshot } from "@/features/pos/prisma-repository";
 import { runRead } from "@/lib/api/write-response";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   return runRead(async (tenant) => {
     const snapshot = await getPrismaPosSnapshot(tenant);
@@ -11,5 +11,5 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       cashierName: snapshot.cashierName,
       showTaxOnReceipt: snapshot.receiptSettings.showTaxOnReceipt,
     });
-  });
+  }, undefined, { request });
 }

@@ -21,5 +21,5 @@ export async function GET(request: Request) {
       };
     }
     return searchPrismaMembers(tenant, { limit, search });
-  });
+  }, undefined, { request });
 }
