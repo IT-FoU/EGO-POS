@@ -58,7 +58,7 @@ function SectionHeading({
   title,
 }: {
   copy: DashboardCopy;
-  href: string;
+  href?: string;
   icon: typeof UsersRound;
   note: string;
   title: string;
@@ -72,13 +72,15 @@ function SectionHeading({
         </div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{note}</p>
       </div>
-      <Link
-        className={`${dashboardLinkClass} inline-flex min-h-10 items-center gap-1 rounded-md px-3 text-sm font-medium text-primary outline-none hover:bg-primary/10 hover:text-foreground`}
-        href={href}
-      >
-        {copy.viewDetails}
-        <ArrowRight aria-hidden="true" className="h-4 w-4" />
-      </Link>
+      {href ? (
+        <Link
+          className={`${dashboardLinkClass} inline-flex min-h-10 items-center gap-1 rounded-md px-3 text-sm font-medium text-primary outline-none hover:bg-primary/10 hover:text-foreground`}
+          href={href}
+        >
+          {copy.viewDetails}
+          <ArrowRight aria-hidden="true" className="h-4 w-4" />
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -86,17 +88,19 @@ function SectionHeading({
 function MembershipSection({
   copy,
   dataStatus,
+  linkMembership,
   summary,
 }: {
   copy: DashboardCopy;
   dataStatus: InsightDataStatus;
+  linkMembership: boolean;
   summary: MembershipInsightSummary;
 }) {
   return (
     <section className={`${dashboardDisplayClass} min-w-0 rounded-lg border border-primary/30 bg-card p-5`}>
       <SectionHeading
         copy={copy}
-        href="/membership-levels"
+        href={linkMembership ? "/membership-levels" : undefined}
         icon={UsersRound}
         note={copy.membershipScopeNote}
         title={copy.membershipInsights}
@@ -212,17 +216,19 @@ function CustomerList({
 function CustomerSection({
   copy,
   dataStatus,
+  linkCustomers,
   summary,
 }: {
   copy: DashboardCopy;
   dataStatus: InsightDataStatus;
+  linkCustomers: boolean;
   summary: CustomerInsightSummary;
 }) {
   return (
     <section className={`${dashboardDisplayClass} min-w-0 rounded-lg border border-border bg-card p-5`}>
       <SectionHeading
         copy={copy}
-        href="/customers"
+        href={linkCustomers ? "/customers" : undefined}
         icon={UserRoundSearch}
         note={copy.trailing90Days}
         title={copy.customerInsights}
@@ -262,16 +268,25 @@ function CustomerSection({
   );
 }
 
-export function DashboardMemberCustomerPanel({ snapshot }: { snapshot: DashboardMemberCustomerSnapshot }) {
+export function DashboardMemberCustomerPanel({
+  linkCustomers = true,
+  linkMembership = true,
+  snapshot,
+}: {
+  linkCustomers?: boolean;
+  linkMembership?: boolean;
+  snapshot: DashboardMemberCustomerSnapshot;
+}) {
   const copy = getDashboardCopy(useAppLocale());
   return (
     <div className="grid min-w-0 gap-5">
       <MembershipSection
         copy={copy}
         dataStatus={snapshot.membershipDataStatus}
+        linkMembership={linkMembership}
         summary={snapshot.membership}
       />
-      <CustomerSection copy={copy} dataStatus={snapshot.customerDataStatus} summary={snapshot.customer} />
+      <CustomerSection copy={copy} dataStatus={snapshot.customerDataStatus} linkCustomers={linkCustomers} summary={snapshot.customer} />
     </div>
   );
 }

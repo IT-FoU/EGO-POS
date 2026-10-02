@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { AccountAccessDeniedError, requirePosAccess } from "@/lib/auth/account-access";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { requireModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import {
@@ -14,7 +15,7 @@ export async function GET() {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   try {
-    await requirePosAccess(tenant);
+    await requireModuleAccess(tenant, "pos");
   } catch (error) {
     if (error instanceof AccountAccessDeniedError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   try {
-    await requirePosAccess(tenant);
+    await requireModuleAccess(tenant, "pos");
   } catch (error) {
     if (error instanceof AccountAccessDeniedError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 403 });

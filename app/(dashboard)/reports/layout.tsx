@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { canViewFullStoreReports } from "@/features/permissions/store-ui-permissions";
 import { canAccessOwnShiftReport } from "@/features/reports/own-shift-report-access";
-import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { requireModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { resolveStoreRoleFromTenant } from "@/lib/auth/store-permission-guard";
 import { tenantFromSession } from "@/lib/db/write-context";
@@ -16,7 +17,7 @@ const OWN_SHIFT_HISTORY_PATH = "/reports/shifts/own-history";
 export default async function ReportsLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
   try {
-    await requireBackOfficeAccess(tenantFromSession(session));
+    await requireModuleAccess(tenantFromSession(session), "reports");
   } catch (error) {
     if (error instanceof AccountAccessDeniedError) return <StoreAccessDenied />;
     throw error;

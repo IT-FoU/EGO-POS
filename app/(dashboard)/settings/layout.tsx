@@ -1,11 +1,24 @@
 import { SettingsIndexScrollGuard } from "@/features/settings/components/settings-index-scroll-guard";
-import { BackOfficeAccessGate } from "@/components/auth/back-office-access-gate";
+import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { requireSettingsDestination } from "@/lib/auth/module-access";
+import { PermissionDeniedError } from "@/lib/auth/permissions";
+import { requireSession } from "@/lib/auth/session";
+import { tenantFromSession } from "@/lib/db/write-context";
 
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const session = await requireSession();
+  try {
+    await requireSettingsDestination(tenantFromSession(session), "index");
+  } catch (error) {
+    if (error instanceof AccountAccessDeniedError || error instanceof PermissionDeniedError) return <StoreAccessDenied />;
+    throw error;
+  }
+
   return (
-    <BackOfficeAccessGate>
+    <>
       <SettingsIndexScrollGuard />
       {children}
-    </BackOfficeAccessGate>
+    </>
   );
 }

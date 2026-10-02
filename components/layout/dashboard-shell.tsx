@@ -33,7 +33,6 @@ import {
   resolveActiveCompanyName,
 } from "@/lib/auth/active-company-name";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
-import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
 import { navVisualState, shouldMarkPendingNavigation } from "@/components/layout/nav-pending";
 import { tInventory } from "@/lib/i18n/inventory-copy";
 import { tProducts } from "@/lib/i18n/products-copy";
@@ -105,17 +104,17 @@ const shellCopy: Record<SupportedLocale, {
 };
 
 export function DashboardShell({
-  allowBackOfficeAccess,
   children,
   demoMode: _demoMode,
   planStatus,
   session,
+  visibleNavKeys,
 }: {
-  allowBackOfficeAccess: boolean;
   children: React.ReactNode;
   demoMode: boolean;
   planStatus: BusinessPlanHeaderStatus | null;
   session: Session;
+  visibleNavKeys: readonly string[];
 }) {
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
@@ -179,11 +178,8 @@ export function DashboardShell({
 
   const copy = shellCopy[locale];
   const visibleNavigation = useMemo(
-    () => navigation.filter((item) => {
-      if (!allowBackOfficeAccess && item.key !== "pos") return false;
-      return canViewStoreNavigationItem(session.user.roles, item.key);
-    }),
-    [allowBackOfficeAccess, session.user.roles],
+    () => navigation.filter((item) => visibleNavKeys.includes(item.key)),
+    [visibleNavKeys],
   );
 
   return (

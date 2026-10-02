@@ -1,21 +1,5 @@
-import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
-import { canViewStoreNavigationItem } from "@/features/permissions/store-ui-permissions";
-import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
-import { requireSession } from "@/lib/auth/session";
-import { tenantFromSession } from "@/lib/db/write-context";
+import { ModuleAccessGate } from "@/components/auth/module-access-gate";
 
-export default async function ProductsLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
-  try {
-    await requireBackOfficeAccess(tenantFromSession(session));
-  } catch (error) {
-    if (error instanceof AccountAccessDeniedError) return <StoreAccessDenied />;
-    throw error;
-  }
-  if (!canViewStoreNavigationItem(session.user.roles, "products")) {
-    return <StoreAccessDenied />;
-  }
-
-  return <>{children}</>;
+export default function ProductsLayout({ children }: { children: React.ReactNode }) {
+  return <ModuleAccessGate module="products">{children}</ModuleAccessGate>;
 }
-

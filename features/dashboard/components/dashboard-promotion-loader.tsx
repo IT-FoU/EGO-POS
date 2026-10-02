@@ -4,7 +4,7 @@ import {
   type DashboardDateRange,
 } from "@/features/dashboard/dashboard-service";
 
-export async function DashboardPromotionLoader({ dateRange }: { dateRange: DashboardDateRange }) {
+export async function DashboardPromotionLoader({ dateRange, linkPromotions = true }: { dateRange: DashboardDateRange; linkPromotions?: boolean }) {
   const snapshot = await getMiniMartDashboardPromotionSnapshot(dateRange);
-  return <DashboardPromotionPanel snapshot={snapshot} />;
+  return <DashboardPromotionPanel linkPromotions={linkPromotions} snapshot={snapshot} />;
 }

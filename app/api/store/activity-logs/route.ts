@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     },
     undefined,
     {
+      request,
       route: "/api/store/activity-logs",
       storeAction: STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE,
       targetType: "store_activity_logs",

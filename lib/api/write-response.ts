@@ -1,6 +1,8 @@
 import { InventoryCountConflictError } from "@/features/inventory/stock-count-errors";
 import { NextResponse } from "next/server";
+import { moduleForApiPath } from "@/features/access-control/module-access";
 import { AccountAccessDeniedError, accountGateForApiPath, accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
+import { requireAnyModuleAccess, requireModuleAccess } from "@/lib/auth/module-access";
 import { ApiUnauthorizedError, requireApiSession } from "@/lib/auth/session";
 import { tenantFromSession, writeFailure, writeSuccess, type TenantContext } from "@/lib/db/write-context";
 import { assertPermission, PermissionDeniedError, type PermissionKey } from "@/lib/auth/permissions";
@@ -32,9 +34,16 @@ function requestPath(request?: Request) {
 }
 
 async function enforceApiAccountGate(tenant: TenantContext, permission: PermissionKey | undefined, request?: Request) {
-  const pathGate = accountGateForApiPath(requestPath(request));
+  const path = requestPath(request);
+  const pathGate = accountGateForApiPath(path);
   const permissionGate = accountGateForPermission(permission);
   await requireAccountGate(tenant, pathGate ?? permissionGate);
+  const moduleId = moduleForApiPath(path);
+  if (moduleId === "activity") {
+    await requireAnyModuleAccess(tenant, ["settings", "staff"]);
+  } else if (moduleId) {
+    await requireModuleAccess(tenant, moduleId);
+  }
 }
 
 function apiStatusFromError(error: unknown): number {

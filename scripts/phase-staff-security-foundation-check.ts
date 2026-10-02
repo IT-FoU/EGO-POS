@@ -56,11 +56,12 @@ check("13. settings permission uses the back office gate", accountGateForPermiss
 check("14. pos API path is a pos gate", accountGateForApiPath("/api/pos/sales") === "pos");
 check("15. product API path is a back office gate", accountGateForApiPath("/api/products") === "back-office");
 check("16. notifications stay outside both module gates", accountGateForApiPath("/api/notifications") === null);
-check("17. sidebar hides back office when the flag is off", shell.includes("!allowBackOfficeAccess && item.key !== \"pos\""));
-check("18. pos page checks requirePosAccess", posPage.includes("requirePosAccess"));
-check("19. products route checks back office access", productsLayout.includes("requireBackOfficeAccess"));
-check("20. settings route checks back office access", settingsLayout.includes("BackOfficeAccessGate"));
-check("21. customers route checks back office access", customersLayout.includes("BackOfficeAccessGate"));
+const moduleGate = read("lib/auth/module-access.ts");
+check("17. sidebar uses server module keys", shell.includes("visibleNavKeys.includes(item.key)") && moduleGate.includes("allowBackOfficeAccess"));
+check("18. pos page checks the pos module", posPage.includes("requireModuleAccess") && posPage.includes("\"pos\""));
+check("19. products route checks the products module", productsLayout.includes("ModuleAccessGate") && productsLayout.includes("products"));
+check("20. settings route checks settings or staff module", settingsLayout.includes("requireSettingsDestination"));
+check("21. customers route checks the customers module", customersLayout.includes("ModuleAccessGate") && customersLayout.includes("customers"));
 check("22. API helper enforces the account gate", writeResponse.includes("enforceApiAccountGate") && permissions.includes("requireAccountGate"));
 
 console.log(`\nStaff security foundation: ${passed} passed, ${failed} failed`);

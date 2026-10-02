@@ -1,3 +1,4 @@
+import { isCanonicalModuleEnabled, moduleForPermissionKey } from "@/features/access-control/module-access";
 import { permissionKeysForCheck } from "@/features/access-control/permission-catalog";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
@@ -76,6 +77,11 @@ export async function assertPermission(tenant: TenantContext, permission: Permis
   const grantedKeys = await getUserPermissionKeys(tenant, client);
   if (grantedKeys.includes("*")) {
     return;
+  }
+
+  const moduleId = moduleForPermissionKey(permission);
+  if (moduleId && !isCanonicalModuleEnabled(moduleId, grantedKeys)) {
+    throw new PermissionDeniedError(permission);
   }
 
   const keysToCheck = permissionKeysForCheck(permission);

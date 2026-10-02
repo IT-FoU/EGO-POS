@@ -3,7 +3,8 @@ import { StoreAccessDenied } from "@/components/permissions/store-access-denied"
 import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
 import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
-import { AccountAccessDeniedError, requireBackOfficeAccess } from "@/lib/auth/account-access";
+import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { requireAnyModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
@@ -12,7 +13,7 @@ import { tSettings } from "@/lib/i18n/settings-copy";
 export default async function ActivityLogsPage() {
   const session = await requireSession();
   try {
-    await requireBackOfficeAccess(tenantFromSession(session));
+    await requireAnyModuleAccess(tenantFromSession(session), ["settings", "staff"]);
   } catch (error) {
     if (error instanceof AccountAccessDeniedError) {
       return <StoreAccessDenied />;
