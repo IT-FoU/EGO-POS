@@ -26,7 +26,7 @@ check("cashier save writes hold and reprint", cashierSaved.includes(FINE.posHold
 check("manager report toggles persist", permissionKeysForDraft(manager, []).includes(FINE.reportsProfit) && permissionKeysForDraft(manager, []).includes(FINE.reportsHistorical));
 check("reports profit off is omitted", !reportsSaved.includes(FINE.reportsProfit) && !reportsSaved.includes(FINE.reportsCost) && !reportsSaved.includes(FINE.reportsMargin));
 check("today can be off while historical stays on", !todaySaved.includes(FINE.reportsToday) && todaySaved.includes(FINE.reportsHistorical) && todaySaved.includes("reports.access"));
-check("historical range is detected", reportRangeNeedsHistorical({ datePreset: "yesterday" }) && !reportRangeNeedsHistorical({ datePreset: "today" }));
+check("historical range is detected", reportRangeNeedsHistorical({ datePreset: "yesterday" }) && !reportRangeNeedsHistorical({ datePreset: "today", dateFrom: new Date(Date.now() - 86_400_000) }));
 check("profit redaction removes profit and keeps sales", (() => {
   const redacted = redactSensitiveFields({ netSalesLak: 10, profitTodayLak: 4, cogsLak: 2, marginPercent: 1 }, reportVisibility([]));
   return redacted.netSalesLak === 10 && !("profitTodayLak" in redacted) && !("cogsLak" in redacted) && !("marginPercent" in redacted);
