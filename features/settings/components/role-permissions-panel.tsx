@@ -45,6 +45,7 @@ export function RolePermissionsPanel({
   const [confirmSave, setConfirmSave] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [pendingRoleId, setPendingRoleId] = useState<string | null>(null);
+  const [roleNotice, setRoleNotice] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const selected = roles.find((role) => role.id === selectedId) ?? roles[0];
   const locked = !selected || selected.templateKey === "Owner" || !actorIsOwner;
   const dirty = !roleDraftsEqual(draft, baseline);
@@ -82,11 +83,15 @@ export function RolePermissionsPanel({
     startTransition(async () => {
       const result = await saveRolePermissionsAction({ permissions, roleId: selected.id });
       if (!result.ok) {
-        onNotify({ text: localizeSettingsError(result.error, locale), tone: "error" });
+        const text = localizeSettingsError(result.error, locale);
+        setRoleNotice({ text, tone: "error" });
+        onNotify({ text, tone: "error" });
         return;
       }
       writeRetainedRoleDraft(selected.id, draft);
-      onNotify({ text: fillSettingsCopy(tSettings("permissionsSaved", locale), { role: localizeRoleTemplate(selected.name, locale) }), tone: "success" });
+      const text = fillSettingsCopy(tSettings("permissionsSaved", locale), { role: localizeRoleTemplate(selected.name, locale) });
+      setRoleNotice({ text, tone: "success" });
+      onNotify({ text, tone: "success" });
       router.refresh();
     });
   }
@@ -100,11 +105,15 @@ export function RolePermissionsPanel({
     startTransition(async () => {
       const result = await saveRolePermissionsAction({ permissions, roleId: selected.id });
       if (!result.ok) {
-        onNotify({ text: localizeSettingsError(result.error, locale), tone: "error" });
+        const text = localizeSettingsError(result.error, locale);
+        setRoleNotice({ text, tone: "error" });
+        onNotify({ text, tone: "error" });
         return;
       }
       writeRetainedRoleDraft(selected.id, next);
-      onNotify({ text: tSettings("roleResetSaved", locale), tone: "success" });
+      const text = tSettings("roleResetSaved", locale);
+      setRoleNotice({ text, tone: "success" });
+      onNotify({ text, tone: "success" });
       router.refresh();
     });
   }
@@ -208,6 +217,7 @@ export function RolePermissionsPanel({
                   </section>
                 );
               })}
+              {roleNotice ? <p className={roleNotice.tone === "success" ? "rounded-md border border-success/40 bg-success/10 p-3 text-sm text-foreground" : "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-foreground"} role={roleNotice.tone === "success" ? "status" : "alert"}>{roleNotice.text}</p> : null}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={locked || isPending || !dirty} type="button" onClick={() => setConfirmSave(true)}>
                   {fillSettingsCopy(tSettings("savePermissions", locale), { role: localizeRoleTemplate(selected.name, locale) })}
