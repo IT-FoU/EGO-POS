@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Banknote, Building2, CalendarOff, ChevronRight, CircleHelp, Clock3, Gift, Image,
   MapPin, MonitorPlay, Percent, QrCode, ReceiptText, Search, ShieldCheck, Users,
@@ -132,30 +131,30 @@ function matches(query: string, values: string[]) {
 
 export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: { allowedHrefs: readonly string[]; facts: SettingsLandingFacts; locale: SupportedLocale }) {
   const locale = useAppLocale(initialLocale);
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [printMode, setPrintMode] = useState<ReceiptPrintMode>("ask_every_time");
+  const [prefetchedHrefs, setPrefetchedHrefs] = useState<ReadonlySet<string>>(() => new Set());
   const allowed = useMemo(() => new Set(allowedHrefs), [allowedHrefs]);
   useEffect(() => setPrintMode(readReceiptPrintModePreference()), []);
   useEffect(() => {
-    let cancelled = false;
     const hrefs = SETTINGS_PREFETCH_ORDER.filter((href) => allowed.has(href));
-    const warm = async () => {
-      for (const href of hrefs) {
-        if (cancelled) return;
-        try {
-          router.prefetch(href);
-        } catch {
-          // A failed warm-up leaves the click to load the route itself.
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 700));
+    let index = 0;
+    const timer = window.setInterval(() => {
+      const href = hrefs[index];
+      if (!href) {
+        window.clearInterval(timer);
+        return;
       }
-    };
-    void warm();
-    return () => {
-      cancelled = true;
-    };
-  }, [allowed, router]);
+      index += 1;
+      setPrefetchedHrefs((current) => {
+        if (current.has(href)) return current;
+        const next = new Set(current);
+        next.add(href);
+        return next;
+      });
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, [allowed]);
   const needle = query.trim().toLocaleLowerCase();
   const filtered = useMemo(() => groups.map((group) => ({
     ...group,
@@ -186,7 +185,7 @@ export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: 
             {group.rows.map((row) => {
               const Icon = row.icon;
               return (
-                <Link className="settings-motion-row group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)} prefetch={false}>
+                <Link className="settings-motion-row group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)} prefetch={prefetchedHrefs.has(row.href)}>
                   <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span>
                   <span className="grid min-w-0 flex-1 gap-1">
                     <span className="flex min-w-0 flex-wrap items-center gap-2">
