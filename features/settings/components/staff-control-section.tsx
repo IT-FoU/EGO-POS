@@ -757,6 +757,7 @@ export function StaffControlSection({
           closeAriaLabel={tSettings("closeModal", locale)}
           closeOnBackdrop={false}
           closeOnEscape={false}
+          raised
           footer={(
             <div className="flex justify-end gap-2">
               <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setResetKind(null)}>{tSettings("cancel", locale)}</button>
