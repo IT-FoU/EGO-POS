@@ -317,7 +317,6 @@ export function StaffControlSection({
       setStaffModalOpen(false);
       setStaffPreset("cashier");
       setStaffDraft(draftFromKind("cashier", emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles), createDefaults));
-      window.setTimeout(() => router.refresh(), 0);
       } finally {
         submitLock.current = false;
       }
