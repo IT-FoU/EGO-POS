@@ -191,7 +191,8 @@ export async function buildDailySalesExcel(input: {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(sheetName);
   const query = data.query;
-  const showCost = data.showCostProfit;
+  const showCost = data.showCost;
+  const showProfit = data.showProfit;
   writeMeta(sheet, 1, t("store", locale), storeName);
   writeMeta(sheet, 2, t("report", locale), t("dailySales", locale));
   writeMeta(sheet, 3, t("date", locale), query.date || queryDateRange(query, locale));
@@ -209,12 +210,8 @@ export async function buildDailySalesExcel(input: {
     { label: t("refunds", locale), value: data.summary.refundLak },
     { label: t("voids", locale), value: data.summary.voidLak },
     { label: t("netSales", locale), value: data.summary.netLak },
-    ...(showCost
-      ? [
-          { label: t("cost", locale), value: data.summary.costLak },
-          { label: t("profit", locale), value: data.summary.profitLak },
-        ]
-      : []),
+    ...(showCost ? [{ label: t("cost", locale), value: data.summary.costLak }] : []),
+    ...(showProfit ? [{ label: t("profit", locale), value: data.summary.profitLak }] : []),
   ];
   const afterSummary = writeSummary(sheet, 10, summaryItems, locale);
   const tableStart = afterSummary + 2;
@@ -230,12 +227,8 @@ export async function buildDailySalesExcel(input: {
     { header: t("colVoid", locale), key: "void", kind: "money", width: 12 },
     { header: t("colNet", locale), key: "net", kind: "money", width: 14 },
     { header: t("colPayment", locale), key: "payment", kind: "text", width: 18 },
-    ...(showCost
-      ? [
-          { header: t("colCost", locale), key: "cost", kind: "money" as const, width: 12 },
-          { header: t("colProfit", locale), key: "profit", kind: "money" as const, width: 12 },
-        ]
-      : []),
+    ...(showCost ? [{ header: t("colCost", locale), key: "cost", kind: "money" as const, width: 12 }] : []),
+    ...(showProfit ? [{ header: t("colProfit", locale), key: "profit", kind: "money" as const, width: 12 }] : []),
     { header: t("colStatus", locale), key: "status", kind: "center", width: 16 },
   ];
   const rows = data.rows.map((row, index) => ({
@@ -263,7 +256,7 @@ export async function buildDailySalesExcel(input: {
     net: data.summary.netLak,
     no: t("total", locale),
     payment: "",
-    profit: showCost ? data.summary.profitLak : "",
+    profit: showProfit ? data.summary.profitLak : "",
     receipt: "",
     refund: data.summary.refundLak,
     status: "",

@@ -16,7 +16,7 @@ import {
   startOfBusinessWeek,
   startOfBusinessYear,
 } from "@/lib/datetime/business-timezone";
-import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
+import { assertReportQueryAllowed, readReportVisibility, redactReportPayload } from "@/lib/auth/fine-access";
 import type { TenantContext } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 import type { InventoryItem } from "@/features/inventory/types";
@@ -659,7 +659,9 @@ export async function getPrismaReportsSnapshot(
   rawFilters?: ReportFilters,
   client: any = db,
 ) {
-  await timedReportsLoad("permission", () => assertPermission(tenant, READ_PERMISSIONS.reportsView, client));
+  const filtersForGuard = rawFilters ?? { datePreset: "today" as const };
+  await timedReportsLoad("permission", () => assertReportQueryAllowed(tenant, filtersForGuard, client));
+  const reportAccess = await readReportVisibility(tenant, client);
   const scope = await timedReportsLoad("scope", () => resolveTenantScope(tenant, client));
   const filters = clampReportFilters(scope, resolveEffectiveFilters(rawFilters));
   const saleFilter = buildSaleWhere(scope, filters);
@@ -1044,7 +1046,7 @@ export async function getPrismaReportsSnapshot(
     grossSalesLak: Math.round(grossSalesLak),
   });
 
-  return {
+  return redactReportPayload(tenant, {
     analytics,
     cogsLak: Math.round(totalCogsLak),
     customers,
@@ -1056,16 +1058,16 @@ export async function getPrismaReportsSnapshot(
     inventoryItems,
     productRows,
     products,
-    purchaseTrend,
+    purchaseTrend: reportAccess.historical ? purchaseTrend : [],
     refundLak: Math.round(refundLak),
-    revenueTrend,
-    salesMetrics,
+    revenueTrend: reportAccess.historical ? revenueTrend : [],
+    salesMetrics: reportAccess.historical ? salesMetrics : salesMetrics.filter((metric) => metric.period === "daily"),
     supplierPayables,
     supplierPayments: [],
     supplierPurchaseOrders,
     supplierReceivings,
     suppliers,
-  };
+  }, client);
 }
 
 function buildRevenueTrend(rows: Array<Record<string, any>>): TrendPoint[] {

@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
+import { allowsFine, fineKeyForPosAction } from "@/features/access-control/fine-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { createPosPermissionPolicyFromDatabase } from "@/features/access-control/pos-policy-loader";
 import {
   evaluatePosPermission,
@@ -36,9 +38,20 @@ async function resolveUserRoleNames(tenant: TenantContext, client: any = db): Pr
   return names.length > 0 ? names : ["cashier"];
 }
 
+const fineKeysByPolicy = new WeakMap<PosPermissionPolicy, string[]>();
+
 export async function buildPosPolicyForTenant(tenant: TenantContext, client: any = db): Promise<PosPermissionPolicy> {
   const roles = await resolveUserRoleNames(tenant, client);
-  return createPosPermissionPolicyFromDatabase({ client, roles, tenant, userId: tenant.userId });
+  const policy = await createPosPermissionPolicyFromDatabase({ client, roles, tenant, userId: tenant.userId });
+  fineKeysByPolicy.set(policy, await getUserPermissionKeys(tenant, client));
+  return policy;
+}
+
+function posFineAllows(keys: readonly string[], action: PosPermissionAction) {
+  if (allowsFine(keys, "*") || keys.includes("*")) return true;
+  if (action === "create_sale") return keys.includes("pos.create") || keys.includes("pos.sell");
+  const key = fineKeyForPosAction(action);
+  return key ? keys.includes(key) : true;
 }
 
 // Throws PermissionDeniedError when the action is not allowed for the policy.
@@ -49,7 +62,16 @@ export function assertPosActionAllowed(
   action: PosPermissionAction,
   context: { amountLak?: number; discountPercent?: number } = {},
 ) {
-  const decision = evaluatePosPermission(policy, action, context);
+  const fineKeys = fineKeysByPolicy.get(policy);
+  const fineKey = fineKeyForPosAction(action);
+  if (fineKeys && fineKey && !posFineAllows(fineKeys, action)) {
+    throw new PermissionDeniedError(fineKey);
+  }
+  const decision = evaluatePosPermission(
+    fineKeys && fineKey ? { ...policy, permissions: { ...policy.permissions, [action]: true } } : policy,
+    action,
+    context,
+  );
   if (!decision.allowed) {
     throw new PermissionDeniedError(`pos.${action}${decision.reason ? ` — ${decision.reason}` : ""}`);
   }

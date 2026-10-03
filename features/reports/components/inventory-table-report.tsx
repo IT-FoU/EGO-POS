@@ -7,6 +7,7 @@ import { fillReportsCopy, tReports } from "@/lib/i18n/reports-copy";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
 import { ReportDetailHeader, ReportPageChrome, ReportSheet } from "@/features/reports/components/report-page-shell";
+import { useReportExportAllowed } from "@/features/reports/components/report-export-gate";
 import { findReportCenterEntry } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
 import type { ReportFilterOptions } from "@/features/reports/report-filters";
@@ -169,6 +170,8 @@ function Pager({
 }
 
 function ExportExcelButton({ href, locale }: { href: string; locale: SupportedLocale }) {
+  const allowed = useReportExportAllowed();
+  if (!allowed) return null;
   return (
     <a className={`inline-flex h-10 items-center rounded-md border border-zinc-800 px-4 text-sm font-semibold text-zinc-900 ${focusRing}`} href={href}>
       {t("exportExcel", locale)}

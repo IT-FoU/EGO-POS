@@ -1,3 +1,4 @@
+import { FINE } from "@/features/access-control/fine-permissions";
 import { getPosPolicyApprovalRules, getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import {
   APPROVAL_RULE_KEYS,
@@ -26,19 +27,19 @@ const allPosActions: PosPermissionAction[] = [
 function posActionFromPermissionKeys(keys: Set<string>, action: PosPermissionAction) {
   if (keys.has("*")) return true;
   const map: Partial<Record<PosPermissionAction, string[]>> = {
-    apply_discount: ["pos.edit", "pos.create"],
-    cash_in: ["pos.edit", "pos.create"],
-    cash_out: ["pos.edit", "pos.create"],
+    apply_discount: [FINE.posDiscount],
+    cash_in: [FINE.posCashIn],
+    cash_out: [FINE.posCashOut],
     create_sale: ["pos.create", "pos.sell"],
     delete_item_from_bill: ["pos.delete", "pos.edit"],
-    hold_bill: ["pos.create", "pos.edit"],
-    manual_price_override: ["pos.edit", "pos.approve"],
+    hold_bill: [FINE.posHold],
+    manual_price_override: [FINE.posPriceOverride],
     multi_currency_payment: ["pos.edit", "pos.create"],
-    refund_bill: ["pos.approve", "pos.delete"],
-    reprint_receipt: ["pos.print"],
-    resume_bill: ["pos.edit", "pos.create"],
+    refund_bill: [FINE.posRefund],
+    reprint_receipt: [FINE.posReprint, "pos.print"],
+    resume_bill: [FINE.posHold],
     split_payment: ["pos.edit", "pos.create"],
-    void_bill: ["pos.delete", "pos.approve"],
+    void_bill: [FINE.posVoid],
   };
   return (map[action] ?? ["pos.create"]).some((key) => keys.has(key));
 }

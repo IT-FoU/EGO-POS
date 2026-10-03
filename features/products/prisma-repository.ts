@@ -1,3 +1,6 @@
+import { allowsFine, FINE, productCostChanged, redactSensitiveFields } from "@/features/access-control/fine-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
+import { PermissionDeniedError } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { normalizeMasterName } from "@/features/products/master-name";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
@@ -20,9 +23,10 @@ const db = prisma as any;
 
 export async function getPrismaProductListPage(tenant: TenantContext, input: ProductListQuery = {}, client: any = db) {
   const page = await loadPrismaProductListPage(tenant, input, client);
+  const products = await attachProductImageDelivery(page.products);
   return {
     ...page,
-    products: await attachProductImageDelivery(page.products),
+    products: await redactProductCosts(products, tenant, client),
   };
 }
 
@@ -52,7 +56,7 @@ export async function getPrismaProducts(tenant: TenantContext, client: any = db)
     },
   });
 
-  return products.map(mapPrismaProduct);
+  return redactProductCosts(products.map(mapPrismaProduct), tenant, client);
 }
 
 export async function getPrismaProductById(productId: string, tenant: TenantContext, client: any = db) {
@@ -81,7 +85,9 @@ export async function getPrismaProductById(productId: string, tenant: TenantCont
     },
   });
 
-  return product ? (await attachProductImageDelivery([mapPrismaProduct(product)]))[0] : null;
+  if (!product) return null;
+  const [mapped] = await attachProductImageDelivery([mapPrismaProduct(product)]);
+  return redactProductCosts(mapped, tenant, client);
 }
 
 export async function getPrismaCategories(tenant: TenantContext) {
@@ -660,6 +666,7 @@ function unitReferenceCount(unit: Record<string, any>) {
 
 export async function writePrismaProductCreate(tx: any, input: ProductWriteInput, tenant: TenantContext) {
   assertValidProductWriteInput(input);
+  await assertProductFieldChanges(tenant, input, null, tx);
   const scope = await resolveTenantScope(tenant, tx);
   await assertProductBranchReferences(tx, scope, input);
   await assertUniqueSku(tx, scope, input);
@@ -751,6 +758,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
     include: { units: true },
     where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
   });
+  await assertProductFieldChanges(tenant, input, existing, tx);
       await assertProductBranchReferences(tx, scope, input);
       await assertUniqueSku(tx, scope, input, existing.id);
       await assertUniqueBarcodes(tx, scope, input, existing.id);
@@ -1349,4 +1357,31 @@ export async function deletePrismaBrand(brandId: string, tenant: TenantContext) 
       return tx.brand.delete({ where: { id: existing.id } });
     },
   });
+}
+
+async function redactProductCosts<T>(value: T, tenant: TenantContext, client: any) {
+  const keys = await getUserPermissionKeys(tenant, client);
+  if (allowsFine(keys, FINE.productsViewCost)) return value;
+  return redactSensitiveFields(value, { cost: false, margin: false, profit: true });
+}
+
+async function assertProductFieldChanges(tenant: TenantContext, input: Partial<ProductWriteInput>, existing: { costPriceLak?: unknown; sellingPriceLak?: unknown; units?: Array<{ costPriceLak?: unknown; id?: string; sellingPriceLak?: unknown }> } | null, client: any) {
+  const keys = await getUserPermissionKeys(tenant, client);
+  const units = input.units ?? [];
+  const costDenied = !allowsFine(keys, FINE.productsChangeCost);
+  const priceDenied = !allowsFine(keys, FINE.productsChangePrice);
+  if (costDenied) {
+    const costChanged = productCostChanged(existing?.costPriceLak ?? 0, input.costPriceLak) || units.some((unit) => {
+      const previous = existing?.units?.find((row) => row.id === unit.id)?.costPriceLak ?? existing?.costPriceLak ?? 0;
+      return productCostChanged(existing ? previous : 0, unit.costPriceLak);
+    });
+    if (costChanged) throw new PermissionDeniedError(FINE.productsChangeCost);
+  }
+  if (priceDenied) {
+    const priceChanged = productCostChanged(existing?.sellingPriceLak ?? 0, input.sellingPriceLak) || units.some((unit) => {
+      const previous = existing?.units?.find((row) => row.id === unit.id)?.sellingPriceLak ?? existing?.sellingPriceLak ?? 0;
+      return productCostChanged(existing ? previous : 0, unit.sellingPriceLak);
+    });
+    if (priceChanged && existing) throw new PermissionDeniedError(FINE.productsChangePrice);
+  }
 }

@@ -1,11 +1,12 @@
 import { recordCashSessionMovement } from "@/features/cash-sessions/prisma-repository";
 import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { FINE, requireFinePermission } from "@/lib/auth/fine-access";
 
 export async function POST(request: Request) {
   return runWrite(
-    (tenant, body) =>
-      recordCashSessionMovement(
+    async (tenant, body) => {
+      await requireFinePermission(tenant, FINE.posCashIn);
+      return recordCashSessionMovement(
         String(body.sessionId ?? ""),
         "cash_in",
         {
@@ -13,8 +14,8 @@ export async function POST(request: Request) {
           reason: typeof body.reason === "string" ? body.reason : undefined,
         },
         tenant,
-      ),
+      );
+    },
     request,
-    WRITE_PERMISSIONS.posCashSessionManage,
   );
 }

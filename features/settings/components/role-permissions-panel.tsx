@@ -244,7 +244,7 @@ export function RolePermissionsPanel({
                 <div className="mt-3 text-sm font-semibold">{tSettings("sensitiveData", locale)}</div>
                 <ul className="mt-1 text-sm">
                   {preview.sensitive.map((item) => (
-                    <li key={item.id}>{permissionLabel(item.id, locale)}: {item.enabled ? tSettings("allowed", locale) : tSettings("blocked", locale)} ({tSettings("notEnforcedYet", locale)})</li>
+                    <li key={item.id}>{permissionLabel(item.id, locale)}: {item.enabled ? tSettings("allowed", locale) : tSettings("blocked", locale)}{item.deferred ? ` (${tSettings("notEnforcedYet", locale)})` : ""}</li>
                   ))}
                 </ul>
               </div>

@@ -67,7 +67,8 @@ function useProductsT() {
     return { locale, t };
 }
 
-export function ProductListClient({ products: initialProducts, brands: initialBrands = [], categories: initialCategories, listPage: initialListPage, suppliers: initialSuppliers = [] }: {
+export function ProductListClient({ access, products: initialProducts, brands: initialBrands = [], categories: initialCategories, listPage: initialListPage, suppliers: initialSuppliers = [] }: {
+    access?: { archive: boolean; create: boolean; printBarcode: boolean; viewCost: boolean };
     products: Product[];
     brands?: Brand[];
     categories: Category[];
@@ -76,6 +77,7 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
 }) {
     const router = useRouter();
     const { locale, t } = useProductsT();
+    const productAccess = access ?? { archive: true, create: true, printBarcode: true, viewCost: true };
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [brands, setBrands] = useState<Brand[]>(initialBrands);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
@@ -333,18 +335,18 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
             </select>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-            <button className="inline-flex h-11 items-center gap-2 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={selectedProductIds.length === 0 || isPending} onClick={bulkDeleteSelectedProducts}>
+            {productAccess.archive ? <button className="inline-flex h-11 items-center gap-2 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={selectedProductIds.length === 0 || isPending} onClick={bulkDeleteSelectedProducts}>
               <Trash2 aria-hidden="true" className="size-4"/>
               {t("deleteSelected")}
-            </button>
+            </button> : null}
             <Link className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" href="/products/categories">
               <SlidersHorizontal aria-hidden="true" className="size-4"/>
               {t("categories")}
             </Link>
-            <Link className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href="/products/new">
+            {productAccess.create ? <Link className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90" href="/products/new">
               <Plus aria-hidden="true" className="size-4"/>
               {t("createProduct")}
-            </Link>
+            </Link> : null}
             <div className="relative">
               <button className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setActionMenuOpen((current) => !current)}>
                 <MoreHorizontal aria-hidden="true" className="size-4"/>
@@ -354,7 +356,7 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
                   <ActionMenuButton icon={Upload} label={t("importProducts")} onClick={() => openOperationDrawer("tool_import")}/>
                   <ActionMenuButton icon={Download} label={t("exportProducts")} onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} onClick={() => openOperationDrawer("tool_audit")}/>
-                  <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/>
+                  {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
                   <ActionMenuButton icon={Tags} label={t("printShelfLabel")} onClick={() => openOperationDrawer("tool_print_shelf")}/>
                   <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} onClick={() => openOperationDrawer("tool_bulk_price")}/>
                 </div>) : null}
@@ -385,7 +387,7 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
                 <th className="px-3 py-3 font-semibold">{t("sku")}</th>
                 <th className="px-3 py-3 font-semibold">{t("category")}</th>
                 <th className="px-3 py-3 text-right font-semibold">{t("stock")}</th>
-                <th className="px-3 py-3 text-right font-semibold">{t("cost")}</th>
+                {productAccess.viewCost ? <th className="px-3 py-3 text-right font-semibold">{t("cost")}</th> : null}
                 <th className="px-3 py-3 text-right font-semibold">{t("price")}</th>
                 <th className="px-3 py-3 font-semibold">{t("expiryStatus")}</th>
                 <th className="px-3 py-3 font-semibold">{t("status")}</th>
@@ -418,7 +420,7 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
                     <td className="px-3 py-3 font-mono text-xs">{product.sku || "-"}</td>
                     <td className="px-3 py-3">{product.categoryName || "-"}</td>
                     <td className="px-3 py-3 text-right"><StockBadge label={formatStockDisplay(product)} stock={stock} minStock={product.minStock}/></td>
-                    <td className="px-3 py-3 text-right">{formatLak(product.costPriceLak)}</td>
+                    {productAccess.viewCost ? <td className="px-3 py-3 text-right">{formatLak(product.costPriceLak)}</td> : null}
                     <td className="px-3 py-3 text-right font-semibold">{formatLak(product.sellingPriceLak)}</td>
                     <td className="px-3 py-3"><ExpiryBadge status={expiryStatus}/></td>
                     <td className="px-3 py-3"><StatusBadge locale={locale} status={product.status}/></td>
@@ -428,10 +430,10 @@ export function ProductListClient({ products: initialProducts, brands: initialBr
                           <Edit3 aria-hidden="true" className="size-4"/>
                           {t("edit")}
                         </Link>
-                        <button className="inline-flex h-9 items-center gap-2 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => deleteProduct(product.id)}>
+                        {productAccess.archive ? <button className="inline-flex h-9 items-center gap-2 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => deleteProduct(product.id)}>
                           <Trash2 aria-hidden="true" className="size-4"/>
                           {t("delete")}
-                        </button>
+                        </button> : null}
                       </div>
                     </td>
                   </tr>);

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireApiSession, requireSession } from "@/lib/auth/session";
+import { requireFinePermission, requireReportExport } from "@/lib/auth/fine-access";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 import { prisma } from "@/lib/db/prisma";
@@ -30,6 +31,7 @@ export async function getMovementTableLocale() {
 
 export async function getStockMovementPageData(searchParams?: SearchParams) {
   const tenant = await requireReportsTenant();
+  await requireFinePermission(tenant, "inventory.movement");
   const query = parseMovementTableQuery(searchParams, { datePreset: "today" });
   return loadStockMovementTable(tenant, query);
 }
@@ -70,12 +72,14 @@ async function requireReportsApiTenant() {
   const session = await requireApiSession();
   const tenant = tenantFromSession(session);
   await assertPermission(tenant, READ_PERMISSIONS.reportsView);
+  await requireReportExport(tenant);
   return tenant;
 }
 
 export async function exportStockMovementExcelResponse(request: Request) {
   try {
     const tenant = await requireReportsApiTenant();
+    await requireFinePermission(tenant, "inventory.movement");
     const locale = await getMovementTableLocale();
     const query = parseMovementTableQuery(searchParamsFromRequest(request), { datePreset: "today" });
     const [data, storeName] = await Promise.all([
@@ -91,6 +95,7 @@ export async function exportStockMovementExcelResponse(request: Request) {
 export async function exportStockValuationExcelResponse(request: Request) {
   try {
     const tenant = await requireReportsApiTenant();
+    await requireFinePermission(tenant, "inventory.view_cost");
     const locale = await getMovementTableLocale();
     const query = parseInventoryTableQuery(searchParamsFromRequest(request), { status: "all" });
     const [base, storeName] = await Promise.all([

@@ -64,7 +64,7 @@ check("owner still loses back office when the account flag is off", !visibleNavi
 check("both flags off leave no operational navigation", visibleNavigationKeys({ allowBackOfficeAccess: false, allowPosAccess: false, isOwner: false, keys: managerKeys }).length === 0);
 check("leftover inventory.edit does not turn inventory on", !isCanonicalModuleEnabled("inventory", ["inventory.edit"]) && !isCanonicalModuleEnabled("products", ["inventory.edit"]));
 check("module off is authoritative over a stored view key", !isCanonicalModuleEnabled("products", managerProductsOff));
-check("advanced alias does not satisfy a module that is off", permissionKeysForCheck("inventory.adjust").includes("inventory.edit") && !isCanonicalModuleEnabled("inventory", ["inventory.edit"]));
+check("advanced alias does not satisfy a module that is off", permissionKeysForCheck("inventory.adjust").join() === "inventory.adjust" && !isCanonicalModuleEnabled("inventory", ["inventory.edit"]));
 check("roles.manage does not grant itself through staff.edit", permissionKeysForCheck("roles.manage").join() === "roles.manage" && moduleForPermissionKey("roles.manage") === null);
 check("staff.view does not open roles administration", !settingsLandingHrefs({ allowBackOfficeAccess: true, isOwner: false, keys: ["staff.view"] }).includes("/settings/roles"));
 check("roles.manage opens roles administration", settingsLandingHrefs({ allowBackOfficeAccess: true, isOwner: false, keys: ["roles.manage"] }).includes("/settings/roles"));

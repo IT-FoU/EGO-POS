@@ -70,7 +70,7 @@ export function staffStatusForDisplay(status: string | null | undefined): "activ
 export function accountGateForPermission(permission: string | null | undefined): AccountGate | null {
   const key = String(permission ?? "").trim();
   if (!key) return null;
-  return POS_PERMISSION_KEYS.has(key) ? "pos" : "back-office";
+  return key.startsWith("pos.") || POS_PERMISSION_KEYS.has(key) ? "pos" : "back-office";
 }
 
 export function accountGateForApiPath(pathname: string | null | undefined): AccountGate | null {
