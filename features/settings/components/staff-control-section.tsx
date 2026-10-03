@@ -589,13 +589,13 @@ export function StaffControlSection({
           title={editingStaffId ? tSettings("editStaff", locale) : tSettings("addStaff", locale)}
           onClose={() => setStaffModalOpen(false)}
           footer={(
-            <>
+            <div className="flex w-full flex-wrap justify-end gap-2">
               <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStaffModalOpen(false)}>{tSettings("cancel", locale)}</button>
               <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" disabled={isPending} type="button" onClick={saveStaff}>
                 <CheckCircle2 className="size-4" aria-hidden="true" />
                 {editingStaffId ? tSettings("saveStaff", locale) : tSettings("addStaff", locale)}
               </button>
-            </>
+            </div>
           )}
         >
           <div className="grid gap-6">
@@ -622,12 +622,12 @@ export function StaffControlSection({
                           value={value}
                           onChange={() => choosePreset(value)}
                         />
-                        <span>{tSettings(labelKey, locale)}</span>
+                        <span className="min-w-0 break-words">{tSettings(labelKey, locale)}</span>
                       </label>
                     );
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">{staffPreset === "last-used" ? `${tSettings("lastUsedPreset", locale)} · ${tSettings("scopeThisDevice", locale)}` : `${tSettings("staffPreset", locale)} · ${tSettings("scopeCompany", locale)}`}</p>
+                <p className="text-xs text-muted-foreground">{staffPreset === "last-used" ? tSettings("scopeThisDevice", locale) : staffPreset === "custom" ? tSettings("customPresetScope", locale) : tSettings("scopeCompany", locale)}</p>
                 <p className="text-xs text-muted-foreground">{tSettings("individualOverridesLater", locale)}</p>
               </fieldset>
             ) : null}
@@ -678,10 +678,10 @@ export function StaffControlSection({
                 <div className="grid gap-2 md:col-span-2">
                   <p className="text-xs text-muted-foreground">{tSettings("scopeCompany", locale)} · {tSettings("staffDefaultCompanyHelp", locale)}</p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => saveCreateDefault("cashier")}>{tSettings("saveAsCashierDefault", locale)}</button>
-                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => saveCreateDefault("manager")}>{tSettings("saveAsManagerDefault", locale)}</button>
-                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => setResetKind("cashier")}>{tSettings("resetCashierDefault", locale)}</button>
-                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => setResetKind("manager")}>{tSettings("resetManagerDefault", locale)}</button>
+                    <button className="min-h-11 break-words rounded-md border border-border bg-card px-3 text-left text-sm font-semibold" disabled={isPending} type="button" onClick={() => saveCreateDefault("cashier")}>{tSettings("saveAsCashierDefault", locale)}</button>
+                    <button className="min-h-11 break-words rounded-md border border-border bg-card px-3 text-left text-sm font-semibold" disabled={isPending} type="button" onClick={() => saveCreateDefault("manager")}>{tSettings("saveAsManagerDefault", locale)}</button>
+                    <button className="min-h-11 break-words rounded-md border border-border bg-card px-3 text-left text-sm font-semibold" disabled={isPending} type="button" onClick={() => setResetKind("cashier")}>{tSettings("resetCashierDefault", locale)}</button>
+                    <button className="min-h-11 break-words rounded-md border border-border bg-card px-3 text-left text-sm font-semibold" disabled={isPending} type="button" onClick={() => setResetKind("manager")}>{tSettings("resetManagerDefault", locale)}</button>
                   </div>
                 </div>
               ) : null}
