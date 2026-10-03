@@ -15,6 +15,7 @@ type AppSmallModalProps = {
   description?: string;
   footer?: React.ReactNode;
   onClose: () => void;
+  raised?: boolean;
   size: AppSmallModalSize;
   title: string;
 };
@@ -27,6 +28,7 @@ export function AppSmallModal({
   description,
   footer,
   onClose,
+  raised = false,
   size,
   title,
 }: AppSmallModalProps) {
@@ -55,7 +57,8 @@ export function AppSmallModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"
+      style={raised ? { zIndex: 80 } : undefined}
       onClick={closeOnBackdrop ? onClose : undefined}
     >
       <section
