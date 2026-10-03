@@ -1,10 +1,7 @@
 import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
-import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
+import { getPrismaSettings, getSettingsLandingSummary } from "@/features/settings/prisma-repository";
 import { SettingsLanding } from "@/features/settings/components/settings-landing";
-import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
-import { APPROVAL_RULE_KEYS } from "@/features/access-control/permission-catalog";
-import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
 import { isCanonicalModuleEnabled, settingsLandingHrefs } from "@/features/access-control/module-access";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
 import { readNavigationAccess } from "@/lib/auth/module-access";
@@ -29,11 +26,9 @@ export default async function SettingsPage() {
   }
   const settingsOn = navigation.keys.includes("*") || isCanonicalModuleEnabled("settings", navigation.keys);
   const staffOn = navigation.keys.includes("*") || isCanonicalModuleEnabled("staff", navigation.keys);
-  const [settings, businessLogoUrl, qrSnapshot, staffSnapshot] = await Promise.all([
+  const [settings, summary] = await Promise.all([
     settingsOn ? getPrismaSettings(tenant) : Promise.resolve(null),
-    settingsOn ? getCompanyBusinessLogoUrl(tenant.companyId) : Promise.resolve(null),
-    settingsOn ? getQrPaymentSettingsSnapshot(tenant) : Promise.resolve(null),
-    staffOn ? getStaffAccessSnapshot(tenant) : Promise.resolve(null),
+    getSettingsLandingSummary(tenant, { settingsOn, staffOn }),
   ]);
   const allowedHrefs = settingsLandingHrefs({
     allowBackOfficeAccess: navigation.allowBackOfficeAccess,
@@ -45,11 +40,11 @@ export default async function SettingsPage() {
     <SettingsLanding
       allowedHrefs={allowedHrefs}
       facts={{
-        activeQrAccounts: qrSnapshot?.accounts.filter((account) => account.isActive).length ?? 0,
-        activeQrBanks: qrSnapshot?.banks.filter((bank) => bank.isActive).length ?? 0,
-        activeStaff: staffSnapshot?.staff.filter((staff) => staff.status === "active").length ?? 0,
-        approvalRulesEnabled: staffSnapshot ? APPROVAL_RULE_KEYS.filter((ruleKey) => staffSnapshot.approvalRules.find((rule) => rule.ruleKey === ruleKey)?.isEnabled ?? true).length : 0,
-        hasLogo: Boolean(businessLogoUrl),
+        activeQrAccounts: summary.activeQrAccounts,
+        activeQrBanks: summary.activeQrBanks,
+        activeStaff: summary.activeStaff,
+        approvalRulesEnabled: summary.approvalRulesEnabled,
+        hasLogo: summary.hasLogo,
         settings,
       }}
       locale={locale}

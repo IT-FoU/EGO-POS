@@ -497,7 +497,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
           ? tSettings("scopeCompany", locale)
           : tSettings("scopeCompany", locale);
     return (<div className="flex flex-col gap-6">
-            <Link className="settings-motion-back inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary" href="/settings" scroll={false}>
+            <Link className="settings-motion-back inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary" href="/settings" prefetch={true} scroll={false}>
         <ArrowLeft className="size-4" aria-hidden="true" />
         {tSettings("backToSettings", locale)}
       </Link>

@@ -12,6 +12,7 @@ import {
   withReceiptLayoutPrefs,
 } from "@/features/settings/receipt-layout";
 import { clearStoredLogo, storeReplacementLogo } from "@/features/brand/company-logo-service";
+import { APPROVAL_RULE_KEYS } from "@/features/access-control/permission-catalog";
 import { signCompanyLogoUrl } from "@/lib/storage/company-logo-storage";
 
 const db = prisma as any;
@@ -194,6 +195,47 @@ export async function getPrismaSettings(tenant: TenantContext) {
   return {
     ...mapSettings(company),
     requireCashShiftBeforeSale: requireCashShiftBeforeSaleFromOpsRow(company.settings),
+  };
+}
+
+export async function getSettingsLandingSummary(
+  tenant: TenantContext,
+  options: { settingsOn: boolean; staffOn: boolean },
+) {
+  const companyId = tenant.companyId;
+  const [logo, activeQrAccounts, activeQrBanks, activeStaff, disabledApprovalRules] = await Promise.all([
+    options.settingsOn
+      ? db.companySetting.findUnique({
+          select: { logoObjectPath: true },
+          where: { companyId },
+        })
+      : Promise.resolve(null),
+    options.settingsOn
+      ? db.qrPaymentAccount.count({ where: { companyId, isActive: true } })
+      : Promise.resolve(0),
+    options.settingsOn
+      ? db.qrPaymentBank.count({ where: { companyId, isActive: true } })
+      : Promise.resolve(0),
+    options.staffOn
+      ? db.companyUser.count({ where: { companyId, status: "active" } })
+      : Promise.resolve(0),
+    options.staffOn
+      ? db.approvalRule.count({
+          where: {
+            companyId,
+            isEnabled: false,
+            ruleKey: { in: [...APPROVAL_RULE_KEYS] },
+          },
+        })
+      : Promise.resolve(0),
+  ]);
+
+  return {
+    activeQrAccounts,
+    activeQrBanks,
+    activeStaff,
+    approvalRulesEnabled: options.staffOn ? APPROVAL_RULE_KEYS.length - disabledApprovalRules : 0,
+    hasLogo: Boolean(logo?.logoObjectPath),
   };
 }
 

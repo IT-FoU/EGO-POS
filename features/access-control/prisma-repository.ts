@@ -317,6 +317,22 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
     username,
   });
 
+  const [passwordHash, actor, rolePermissionRows] = await Promise.all([
+    password ? hash(password, 12) : Promise.resolve(undefined),
+    resolveTenantMembership(tenant),
+    db.rolePermission.findMany({
+      select: { permission: { select: { key: true } } },
+      where: { roleId, role: { companyId: tenant.companyId } },
+    }),
+  ]);
+  const [actorMembership, actorKeys] = await Promise.all([
+    db.companyUser.findFirst({
+      select: { allowBackOfficeAccess: true, allowPosAccess: true },
+      where: { companyId: tenant.companyId, userId: actor.effectiveUserId },
+    }),
+    actor.isOwner ? Promise.resolve(["*"]) : getUserPermissionKeys(tenant),
+  ]);
+
   return withTenantTransaction({
     action: input.id ? "update" : "create",
     module: "staff",
@@ -340,19 +356,9 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       if (isProtectedOwnerRole(role)) {
         throw new Error("You do not have permission to assign this role.");
       }
-      const actor = await resolveTenantMembership(tenant, tx);
-      const actorMembership = await tx.companyUser.findFirst({
-        select: { allowBackOfficeAccess: true, allowPosAccess: true },
-        where: { companyId: tenant.companyId, userId: actor.effectiveUserId },
-      });
-      const actorKeys = actor.isOwner ? ["*"] : await getUserPermissionKeys(tenant, tx);
       if (!actor.isOwner && !allowsFine(actorKeys, input.id ? "staff.edit" : "staff.create")) {
         throw new PermissionDeniedError(input.id ? "staff.edit" : "staff.create");
       }
-      const rolePermissionRows = await tx.rolePermission.findMany({
-        select: { permission: { select: { key: true } } },
-        where: { roleId },
-      });
       const roleKeys = rolePermissionRows.map((row: { permission?: { key?: string } }) => String(row.permission?.key ?? "")).filter(Boolean);
       if (grantExceedsActor({
         actorBackOffice: Boolean(actorMembership?.allowBackOfficeAccess),
@@ -439,8 +445,8 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         if (!membership.user.email || membership.user.email === previousGeneratedEmail) {
           userUpdate.email = `${username}@staff.local`;
         }
-        if (password) {
-          userUpdate.passwordHash = await hash(password, 12);
+        if (passwordHash) {
+          userUpdate.passwordHash = passwordHash;
         }
 
         await tx.user.update({
@@ -509,7 +515,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       if (duplicate) {
         throw new Error("Username already exists.");
       }
-      if (!password) {
+      if (!passwordHash) {
         throw new Error("Password is required for new staff.");
       }
 
@@ -517,7 +523,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         data: {
           email: `${username}@staff.local`,
           fullName,
-          passwordHash: await hash(password, 12),
+          passwordHash,
           preferredLocale: "en",
           status: storedStatus,
           username,
