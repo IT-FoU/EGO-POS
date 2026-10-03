@@ -23,7 +23,7 @@ export function SettingsLargeDrawer({
             <h2 className="truncate text-xl font-semibold">{title}</h2>
           </div>
           <button
-            className="grid size-10 shrink-0 place-items-center rounded-md border border-border"
+            className="settings-motion-close grid size-10 shrink-0 place-items-center rounded-md border border-border"
             type="button"
             onClick={onClose}
             aria-label={closeLabel}

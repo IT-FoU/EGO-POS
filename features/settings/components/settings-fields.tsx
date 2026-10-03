@@ -15,7 +15,7 @@ export function DialogActions({ disabled = false, locale, onCancel, onSave, save
   return (
     <div className="flex justify-end gap-2">
       <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" disabled={disabled} type="button" onClick={onCancel}>{tSettings("cancel", locale)}</button>
-      <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={disabled} type="button" onClick={onSave}>
+      <button className="settings-motion-save inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={disabled} type="button" onClick={onSave}>
         <CheckCircle2 className="size-4" aria-hidden="true"/>
         {saveLabel}
       </button>

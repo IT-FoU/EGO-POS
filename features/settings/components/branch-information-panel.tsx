@@ -116,7 +116,7 @@ export function BranchInformationPanel({
 
         <div className="mt-5 flex justify-end">
           <button
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+            className="settings-motion-save inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
             disabled={isPending || !dirty}
             type="button"
             onClick={save}
