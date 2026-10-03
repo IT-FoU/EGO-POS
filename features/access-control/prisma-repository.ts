@@ -451,10 +451,18 @@ export type StaffSaveTiming = {
   validationMs: number;
 };
 
+export type StaffSaveActor = {
+  allowBackOfficeAccess: boolean;
+  allowPosAccess: boolean;
+  effectiveUserId: string;
+  isOwner: boolean;
+  keys: string[];
+};
+
 export async function saveStaffMember(
   input: SaveStaffMemberInput,
   tenant: TenantContext,
-  preloadedKeys?: string[],
+  preloadedActor?: StaffSaveActor,
 ): Promise<{ member: StaffMemberRecord; timing: StaffSaveTiming }> {
   const started = Date.now();
   assertStaffAccessFlags(input);
@@ -491,8 +499,10 @@ export async function saveStaffMember(
   const prepareStarted = Date.now();
   let hashMs = 0;
   const hashStarted = Date.now();
-  const actor = await resolveTenantMembership(tenant);
-  const [passwordHash, rolePermissionRows, actorMembership] = await Promise.all([
+  const actor = preloadedActor
+    ? { effectiveUserId: preloadedActor.effectiveUserId, isOwner: preloadedActor.isOwner }
+    : await resolveTenantMembership(tenant);
+  const [passwordHash, rolePermissionRows, actorKeys, actorMembership] = await Promise.all([
     password
       ? hash(password, 12).then((value) => {
           hashMs = Date.now() - hashStarted;
@@ -503,12 +513,21 @@ export async function saveStaffMember(
       select: { permission: { select: { key: true } } },
       where: { roleId, role: { companyId: tenant.companyId } },
     }),
-    db.companyUser.findFirst({
-      select: { allowBackOfficeAccess: true, allowPosAccess: true },
-      where: { companyId: tenant.companyId, userId: actor.effectiveUserId },
-    }),
+    preloadedActor
+      ? Promise.resolve(preloadedActor.keys)
+      : actor.isOwner
+        ? Promise.resolve(["*"] as string[])
+        : getUserPermissionKeys(tenant),
+    preloadedActor
+      ? Promise.resolve({
+          allowBackOfficeAccess: preloadedActor.allowBackOfficeAccess,
+          allowPosAccess: preloadedActor.allowPosAccess,
+        })
+      : db.companyUser.findFirst({
+          select: { allowBackOfficeAccess: true, allowPosAccess: true },
+          where: { companyId: tenant.companyId, userId: actor.effectiveUserId },
+        }),
   ]);
-  const actorKeys = preloadedKeys ?? (actor.isOwner ? ["*"] : await getUserPermissionKeys(tenant));
   const prepareMs = Date.now() - prepareStarted;
   const dbStarted = Date.now();
 
@@ -519,18 +538,29 @@ export async function saveStaffMember(
     oldData: previousAudit,
     tenant,
     write: async (tx) => {
-      const branch = await tx.branch.findFirst({
-        select: { id: true, name: true },
-        where: { companyId: tenant.companyId, id: branchId },
-      });
+      const branchScope = { companyId: tenant.companyId, id: branchId };
+      const scopedRows: Array<{ id: string; kind: string; name: string | null; template_key: string | null }> = await tx.$queryRaw`
+        SELECT 'branch' AS kind, id, name, NULL::text AS template_key
+        FROM branches
+        WHERE id = ${branchScope.id} AND company_id = ${branchScope.companyId}
+        UNION ALL
+        SELECT 'role' AS kind, id, name, template_key::text
+        FROM roles
+        WHERE id = ${roleId} AND company_id = ${tenant.companyId}
+        UNION ALL
+        SELECT 'dup' AS kind, id, NULL::text AS name, NULL::text AS template_key
+        FROM users
+        WHERE lower(username) = lower(${username})
+          OR lower(email) = lower(${username})
+          OR lower(email) = lower(${`${username}@staff.local`})
+      `;
+      const branchRow = scopedRows.find((row) => row.kind === "branch");
+      const roleRow = scopedRows.find((row) => row.kind === "role");
+      const branch = branchRow ? { id: branchRow.id, name: branchRow.name } : null;
+      const role = roleRow ? { id: roleRow.id, name: roleRow.name, templateKey: roleRow.template_key } : null;
       if (!branch) {
         throw new Error("Branch was not found for this company.");
       }
-
-      const role = await tx.role.findFirst({
-        select: { id: true, name: true, templateKey: true },
-        where: { companyId: tenant.companyId, id: roleId },
-      });
       if (!role) {
         throw new Error("Role was not found for this company.");
       }
@@ -603,17 +633,7 @@ export async function saveStaffMember(
           username: String(membership.user.username ?? ""),
         }));
 
-        const duplicate = await tx.user.findFirst({
-          select: { id: true },
-          where: {
-            id: { not: membership.userId },
-            OR: [
-              { username: { equals: username, mode: "insensitive" } },
-              { email: { equals: username, mode: "insensitive" } },
-              { email: { equals: `${username}@staff.local`, mode: "insensitive" } },
-            ],
-          },
-        });
+        const duplicate = scopedRows.find((row) => row.kind === "dup" && row.id !== membership.userId);
         if (duplicate) {
           throw new Error("Username already exists.");
         }
@@ -684,16 +704,7 @@ export async function saveStaffMember(
         });
       }
 
-      const duplicate = await tx.user.findFirst({
-        select: { id: true },
-        where: {
-          OR: [
-            { username: { equals: username, mode: "insensitive" } },
-            { email: { equals: username, mode: "insensitive" } },
-            { email: { equals: `${username}@staff.local`, mode: "insensitive" } },
-          ],
-        },
-      });
+      const duplicate = scopedRows.find((row) => row.kind === "dup");
       if (duplicate) {
         throw new Error("Username already exists.");
       }

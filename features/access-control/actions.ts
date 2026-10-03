@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
+import { accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
 import { requireFinePermission } from "@/lib/auth/fine-access";
 import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 import { requireSession } from "@/lib/auth/session";
@@ -50,9 +51,17 @@ export async function saveStaffMemberAction(input: SaveStaffMemberInput) {
   try {
     const permissionStarted = Date.now();
     const tenant = tenantFromSession(await requireSession());
-    const actorKeys = await requireFinePermission(tenant, input.id ? "staff.edit" : "staff.create");
+    const permission = input.id ? "staff.edit" : "staff.create";
+    const access = await requireAccountGate(tenant, accountGateForPermission(permission));
+    const actorKeys = access.isOwner ? ["*"] : await requireFinePermission(tenant, permission);
     const permissionMs = Date.now() - permissionStarted;
-    const saved = await saveStaffMember(input, tenant, actorKeys);
+    const saved = await saveStaffMember(input, tenant, {
+      allowBackOfficeAccess: access.allowBackOfficeAccess,
+      allowPosAccess: access.allowPosAccess,
+      effectiveUserId: access.userId,
+      isOwner: access.isOwner,
+      keys: actorKeys,
+    });
     const postStarted = Date.now();
     after(() => {
       revalidateStaffPaths();
