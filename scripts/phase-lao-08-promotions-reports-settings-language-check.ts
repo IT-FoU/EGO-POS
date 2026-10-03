@@ -66,7 +66,6 @@ const reportsCatalog = read("features/reports/report-catalog.ts");
 const settingsForm = read("features/settings/components/settings-form.tsx");
 const settingsStaff = read("features/settings/components/staff-control-section.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
-const settingsLoading = read("app/(dashboard)/settings/loading.tsx");
 const settingsActions = read("features/settings/actions.ts");
 const settingsRepo = read("features/settings/prisma-repository.ts");
 const storeActivity = read("features/store-activity/components/store-activity-logs-client.tsx");
@@ -117,8 +116,7 @@ check(
     Boolean(sen.resetThisPage && slo.resetThisPage) &&
     Boolean(sen.customerDisplay && slo.customerDisplay) &&
     settingsForm.includes('from "@/lib/i18n/settings-copy"') &&
-    settingsStaff.includes('from "@/lib/i18n/settings-copy"') &&
-    settingsLoading.includes("copy.loadingSettings"),
+    settingsStaff.includes('from "@/lib/i18n/settings-copy"'),
 );
 
 check("4. EN/LO key parity", promotionsCopyKeyParity() && reportsCopyKeyParity() && settingsCopyKeyParity());

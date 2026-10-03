@@ -45,6 +45,36 @@ function roleOptionSummary(template: StaffAccessSnapshot["roles"][number]["templ
   return tSettings("customAccess", locale);
 }
 
+function sameConfirmedStaff(left: StaffMemberRecord, right: StaffMemberRecord) {
+  return left.fullName === right.fullName
+    && left.username === right.username
+    && left.roleId === right.roleId
+    && left.branchId === right.branchId
+    && left.status === right.status
+    && left.allowPosAccess === right.allowPosAccess
+    && left.allowBackOfficeAccess === right.allowBackOfficeAccess
+    && left.assignedTerminal === right.assignedTerminal
+    && left.requirePasswordChange === right.requirePasswordChange;
+}
+
+function reconcileConfirmedStaff(incoming: StaffMemberRecord[], pending: StaffMemberRecord[]) {
+  if (!pending.length) return { pending, staff: incoming };
+  const incomingIds = new Set(incoming.map((member) => member.id));
+  const nextPending: StaffMemberRecord[] = [];
+  const overrides = new Map<string, StaffMemberRecord>();
+  for (const member of pending) {
+    const server = incoming.find((row) => row.id === member.id);
+    if (server && sameConfirmedStaff(server, member)) continue;
+    nextPending.push(member);
+    overrides.set(member.id, member);
+  }
+  const created = nextPending.filter((member) => !incomingIds.has(member.id));
+  return {
+    pending: nextPending,
+    staff: [...created, ...incoming.map((member) => overrides.get(member.id) ?? member)],
+  };
+}
+
 function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: StaffAccessSnapshot["roles"]): StaffDraft {
   const assignable = roles.filter((role) => isAssignableStaffRole(role));
   const cashierRole = assignable.find((role) => role.templateKey === "Staff/Cashier") ?? assignable[0];
@@ -112,9 +142,12 @@ export function StaffControlSection({
   const [resetKind, setResetKind] = useState<"cashier" | "manager" | null>(null);
   const presetRadioRef = useRef<HTMLInputElement>(null);
   const submitLock = useRef(false);
+  const confirmedStaffRef = useRef<StaffMemberRecord[]>([]);
 
   useEffect(() => {
-    setStaff(initialSnapshot.staff);
+    const next = reconcileConfirmedStaff(initialSnapshot.staff, confirmedStaffRef.current);
+    confirmedStaffRef.current = next.pending;
+    setStaff(next.staff);
     setApprovalRules(initialSnapshot.approvalRules);
     setPendingApprovals(initialSnapshot.pendingApprovals);
     setCreateDefaults(defaultsFromSnapshot(initialSnapshot));
@@ -273,13 +306,18 @@ export function StaffControlSection({
         return;
       }
       if (creating) writeStaffLastUsed(lastUsedPreset);
+      const saved = result.data;
+      if (saved) {
+        confirmedStaffRef.current = [saved, ...confirmedStaffRef.current.filter((member) => member.id !== saved.id)];
+        setStaff((current) => [saved, ...current.filter((member) => member.id !== saved.id)]);
+      }
       const success = creating ? tSettings("staffCreated", locale) : tSettings("staffUpdated", locale);
       setStaffNotice(success);
       onNotify({ text: success, tone: "success" });
       setStaffModalOpen(false);
       setStaffPreset("cashier");
       setStaffDraft(draftFromKind("cashier", emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles), createDefaults));
-      router.refresh();
+      window.setTimeout(() => router.refresh(), 0);
       } finally {
         submitLock.current = false;
       }

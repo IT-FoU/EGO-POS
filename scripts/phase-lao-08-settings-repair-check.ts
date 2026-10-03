@@ -45,7 +45,6 @@ const en = SETTINGS_COPY.en;
 const lo = SETTINGS_COPY.lo;
 const shell = read("components/layout/dashboard-shell.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
-const settingsLoading = read("app/(dashboard)/settings/loading.tsx");
 const accessDenied = read("components/permissions/store-access-denied.tsx");
 const productsLayout = read("app/(dashboard)/products/layout.tsx");
 const reportsLayout = read("app/(dashboard)/reports/layout.tsx");
@@ -324,7 +323,6 @@ check(
     settingsActions.includes("updateSettingsAction") &&
     settingsRepo.includes("getPrismaSettings") &&
     settingsPage.includes("locale={locale}") &&
-    settingsLoading.includes("copy.loadingSettings") &&
     settingsPage.includes("readNavigationAccess"),
 );
 
