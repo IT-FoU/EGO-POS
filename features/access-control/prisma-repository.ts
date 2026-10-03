@@ -264,6 +264,131 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
   };
 }
 
+function emptySettingsStaffSnapshot(companyId: string, partial: Partial<StaffAccessSnapshot> = {}): StaffAccessSnapshot {
+  return {
+    approvalRules: [],
+    branches: [],
+    companyId,
+    matrix: buildDefaultMatrix(),
+    permissionKeysByRole: {},
+    pendingApprovals: [],
+    roles: [],
+    staff: [],
+    ...partial,
+  };
+}
+
+function permissionKeysFromRows(rolePermissionRows: Array<{ permission?: { key?: string }; roleId?: string }>) {
+  const permissionKeysByRole: Record<string, string[]> = {};
+  for (const row of rolePermissionRows) {
+    const roleId = String(row.roleId ?? "");
+    const key = String(row.permission?.key ?? "");
+    if (!roleId || !key) continue;
+    permissionKeysByRole[roleId] ??= [];
+    permissionKeysByRole[roleId].push(key);
+  }
+  return permissionKeysByRole;
+}
+
+export async function getSettingsSectionStaffSnapshot(
+  tenant: TenantContext,
+  section: "approval-rules" | "day-off" | "ot" | "roles" | "staff",
+): Promise<StaffAccessSnapshot> {
+  if (section === "day-off" || section === "ot") {
+    const staffRows = await db.companyUser.findMany({
+      include: {
+        branch: { select: { id: true, name: true } },
+        user: { select: { fullName: true, id: true, username: true } },
+      },
+      orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
+      where: { companyId: tenant.companyId },
+    });
+    return emptySettingsStaffSnapshot(tenant.companyId, { staff: staffRows.map(mapStaffMember) });
+  }
+
+  if (section === "approval-rules") {
+    const [approvalRules, pendingApprovals] = await Promise.all([
+      db.approvalRule.findMany({
+        orderBy: { ruleKey: "asc" },
+        where: { companyId: tenant.companyId },
+      }),
+      db.approval.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        where: { companyId: tenant.companyId, status: "pending" },
+      }),
+    ]);
+    return emptySettingsStaffSnapshot(tenant.companyId, {
+      approvalRules: approvalRules.map(mapApprovalRule),
+      pendingApprovals: pendingApprovals.map(mapPendingApproval),
+    });
+  }
+
+  if (section === "roles") {
+    await ensureAssignableStaffRoles(tenant.companyId);
+    const [roles, rolePermissionRows] = await Promise.all([
+      db.role.findMany({
+        orderBy: [{ templateKey: "asc" }, { name: "asc" }],
+        where: { companyId: tenant.companyId },
+      }),
+      db.rolePermission.findMany({
+        select: { permission: { select: { key: true } }, roleId: true },
+        where: { role: { companyId: tenant.companyId } },
+      }),
+    ]);
+    const mappedRoles = roles.map(mapRole);
+    return emptySettingsStaffSnapshot(tenant.companyId, {
+      matrix: buildMatrixFromRolePermissions(
+        mappedRoles,
+        rolePermissionRows.map((row: Record<string, unknown>) => ({
+          permissionKey: String((row.permission as Record<string, unknown>)?.key ?? ""),
+          roleId: String(row.roleId),
+        })),
+      ),
+      permissionKeysByRole: permissionKeysFromRows(rolePermissionRows),
+      roles: mappedRoles,
+    });
+  }
+
+  await ensureAssignableStaffRoles(tenant.companyId);
+  const [branches, roles, staffRows, companySetting] = await Promise.all([
+    db.branch.findMany({
+      orderBy: [{ isMainBranch: "desc" }, { name: "asc" }],
+      select: { id: true, name: true },
+      where: { companyId: tenant.companyId },
+    }),
+    db.role.findMany({
+      orderBy: [{ templateKey: "asc" }, { name: "asc" }],
+      where: { companyId: tenant.companyId },
+    }),
+    db.companyUser.findMany({
+      include: {
+        branch: { select: { id: true, name: true } },
+        user: {
+          include: {
+            roles: {
+              include: { role: true },
+              where: { companyId: tenant.companyId },
+            },
+          },
+        },
+      },
+      orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
+      where: { companyId: tenant.companyId },
+    }),
+    db.companySetting.findUnique({
+      select: { unitPricingDefaults: true },
+      where: { companyId: tenant.companyId },
+    }),
+  ]);
+  return emptySettingsStaffSnapshot(tenant.companyId, {
+    branches,
+    roles: roles.map(mapRole),
+    staff: staffRows.map(mapStaffMember),
+    staffCreateDefaults: parseStaffCreateDefaults(companySetting?.unitPricingDefaults, branches),
+  });
+}
+
 function staffAuditData(input: {
   allowBackOfficeAccess: boolean;
   allowPosAccess: boolean;
@@ -286,7 +411,52 @@ function staffAuditData(input: {
   };
 }
 
-export async function saveStaffMember(input: SaveStaffMemberInput, tenant: TenantContext) {
+function staffRecordFromWrite(input: {
+  allowBackOfficeAccess: boolean;
+  allowPosAccess: boolean;
+  assignedTerminal: string;
+  branch: { id?: string; name?: string | null };
+  fullName: string;
+  isOwner: boolean;
+  membershipId: string;
+  passwordChange: boolean;
+  role: { id?: string; name?: string | null; templateKey?: string | null };
+  status: string;
+  userId: string;
+  username: string;
+}): StaffMemberRecord {
+  return {
+    allowBackOfficeAccess: Boolean(input.allowBackOfficeAccess),
+    allowPosAccess: Boolean(input.allowPosAccess),
+    assignedTerminal: String(input.assignedTerminal || "POS-01"),
+    branchId: String(input.branch.id ?? ""),
+    branchName: input.branch.name ? String(input.branch.name) : "",
+    fullName: input.fullName,
+    id: String(input.membershipId),
+    isOwner: Boolean(input.isOwner),
+    requirePasswordChange: Boolean(input.passwordChange),
+    roleId: String(input.role.id ?? ""),
+    roleName: String(input.role.name ?? "Custom"),
+    roleTemplate: mapTemplateLabel(input.role.templateKey ? String(input.role.templateKey) : null, String(input.role.name ?? "Custom")),
+    status: staffStatusForDisplay(input.status),
+    userId: String(input.userId),
+    username: input.username,
+  };
+}
+
+export type StaffSaveTiming = {
+  dbMs: number;
+  hashMs: number;
+  prepareMs: number;
+  validationMs: number;
+};
+
+export async function saveStaffMember(
+  input: SaveStaffMemberInput,
+  tenant: TenantContext,
+  preloadedKeys?: string[],
+): Promise<{ member: StaffMemberRecord; timing: StaffSaveTiming }> {
+  const started = Date.now();
   assertStaffAccessFlags(input);
   const branchId = stringValue(input.branchId);
   const roleId = stringValue(input.roleId);
@@ -317,23 +487,32 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
     username,
   });
 
-  const [passwordHash, actor, rolePermissionRows] = await Promise.all([
-    password ? hash(password, 12) : Promise.resolve(undefined),
-    resolveTenantMembership(tenant),
+  const validationMs = Date.now() - started;
+  const prepareStarted = Date.now();
+  let hashMs = 0;
+  const hashStarted = Date.now();
+  const actor = await resolveTenantMembership(tenant);
+  const [passwordHash, rolePermissionRows, actorMembership] = await Promise.all([
+    password
+      ? hash(password, 12).then((value) => {
+          hashMs = Date.now() - hashStarted;
+          return value;
+        })
+      : Promise.resolve(undefined),
     db.rolePermission.findMany({
       select: { permission: { select: { key: true } } },
       where: { roleId, role: { companyId: tenant.companyId } },
     }),
-  ]);
-  const [actorMembership, actorKeys] = await Promise.all([
     db.companyUser.findFirst({
       select: { allowBackOfficeAccess: true, allowPosAccess: true },
       where: { companyId: tenant.companyId, userId: actor.effectiveUserId },
     }),
-    actor.isOwner ? Promise.resolve(["*"]) : getUserPermissionKeys(tenant),
   ]);
+  const actorKeys = preloadedKeys ?? (actor.isOwner ? ["*"] : await getUserPermissionKeys(tenant));
+  const prepareMs = Date.now() - prepareStarted;
+  const dbStarted = Date.now();
 
-  return withTenantTransaction({
+  const member = await withTenantTransaction({
     action: input.id ? "update" : "create",
     module: "staff",
     newData: nextAudit,
@@ -341,6 +520,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
     tenant,
     write: async (tx) => {
       const branch = await tx.branch.findFirst({
+        select: { id: true, name: true },
         where: { companyId: tenant.companyId, id: branchId },
       });
       if (!branch) {
@@ -348,6 +528,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       }
 
       const role = await tx.role.findFirst({
+        select: { id: true, name: true, templateKey: true },
         where: { companyId: tenant.companyId, id: roleId },
       });
       if (!role) {
@@ -423,6 +604,7 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         }));
 
         const duplicate = await tx.user.findFirst({
+          select: { id: true },
           where: {
             id: { not: membership.userId },
             OR: [
@@ -486,24 +668,24 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
           });
         }
 
-        const refreshed = await tx.companyUser.findFirst({
-          include: {
-            branch: { select: { id: true, name: true } },
-            user: {
-              include: {
-                roles: {
-                  include: { role: true },
-                  where: { companyId: tenant.companyId },
-                },
-              },
-            },
-          },
-          where: { id: membership.id },
+        return staffRecordFromWrite({
+          allowBackOfficeAccess: Boolean(input.allowBackOfficeAccess),
+          allowPosAccess: Boolean(input.allowPosAccess),
+          assignedTerminal: String(input.assignedTerminal ?? ""),
+          branch,
+          fullName,
+          isOwner: false,
+          membershipId: String(membership.id),
+          passwordChange: Boolean(membership["require" + "PasswordChange"]),
+          role,
+          status: storedStatus,
+          userId: String(membership.userId),
+          username,
         });
-        return mapStaffMember(refreshed);
       }
 
       const duplicate = await tx.user.findFirst({
+        select: { id: true },
         where: {
           OR: [
             { username: { equals: username, mode: "insensitive" } },
@@ -551,24 +733,31 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         },
       });
 
-      const refreshed = await tx.companyUser.findFirst({
-        include: {
-          branch: { select: { id: true, name: true } },
-          user: {
-            include: {
-              roles: {
-                include: { role: true },
-                where: { companyId: tenant.companyId },
-              },
-            },
-          },
-        },
-        where: { id: membership.id },
+      return staffRecordFromWrite({
+        allowBackOfficeAccess: Boolean(input.allowBackOfficeAccess),
+        allowPosAccess: Boolean(input.allowPosAccess),
+        assignedTerminal: String(input.assignedTerminal ?? ""),
+        branch,
+        fullName,
+        isOwner: false,
+        membershipId: String(membership.id),
+        passwordChange: Boolean(input.requirePasswordChange),
+        role,
+        status: storedStatus,
+        userId: String(user.id),
+        username,
       });
-
-      return mapStaffMember(refreshed);
     },
   });
+  return {
+    member,
+    timing: {
+      dbMs: Date.now() - dbStarted,
+      hashMs,
+      prepareMs,
+      validationMs,
+    },
+  };
 }
 
 export async function deactivateStaffMember(membershipId: string, tenant: TenantContext) {

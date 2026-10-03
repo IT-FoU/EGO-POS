@@ -201,7 +201,7 @@ check("58. landing summaries real", () => {
   assert(landing.includes("activeStaff") && landing.includes("loyaltyEnabled"), "landing summaries missing");
 });
 check("staff snapshot for day-off/ot", () => {
-  assert(page.includes('section === "day-off"') && page.includes('section === "ot"') && page.includes("getStaffAccessSnapshot"), "picker data load missing");
+  assert(page.includes('section === "day-off"') && page.includes('section === "ot"') && page.includes("getSettingsSectionStaffSnapshot"), "picker data load missing");
 });
 check("no new migration", () => {
   const dirs = readdirSync(join(root, "prisma/migrations"));

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
-import { getStaffAccessSnapshot } from "@/features/access-control/prisma-repository";
+import { getSettingsSectionStaffSnapshot } from "@/features/access-control/prisma-repository";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
 import { requireSettingsDestination } from "@/lib/auth/module-access";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
@@ -77,18 +77,14 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
   const needsStaff = section === "staff" || section === "roles" || section === "approval-rules" || section === "day-off" || section === "ot";
   const needsLogo = section === "business-logo" || section === "receipt";
   const needsBranch = section === "branch-information" || section === "help" || section === "receipt";
-  const [settings, businessLogoUrl, qrSnapshot, staffSnapshot, activeBranch] = await Promise.all([
+  const [settings, businessLogoUrl, qrSnapshot, staffSnapshot, activeBranch, receiptPreviewQrUrl] = await Promise.all([
     needsStaff ? Promise.resolve(blankSettings) : getPrismaSettings(tenant),
     needsLogo ? getCompanyBusinessLogoUrl(tenant.companyId) : Promise.resolve(null),
     needsQr ? getQrPaymentSettingsSnapshot(tenant) : Promise.resolve(null),
-    needsStaff ? getStaffAccessSnapshot(tenant) : Promise.resolve(undefined),
+    needsStaff ? getSettingsSectionStaffSnapshot(tenant, section as "approval-rules" | "day-off" | "ot" | "roles" | "staff") : Promise.resolve(undefined),
     needsBranch ? getActiveBranchInformation(tenant) : Promise.resolve(null),
+    section === "receipt" ? getReceiptPreviewQrImageUrl(tenant, tenant.branchId) : Promise.resolve(null),
   ]);
-
-  const receiptPreviewQrUrl =
-    section === "receipt"
-      ? await getReceiptPreviewQrImageUrl(tenant, activeBranch?.id ?? tenant.branchId)
-      : null;
 
   if (section === "branch-information" && !activeBranch) {
     return (

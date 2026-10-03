@@ -158,7 +158,7 @@ export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: 
             {group.rows.map((row) => {
               const Icon = row.icon;
               return (
-                <Link className="settings-motion-row group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)} prefetch={PREFETCH_SETTINGS_HREFS.has(row.href) ? true : undefined}>
+                <Link className="settings-motion-row group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)} prefetch={row.href.startsWith("/settings/") || PREFETCH_SETTINGS_HREFS.has(row.href) ? true : undefined}>
                   <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span>
                   <span className="grid min-w-0 flex-1 gap-1">
                     <span className="flex min-w-0 flex-wrap items-center gap-2">

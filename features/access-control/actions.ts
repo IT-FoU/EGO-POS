@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireFinePermission } from "@/lib/auth/fine-access";
 import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 import { requireSession } from "@/lib/auth/session";
@@ -45,10 +46,27 @@ export async function saveStaffCreateDefaultAction(input: {
 }
 
 export async function saveStaffMemberAction(input: SaveStaffMemberInput) {
+  const started = Date.now();
   try {
-    const data = await saveStaffMember(input, await staffTenant(input.id ? "staff.edit" : "staff.create"));
-    revalidateStaffPaths();
-    return writeSuccess(data);
+    const permissionStarted = Date.now();
+    const tenant = tenantFromSession(await requireSession());
+    const actorKeys = await requireFinePermission(tenant, input.id ? "staff.edit" : "staff.create");
+    const permissionMs = Date.now() - permissionStarted;
+    const saved = await saveStaffMember(input, tenant, actorKeys);
+    const postStarted = Date.now();
+    after(() => {
+      revalidateStaffPaths();
+    });
+    const postWriteMs = Date.now() - postStarted;
+    console.info(JSON.stringify({
+      staffSaveTiming: {
+        ...saved.timing,
+        permissionMs,
+        postWriteMs,
+        totalMs: Date.now() - started,
+      },
+    }));
+    return writeSuccess(saved.member);
   } catch (error) {
     return writeFailure(error);
   }
