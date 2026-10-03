@@ -1,3 +1,4 @@
+import { readReportVisibility, redactReportPayload } from "@/lib/auth/fine-access";
 import { prisma } from "@/lib/db/prisma";
 import type { ReportFilterOptions } from "@/features/reports/report-filters";
 import { getReportFilterOptions } from "@/features/reports/prisma-repository";
@@ -512,7 +513,8 @@ async function buildRows(
     }
   }
 
-  return {
+  const visibility = await readReportVisibility(tenant, dbClient);
+  return redactReportPayload(tenant, {
     detailMovements,
     filterOptions: enrichFilterOptions(filterOptions, warehouses),
     page,
@@ -521,7 +523,7 @@ async function buildRows(
     query: clamped,
     rows: pageRows,
     selectedProduct,
-    showCost: true,
+    showCost: visibility.cost,
     summary: filtered.length ? summary : emptyInventorySummary(),
     totalRow: {
       available: summary.totalAvailable,
@@ -530,7 +532,7 @@ async function buildRows(
       reserved: summary.totalReserved,
       stockValueLak: summary.totalStockValueLak,
     },
-  };
+  }, dbClient);
 }
 
 export async function loadStockOnHandTable(

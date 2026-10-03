@@ -1,7 +1,7 @@
 import { closeCashSession } from "@/features/cash-sessions/prisma-repository";
 import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { runWrite } from "@/lib/api/write-response";
-import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { FINE, requireFinePermission } from "@/lib/auth/fine-access";
 
 function readClosingCountBreakdown(body: Record<string, unknown>) {
   const breakdown = body.countBreakdown;
@@ -17,8 +17,9 @@ function readClosingCountBreakdown(body: Record<string, unknown>) {
 
 export async function POST(request: Request) {
   return runWrite(
-    (tenant, body) =>
-      closeCashSession(
+    async (tenant, body) => {
+      await requireFinePermission(tenant, FINE.posShiftClose);
+      return closeCashSession(
         String(body.sessionId ?? ""),
         {
           countBreakdown: readClosingCountBreakdown(body),
@@ -26,9 +27,10 @@ export async function POST(request: Request) {
           note: typeof body.note === "string" ? body.note : undefined,
         },
         tenant,
-      ),
+      );
+    },
     request,
-    WRITE_PERMISSIONS.posCashSessionManage,
+    undefined,
     { route: "/api/pos/cash-sessions/close", storeAction: STORE_ACTIONS.SHIFT_CLOSE, targetType: "cash_session" },
   );
 }

@@ -47,7 +47,7 @@ check("15. staff UI uses disabled and reactivate", staffUi.includes('value="disa
 check("16. owner row stays protected in the list", staffUi.includes('member.isOwner') && staffUi.includes('tSettings("protected"'));
 check("17. both-access warning is present", staffUi.includes("bothAccessOffWarning"));
 check("18. effective access summary is present", staffUi.includes('tSettings("effectiveAccess"'));
-check("19. reactivate action uses staff edit permission", actions.includes("reactivateStaffMemberAction") && actions.includes("WRITE_PERMISSIONS.staffManage"));
+check("19. reactivate action uses staff deactivate permission", actions.includes("reactivateStaffMemberAction") && actions.includes('staffTenant("staff.delete")'));
 check("20. EN and LO staff copy match", settingsCopyKeyParity() && tSettings("posAccessHelp", "en").includes("POS") && tSettings("posAccessHelp", "lo") !== tSettings("posAccessHelp", "en") && tSettings("disabled", "lo") !== "Disabled");
 check("21. false access flags are valid", (() => { try { assertStaffAccessFlags({ allowBackOfficeAccess: false, allowPosAccess: false }); return true; } catch { return false; } })());
 check("22. missing access flags are rejected", (() => { try { assertStaffAccessFlags({ allowBackOfficeAccess: undefined, allowPosAccess: false }); return false; } catch { return true; } })());

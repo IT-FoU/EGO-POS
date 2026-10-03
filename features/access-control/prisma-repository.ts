@@ -7,6 +7,8 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { resolveTenantMembership, type TenantMembership } from "@/lib/db/resolve-tenant-user";
 import { decideApprovalRequest } from "@/features/approvals/approval-engine";
+import { allowsFine, FINE, FINE_MARKER, FINE_PERMISSION_ENTRIES, grantExceedsActor, legacyFineKeys } from "@/features/access-control/fine-permissions";
+import { PermissionDeniedError } from "@/lib/auth/permissions";
 import {
   APPROVAL_RULE_KEYS,
   APPROVAL_RULE_LABELS,
@@ -331,6 +333,31 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
       if (isProtectedOwnerRole(role)) {
         throw new Error("You do not have permission to assign this role.");
       }
+      const actor = await resolveTenantMembership(tenant, tx);
+      const actorMembership = await tx.companyUser.findFirst({
+        select: { allowBackOfficeAccess: true, allowPosAccess: true },
+        where: { companyId: tenant.companyId, userId: actor.effectiveUserId },
+      });
+      const actorKeys = actor.isOwner ? ["*"] : await getUserPermissionKeys(tenant, tx);
+      if (!actor.isOwner && !allowsFine(actorKeys, input.id ? "staff.edit" : "staff.create")) {
+        throw new PermissionDeniedError(input.id ? "staff.edit" : "staff.create");
+      }
+      const rolePermissionRows = await tx.rolePermission.findMany({
+        select: { permission: { select: { key: true } } },
+        where: { roleId },
+      });
+      const roleKeys = rolePermissionRows.map((row: { permission?: { key?: string } }) => String(row.permission?.key ?? "")).filter(Boolean);
+      if (grantExceedsActor({
+        actorBackOffice: Boolean(actorMembership?.allowBackOfficeAccess),
+        actorKeys,
+        actorPos: Boolean(actorMembership?.allowPosAccess),
+        isOwner: actor.isOwner,
+        nextBackOffice: Boolean(input.allowBackOfficeAccess),
+        nextPos: Boolean(input.allowPosAccess),
+        roleKeys,
+      })) {
+        throw new PermissionDeniedError(FINE.staffChangeRole);
+      }
 
       if (input.id) {
         const membership = await tx.companyUser.findFirst({
@@ -353,8 +380,14 @@ export async function saveStaffMember(input: SaveStaffMemberInput, tenant: Tenan
         if (membership.isOwner) {
           throw new Error("Owner membership cannot be edited from staff management.");
         }
-        const actor = await resolveTenantMembership(tenant, tx);
         const currentRoleId = membership.user.roles[0]?.roleId ?? "";
+        if (!actor.isOwner) {
+          if (currentRoleId !== roleId && !allowsFine(actorKeys, FINE.staffChangeRole)) throw new PermissionDeniedError(FINE.staffChangeRole);
+          if (String(membership.branchId ?? "") !== branchId && !allowsFine(actorKeys, FINE.staffChangeBranch)) throw new PermissionDeniedError(FINE.staffChangeBranch);
+          if (password && !allowsFine(actorKeys, FINE.staffResetPassword)) throw new PermissionDeniedError(FINE.staffResetPassword);
+          if (Boolean(membership.allowPosAccess) !== Boolean(input.allowPosAccess) && !allowsFine(actorKeys, FINE.staffPosAccess)) throw new PermissionDeniedError(FINE.staffPosAccess);
+          if (Boolean(membership.allowBackOfficeAccess) !== Boolean(input.allowBackOfficeAccess) && !allowsFine(actorKeys, FINE.staffBackOfficeAccess)) throw new PermissionDeniedError(FINE.staffBackOfficeAccess);
+        }
         if (membership.userId === actor.effectiveUserId && currentRoleId !== roleId) {
           throw new Error("You do not have permission to change your own role.");
         }
@@ -634,6 +667,7 @@ export async function saveRolePermissions(input: SaveRolePermissionsInput, tenan
         throw new Error("Owner permissions cannot be changed.");
       }
 
+      await ensureAccessControlCatalog(tx);
       const permissions = await tx.permission.findMany({
         where: { key: { in: input.permissions } },
       });
@@ -697,6 +731,9 @@ export async function decideApproval(input: DecideApprovalInput, tenant: TenantC
 }
 
 async function getUserPermissionKeysUncached(tenant: TenantContext, client: any): Promise<string[]> {
+  if (client === db) {
+    await ensureFinePermissionGrants(client);
+  }
   let membership: TenantMembership;
   try {
     membership = await resolveTenantMembership(tenant, client);
@@ -759,6 +796,48 @@ export async function ensureAccessControlCatalog(dbClient: any = db) {
       create: { key, module, name },
       update: { module, name },
       where: { key },
+    });
+  }
+
+  for (const [key, name, module] of FINE_PERMISSION_ENTRIES) {
+    await dbClient.permission.upsert({
+      create: { key, module, name },
+      update: { module, name },
+      where: { key },
+    });
+  }
+}
+
+let fineGrantTask: Promise<void> | null = null;
+
+export function ensureFinePermissionGrants(dbClient: any = db) {
+  if (dbClient !== db) return backfillFinePermissionGrants(dbClient);
+  fineGrantTask ??= backfillFinePermissionGrants(db).catch((error) => {
+    fineGrantTask = null;
+    console.error("fine permission baseline failed", error instanceof Error ? error.message : String(error));
+  });
+  return fineGrantTask;
+}
+
+async function backfillFinePermissionGrants(dbClient: any) {
+  await ensureAccessControlCatalog(dbClient);
+  const roles = await dbClient.role.findMany({
+    select: {
+      id: true,
+      permissions: { select: { permission: { select: { key: true } } } },
+      templateKey: true,
+    },
+  });
+  for (const role of roles as Array<{ id: string; permissions: Array<{ permission?: { key?: string } }>; templateKey?: string | null }>) {
+    if (String(role.templateKey ?? "") === "owner") continue;
+    const existing = role.permissions.map((entry) => String(entry.permission?.key ?? "")).filter(Boolean);
+    if (existing.includes(FINE_MARKER)) continue;
+    const keys = legacyFineKeys(existing, String(role.templateKey ?? ""));
+    const permissions = await dbClient.permission.findMany({ where: { key: { in: keys } } });
+    if (permissions.length === 0) continue;
+    await dbClient.rolePermission.createMany({
+      data: permissions.map((permission: { id: string }) => ({ permissionId: permission.id, roleId: role.id })),
+      skipDuplicates: true,
     });
   }
 }

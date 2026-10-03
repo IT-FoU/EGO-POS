@@ -1,3 +1,5 @@
+import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
@@ -80,11 +82,15 @@ export async function getPrismaPurchasingSnapshot(tenant: TenantContext) {
     getPrismaInventorySnapshot(scope),
   ]);
 
+  const keys = await getUserPermissionKeys(tenant);
+  const orders = purchaseOrders.map(mapPrismaPurchaseOrder);
   return {
     inventoryItems: inventory.items,
     payables: payables.map(mapPrismaSupplierPayable),
     products,
-    purchaseOrders: purchaseOrders.map(mapPrismaPurchaseOrder),
+    purchaseOrders: allowsFine(keys, FINE.productsViewCost)
+      ? orders
+      : redactSensitiveFields(orders, { cost: false, margin: false, profit: true }),
     suppliers: suppliers.map(mapPrismaPurchasingSupplier),
     warehouses: inventory.warehouses,
   };

@@ -1,3 +1,5 @@
+import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
 import { getOpenAttendanceSession } from "@/features/attendance/prisma-repository";
 import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
@@ -145,17 +147,23 @@ export async function listSellablePosProducts(tenant: TenantContext, client: any
     products.map((product: Record<string, any>) => mapPrismaPosProduct(product, scope.warehouseId)),
   );
   if (!scope.warehouseId || mapped.length === 0) {
-    return mapped;
+    return redactPosCatalogCosts(tenant, mapped, client);
   }
   const reserved = await sumActiveReservedByProduct(client, {
     companyId: scope.companyId,
     productIds: mapped.map((product) => product.id),
     warehouseId: scope.warehouseId,
   });
-  return mapped.map((product) => ({
+  return redactPosCatalogCosts(tenant, mapped.map((product) => ({
     ...product,
     stockQty: Math.max(0, Number(product.stockQty ?? 0) - (reserved.get(String(product.id)) ?? 0)),
-  }));
+  })), client);
+}
+
+async function redactPosCatalogCosts<T>(tenant: TenantContext, products: T, client: any) {
+  const keys = await getUserPermissionKeys(tenant, client);
+  if (allowsFine(keys, FINE.productsViewCost)) return products;
+  return redactSensitiveFields(products, { cost: false, margin: false, profit: true });
 }
 
 function posLoadTimingEnabled() {
@@ -321,7 +329,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
       id: String(level.id),
       name: String(level.name),
     })),
-    products: productsWithAvailable,
+    products: await redactPosCatalogCosts(tenant, productsWithAvailable, db),
     promotionBanners: promotions
       .map((promotion: Record<string, unknown>) => String(promotion.promotionName || promotion.description || ""))
       .filter(Boolean),
@@ -508,9 +516,15 @@ export async function writeCompletePrismaSale(
           throw new Error(`Invalid selling price for product ${item.productId}.`);
         }
         const costPrice = numberValue(unit.costPriceLak ?? product.costPriceLak);
-        const sellingPrice = membershipDiscountPercent > 0
-          ? Math.round(retailPrice * (1 - membershipDiscountPercent / 100))
-          : retailPrice;
+        const requestedPrice = numberValue(item.sellingPrice);
+        if (Math.round(requestedPrice) !== Math.round(retailPrice)) {
+          assertPosActionAllowed(policy, "manual_price_override");
+        }
+        const sellingPrice = Math.round(requestedPrice) !== Math.round(retailPrice)
+          ? requestedPrice
+          : membershipDiscountPercent > 0
+            ? Math.round(retailPrice * (1 - membershipDiscountPercent / 100))
+            : retailPrice;
 
         return {
           baseQuantity: quantity * conversionQty,

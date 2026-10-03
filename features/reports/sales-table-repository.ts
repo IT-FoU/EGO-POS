@@ -1,3 +1,4 @@
+import { assertReportQueryAllowed, readReportVisibility, redactReportPayload } from "@/lib/auth/fine-access";
 import { prisma } from "@/lib/db/prisma";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import type { ReportFilterOptions } from "@/features/reports/report-filters";
@@ -193,7 +194,9 @@ export type DailySalesTableResult = {
   pageSize: number;
   query: SalesTableQuery;
   rows: DailySalesTableRow[];
+  showCost: boolean;
   showCostProfit: boolean;
+  showProfit: boolean;
   summary: SalesTableSummary;
   totalRow: DailySalesTableRow;
   truncated: boolean;
@@ -238,6 +241,11 @@ export async function loadDailySalesTable(
   client: any = db,
   options: SalesTableLoadOptions = {},
 ): Promise<DailySalesTableResult> {
+  await assertReportQueryAllowed(tenant, {
+    dateFrom: query.dateFrom instanceof Date ? query.dateFrom : undefined,
+    datePreset: query.datePreset,
+  }, client);
+  const visibility = await readReportVisibility(tenant, client);
   const dbClient = salesTableClient(client);
   const scope = await resolveTenantScope(tenant, dbClient);
   const clamped = clampSalesTableQuery(scope, query);
@@ -269,14 +277,16 @@ export async function loadDailySalesTable(
   const sorted = decorated.map((row) => row.row).sort((left, right) => compareDailyRows(left, right, clamped.sort, clamped.dir));
   const pageSize = SALES_TABLE_PAGE_SIZE;
   const paged = selectSalesTableRows(sorted, clamped.page, pageSize, options.allRows === true);
-  return {
+  const result = {
     filterOptions,
     page: paged.page,
     pageCount: paged.pageCount,
     pageSize,
     query: { ...clamped, page: paged.page },
     rows: paged.rows,
-    showCostProfit: true,
+    showCost: visibility.cost,
+    showCostProfit: visibility.cost || visibility.profit,
+    showProfit: visibility.profit,
     summary,
     totalRow: {
       cashierName: "",
@@ -296,6 +306,7 @@ export async function loadDailySalesTable(
     },
     truncated: false,
   };
+  return redactReportPayload(tenant, result, client);
 }
 
 export type MonthlySalesTableRow = SalesTableSummary & {
@@ -320,6 +331,8 @@ export async function loadMonthlySalesTable(
   query: SalesTableQuery,
   client: any = db,
 ): Promise<MonthlySalesTableResult> {
+  await assertReportQueryAllowed(tenant, { datePreset: query.datePreset === "today" ? "this_month" : query.datePreset }, client);
+  const visibility = await readReportVisibility(tenant, client);
   const dbClient = salesTableClient(client);
   const scope = await resolveTenantScope(tenant, dbClient);
   const clamped: SalesTableQuery = {
@@ -407,14 +420,14 @@ export async function loadMonthlySalesTable(
     },
   );
 
-  return {
+  return redactReportPayload(tenant, {
     filterOptions,
     month: clamped.month,
     query: clamped,
     rows,
-    showCostProfit: true,
+    showCostProfit: visibility.cost || visibility.profit,
     summary,
-  };
+  }, client);
 }
 
 function isVoidSaleStatusSafe(status: string) {

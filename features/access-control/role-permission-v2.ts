@@ -1,3 +1,4 @@
+import { FINE, FINE_MARKER, moduleAccessKey } from "@/features/access-control/fine-permissions";
 import {
   buildDefaultMatrix,
   matrixToPermissionKeys,
@@ -27,8 +28,6 @@ export type RoleModuleDraft = {
 
 export type RolePermissionDraft = Record<string, RoleModuleDraft>;
 
-const shiftKeys = ["pos.cash_session.manage"] as const;
-
 export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
   module("dashboard", "moduleDashboard", [
     perm("dashboard.view", "permissionView", ["dashboard.view"]),
@@ -37,25 +36,25 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("pos.view", "permissionView", ["pos.view"]),
     perm("pos.sell", "permSell", ["pos.create"], ["pos.create", "pos.sell"]),
     perm("pos.print", "permissionPrint", ["pos.print"]),
-    deferred("pos.hold", "permHoldResume"),
-    deferred("pos.discount", "permDiscount"),
-    deferred("pos.priceOverride", "permPriceOverride", true),
-    deferred("pos.refund", "permRefund", true),
-    deferred("pos.void", "permVoid"),
-    deferred("pos.reprint", "permReprint"),
-    deferred("pos.cashIn", "permCashIn", true),
-    deferred("pos.cashOut", "permCashOut", true),
-    perm("pos.openShift", "permOpenShift", shiftKeys),
-    perm("pos.closeShift", "permCloseShift", shiftKeys),
+    perm("pos.hold", "permHoldResume", [FINE.posHold]),
+    perm("pos.discount", "permDiscount", [FINE.posDiscount], [FINE.posDiscount], { sensitive: true }),
+    perm("pos.priceOverride", "permPriceOverride", [FINE.posPriceOverride], [FINE.posPriceOverride], { sensitive: true }),
+    perm("pos.refund", "permRefund", [FINE.posRefund], [FINE.posRefund], { sensitive: true }),
+    perm("pos.void", "permVoid", [FINE.posVoid]),
+    perm("pos.reprint", "permReprint", [FINE.posReprint]),
+    perm("pos.cashIn", "permCashIn", [FINE.posCashIn], [FINE.posCashIn], { sensitive: true }),
+    perm("pos.cashOut", "permCashOut", [FINE.posCashOut], [FINE.posCashOut], { sensitive: true }),
+    perm("pos.openShift", "permOpenShift", [FINE.posShiftOpen], [FINE.posShiftOpen, "pos.cash_session.manage"]),
+    perm("pos.closeShift", "permCloseShift", [FINE.posShiftClose], [FINE.posShiftClose, "pos.cash_session.manage"]),
   ]),
   module("products", "moduleProducts", [
     perm("products.view", "permissionView", ["products.view"]),
     perm("products.create", "permissionCreate", ["products.create"]),
     perm("products.edit", "permissionEdit", ["products.edit"], ["products.edit", "products.update"]),
     perm("products.archive", "permArchive", ["products.delete"]),
-    deferred("products.viewCost", "permViewCost", true),
-    deferred("products.changeCost", "permChangeCost", true),
-    deferred("products.changePrice", "permChangePrice", true),
+    perm("products.viewCost", "permViewCost", [FINE.productsViewCost], [FINE.productsViewCost], { sensitive: true }),
+    perm("products.changeCost", "permChangeCost", [FINE.productsChangeCost], [FINE.productsChangeCost], { sensitive: true }),
+    perm("products.changePrice", "permChangePrice", [FINE.productsChangePrice], [FINE.productsChangePrice], { sensitive: true }),
     perm("products.printBarcode", "permPrintBarcode", ["products.print"]),
   ]),
   module("inventory", "moduleInventory", [
@@ -63,8 +62,8 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("inventory.stockIn", "permStockIn", ["inventory.stock_in"]),
     perm("inventory.adjustment", "permAdjustment", ["inventory.adjust"]),
     perm("inventory.count", "permCount", ["inventory.count"]),
-    deferred("inventory.movement", "permMovement"),
-    deferred("inventory.viewCost", "permViewCost", true),
+    perm("inventory.movement", "permMovement", [FINE.inventoryMovement]),
+    perm("inventory.viewCost", "permViewCost", [FINE.inventoryViewCost], [FINE.inventoryViewCost], { sensitive: true }),
   ]),
   module("purchasing", "modulePurchasing", [
     perm("purchasing.view", "permissionView", ["purchasing.view"]),
@@ -100,10 +99,10 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
   ]),
   module("reports", "moduleReports", [
     perm("reports.today", "reportsToday", ["reports.view"], ["reports.view"], { report: true }),
-    deferred("reports.historical", "reportsHistorical", false, true),
-    deferred("reports.cost", "reportsCost", true, true),
-    deferred("reports.profit", "reportsProfit", true, true),
-    deferred("reports.margin", "reportsMargin", true, true),
+    perm("reports.historical", "reportsHistorical", [FINE.reportsHistorical], [FINE.reportsHistorical], { report: true }),
+    perm("reports.cost", "reportsCost", [FINE.reportsCost], [FINE.reportsCost], { report: true, sensitive: true }),
+    perm("reports.profit", "reportsProfit", [FINE.reportsProfit], [FINE.reportsProfit], { report: true, sensitive: true }),
+    perm("reports.margin", "reportsMargin", [FINE.reportsMargin], [FINE.reportsMargin], { report: true, sensitive: true }),
     perm("reports.export", "permissionExport", ["reports.export"], ["reports.export"], { report: true }),
   ]),
   module("settings", "moduleSettings", [
@@ -115,11 +114,11 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("staff.add", "permissionCreate", ["staff.create"]),
     perm("staff.edit", "permissionEdit", ["staff.edit"]),
     perm("staff.deactivate", "permDeactivate", ["staff.delete"]),
-    deferred("staff.changeRole", "permChangeRole"),
-    deferred("staff.changeBranch", "permChangeBranch"),
-    deferred("staff.resetPassword", "permResetPassword"),
-    deferred("staff.posAccess", "permPosAccess"),
-    deferred("staff.backOfficeAccess", "permBackOfficeAccess"),
+    perm("staff.changeRole", "permChangeRole", [FINE.staffChangeRole]),
+    perm("staff.changeBranch", "permChangeBranch", [FINE.staffChangeBranch]),
+    perm("staff.resetPassword", "permResetPassword", [FINE.staffResetPassword]),
+    perm("staff.posAccess", "permPosAccess", [FINE.staffPosAccess]),
+    perm("staff.backOfficeAccess", "permBackOfficeAccess", [FINE.staffBackOfficeAccess]),
     perm("staff.manageRoles", "permManageRoles", ["roles.manage"]),
   ]),
   module("approvals", "moduleApprovals", [
@@ -159,7 +158,7 @@ export function draftFromPermissionKeys(keys: readonly string[], retained?: Role
       }
       draft[entry.id].advanced[item.id] = item.readKeys.some((key) => granted.has(key));
     }
-    const savedEnabled = entry.permissions.some((item) => !item.deferred && draft[entry.id].advanced[item.id]);
+    const savedEnabled = granted.has(moduleAccessKey(entry.id)) || entry.permissions.some((item) => !item.deferred && draft[entry.id].advanced[item.id]);
     draft[entry.id].enabled = savedEnabled;
     if (!savedEnabled && retained?.[entry.id]) {
       draft[entry.id].advanced = { ...retained[entry.id].advanced };
@@ -170,7 +169,26 @@ export function draftFromPermissionKeys(keys: readonly string[], retained?: Role
 }
 
 export function recommendedRoleDraft(template: RoleTemplateLabel): RolePermissionDraft {
-  return draftFromPermissionKeys(recommendedPermissionKeys(template));
+  const draft = draftFromPermissionKeys(recommendedPermissionKeys(template));
+  if (template === "Staff/Cashier" && draft.pos?.enabled) {
+    draft.pos.advanced["pos.hold"] = true;
+    draft.pos.advanced["pos.reprint"] = true;
+    draft.pos.advanced["pos.cashIn"] = true;
+    draft.pos.advanced["pos.cashOut"] = true;
+  }
+  if (template === "Manager") {
+    enableRecommended(draft, "reports", ["reports.historical", "reports.cost", "reports.profit", "reports.margin", "reports.export"]);
+    enableRecommended(draft, "products", ["products.viewCost", "products.changeCost", "products.changePrice"]);
+    enableRecommended(draft, "inventory", ["inventory.movement", "inventory.viewCost"]);
+    enableRecommended(draft, "pos", ["pos.hold", "pos.discount", "pos.priceOverride", "pos.refund", "pos.void", "pos.reprint", "pos.cashIn", "pos.cashOut", "pos.openShift", "pos.closeShift"]);
+    enableRecommended(draft, "staff", ["staff.changeRole", "staff.changeBranch", "staff.resetPassword", "staff.posAccess", "staff.backOfficeAccess"]);
+  }
+  return draft;
+}
+
+function enableRecommended(draft: RolePermissionDraft, moduleId: string, ids: string[]) {
+  if (!draft[moduleId]?.enabled) return;
+  for (const id of ids) draft[moduleId].advanced[id] = true;
 }
 
 const moduleKeyPrefixes: Record<string, readonly string[]> = {
@@ -194,13 +212,13 @@ export function permissionKeysForDraft(draft: RolePermissionDraft, currentKeys: 
   const next = new Set(currentKeys.filter((key) => !ownedKeys.has(key) && !disabledPrefixes.some((prefix) => key.startsWith(prefix))));
   for (const entry of ROLE_PERMISSION_MODULES) {
     if (!draft[entry.id]?.enabled) continue;
-    const gate = entry.permissions.find((item) => !item.deferred && item.writeKeys.length > 0);
-    for (const key of gate?.writeKeys ?? []) next.add(key);
+    next.add(moduleAccessKey(entry.id));
     for (const item of entry.permissions) {
       if (item.deferred || !draft[entry.id].advanced[item.id]) continue;
       for (const key of item.writeKeys) next.add(key);
     }
   }
+  next.add(FINE_MARKER);
   return [...next];
 }
 
@@ -239,7 +257,7 @@ export function roleDraftsEqual(left: RolePermissionDraft, right: RolePermission
 export type RoleAccessPreview = {
   hidden: string[];
   reports: Array<{ deferred: boolean; enabled: boolean; id: string }>;
-  sensitive: Array<{ enabled: boolean; id: string }>;
+  sensitive: Array<{ deferred: boolean; enabled: boolean; id: string }>;
   visible: string[];
 };
 
@@ -260,7 +278,11 @@ export function previewRoleAccess(draft: RolePermissionDraft): RoleAccessPreview
     })),
     sensitive: sensitive.map((item) => {
       const moduleId = item.id.split(".")[0];
-      return { enabled: Boolean(draft[moduleId]?.enabled && draft[moduleId]?.advanced[item.id]), id: item.id };
+      return {
+        deferred: Boolean(item.deferred),
+        enabled: Boolean(draft[moduleId]?.enabled && draft[moduleId]?.advanced[item.id]),
+        id: item.id,
+      };
     }),
     visible,
   };

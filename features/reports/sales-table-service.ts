@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireApiSession, requireSession } from "@/lib/auth/session";
+import { requireReportExport } from "@/lib/auth/fine-access";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 import { prisma } from "@/lib/db/prisma";
@@ -80,6 +81,7 @@ async function requireReportsApiTenant() {
   const session = await requireApiSession();
   const tenant = tenantFromSession(session);
   await assertPermission(tenant, READ_PERMISSIONS.reportsView);
+  await requireReportExport(tenant);
   return tenant;
 }
 

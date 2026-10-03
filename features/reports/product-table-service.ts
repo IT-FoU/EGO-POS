@@ -5,6 +5,7 @@ import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 import { prisma } from "@/lib/db/prisma";
 import { apiJsonFromError } from "@/lib/api/write-response";
+import { assertReportQueryAllowed, readReportVisibility, redactReportPayload, requireReportExport } from "@/lib/auth/fine-access";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 import {
   buildCategorySalesExcel,
@@ -32,22 +33,43 @@ export async function getProductTableLocale() {
   return getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
 }
 
+async function presentProductReport<T extends { showCostProfit: boolean }>(
+  tenant: TenantContext,
+  query: { dateFrom?: Date | string | null; datePreset?: string | null },
+  data: T,
+) {
+  const parsedFrom = query.dateFrom instanceof Date
+    ? query.dateFrom
+    : typeof query.dateFrom === "string" && query.dateFrom
+      ? new Date(query.dateFrom)
+      : null;
+  await assertReportQueryAllowed(tenant, {
+    dateFrom: parsedFrom && !Number.isNaN(parsedFrom.getTime()) ? parsedFrom : null,
+    datePreset: query.datePreset,
+  });
+  const visibility = await readReportVisibility(tenant);
+  return redactReportPayload(tenant, {
+    ...data,
+    showCostProfit: visibility.cost && visibility.profit && visibility.margin,
+  });
+}
+
 export async function getProductSalesPageData(searchParams?: SearchParams) {
   const tenant = await requireReportsTenant();
   const query = parseProductTableQuery(searchParams, { datePreset: "today" });
-  return loadProductSalesTable(tenant, query);
+  return presentProductReport(tenant, query, await loadProductSalesTable(tenant, query));
 }
 
 export async function getCategorySalesPageData(searchParams?: SearchParams) {
   const tenant = await requireReportsTenant();
   const query = parseProductTableQuery(searchParams, { datePreset: "this_month" });
-  return loadCategorySalesTable(tenant, query);
+  return presentProductReport(tenant, query, await loadCategorySalesTable(tenant, query));
 }
 
 export async function getProductPerformancePageData(searchParams?: SearchParams) {
   const tenant = await requireReportsTenant();
   const query = parseProductTableQuery(searchParams, { datePreset: "this_month" });
-  return loadProductPerformanceTable(tenant, query);
+  return presentProductReport(tenant, query, await loadProductPerformanceTable(tenant, query));
 }
 
 async function loadStoreName(tenant: TenantContext) {
@@ -76,6 +98,7 @@ async function requireReportsApiTenant() {
   const session = await requireApiSession();
   const tenant = tenantFromSession(session);
   await assertPermission(tenant, READ_PERMISSIONS.reportsView);
+  await requireReportExport(tenant);
   return tenant;
 }
 
@@ -85,10 +108,11 @@ export async function exportProductSalesExcelResponse(request: Request) {
     const locale = await getProductTableLocale();
     const defaults: { datePreset: ProductTableDatePreset } = { datePreset: "today" };
     const query = parseProductTableQuery(searchParamsFromRequest(request), defaults);
-    const [data, storeName] = await Promise.all([
+    const [loaded, storeName] = await Promise.all([
       loadProductSalesTable(tenant, query, undefined, { allRows: true }),
       loadStoreName(tenant),
     ]);
+    const data = await presentProductReport(tenant, query, loaded);
     return excelFileResponse(await buildProductSalesExcel({ data, locale, storeName }));
   } catch (error) {
     return apiJsonFromError(error);
@@ -100,10 +124,11 @@ export async function exportCategorySalesExcelResponse(request: Request) {
     const tenant = await requireReportsApiTenant();
     const locale = await getProductTableLocale();
     const query = parseProductTableQuery(searchParamsFromRequest(request), { datePreset: "this_month" });
-    const [data, storeName] = await Promise.all([
+    const [loaded, storeName] = await Promise.all([
       loadCategorySalesTable(tenant, query, undefined, { allRows: true }),
       loadStoreName(tenant),
     ]);
+    const data = await presentProductReport(tenant, query, loaded);
     return excelFileResponse(await buildCategorySalesExcel({ data, locale, storeName }));
   } catch (error) {
     return apiJsonFromError(error);
@@ -115,10 +140,11 @@ export async function exportProductPerformanceExcelResponse(request: Request) {
     const tenant = await requireReportsApiTenant();
     const locale = await getProductTableLocale();
     const query = parseProductTableQuery(searchParamsFromRequest(request), { datePreset: "this_month" });
-    const [data, storeName] = await Promise.all([
+    const [loaded, storeName] = await Promise.all([
       loadProductPerformanceTable(tenant, query, undefined, { allRows: true }),
       loadStoreName(tenant),
     ]);
+    const data = await presentProductReport(tenant, query, loaded);
     return excelFileResponse(await buildProductPerformanceExcel({ data, locale, storeName }));
   } catch (error) {
     return apiJsonFromError(error);

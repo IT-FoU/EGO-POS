@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireFinePermission } from "@/lib/auth/fine-access";
 import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { requireSession } from "@/lib/auth/session";
+import { tenantFromSession } from "@/lib/db/write-context";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import {
   deactivateStaffMember,
@@ -25,7 +28,7 @@ function revalidateStaffPaths() {
 
 export async function saveStaffMemberAction(input: SaveStaffMemberInput) {
   try {
-    const data = await saveStaffMember(input, await requireWritePermission(WRITE_PERMISSIONS.staffManage));
+    const data = await saveStaffMember(input, await staffTenant(input.id ? "staff.edit" : "staff.create"));
     revalidateStaffPaths();
     return writeSuccess(data);
   } catch (error) {
@@ -33,9 +36,15 @@ export async function saveStaffMemberAction(input: SaveStaffMemberInput) {
   }
 }
 
+async function staffTenant(permission: string) {
+  const tenant = tenantFromSession(await requireSession());
+  await requireFinePermission(tenant, permission);
+  return tenant;
+}
+
 export async function deactivateStaffMemberAction(membershipId: string) {
   try {
-    const data = await deactivateStaffMember(membershipId, await requireWritePermission(WRITE_PERMISSIONS.staffManage));
+    const data = await deactivateStaffMember(membershipId, await staffTenant("staff.delete"));
     revalidateStaffPaths();
     return writeSuccess(data);
   } catch (error) {
@@ -45,7 +54,7 @@ export async function deactivateStaffMemberAction(membershipId: string) {
 
 export async function reactivateStaffMemberAction(membershipId: string) {
   try {
-    const data = await reactivateStaffMember(membershipId, await requireWritePermission(WRITE_PERMISSIONS.staffManage));
+    const data = await reactivateStaffMember(membershipId, await staffTenant("staff.delete"));
     revalidateStaffPaths();
     return writeSuccess(data);
   } catch (error) {

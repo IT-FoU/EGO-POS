@@ -10,6 +10,7 @@ import { fillReportsCopy, paymentMethodLabel, tReports } from "@/lib/i18n/report
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { businessDayLabel, formatBusinessDateTimeLabel, formatBusinessTimeLabel } from "@/lib/datetime/business-timezone";
 import { ReportDetailHeader, ReportPageChrome, ReportSheet } from "@/features/reports/components/report-page-shell";
+import { useReportExportAllowed } from "@/features/reports/components/report-export-gate";
 import { findReportCenterEntry } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
 import type { ReportFilterOptions } from "@/features/reports/report-filters";
@@ -239,7 +240,9 @@ function SalesTableFilters({
 }
 
 function ExportExcelButton({ href, locale }: { href: string; locale: SupportedLocale }) {
+  const allowed = useReportExportAllowed();
   const [state, setState] = useState<"idle" | "exporting" | "done" | "error">("idle");
+  if (!allowed) return null;
 
   async function onExport() {
     setState("exporting");
@@ -482,12 +485,8 @@ export function DailySalesReportView({
       { key: "voids", label: t("voids", locale), value: moneyCell(data.summary.voidLak) },
       { key: "net", label: t("netSales", locale), value: moneyCell(data.summary.netLak) },
     ];
-    if (data.showCostProfit) {
-      items.push(
-        { key: "cost", label: t("cost", locale), value: moneyCell(data.summary.costLak) },
-        { key: "profit", label: t("profit", locale), value: moneyCell(data.summary.profitLak) },
-      );
-    }
+    if (data.showCost) items.push({ key: "cost", label: t("cost", locale), value: moneyCell(data.summary.costLak) });
+    if (data.showProfit) items.push({ key: "profit", label: t("profit", locale), value: moneyCell(data.summary.profitLak) });
     return items;
   }, [data, locale]);
 
@@ -525,11 +524,11 @@ export function DailySalesReportView({
                     <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "void"} dir={query.dir} href={sortHref("void")}>{t("colVoid", locale)}</SortLink></th>
                     <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "net"} dir={query.dir} href={sortHref("net")}>{t("colNet", locale)}</SortLink></th>
                     <th className={thCell}><SortLink active={query.sort === "payment"} dir={query.dir} href={sortHref("payment")}>{t("colPayment", locale)}</SortLink></th>
-                    {data.showCostProfit ? (
-                      <>
-                        <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "cost"} dir={query.dir} href={sortHref("cost")}>{t("colCost", locale)}</SortLink></th>
-                        <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "profit"} dir={query.dir} href={sortHref("profit")}>{t("colProfit", locale)}</SortLink></th>
-                      </>
+                    {data.showCost ? (
+                      <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "cost"} dir={query.dir} href={sortHref("cost")}>{t("colCost", locale)}</SortLink></th>
+                    ) : null}
+                    {data.showProfit ? (
+                      <th className={`${thCell} ${numClass}`}><SortLink active={query.sort === "profit"} dir={query.dir} href={sortHref("profit")}>{t("colProfit", locale)}</SortLink></th>
                     ) : null}
                     <th className={`${thCell} text-center`}><SortLink active={query.sort === "status"} dir={query.dir} href={sortHref("status")}>{t("colStatus", locale)}</SortLink></th>
                   </tr>
@@ -560,12 +559,8 @@ export function DailySalesReportView({
                       <td className={`${tdCell} ${numClass}`}>{moneyCell(row.voidLak)}</td>
                       <td className={`${tdCell} ${numClass}`}>{moneyCell(row.netLak)}</td>
                       <td className={tdCell}>{row.paymentMethods.map((method) => paymentMethodLabel(method, locale)).join(" + ")}</td>
-                      {data.showCostProfit ? (
-                        <>
-                          <td className={`${tdCell} ${numClass}`}>{moneyCell(row.costLak)}</td>
-                          <td className={`${tdCell} ${numClass}`}>{moneyCell(row.profitLak)}</td>
-                        </>
-                      ) : null}
+                      {data.showCost ? <td className={`${tdCell} ${numClass}`}>{moneyCell(row.costLak)}</td> : null}
+                      {data.showProfit ? <td className={`${tdCell} ${numClass}`}>{moneyCell(row.profitLak)}</td> : null}
                       <td className={`${tdCell} text-center`}>{t(saleStatusCopyKey(row.status), locale)}</td>
                     </tr>
                   ))}
@@ -582,12 +577,8 @@ export function DailySalesReportView({
                       <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.voidLak)}</td>
                       <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.netLak)}</td>
                       <td className={tdTotal} />
-                      {data.showCostProfit ? (
-                        <>
-                          <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.costLak)}</td>
-                          <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.profitLak)}</td>
-                        </>
-                      ) : null}
+                      {data.showCost ? <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.costLak)}</td> : null}
+                      {data.showProfit ? <td className={`${tdTotal} ${numClass}`}>{moneyCell(data.totalRow.profitLak)}</td> : null}
                       <td className={tdTotal} />
                     </tr>
                   ) : null}

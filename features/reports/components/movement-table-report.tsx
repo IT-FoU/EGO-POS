@@ -6,6 +6,7 @@ import type { SupportedLocale } from "@/lib/constants";
 import { fillReportsCopy, tReports } from "@/lib/i18n/reports-copy";
 import { formatLak, formatNumber } from "@/features/reports/format";
 import { ReportDetailHeader, ReportPageChrome, ReportSheet } from "@/features/reports/components/report-page-shell";
+import { useReportExportAllowed } from "@/features/reports/components/report-export-gate";
 import { findReportCenterEntry } from "@/features/reports/report-center-catalog";
 import { REPORT_CENTER_ICON_MAP } from "@/features/reports/report-center-icons";
 import {
@@ -88,6 +89,7 @@ export function StockMovementReportView({
   locale: SupportedLocale;
 }) {
   const pathname = "/reports/inventory/movements";
+  const canExport = useReportExportAllowed();
   const query = data?.query;
 
   const summaryItems = useMemo(() => {
@@ -220,12 +222,14 @@ export function StockMovementReportView({
                 <Link className={`inline-flex h-10 items-center rounded-md border border-zinc-300 bg-white px-4 text-sm text-zinc-800 ${focusRing}`} href={pathname}>
                   {t("clear", locale)}
                 </Link>
+                {canExport && query ? (
                 <Link
                   className={`inline-flex h-10 items-center rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-900 ${focusRing}`}
                   href={movementTableExportHref("/api/reports/inventory/movements/export", query)}
                 >
                   {t("exportExcel", locale)}
                 </Link>
+                ) : null}
               </div>
               <p className="text-xs text-zinc-500">{t("movementReservationNote", locale)}</p>
             </form>

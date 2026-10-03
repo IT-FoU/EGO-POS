@@ -8,6 +8,7 @@ import { resolveStoreRoleFromTenant } from "@/lib/auth/store-permission-guard";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 import { prisma } from "@/lib/db/prisma";
 import { apiJsonFromError } from "@/lib/api/write-response";
+import { requireReportExport } from "@/lib/auth/fine-access";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 import { buildOwnShiftHistoryExcel, buildShiftSummaryExcel } from "@/features/reports/shift-table-excel";
 import { loadOwnShiftHistoryTable, loadShiftDetail, loadShiftSummaryTable } from "@/features/reports/shift-table-repository";
@@ -98,6 +99,7 @@ export async function exportShiftSummaryExcelResponse(request: Request) {
     if (!canViewBranchShiftReports(role)) {
       throw new PermissionMatrixDeniedError(role, STORE_ACTIONS.REPORTS_VIEW_FULL);
     }
+    await requireReportExport(tenant);
     const locale = await getShiftTableLocale();
     const query = parseShiftTableQuery(searchParamsFromRequest(request), { datePreset: "today" });
     const [data, storeName] = await Promise.all([
@@ -118,6 +120,7 @@ export async function exportOwnShiftHistoryExcelResponse(request: Request) {
     if (!canAccessOwnShiftReport(role)) {
       throw new PermissionMatrixDeniedError(role, STORE_ACTIONS.REPORTS_VIEW_OWN_SHIFT);
     }
+    await requireReportExport(tenant);
     const locale = await getShiftTableLocale();
     const query = parseShiftTableQuery(searchParamsFromRequest(request), { datePreset: "this_month" });
     delete (query as { cashierId?: string }).cashierId;

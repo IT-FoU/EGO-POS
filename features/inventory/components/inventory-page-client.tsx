@@ -23,13 +23,15 @@ function movementProductName(movement: StockMovement, locale: SupportedLocale) {
     return movement.productName;
 }
 
-export function InventoryPageClient({ items: initialItems, movements: initialMovements, warehouses, listPage: initialListPage, locale: localeProp, }: {
+export function InventoryPageClient({ actions, items: initialItems, movements: initialMovements, warehouses, listPage: initialListPage, locale: localeProp, }: {
+    actions?: { adjustment: boolean; count: boolean; movement: boolean; stockIn: boolean };
     items: InventoryItem[];
     movements: StockMovement[];
     warehouses: Warehouse[];
     listPage?: InventoryListPage;
     locale?: SupportedLocale;
 }) {
+    const inventoryActions = actions ?? { adjustment: true, count: true, movement: true, stockIn: true };
     const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
     const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
@@ -126,18 +128,18 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
       <InventoryInsightPanel activePanel={activePanel} items={listPage?.previewItems ?? filteredItems} locale={locale} onFilterChange={setStockFilter}/>
 
       <nav className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90" href="/inventory/quick-stock-in">
+        {inventoryActions.stockIn ? <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90" href="/inventory/quick-stock-in">
           <PackagePlus aria-hidden="true"/>
           {t("quickStockIn")}
-        </Link>
-        <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/inventory/count">
+        </Link> : null}
+        {inventoryActions.count ? <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/inventory/count">
           <ClipboardCheck aria-hidden="true"/>
           {t("stockCount")}
-        </Link>
-        <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/inventory/adjustment">
+        </Link> : null}
+        {inventoryActions.adjustment ? <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/inventory/adjustment">
           <SlidersHorizontal aria-hidden="true"/>
           {t("adjustment")}
-        </Link>
+        </Link> : null}
         <Link className="inline-flex min-h-16 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:border-primary" href="/purchasing/new">
           <ReceiptText aria-hidden="true"/>
           {t("purchaseOrder")}
@@ -199,6 +201,6 @@ export function InventoryPageClient({ items: initialItems, movements: initialMov
         </div>
       ) : null}
       <InventoryAlertLists items={listPage?.previewItems ?? filteredItems} locale={locale}/>
-      <StockMovementHistory movements={filteredMovements} locale={locale}/>
+      {inventoryActions.movement ? <StockMovementHistory movements={filteredMovements} locale={locale}/> : null}
     </div>);
 }

@@ -8,6 +8,7 @@ import { resolveStoreRoleFromTenant } from "@/lib/auth/store-permission-guard";
 import { tenantFromSession, type TenantContext } from "@/lib/db/write-context";
 import { prisma } from "@/lib/db/prisma";
 import { apiJsonFromError } from "@/lib/api/write-response";
+import { requireReportExport } from "@/lib/auth/fine-access";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 import { canViewBranchShiftReports } from "@/features/reports/own-shift-report-access";
 import { buildStaffAttendanceExcel } from "@/features/reports/attendance-report-excel";
@@ -72,6 +73,7 @@ export async function exportAttendanceReportExcelResponse(request: Request) {
     if (!canViewBranchShiftReports(role)) {
       throw new PermissionMatrixDeniedError(role, STORE_ACTIONS.REPORTS_VIEW_FULL);
     }
+    await requireReportExport(tenant);
     const locale = await getAttendanceReportLocale();
     const query = parseAttendanceReportTableQuery(searchParamsFromRequest(request), { datePreset: "today" });
     const [data, storeName] = await Promise.all([

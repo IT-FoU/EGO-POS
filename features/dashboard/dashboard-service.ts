@@ -10,6 +10,8 @@ import {
   type DashboardPromotionSummary,
 } from "@/features/dashboard/dashboard-promotion-analytics";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
+import { readReportVisibility } from "@/lib/auth/fine-access";
+import { redactSensitiveFields } from "@/features/access-control/fine-permissions";
 import { assertPermission, READ_PERMISSIONS } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
@@ -520,9 +522,12 @@ export async function getMiniMartDashboardCriticalSnapshot(
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   await assertPermission(tenant, READ_PERMISSIONS.dashboardView);
+  const visibility = await readReportVisibility(tenant);
+  const safeRange = visibility.historical || range.key === "today" ? range : { key: "today" as const };
 
   try {
-    return await loadDashboardCriticalSnapshot(tenant, range);
+    const snapshot = await loadDashboardCriticalSnapshot(tenant, safeRange);
+    return redactSensitiveFields(snapshot, visibility);
   } catch (error) {
     logDashboardQueryFailure("getMiniMartDashboardCriticalSnapshot", "dashboardCritical", error);
     return emptySnapshot("Dashboard data could not be loaded");

@@ -1,3 +1,5 @@
+import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -39,7 +41,8 @@ import {
 const db = prisma as any;
 
 export async function getPrismaInventoryListPage(tenant: TenantContext, input: InventoryListQuery = {}, client: any = db) {
-  return loadPrismaInventoryListPage(tenant, input, client);
+  const page = await loadPrismaInventoryListPage(tenant, input, client);
+  return applyInventoryVisibility(tenant, page, client);
 }
 
 export async function getPrismaInventorySnapshot(tenant: TenantContext, client: any = db) {
@@ -92,11 +95,20 @@ export async function getPrismaInventorySnapshot(tenant: TenantContext, client: 
     sold30Days.map((row: Record<string, any>) => [row.productId, amount(row._sum.quantity)]),
   );
 
-  return {
+  return applyInventoryVisibility(tenant, {
     items: attachInventorySalesMetrics(balances, lastSaleByProduct, sold30ByProduct),
     movements: movements.map(mapPrismaStockMovement),
     warehouses: warehouses.map(mapPrismaWarehouse),
-  };
+  }, client);
+}
+
+async function applyInventoryVisibility<T extends { movements?: unknown }>(tenant: TenantContext, value: T, client: any) {
+  const keys = await getUserPermissionKeys(tenant, client);
+  const withHistory = allowsFine(keys, FINE.inventoryMovement) || !("movements" in value)
+    ? value
+    : { ...value, movements: [] };
+  if (allowsFine(keys, FINE.inventoryViewCost)) return withHistory;
+  return redactSensitiveFields(withHistory, { cost: false, margin: false, profit: true });
 }
 
 function amount(value: unknown) {
@@ -135,7 +147,9 @@ export async function getPrismaReceivableCatalogItems(tenant: TenantContext, cli
     }
   }
 
-  return items;
+  const keys = await getUserPermissionKeys(tenant, client);
+  if (allowsFine(keys, FINE.inventoryViewCost)) return items;
+  return redactSensitiveFields(items, { cost: false, margin: false, profit: true });
 }
 
 export function mergeQuickStockInCatalog(balanceItems: InventoryItem[], catalogItems: InventoryItem[]) {

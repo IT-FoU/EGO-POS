@@ -9,6 +9,7 @@ import { canViewFullStoreReports } from "@/features/permissions/store-ui-permiss
 import { tenantFromSession, writeFailure, writeSuccess, type TenantContext } from "@/lib/db/write-context";
 import { prisma } from "@/lib/db/prisma";
 import { apiJsonFromError } from "@/lib/api/write-response";
+import { requireReportExport } from "@/lib/auth/fine-access";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 import { parseReorderTableQuery } from "@/features/reports/reorder-report-query";
 import {
@@ -76,6 +77,7 @@ export async function exportReorderExcelResponse(request: Request) {
     if (!canViewFullStoreReports(role)) {
       throw new PermissionMatrixDeniedError(role, STORE_ACTIONS.REPORTS_VIEW_FULL);
     }
+    await requireReportExport(tenant);
     const locale = await getReorderReportLocale();
     const query = parseReorderTableQuery(searchParamsFromRequest(request), { tab: "need" });
     const [data, storeName] = await Promise.all([loadReorderExportData(tenant, query), loadStoreName(tenant)]);
