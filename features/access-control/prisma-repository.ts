@@ -8,6 +8,7 @@ import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { resolveTenantMembership, type TenantMembership } from "@/lib/db/resolve-tenant-user";
 import { decideApprovalRequest } from "@/features/approvals/approval-engine";
 import { allowsFine, FINE, FINE_MARKER, FINE_PERMISSION_ENTRIES, grantExceedsActor, legacyFineKeys } from "@/features/access-control/fine-permissions";
+import { parseStaffCreateDefaults, recommendedStaffSetup, withStaffCreateDefaults, type StaffCreateDefaults } from "@/features/access-control/staff-create-defaults";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import {
   APPROVAL_RULE_KEYS,
@@ -184,7 +185,7 @@ export async function ensureAssignableStaffRoles(companyId: string, dbClient: an
 
 export async function getStaffAccessSnapshot(tenant: TenantContext, client: any = db): Promise<StaffAccessSnapshot> {
   await ensureAssignableStaffRoles(tenant.companyId, client);
-  const [branches, roles, staffRows, approvalRules, pendingApprovals, rolePermissionRows] = await Promise.all([
+  const [branches, roles, staffRows, approvalRules, pendingApprovals, rolePermissionRows, companySetting] = await Promise.all([
     client.branch.findMany({
       orderBy: [{ isMainBranch: "desc" }, { name: "asc" }],
       select: { id: true, name: true },
@@ -227,6 +228,10 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
         role: { companyId: tenant.companyId },
       },
     }),
+    client.companySetting.findUnique({
+      select: { unitPricingDefaults: true },
+      where: { companyId: tenant.companyId },
+    }),
   ]);
 
   const mappedRoles = roles.map(mapRole);
@@ -249,11 +254,13 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
   return {
     approvalRules: approvalRules.map(mapApprovalRule),
     branches,
+    companyId: tenant.companyId,
     matrix,
     permissionKeysByRole,
     pendingApprovals: pendingApprovals.map(mapPendingApproval),
     roles: mappedRoles,
     staff: staffRows.map(mapStaffMember),
+    staffCreateDefaults: parseStaffCreateDefaults(companySetting?.unitPricingDefaults, branches),
   };
 }
 
@@ -917,4 +924,52 @@ export async function seedRoleTemplatePermissions(
 
 export function approvalRuleLabel(ruleKey: string) {
   return APPROVAL_RULE_LABELS[ruleKey as keyof typeof APPROVAL_RULE_LABELS] ?? ruleKey;
+}
+
+export async function saveCompanyStaffCreateDefault(
+  input: {
+    allowBackOfficeAccess: boolean;
+    allowPosAccess: boolean;
+    branchId: string;
+    kind: "cashier" | "manager";
+    reset: boolean;
+  },
+  tenant: TenantContext,
+  client: any = db,
+): Promise<StaffCreateDefaults> {
+  const actor = await resolveTenantMembership(tenant, client);
+  if (!actor.isOwner) {
+    throw new PermissionDeniedError("roles.manage");
+  }
+  const branches = await client.branch.findMany({
+    orderBy: [{ isMainBranch: "desc" }, { name: "asc" }],
+    select: { id: true },
+    where: { companyId: tenant.companyId },
+  });
+  const branchIds = new Set(branches.map((branch: { id: string }) => branch.id));
+  if (!input.reset && input.branchId && !branchIds.has(input.branchId)) {
+    throw new Error("Branch was not found for this company.");
+  }
+  const existing = await client.companySetting.findUnique({
+    select: { unitPricingDefaults: true },
+    where: { companyId: tenant.companyId },
+  });
+  const current = parseStaffCreateDefaults(existing?.unitPricingDefaults, branches);
+  const next: StaffCreateDefaults = input.reset
+    ? { ...current, [input.kind]: recommendedStaffSetup(input.kind, branches) }
+    : {
+        ...current,
+        [input.kind]: {
+          allowBackOfficeAccess: Boolean(input.allowBackOfficeAccess),
+          allowPosAccess: Boolean(input.allowPosAccess),
+          branchId: input.branchId,
+        },
+      };
+  const packed = withStaffCreateDefaults(existing?.unitPricingDefaults, next);
+  await client.companySetting.upsert({
+    create: { companyId: tenant.companyId, unitPricingDefaults: packed },
+    update: { unitPricingDefaults: packed },
+    where: { companyId: tenant.companyId },
+  });
+  return next;
 }

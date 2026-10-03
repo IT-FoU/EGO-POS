@@ -11,6 +11,7 @@ import {
   decideApproval,
   reactivateStaffMember,
   saveApprovalRule,
+  saveCompanyStaffCreateDefault,
   saveRolePermissions,
   saveStaffMember,
 } from "@/features/access-control/prisma-repository";
@@ -24,6 +25,23 @@ import type {
 function revalidateStaffPaths() {
   revalidatePath("/settings");
   revalidatePath("/pos");
+}
+
+export async function saveStaffCreateDefaultAction(input: {
+  allowBackOfficeAccess: boolean;
+  allowPosAccess: boolean;
+  branchId: string;
+  kind: "cashier" | "manager";
+  reset: boolean;
+}) {
+  try {
+    const tenant = tenantFromSession(await requireSession());
+    const data = await saveCompanyStaffCreateDefault(input, tenant);
+    revalidateStaffPaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function saveStaffMemberAction(input: SaveStaffMemberInput) {

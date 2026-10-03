@@ -136,12 +136,11 @@ export function mergeUnitPricingDefaultsFromUnits(
       roundingLak: normalizeRounding(unit.roundingLak),
     };
   }
-  // Do not create or rewrite the cash-shift flag. Preserve a legacy key only.
-  if (current && typeof current === "object" && !Array.isArray(current) && REQUIRE_CASH_SHIFT_JSON_KEY in current) {
-    return {
-      ...next,
-      [REQUIRE_CASH_SHIFT_JSON_KEY]: (current as Record<string, unknown>)[REQUIRE_CASH_SHIFT_JSON_KEY],
-    };
-  }
-  return next;
+  // Keep receipt layout, staff-create defaults, and any other reserved keys already stored beside unit pricing.
+  const preserved = current && typeof current === "object" && !Array.isArray(current) ? { ...(current as Record<string, unknown>) } : {};
+  return {
+    ...preserved,
+    units: next.units,
+    version: next.version,
+  };
 }

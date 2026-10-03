@@ -1,3 +1,4 @@
+import type { StaffCreateDefaults } from "@/features/access-control/staff-create-defaults";
 import type {
   ApprovalRuleKey,
   PermissionActionLabel,
@@ -67,11 +68,13 @@ export type PendingApprovalRecord = {
 export type StaffAccessSnapshot = {
   approvalRules: ApprovalRuleRecord[];
   branches: BranchOption[];
+  companyId?: string;
   matrix: PermissionMatrix;
   permissionKeysByRole?: Record<string, string[]>;
   pendingApprovals: PendingApprovalRecord[];
   roles: RoleTemplateRecord[];
   staff: StaffMemberRecord[];
+  staffCreateDefaults?: StaffCreateDefaults;
 };
 
 export type SaveStaffMemberInput = {
