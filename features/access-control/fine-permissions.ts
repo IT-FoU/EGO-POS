@@ -147,7 +147,10 @@ export function redactSensitiveFields<T>(value: T, visibility: Pick<SensitiveVis
 
 export function reportRangeNeedsHistorical(input: { dateFrom?: Date | null; datePreset?: string | null }, now = new Date()) {
   const preset = String(input.datePreset ?? "").trim().toLowerCase();
-  if (preset && preset !== "today") return true;
+  // An explicit today preset is today's sales even when the resolved business-day
+  // start is earlier than the worker's local midnight.
+  if (preset === "today") return false;
+  if (preset) return true;
   if (input.dateFrom && input.dateFrom.getTime() < startOfToday(now).getTime()) return true;
   return false;
 }
