@@ -54,7 +54,7 @@ check("owner role save stays protected", repo.includes("isProtectedOwnerRole") &
 check("role admin still uses roles.manage only", PERMISSION_ALIAS_GROUPS["roles.manage"].join() === "roles.manage" && catalog.includes('"roles.manage": ["roles.manage"]'));
 check("approval rules stay separate from role editor", staff.includes("APPROVAL_RULE_LABELS") && panel.includes("/settings/approval-rules") && !panel.includes("thresholdLak"));
 check("new staff defaults stay cashier-safe", NEW_STAFF_DEFAULTS.allowPosAccess === true && NEW_STAFF_DEFAULTS.allowBackOfficeAccess === false);
-check("staff preset architecture is present", staff.includes("useRoleDefault") && staff.includes("useLastUsed") && staff.includes("individualOverridesLater"));
+check("staff preset architecture is present", staff.includes("cashierDefault") && staff.includes("lastUsedPreset") && staff.includes("individualOverridesLater") && staff.includes("effectiveAccessPreview") && !staff.includes("user_permission_overrides"));
 check("copy parity and Lao labels", settingsCopyKeyParity() && tSettings("moduleAccess", "lo") !== tSettings("moduleAccess", "en") && tSettings("previewAccess", "lo") !== "previewAccess");
 check("no runtime engine rewrite", !panel.includes("STORE_PERMISSION_MATRIX") && !read("features/permissions/store-permissions.ts").includes("ROLE_PERMISSION_MODULES"));
 

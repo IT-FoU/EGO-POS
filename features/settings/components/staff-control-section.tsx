@@ -8,17 +8,21 @@ import {
   deactivateStaffMemberAction,
   reactivateStaffMemberAction,
   saveApprovalRuleAction,
+  saveStaffCreateDefaultAction,
   saveStaffMemberAction,
 } from "@/features/access-control/actions";
 import { APPROVAL_RULE_LABELS } from "@/features/access-control/permission-catalog";
 import { isAssignableStaffRole, NEW_STAFF_DEFAULTS, validateStaffAccountInput } from "@/features/access-control/staff-account";
-import { readStaffLastUsed, writeStaffLastUsed, type StaffLastUsedPreset } from "@/features/access-control/staff-presets";
+import { previewStaffAccess, recommendedStaffSetup, type StaffCreateDefaults } from "@/features/access-control/staff-create-defaults";
+import { readStaffLastUsed, writeStaffLastUsed } from "@/features/access-control/staff-presets";
 import type { StaffAccessSnapshot, StaffMemberRecord } from "@/features/access-control/types";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { SupportedLocale } from "@/lib/constants";
 import { fillSettingsCopy, localizeApprovalRule, localizePermissionModule, localizeRoleTemplate, localizeSettingsError, localizeStaffStatus, tSettings } from "@/lib/i18n/settings-copy";
 import { RolePermissionsPanel } from "@/features/settings/components/role-permissions-panel";
 import { SettingsLargeDrawer } from "@/features/settings/components/settings-large-drawer";
+
+type StaffPresetChoice = "cashier" | "custom" | "last-used" | "manager";
 
 type StaffDraft = {
   allowBackOfficeAccess: boolean;
@@ -59,6 +63,17 @@ function emptyStaffDraft(branches: StaffAccessSnapshot["branches"], roles: Staff
   };
 }
 
+function defaultsFromSnapshot(snapshot: StaffAccessSnapshot): StaffCreateDefaults {
+  return snapshot.staffCreateDefaults ?? {
+    cashier: recommendedStaffSetup("cashier", snapshot.branches),
+    manager: recommendedStaffSetup("manager", snapshot.branches),
+  };
+}
+
+function validBranchId(branchId: string, branches: StaffAccessSnapshot["branches"], fallback: string) {
+  return branches.some((branch) => branch.id === branchId) ? branchId : fallback;
+}
+
 export function StaffControlSection({
   actorIsOwner = false,
   actorUserId,
@@ -90,13 +105,19 @@ export function StaffControlSection({
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
   const [confirmReactivateId, setConfirmReactivateId] = useState<string | null>(null);
   const [confirmApprovalRule, setConfirmApprovalRule] = useState<keyof typeof APPROVAL_RULE_LABELS | null>(null);
-  const [staffPreset, setStaffPreset] = useState<"customize" | "default" | "last-used">("default");
-  const [lastUsed, setLastUsed] = useState<StaffLastUsedPreset | null>(null);
+  const [staffPreset, setStaffPreset] = useState<StaffPresetChoice>("cashier");
+  const [createDefaults, setCreateDefaults] = useState<StaffCreateDefaults>(() => defaultsFromSnapshot(initialSnapshot));
+  const [staffNotice, setStaffNotice] = useState<string | null>(null);
+  const [staffFormError, setStaffFormError] = useState<string | null>(null);
+  const [resetKind, setResetKind] = useState<"cashier" | "manager" | null>(null);
+  const presetRadioRef = useRef<HTMLInputElement>(null);
+  const submitLock = useRef(false);
 
   useEffect(() => {
     setStaff(initialSnapshot.staff);
     setApprovalRules(initialSnapshot.approvalRules);
     setPendingApprovals(initialSnapshot.pendingApprovals);
+    setCreateDefaults(defaultsFromSnapshot(initialSnapshot));
   }, [initialSnapshot]);
 
   const assignableRoles = initialSnapshot.roles.filter((entry) => isAssignableStaffRole(entry));
@@ -157,10 +178,12 @@ export function StaffControlSection({
   }
 
   function openAddStaff() {
+    const defaults = defaultsFromSnapshot(initialSnapshot);
     setEditingStaffId(null);
-    setStaffPreset("default");
-    setLastUsed(readStaffLastUsed());
-    setStaffDraft(emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles));
+    setStaffPreset("cashier");
+    setStaffFormError(null);
+    setCreateDefaults(defaults);
+    setStaffDraft(draftFromKind("cashier", emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles), defaults));
     setStaffModalOpen(true);
   }
 
@@ -187,16 +210,19 @@ export function StaffControlSection({
 
   useEffect(() => {
     if (!staffModalOpen) return;
-    nameInputRef.current?.focus();
+    if (editingStaffId) nameInputRef.current?.focus();
+    else presetRadioRef.current?.focus();
   }, [staffModalOpen, editingStaffId]);
 
   function saveStaff() {
+    if (isPending || submitLock.current) return;
+    setStaffFormError(null);
     if (!staffDraft.roleId) {
-      onNotify({ text: tSettings("staffRoleRequired", locale), tone: "error" });
+      setStaffFormError(tSettings("staffRoleRequired", locale));
       return;
     }
-    if (!staffDraft.branchId) {
-      onNotify({ text: tSettings("branchRequired", locale), tone: "error" });
+    if (!staffDraft.branchId || !initialSnapshot.branches.some((branch) => branch.id === staffDraft.branchId)) {
+      setStaffFormError(tSettings("branchRequired", locale));
       return;
     }
     try {
@@ -207,40 +233,55 @@ export function StaffControlSection({
         username: staffDraft.username,
       });
     } catch (error) {
-      onNotify({ text: localizeSettingsError(error instanceof Error ? error.message : "", locale), tone: "error" });
+      setStaffFormError(localizeSettingsError(error instanceof Error ? error.message : "", locale));
       return;
     }
     if (staffDraft.password && staffDraft.password !== staffDraft.confirmPassword) {
-      onNotify({ text: tSettings("passwordsDoNotMatch", locale), tone: "error" });
+      setStaffFormError(tSettings("passwordsDoNotMatch", locale));
       return;
     }
+    submitLock.current = true;
     const creating = !editingStaffId;
-    const preset = {
+    const payload = {
       allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
       allowPosAccess: staffDraft.allowPosAccess,
+      assignedTerminal: staffDraft.assignedTerminal,
+      branchId: staffDraft.branchId,
+      fullName: staffDraft.fullName.trim(),
+      id: editingStaffId ?? undefined,
+      password: staffDraft.password || undefined,
+      requirePasswordChange: staffDraft.requirePasswordChange,
+      roleId: staffDraft.roleId,
+      status: staffDraft.status,
+      username: staffDraft.username.trim(),
+    };
+    const lastUsedPreset = {
+      allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
+      allowPosAccess: staffDraft.allowPosAccess,
+      branchId: staffDraft.branchId,
+      companyId: initialSnapshot.companyId ?? "",
       roleId: staffDraft.roleId,
     };
-    runMutation(
-      async () => {
-        const result = await saveStaffMemberAction({
-          allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
-          allowPosAccess: staffDraft.allowPosAccess,
-          assignedTerminal: staffDraft.assignedTerminal,
-          branchId: staffDraft.branchId,
-          fullName: staffDraft.fullName.trim(),
-          id: editingStaffId ?? undefined,
-          password: staffDraft.password || undefined,
-          requirePasswordChange: staffDraft.requirePasswordChange,
-          roleId: staffDraft.roleId,
-          status: staffDraft.status,
-          username: staffDraft.username.trim(),
-        });
-        if (result.ok && creating) writeStaffLastUsed(preset);
-        return result;
-      },
-      editingStaffId ? tSettings("staffUpdated", locale) : tSettings("staffCreated", locale),
-    );
-    setStaffModalOpen(false);
+    startTransition(async () => {
+      try {
+      const result = await saveStaffMemberAction(payload);
+      if (!result.ok) {
+        setStaffDraft((current) => ({ ...current, confirmPassword: "", password: "" }));
+        setStaffFormError(localizeSettingsError(result.error, locale));
+        return;
+      }
+      if (creating) writeStaffLastUsed(lastUsedPreset);
+      const success = creating ? tSettings("staffCreated", locale) : tSettings("staffUpdated", locale);
+      setStaffNotice(success);
+      onNotify({ text: success, tone: "success" });
+      setStaffModalOpen(false);
+      setStaffPreset("cashier");
+      setStaffDraft(draftFromKind("cashier", emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles), createDefaults));
+      router.refresh();
+      } finally {
+        submitLock.current = false;
+      }
+    });
   }
 
   function disableStaff(memberId: string) {
@@ -261,21 +302,114 @@ export function StaffControlSection({
     return member.branchName.trim() ? member.branchName : tSettings("unknownBranch", locale);
   }
 
-  function applyStaffPreset(mode: "default" | "last-used") {
-    setStaffPreset(mode);
-    if (mode === "default") {
-      const next = emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles);
-      setStaffDraft((current) => ({ ...current, allowBackOfficeAccess: next.allowBackOfficeAccess, allowPosAccess: next.allowPosAccess, roleId: next.roleId }));
+  function draftFromKind(kind: "cashier" | "manager", current: StaffDraft, defaults: StaffCreateDefaults): StaffDraft {
+    const template = kind === "cashier" ? "Staff/Cashier" : "Manager";
+    const role = initialSnapshot.roles.find((entry) => isAssignableStaffRole(entry) && entry.templateKey === template);
+    const setup = defaults[kind];
+    return {
+      ...current,
+      allowBackOfficeAccess: setup.allowBackOfficeAccess,
+      allowPosAccess: setup.allowPosAccess,
+      branchId: validBranchId(setup.branchId, initialSnapshot.branches, initialSnapshot.branches[0]?.id ?? current.branchId),
+      roleId: role?.id ?? current.roleId,
+    };
+  }
+
+  function applyNamedPreset(kind: "cashier" | "manager") {
+    const template = kind === "cashier" ? "Staff/Cashier" : "Manager";
+    const role = assignableRoles.find((entry) => entry.templateKey === template);
+    setStaffFormError(role ? null : tSettings("staffRoleRequired", locale));
+    setStaffPreset(kind);
+    setStaffDraft((current) => draftFromKind(kind, current, createDefaults));
+  }
+
+  function applyLastUsedPreset() {
+    const stored = readStaffLastUsed(initialSnapshot.companyId ?? "");
+    setStaffPreset("last-used");
+    if (!stored) {
+      setStaffFormError(tSettings("noLastUsedOnDevice", locale));
       return;
     }
-    if (!lastUsed) return;
-    const roleStillExists = assignableRoles.some((role) => role.id === lastUsed.roleId);
+    const roleStillExists = assignableRoles.some((role) => role.id === stored.roleId);
+    setStaffFormError(null);
     setStaffDraft((current) => ({
       ...current,
-      allowBackOfficeAccess: lastUsed.allowBackOfficeAccess,
-      allowPosAccess: lastUsed.allowPosAccess,
-      roleId: roleStillExists ? lastUsed.roleId : current.roleId,
+      allowBackOfficeAccess: stored.allowBackOfficeAccess,
+      allowPosAccess: stored.allowPosAccess,
+      branchId: validBranchId(stored.branchId, initialSnapshot.branches, current.branchId),
+      roleId: roleStillExists ? stored.roleId : current.roleId,
     }));
+  }
+
+  function choosePreset(choice: StaffPresetChoice) {
+    if (choice === "cashier" || choice === "manager") {
+      applyNamedPreset(choice);
+      return;
+    }
+    if (choice === "last-used") {
+      applyLastUsedPreset();
+      return;
+    }
+    setStaffFormError(null);
+    setStaffPreset("custom");
+  }
+
+  function markCustom(patch: Partial<StaffDraft>) {
+    setStaffDraft((current) => ({ ...current, ...patch }));
+    if (!editingStaffId) setStaffPreset("custom");
+  }
+
+  function applySelectedRoleDefault() {
+    const role = assignableRoles.find((entry) => entry.id === staffDraft.roleId);
+    if (role?.templateKey === "Staff/Cashier") applyNamedPreset("cashier");
+    if (role?.templateKey === "Manager") applyNamedPreset("manager");
+  }
+
+  function saveCreateDefault(kind: "cashier" | "manager") {
+    if (!actorIsOwner || isPending) return;
+    setStaffFormError(null);
+    startTransition(async () => {
+      const result = await saveStaffCreateDefaultAction({
+        allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
+        allowPosAccess: staffDraft.allowPosAccess,
+        branchId: staffDraft.branchId,
+        kind,
+        reset: false,
+      });
+      if (!result.ok || !result.data) {
+        setStaffFormError(localizeSettingsError(result.error, locale));
+        return;
+      }
+      setCreateDefaults(result.data);
+      setStaffNotice(tSettings("staffDefaultSaved", locale));
+      onNotify({ text: tSettings("staffDefaultSaved", locale), tone: "success" });
+    });
+  }
+
+  function commitResetDefault() {
+    if (!resetKind || isPending) return;
+    const kind = resetKind;
+    setResetKind(null);
+    startTransition(async () => {
+      const result = await saveStaffCreateDefaultAction({
+        allowBackOfficeAccess: kind === "manager",
+        allowPosAccess: true,
+        branchId: initialSnapshot.branches[0]?.id ?? "",
+        kind,
+        reset: true,
+      });
+      if (!result.ok || !result.data) {
+        setStaffFormError(localizeSettingsError(result.error, locale));
+        return;
+      }
+      const savedDefaults = result.data;
+      setCreateDefaults(savedDefaults);
+      if (staffPreset === kind) {
+        setStaffDraft((draft) => draftFromKind(kind, draft, savedDefaults));
+      }
+      setStaffNotice(tSettings("staffDefaultReset", locale));
+      onNotify({ text: tSettings("staffDefaultReset", locale), tone: "success" });
+    });
   }
 
   function decideApproval(approvalId: string, status: "approved" | "rejected") {
@@ -340,6 +474,9 @@ export function StaffControlSection({
                 </button>
               </div>
             </div>
+            {staffNotice ? (
+              <p className="mt-3 rounded-md border border-success/40 bg-success/10 p-3 text-sm text-foreground" role="status">{staffNotice}</p>
+            ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <select aria-label={tSettings("status", locale)} className="field-input h-10" value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value as "all" | "active" | "disabled")}>
                 <option value="all">{tSettings("allStatuses", locale)}</option>
@@ -460,6 +597,38 @@ export function StaffControlSection({
           )}
         >
           <div className="grid gap-6">
+            {staffFormError ? <p className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-foreground" role="alert">{staffFormError}</p> : null}
+            {!editingStaffId ? (
+              <fieldset className="grid gap-3">
+                <legend className="text-sm font-semibold">{tSettings("staffPreset", locale)}</legend>
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="radiogroup" aria-label={tSettings("staffPreset", locale)}>
+                  {([
+                    ["cashier", "cashierDefault"],
+                    ["manager", "managerDefault"],
+                    ["last-used", "lastUsedPreset"],
+                    ["custom", "customPreset"],
+                  ] as const).map(([value, labelKey], index) => {
+                    const selected = staffPreset === value;
+                    return (
+                      <label className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold ${selected ? "border-primary bg-primary/10 text-foreground" : "border-border bg-card text-foreground"}`} key={value}>
+                        <input
+                          ref={index === 0 ? presetRadioRef : undefined}
+                          checked={selected}
+                          className="size-4 accent-primary"
+                          name="staff-preset"
+                          type="radio"
+                          value={value}
+                          onChange={() => choosePreset(value)}
+                        />
+                        <span>{tSettings(labelKey, locale)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">{staffPreset === "last-used" ? `${tSettings("lastUsedPreset", locale)} · ${tSettings("scopeThisDevice", locale)}` : `${tSettings("staffPreset", locale)} · ${tSettings("scopeCompany", locale)}`}</p>
+                <p className="text-xs text-muted-foreground">{tSettings("individualOverridesLater", locale)}</p>
+              </fieldset>
+            ) : null}
             <FormSection title={tSettings("basicInformation", locale)}>
               <Field label={tSettings("fullName", locale)}>
                 <input ref={nameInputRef} autoComplete="name" className="field-input" required value={staffDraft.fullName} onChange={(event) => setStaffDraft((current) => ({ ...current, fullName: event.target.value }))} />
@@ -469,34 +638,21 @@ export function StaffControlSection({
               </Field>
             </FormSection>
             <FormSection title={tSettings("roleAndBranch", locale)}>
-              {!editingStaffId ? (
-                <fieldset className="grid gap-2 md:col-span-2">
-                  <legend className="text-sm font-semibold">{tSettings("staffPreset", locale)}</legend>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input checked={staffPreset === "default"} name="staff-preset" type="radio" onChange={() => applyStaffPreset("default")} />
-                    {tSettings("useRoleDefault", locale)}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input checked={staffPreset === "last-used"} disabled={!lastUsed} name="staff-preset" type="radio" onChange={() => applyStaffPreset("last-used")} />
-                    {tSettings("useLastUsed", locale)}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input checked={staffPreset === "customize"} name="staff-preset" type="radio" onChange={() => setStaffPreset("customize")} />
-                    {tSettings("customizeStaffAccess", locale)}
-                  </label>
-                  {staffPreset === "customize" ? <p className="text-xs text-muted-foreground">{tSettings("individualOverridesLater", locale)}</p> : null}
-                </fieldset>
-              ) : null}
               <Field label={tSettings("role", locale)}>
-                <select aria-label={tSettings("role", locale)} className="field-input" disabled={editingSelf} value={staffDraft.roleId} onChange={(event) => setStaffDraft((current) => ({ ...current, roleId: event.target.value }))}>
+                <select aria-label={tSettings("role", locale)} className="field-input" disabled={editingSelf} value={staffDraft.roleId} onChange={(event) => markCustom({ roleId: event.target.value })}>
                   {assignableRoles.map((entry) => <option key={entry.id} value={entry.id}>{`${localizeRoleTemplate(entry.name, locale)} — ${roleOptionSummary(entry.templateKey, locale)}`}</option>)}
                 </select>
               </Field>
               <Field label={tSettings("branch", locale)}>
-                <select aria-label={tSettings("branch", locale)} className="field-input" value={staffDraft.branchId} onChange={(event) => setStaffDraft((current) => ({ ...current, branchId: event.target.value }))}>
+                <select aria-label={tSettings("branch", locale)} className="field-input" value={staffDraft.branchId} onChange={(event) => markCustom({ branchId: event.target.value })}>
                   {initialSnapshot.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                 </select>
               </Field>
+              {!editingStaffId && ["Staff/Cashier", "Manager"].includes(assignableRoles.find((entry) => entry.id === staffDraft.roleId)?.templateKey ?? "") ? (
+                <div className="md:col-span-2">
+                  <button className="inline-flex min-h-11 items-center rounded-md border border-border bg-card px-3 text-sm font-semibold" type="button" onClick={applySelectedRoleDefault}>{tSettings("applyRoleDefault", locale)}</button>
+                </div>
+              ) : null}
             </FormSection>
             <FormSection title={tSettings("access", locale)}>
               <AccessSwitch
@@ -504,17 +660,28 @@ export function StaffControlSection({
                 description={tSettings("posAccessHelp", locale)}
                 disabled={editingSelf}
                 label={tSettings("posAccess", locale)}
-                onChange={(allowPosAccess) => setStaffDraft((current) => ({ ...current, allowPosAccess }))}
+                onChange={(allowPosAccess) => markCustom({ allowPosAccess })}
               />
               <AccessSwitch
                 checked={staffDraft.allowBackOfficeAccess}
                 description={tSettings("backOfficeAccessHelp", locale)}
                 disabled={editingSelf}
                 label={tSettings("backOfficeAccess", locale)}
-                onChange={(allowBackOfficeAccess) => setStaffDraft((current) => ({ ...current, allowBackOfficeAccess }))}
+                onChange={(allowBackOfficeAccess) => markCustom({ allowBackOfficeAccess })}
               />
               {!staffDraft.allowPosAccess && !staffDraft.allowBackOfficeAccess ? (
                 <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground md:col-span-2" role="alert">{tSettings("bothAccessOffWarning", locale)}</p>
+              ) : null}
+              {!editingStaffId && actorIsOwner ? (
+                <div className="grid gap-2 md:col-span-2">
+                  <p className="text-xs text-muted-foreground">{tSettings("scopeCompany", locale)} · {tSettings("staffDefaultCompanyHelp", locale)}</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => saveCreateDefault("cashier")}>{tSettings("saveAsCashierDefault", locale)}</button>
+                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => saveCreateDefault("manager")}>{tSettings("saveAsManagerDefault", locale)}</button>
+                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => setResetKind("cashier")}>{tSettings("resetCashierDefault", locale)}</button>
+                    <button className="min-h-11 rounded-md border border-border bg-card px-3 text-sm font-semibold" disabled={isPending} type="button" onClick={() => setResetKind("manager")}>{tSettings("resetManagerDefault", locale)}</button>
+                  </div>
+                </div>
               ) : null}
             </FormSection>
             <FormSection title={tSettings("accountStatus", locale)}>
@@ -534,16 +701,13 @@ export function StaffControlSection({
                 <input autoComplete="new-password" className="field-input" type="password" value={staffDraft.confirmPassword} onChange={(event) => setStaffDraft((current) => ({ ...current, confirmPassword: event.target.value }))} />
               </Field>
             </FormSection>
-            <section className="rounded-lg border border-border bg-background p-4">
-              <h3 className="text-sm font-semibold">{tSettings("effectiveAccess", locale)}</h3>
-              <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                <div><dt className="text-xs text-muted-foreground">{tSettings("pos", locale)}</dt><dd>{staffDraft.allowPosAccess ? tSettings("allowed", locale) : tSettings("blocked", locale)}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">{tSettings("backOffice", locale)}</dt><dd>{staffDraft.allowBackOfficeAccess ? tSettings("allowed", locale) : tSettings("backOfficeModulesBlocked", locale)}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">{tSettings("role", locale)}</dt><dd>{localizeRoleTemplate(assignableRoles.find((entry) => entry.id === staffDraft.roleId)?.name ?? "", locale)}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">{tSettings("branch", locale)}</dt><dd>{initialSnapshot.branches.find((branch) => branch.id === staffDraft.branchId)?.name || tSettings("unknownBranch", locale)}</dd></div>
-              </dl>
-              <p className="mt-3 text-xs text-muted-foreground">{tSettings("currentRoleAccess", locale)}</p>
-            </section>
+            <StaffAccessPreviewPanel
+              branchName={initialSnapshot.branches.find((branch) => branch.id === staffDraft.branchId)?.name || tSettings("unknownBranch", locale)}
+              locale={locale}
+              permissionKeys={initialSnapshot.permissionKeysByRole?.[staffDraft.roleId] ?? []}
+              roleName={localizeRoleTemplate(assignableRoles.find((entry) => entry.id === staffDraft.roleId)?.name ?? "", locale)}
+              staffDraft={staffDraft}
+            />
           </div>
         </SettingsLargeDrawer>
       ) : null}
@@ -586,6 +750,25 @@ export function StaffControlSection({
         </AppSmallModal>
       ) : null}
 
+      {resetKind ? (
+        <AppSmallModal
+          closeAriaLabel={tSettings("closeModal", locale)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setResetKind(null)}>{tSettings("cancel", locale)}</button>
+              <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitResetDefault}>{tSettings("resetToDefault", locale)}</button>
+            </div>
+          )}
+          onClose={() => setResetKind(null)}
+          size="sm"
+          title={tSettings("resetStaffDefaultTitle", locale)}
+        >
+          <p className="text-sm text-muted-foreground">{fillSettingsCopy(tSettings("resetStaffDefaultBody", locale), { role: tSettings(resetKind === "cashier" ? "cashierDefault" : "managerDefault", locale) })}</p>
+        </AppSmallModal>
+      ) : null}
+
       {confirmApprovalRule ? (
         <AppSmallModal
           closeAriaLabel={tSettings("closeModal", locale)}
@@ -614,6 +797,48 @@ function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }
 
 function Field({ children, label }: { children: React.ReactNode; label: string }) {
   return <label className="grid gap-2 text-sm"><span className="font-medium">{label}</span>{children}</label>;
+}
+
+function StaffAccessPreviewPanel({
+  branchName,
+  locale,
+  permissionKeys,
+  roleName,
+  staffDraft,
+}: {
+  branchName: string;
+  locale: SupportedLocale;
+  permissionKeys: readonly string[];
+  roleName: string;
+  staffDraft: Pick<StaffDraft, "allowBackOfficeAccess" | "allowPosAccess">;
+}) {
+  const preview = previewStaffAccess({
+    allowBackOfficeAccess: staffDraft.allowBackOfficeAccess,
+    allowPosAccess: staffDraft.allowPosAccess,
+    permissionKeys,
+  });
+  const reportsLabel = preview.reports === "today"
+    ? tSettings("reportsTodayOnly", locale)
+    : preview.reports === "historical"
+      ? tSettings("reportsHistorical", locale)
+      : tSettings("reportsHidden", locale);
+  return (
+    <section aria-labelledby="effective-access-preview-title" className="rounded-lg border border-border bg-background p-4">
+      <h3 className="text-sm font-semibold" id="effective-access-preview-title">{tSettings("effectiveAccessPreview", locale)}</h3>
+      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <div><dt className="text-xs text-muted-foreground">{tSettings("role", locale)}</dt><dd>{roleName || tSettings("staffRoleRequired", locale)}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("branch", locale)}</dt><dd>{branchName}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("pos", locale)}</dt><dd>{preview.pos === "allowed" ? tSettings("allowed", locale) : tSettings("blocked", locale)}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("backOffice", locale)}</dt><dd>{preview.backOffice === "allowed" ? tSettings("allowed", locale) : tSettings("blocked", locale)}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("previewReports", locale)}</dt><dd>{reportsLabel}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("reportsProfit", locale)}</dt><dd>{preview.profit === "visible" ? tSettings("previewVisible", locale) : tSettings("reportsHidden", locale)}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("reportsCost", locale)}</dt><dd>{preview.cost === "visible" ? tSettings("previewVisible", locale) : tSettings("reportsHidden", locale)}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">{tSettings("permRefund", locale)}</dt><dd>{preview.refund === "allowed" ? tSettings("allowed", locale) : tSettings("previewDenied", locale)}</dd></div>
+      </dl>
+      {!staffDraft.allowBackOfficeAccess ? <p className="mt-3 text-xs text-muted-foreground">{tSettings("backOfficeBlocksReports", locale)}</p> : null}
+      <p className="mt-3 text-xs text-muted-foreground">{tSettings("staffPresetRoleNote", locale)}</p>
+    </section>
+  );
 }
 
 function FormSection({ children, title }: { children: React.ReactNode; title: string }) {
