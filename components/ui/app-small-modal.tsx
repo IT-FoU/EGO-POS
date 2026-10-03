@@ -55,7 +55,7 @@ export function AppSmallModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/60"
+      className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-4"
       onClick={closeOnBackdrop ? onClose : undefined}
     >
       <section
