@@ -497,7 +497,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
           ? tSettings("scopeCompany", locale)
           : tSettings("scopeCompany", locale);
     return (<div className="flex flex-col gap-6">
-      <Link className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary hover:underline" href="/settings" scroll={false}>
+            <Link className="settings-motion-back inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary" href="/settings" scroll={false}>
         <ArrowLeft className="size-4" aria-hidden="true" />
         {tSettings("backToSettings", locale)}
       </Link>
@@ -510,7 +510,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
           </div>
         </div>
         {canSaveCompanySettings ? (
-        <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60" disabled={isPending || !isSectionDirty()} type="button" onClick={saveSettings}>
+        <button className="settings-motion-save inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending || !isSectionDirty()} type="button" onClick={saveSettings}>
           <Save aria-hidden="true"/>
           {isPending ? tSettings("saving", locale) : tSettings("saveSettings", locale)}
         </button>
@@ -600,8 +600,8 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
                     aria-checked={selected}
                     aria-pressed={selected}
                     className={selected
-                      ? "h-11 min-w-[88px] rounded-md border border-primary bg-primary/10 px-3 text-sm font-semibold text-primary shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      : "h-11 min-w-[88px] rounded-md border border-border bg-background px-3 text-sm font-semibold transition hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"}
+                      ? "settings-motion-tab h-11 min-w-[88px] rounded-md border border-primary bg-primary/10 px-3 text-sm font-semibold text-primary shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      : "settings-motion-tab h-11 min-w-[88px] rounded-md border border-border bg-background px-3 text-sm font-semibold hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"}
                     key={size}
                     role="radio"
                     type="button"
@@ -741,8 +741,8 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
             <div className="text-sm font-semibold">{tSettings("displayTemplate", locale)}</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               {CUSTOMER_DISPLAY_TEMPLATE_OPTIONS.map((template) => (<button className={displaySettings.template === template.id
-                ? "rounded-md border border-primary bg-primary/10 p-3 text-left text-sm shadow-sm"
-                : "rounded-md border border-border bg-background p-3 text-left text-sm transition hover:border-primary"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
+                ? "settings-motion-tab rounded-md border border-primary bg-primary/10 p-3 text-left text-sm shadow-sm"
+                : "settings-motion-tab rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
                   <div className="font-semibold">{template.name}</div>
                   <div className="mt-2 text-xs leading-5 text-muted-foreground">{localizeCustomerDisplayTemplateDescription(template.id, template.description, locale)}</div>
                   <div className="mt-3 text-xs font-semibold text-primary">

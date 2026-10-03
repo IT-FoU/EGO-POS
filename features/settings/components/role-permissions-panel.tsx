@@ -131,7 +131,7 @@ export function RolePermissionsPanel({
           return (
             <button
               aria-pressed={role.id === selected?.id}
-              className={role.id === selected?.id ? "rounded-lg border border-primary bg-primary/10 p-4 text-left" : "rounded-lg border border-border bg-card p-4 text-left hover:border-primary"}
+              className={role.id === selected?.id ? "settings-motion-tab rounded-lg border border-primary bg-primary/10 p-4 text-left" : "settings-motion-tab rounded-lg border border-border bg-card p-4 text-left hover:border-primary"}
               key={role.id}
               type="button"
               onClick={() => chooseRole(role.id)}
@@ -219,7 +219,7 @@ export function RolePermissionsPanel({
               })}
               {roleNotice ? <p className={roleNotice.tone === "success" ? "rounded-md border border-success/40 bg-success/10 p-3 text-sm text-foreground" : "rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-foreground"} role={roleNotice.tone === "success" ? "status" : "alert"}>{roleNotice.text}</p> : null}
               <div className="flex flex-col gap-2 sm:flex-row">
-                <button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={locked || isPending || !dirty} type="button" onClick={() => setConfirmSave(true)}>
+                <button className="settings-motion-save h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={locked || isPending || !dirty} type="button" onClick={() => setConfirmSave(true)}>
                   {fillSettingsCopy(tSettings("savePermissions", locale), { role: localizeRoleTemplate(selected.name, locale) })}
                 </button>
                 <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold disabled:opacity-60" disabled={locked || isPending} type="button" onClick={() => setConfirmReset(true)}>

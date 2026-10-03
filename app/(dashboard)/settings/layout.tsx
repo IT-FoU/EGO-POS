@@ -16,9 +16,9 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   }
 
   return (
-    <>
+    <div data-settings-ui>
       <SettingsIndexScrollGuard />
       {children}
-    </>
+    </div>
   );
 }

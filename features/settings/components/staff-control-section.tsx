@@ -591,7 +591,7 @@ export function StaffControlSection({
           footer={(
             <div className="flex w-full flex-wrap justify-end gap-2">
               <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setStaffModalOpen(false)}>{tSettings("cancel", locale)}</button>
-              <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" disabled={isPending} type="button" onClick={saveStaff}>
+              <button className="settings-motion-save inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending} type="button" onClick={saveStaff}>
                 <CheckCircle2 className="size-4" aria-hidden="true" />
                 {editingStaffId ? tSettings("saveStaff", locale) : tSettings("addStaff", locale)}
               </button>
@@ -878,13 +878,13 @@ function AccessSwitch({
         aria-checked={checked}
         aria-describedby={descriptionId}
         aria-labelledby={labelId}
-        className={checked ? "relative h-7 w-12 shrink-0 rounded-full bg-primary disabled:opacity-50" : "relative h-7 w-12 shrink-0 rounded-full bg-muted disabled:opacity-50"}
+        className={checked ? "settings-motion-switch relative h-7 w-12 shrink-0 rounded-full bg-primary disabled:opacity-50" : "settings-motion-switch relative h-7 w-12 shrink-0 rounded-full bg-muted disabled:opacity-50"}
         disabled={disabled}
         role="switch"
         type="button"
         onClick={() => onChange(!checked)}
       >
-        <span className={checked ? "absolute top-0.5 left-5 size-6 rounded-full bg-primary-foreground" : "absolute top-0.5 left-0.5 size-6 rounded-full bg-foreground"} />
+        <span className={checked ? "settings-motion-knob absolute top-0.5 left-5 size-6 rounded-full bg-primary-foreground" : "settings-motion-knob absolute top-0.5 left-0.5 size-6 rounded-full bg-foreground"} />
       </button>
     </div>
   );
