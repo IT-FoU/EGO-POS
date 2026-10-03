@@ -431,7 +431,7 @@ export function StaffControlSection({
                 <div className="rounded-md border border-border bg-card p-3" key={ruleKey}>
                   <div className="text-xs font-semibold">{localizeApprovalRule(ruleKey, locale)}</div>
                   <label className="mt-2 flex items-center gap-2 text-xs">
-                    <input checked={rule?.isEnabled ?? true} className="size-4 accent-primary" type="checkbox" onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, isEnabled: event.target.checked } : entry))} />
+                    <input checked={rule?.isEnabled ?? true} className="settings-motion-choice size-4 accent-primary" type="checkbox" onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, isEnabled: event.target.checked } : entry))} />
                     {tSettings("enabled", locale)}
                   </label>
                   <select className="field-input mt-2 h-9 text-xs" value={rule?.approverRole ?? "owner"} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, approverRole: event.target.value } : entry))}>
@@ -470,7 +470,7 @@ export function StaffControlSection({
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input aria-label={tSettings("searchStaff", locale)} className="field-input h-10 sm:w-64" placeholder={tSettings("searchStaff", locale)} value={staffQuery} onChange={(event) => setStaffQuery(event.target.value)} />
-                <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={openAddStaff}>
+                <button className="settings-motion-save inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={openAddStaff}>
                   <Plus className="size-4" aria-hidden="true" />
                   {tSettings("addStaff", locale)}
                 </button>
@@ -616,7 +616,7 @@ export function StaffControlSection({
                         <input
                           ref={index === 0 ? presetRadioRef : undefined}
                           checked={selected}
-                          className="size-4 accent-primary"
+                          className="settings-motion-choice size-4 accent-primary"
                           name="staff-preset"
                           type="radio"
                           value={value}

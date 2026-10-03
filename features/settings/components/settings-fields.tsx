@@ -52,7 +52,7 @@ export function Toggle({ checked, describedBy, label, onChange }: {
   return (
     <label className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-border bg-background px-3 text-sm font-medium">
       <span>{label}</span>
-      <input aria-describedby={describedBy} checked={checked} className="size-4 accent-primary" type="checkbox" onChange={(event) => onChange(event.target.checked)}/>
+      <input aria-describedby={describedBy} checked={checked} className="settings-motion-choice size-4 accent-primary" type="checkbox" onChange={(event) => onChange(event.target.checked)}/>
     </label>
   );
 }

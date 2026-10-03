@@ -539,7 +539,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
                 <div className="flex flex-wrap gap-2">
                   {/* Source markers: ui.confirm.logo ui.remove.logo */}
                   {isStagedImageDirty(logoStage) ? (<>
-                    <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending} type="button" onClick={confirmLogo}>{isPending ? tSettings("uploadingLogo", locale) : tSettings("confirm", locale)}</button>
+                    <button className="settings-motion-save h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={isPending} type="button" onClick={confirmLogo}>{isPending ? tSettings("uploadingLogo", locale) : tSettings("confirm", locale)}</button>
                     <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-60" disabled={isPending} type="button" onClick={() => logoInputRef.current?.click()}>{tSettings("change", locale)}</button>
                     <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-60" disabled={isPending} type="button" onClick={cancelLogoDraft}>{tSettings("cancel", locale)}</button>
                   </>) : (<>
@@ -740,9 +740,9 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
           <div>
             <div className="text-sm font-semibold">{tSettings("displayTemplate", locale)}</div>
             <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {CUSTOMER_DISPLAY_TEMPLATE_OPTIONS.map((template) => (<button className={displaySettings.template === template.id
+              {CUSTOMER_DISPLAY_TEMPLATE_OPTIONS.map((template) => (<button aria-pressed={displaySettings.template === template.id} className={displaySettings.template === template.id
                 ? "settings-motion-tab rounded-md border border-primary bg-primary/10 p-3 text-left text-sm shadow-sm"
-                : "settings-motion-tab rounded-md border border-border bg-background p-3 text-left text-sm hover:border-primary"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
+                : "settings-motion-tab rounded-md border border-border bg-background p-3 text-left text-sm"} key={template.id} type="button" onClick={() => updateDisplayTemplate(template.id)}>
                   <div className="font-semibold">{template.name}</div>
                   <div className="mt-2 text-xs leading-5 text-muted-foreground">{localizeCustomerDisplayTemplateDescription(template.id, template.description, locale)}</div>
                   <div className="mt-3 text-xs font-semibold text-primary">
@@ -754,9 +754,9 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
           <div>
             <div className="text-sm font-semibold">{tSettings("qr", locale)}</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {CUSTOMER_DISPLAY_QR_STYLE_OPTIONS.map((option) => (<button className={displaySettings.qrDisplayStyle === option.id
-                ? "rounded-md border border-primary bg-primary/10 px-3 py-3 text-left text-sm font-semibold shadow-sm"
-                : "rounded-md border border-border bg-background px-3 py-3 text-left text-sm font-semibold transition hover:border-primary"} key={option.id} type="button" onClick={() => updateDisplayQrStyle(option.id)}>
+              {CUSTOMER_DISPLAY_QR_STYLE_OPTIONS.map((option) => (<button aria-pressed={displaySettings.qrDisplayStyle === option.id} className={displaySettings.qrDisplayStyle === option.id
+                ? "settings-motion-tab rounded-md border border-primary bg-primary/10 px-3 py-3 text-left text-sm font-semibold shadow-sm"
+                : "settings-motion-tab rounded-md border border-border bg-background px-3 py-3 text-left text-sm font-semibold"} key={option.id} type="button" onClick={() => updateDisplayQrStyle(option.id)}>
                   {option.name}
                 </button>))}
             </div>
@@ -780,7 +780,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
             <img className="aspect-video w-full object-cover" src={media.url} alt={media.name}/>)}
                       <div className="flex items-center justify-between gap-2 p-2">
                         <span className="truncate text-xs font-semibold">{media.name}</span>
-                        <button className="grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deleteDisplayMedia(media.id)} aria-label={tSettings("delete", locale)}>
+                        <button className="settings-motion-icon grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deleteDisplayMedia(media.id)} aria-label={tSettings("delete", locale)}>
                           <Trash2 className="size-4" aria-hidden="true"/>
                         </button>
                       </div>
@@ -795,7 +795,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
               <Field label={tSettings("promotionMessage", locale)}>
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <input className="field-input" value={promotionDraft} onChange={(event) => setPromotionDraft(event.target.value)}/>
-                  <button className="h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={addPromotionMessage}>
+                  <button className="settings-motion-save h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={addPromotionMessage}>
                     {tSettings("add", locale)}
                   </button>
                 </div>
@@ -803,7 +803,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
               <div className="grid gap-2">
                 {displaySettings.promotionMessages.map((promotion, index) => (<div className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm" key={`${promotion}-${index}`}>
                     <span className="min-w-0 truncate">{promotion}</span>
-                    <button className="grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deletePromotionMessage(index)} aria-label={tSettings("delete", locale)}>
+                    <button className="settings-motion-icon grid size-8 shrink-0 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => deletePromotionMessage(index)} aria-label={tSettings("delete", locale)}>
                       <Trash2 className="size-4" aria-hidden="true"/>
                     </button>
                   </div>))}
@@ -940,7 +940,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
             {settingsConfirm === "removeLogo" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyRemoveLogo}>{tSettings("remove", locale)}</button>) : null}
             {settingsConfirm === "resetThisPage" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAppearancePage}>{tSettings("resetThisPage", locale)}</button>) : null}
             {settingsConfirm === "resetAll" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAllDisplaySettings}>{tSettings("resetAllCustomerDisplay", locale)}</button>) : null}
-            {settingsConfirm === "taxChange" || settingsConfirm === "cashShiftOff" || settingsConfirm === "loyaltyChange" ? (<button className="h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSettingsSave}>{tSettings("applyChanges", locale)}</button>) : null}
+            {settingsConfirm === "taxChange" || settingsConfirm === "cashShiftOff" || settingsConfirm === "loyaltyChange" ? (<button className="settings-motion-save h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSettingsSave}>{tSettings("applyChanges", locale)}</button>) : null}
           </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplay", locale) : settingsConfirm === "taxChange" ? tSettings("taxChangeConfirmTitle", locale) : settingsConfirm === "loyaltyChange" ? tSettings("loyaltyChangeConfirmTitle", locale) : tSettings("cashShiftDisableConfirmTitle", locale)}>
           {settingsConfirm === "taxChange" ? (
             <ul className="grid gap-2 text-sm text-muted-foreground">

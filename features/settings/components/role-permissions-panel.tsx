@@ -184,7 +184,7 @@ export function RolePermissionsPanel({
                         <input
                           aria-label={tSettings(entry.labelKey, locale)}
                           checked={enabled}
-                          className="size-4 accent-primary"
+                          className="settings-motion-choice size-4 accent-primary"
                           disabled={locked || isPending}
                           role="switch"
                           type="checkbox"
@@ -205,7 +205,7 @@ export function RolePermissionsPanel({
                             <input
                               aria-label={tSettings(item.labelKey, locale)}
                               checked={Boolean(draft[entry.id]?.advanced[item.id])}
-                              className="size-4 accent-primary"
+                              className="settings-motion-choice size-4 accent-primary"
                               disabled={locked || isPending || !enabled}
                               type="checkbox"
                               onChange={() => setDraft((current) => toggleRoleAdvanced(current, entry.id, item.id))}
