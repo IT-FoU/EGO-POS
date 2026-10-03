@@ -173,7 +173,7 @@ export function HelpSupportPanel({
         </dl>
         <div className="mt-5 flex flex-wrap gap-2">
           <button
-            className="inline-flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground"
+            className="settings-motion-save inline-flex h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground"
             type="button"
             onClick={() => void copyText("system")}
           >

@@ -161,18 +161,14 @@ textarea {
   }
 }
 
-/* Settings interaction polish. Scoped to [data-settings-ui]. */
+/* Settings press-depth standard. Scoped to [data-settings-ui]. */
+[data-settings-ui] button,
+[data-settings-ui] summary,
 [data-settings-ui] .settings-motion-back,
-[data-settings-ui] .settings-motion-save,
-[data-settings-ui] .settings-motion-close,
+[data-settings-ui] .settings-motion-back svg,
 [data-settings-ui] .settings-motion-row,
 [data-settings-ui] .settings-motion-chevron,
-[data-settings-ui] .settings-motion-switch,
 [data-settings-ui] .settings-motion-knob,
-[data-settings-ui] .settings-motion-tab,
-[data-settings-ui] .settings-motion-icon,
-[data-settings-ui] [role="dialog"] > header > button,
-[data-settings-ui] :not(header) > button:has(> svg:only-child),
 [data-settings-ui] label:has(> input[type="checkbox"]),
 [data-settings-ui] label:has(> input[type="radio"]),
 [data-settings-ui] input[type="checkbox"],
@@ -184,7 +180,8 @@ textarea {
     box-shadow 150ms ease,
     opacity 150ms ease,
     color 150ms ease,
-    left 170ms ease;
+    filter 150ms ease,
+    left 160ms ease;
 }
 
 [data-settings-ui] .settings-motion-back {
@@ -194,85 +191,101 @@ textarea {
 }
 
 [data-settings-ui] .settings-motion-back:hover {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  transform: translateX(-3px);
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
+[data-settings-ui] .settings-motion-back:hover svg {
+  transform: translateX(-2px);
 }
 
 [data-settings-ui] .settings-motion-back:active {
-  transform: translateX(-1px) scale(0.98);
-  transition-duration: 90ms;
-}
-
-[data-settings-ui] .settings-motion-save:not(:disabled):hover {
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--foreground) 16%, transparent);
-  transform: translateY(-2px);
-}
-
-[data-settings-ui] .settings-motion-save:not(:disabled):active {
   box-shadow: none;
-  transform: scale(0.98);
-  transition-duration: 90ms;
+  transform: scale(0.98) translateY(1px);
+  transition-duration: 100ms;
 }
 
-[data-settings-ui] .settings-motion-save:disabled {
+[data-settings-ui] .settings-motion-save:not(:disabled):hover,
+[data-settings-ui] button[class~="bg-primary"]:not(:disabled):not(.settings-motion-tab):hover {
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--foreground) 14%, transparent);
+  filter: brightness(1.05);
+}
+
+[data-settings-ui] button:not(:disabled):not(.settings-motion-switch):not(.settings-motion-tab):active {
+  box-shadow: none;
+  filter: none;
+  transform: scale(0.98) translateY(1px);
+  transition-duration: 100ms;
+}
+
+[data-settings-ui] button:disabled,
+[data-settings-ui] button:disabled:hover,
+[data-settings-ui] button:disabled:active {
   box-shadow: none;
   cursor: not-allowed;
+  filter: none;
   transform: none;
 }
 
-[data-settings-ui] .settings-motion-close,
-[data-settings-ui] [role="dialog"] > header > button {
-  border-radius: 9999px;
+[data-settings-ui] .settings-motion-close:not(:disabled):hover,
+[data-settings-ui] [role="dialog"] > header > button:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-color: var(--primary);
+  color: var(--foreground);
 }
 
-[data-settings-ui] .settings-motion-close:hover,
-[data-settings-ui] [role="dialog"] > header > button:hover {
-  background: color-mix(in srgb, var(--foreground) 8%, transparent);
-  transform: scale(1.04) rotate(6deg);
+[data-settings-ui] .settings-motion-icon:not(:disabled):hover,
+[data-settings-ui] button:not(:disabled):not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-switch):not(.settings-motion-close):not([class~="bg-primary"]):not([class*="border-danger"]):hover {
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--background));
+  border-color: var(--primary);
 }
 
-[data-settings-ui] .settings-motion-close:active,
-[data-settings-ui] [role="dialog"] > header > button:active {
-  transform: scale(0.96);
-  transition-duration: 90ms;
+[data-settings-ui] button:not(:disabled):not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-switch):not(.settings-motion-close):not([class~="bg-primary"])[class*="border-danger"]:hover {
+  background-color: color-mix(in srgb, var(--danger) 8%, var(--background));
+  border-color: var(--danger);
 }
 
 [data-settings-ui] .settings-motion-row:hover {
-  background: color-mix(in srgb, var(--primary) 7%, var(--background));
-  transform: translateX(2px);
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--background));
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 [data-settings-ui] .settings-motion-row:active {
-  transform: translateX(1px);
-  transition-duration: 90ms;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 40%, transparent);
+  transform: scale(0.99);
+  transition-duration: 100ms;
 }
 
 [data-settings-ui] .settings-motion-row:hover .settings-motion-chevron {
-  transform: translateX(2px);
+  transform: translateX(4px);
 }
 
-[data-settings-ui] .settings-motion-switch:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--foreground) 16%, transparent);
+[data-settings-ui] .settings-motion-switch:not(:disabled):hover {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
-[data-settings-ui] .settings-motion-tab:hover {
-  background: color-mix(in srgb, var(--primary) 8%, var(--background));
-}
-
-[data-settings-ui] .settings-motion-tab:active {
+[data-settings-ui] .settings-motion-switch:not(:disabled):active {
   transform: scale(0.98);
-  transition-duration: 90ms;
+  transition-duration: 100ms;
 }
 
-[data-settings-ui] :not(header) > button:not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-close):not(:disabled):has(> svg:only-child):hover,
-[data-settings-ui] .settings-motion-icon:not(:disabled):hover {
-  transform: scale(1.04);
+[data-settings-ui] .settings-motion-tab:not([aria-pressed="true"]):hover {
+  background-color: color-mix(in srgb, var(--primary) 8%, var(--background));
+  border-color: var(--primary);
 }
 
-[data-settings-ui] :not(header) > button:not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-close):not(:disabled):has(> svg:only-child):active,
-[data-settings-ui] .settings-motion-icon:not(:disabled):active {
-  transform: scale(0.97);
-  transition-duration: 90ms;
+[data-settings-ui] .settings-motion-tab:not(:disabled):active {
+  transform: scale(0.98) translateY(1px);
+  transition-duration: 100ms;
+}
+
+[data-settings-ui] summary:hover {
+  background-color: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+[data-settings-ui] summary:active {
+  transform: scale(0.99);
+  transition-duration: 100ms;
 }
 
 [data-settings-ui] label:has(> input[type="checkbox"]):hover,
@@ -282,31 +295,31 @@ textarea {
 
 [data-settings-ui] input[type="checkbox"]:hover,
 [data-settings-ui] input[type="radio"]:hover {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent);
 }
 
+[data-settings-ui] input[type="checkbox"]:active,
+[data-settings-ui] input[type="radio"]:active {
+  transform: scale(0.98);
+  transition-duration: 100ms;
+}
+
+[data-settings-ui] button:focus-visible,
 [data-settings-ui] .settings-motion-back:focus-visible,
-[data-settings-ui] .settings-motion-save:focus-visible,
-[data-settings-ui] .settings-motion-close:focus-visible,
-[data-settings-ui] .settings-motion-tab:focus-visible,
 [data-settings-ui] .settings-motion-switch:focus-visible,
-[data-settings-ui] [role="dialog"] > header > button:focus-visible {
+[data-settings-ui] summary:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-settings-ui] button,
+  [data-settings-ui] summary,
   [data-settings-ui] .settings-motion-back,
-  [data-settings-ui] .settings-motion-save,
-  [data-settings-ui] .settings-motion-close,
+  [data-settings-ui] .settings-motion-back svg,
   [data-settings-ui] .settings-motion-row,
   [data-settings-ui] .settings-motion-chevron,
-  [data-settings-ui] .settings-motion-switch,
   [data-settings-ui] .settings-motion-knob,
-  [data-settings-ui] .settings-motion-tab,
-  [data-settings-ui] .settings-motion-icon,
-  [data-settings-ui] [role="dialog"] > header > button,
-  [data-settings-ui] :not(header) > button:has(> svg:only-child),
   [data-settings-ui] label:has(> input[type="checkbox"]),
   [data-settings-ui] label:has(> input[type="radio"]),
   [data-settings-ui] input[type="checkbox"],
@@ -316,25 +329,20 @@ textarea {
       border-color 150ms ease,
       box-shadow 150ms ease,
       opacity 150ms ease,
-      color 150ms ease;
+      color 150ms ease,
+      filter 150ms ease;
   }
 
-  [data-settings-ui] .settings-motion-back:hover,
+  [data-settings-ui] .settings-motion-back:hover svg,
   [data-settings-ui] .settings-motion-back:active,
-  [data-settings-ui] .settings-motion-save:not(:disabled):hover,
-  [data-settings-ui] .settings-motion-save:not(:disabled):active,
-  [data-settings-ui] .settings-motion-close:hover,
-  [data-settings-ui] .settings-motion-close:active,
-  [data-settings-ui] .settings-motion-row:hover,
   [data-settings-ui] .settings-motion-row:active,
   [data-settings-ui] .settings-motion-row:hover .settings-motion-chevron,
-  [data-settings-ui] .settings-motion-tab:active,
-  [data-settings-ui] .settings-motion-icon:not(:disabled):hover,
-  [data-settings-ui] .settings-motion-icon:not(:disabled):active,
-  [data-settings-ui] [role="dialog"] > header > button:hover,
-  [data-settings-ui] [role="dialog"] > header > button:active,
-  [data-settings-ui] :not(header) > button:not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-close):not(:disabled):has(> svg:only-child):hover,
-  [data-settings-ui] :not(header) > button:not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-close):not(:disabled):has(> svg:only-child):active {
+  [data-settings-ui] .settings-motion-switch:not(:disabled):active,
+  [data-settings-ui] .settings-motion-tab:not(:disabled):active,
+  [data-settings-ui] button:not(:disabled):not(.settings-motion-switch):not(.settings-motion-tab):active,
+  [data-settings-ui] summary:active,
+  [data-settings-ui] input[type="checkbox"]:active,
+  [data-settings-ui] input[type="radio"]:active {
     transform: none;
   }
 }

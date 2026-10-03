@@ -304,7 +304,7 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
             <Plus className="size-4" aria-hidden="true"/>
             {tSettings("addBank", locale)}
           </button>
-          <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90" type="button" onClick={openAddAccount}>
+          <button className="settings-motion-save inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={openAddAccount}>
             <Plus className="size-4" aria-hidden="true"/>
             {tSettings("addQrAccount", locale)}
           </button>
@@ -339,13 +339,13 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
                     <div className="mt-1 text-xs text-muted-foreground">{fillSettingsCopy(tSettings("qrAccountsCount", locale), { count: qrAccounts.filter((account) => account.bankId === bank.id).length })}</div>
                   </div>
                   <div className="flex items-center gap-2 sm:justify-end">
-                    <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditBank(bank)} aria-label={tSettings("edit", locale)}>
+                    <button className="settings-motion-icon grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={() => openEditBank(bank)} aria-label={tSettings("edit", locale)}>
                       <Edit3 className="size-4" aria-hidden="true"/>
                     </button>
                     {bank.isActive ? null : (
                       <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" type="button" onClick={() => enableBank(bank)}>{tSettings("enable", locale)}</button>
                     )}
-                    <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setBankToDelete(bank)} aria-label={tSettings("delete", locale)}>
+                    <button className="settings-motion-icon grid size-9 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => setBankToDelete(bank)} aria-label={tSettings("delete", locale)}>
                       <Trash2 className="size-4" aria-hidden="true"/>
                     </button>
                   </div>
@@ -385,10 +385,10 @@ export function QrPaymentBankManagementSection({ branches, initialAccounts, init
                     <div className="flex flex-wrap gap-2 lg:justify-end">
                       <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewAccount(account)}>{tSettings("qrPreview", locale)}</button>
                       <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setDefaultQrAccount(account)}>{tSettings("setDefault", locale)}</button>
-                      <button className="grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:border-primary hover:text-primary" type="button" onClick={() => openEditAccount(account)} aria-label={tSettings("edit", locale)}>
+                      <button className="settings-motion-icon grid size-9 place-items-center rounded-md border border-border text-muted-foreground" type="button" onClick={() => openEditAccount(account)} aria-label={tSettings("edit", locale)}>
                         <Edit3 className="size-4" aria-hidden="true"/>
                       </button>
-                      <button className="grid size-9 place-items-center rounded-md border border-danger/40 text-danger transition hover:bg-danger/10" type="button" onClick={() => setAccountToDelete(account)} aria-label={tSettings("delete", locale)}>
+                      <button className="settings-motion-icon grid size-9 place-items-center rounded-md border border-danger/40 text-danger" type="button" onClick={() => setAccountToDelete(account)} aria-label={tSettings("delete", locale)}>
                         <Trash2 className="size-4" aria-hidden="true"/>
                       </button>
                     </div>
