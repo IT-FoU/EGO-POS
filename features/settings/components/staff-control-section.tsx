@@ -233,10 +233,12 @@ export function StaffControlSection({
         username: staffDraft.username,
       });
     } catch (error) {
+      setStaffDraft((current) => ({ ...current, confirmPassword: "", password: "" }));
       setStaffFormError(localizeSettingsError(error instanceof Error ? error.message : "", locale));
       return;
     }
     if (staffDraft.password && staffDraft.password !== staffDraft.confirmPassword) {
+      setStaffDraft((current) => ({ ...current, confirmPassword: "", password: "" }));
       setStaffFormError(tSettings("passwordsDoNotMatch", locale));
       return;
     }
