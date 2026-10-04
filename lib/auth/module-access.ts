@@ -1,4 +1,5 @@
-import { assertPermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { assertPermission, PermissionDeniedError, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { settingsSectionAllows, type SettingsSectionId } from "@/features/access-control/phase3-permissions";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import {
   isCanonicalModuleEnabled,
@@ -36,20 +37,30 @@ export async function requireAnyModuleAccess(tenant: TenantContext, moduleIds: C
 const STAFF_SETTINGS_SECTIONS = new Set(["approval-rules", "day-off", "ot", "staff"]);
 
 export async function requireSettingsDestination(tenant: TenantContext, section: string) {
-  if (section === "roles") {
-    await requireBackOfficeAccess(tenant);
-    await assertPermission(tenant, WRITE_PERMISSIONS.rolesManage);
-    return;
-  }
   if (section === "index") {
     await requireAnyModuleAccess(tenant, ["settings", "staff"]);
     return;
   }
-  if (STAFF_SETTINGS_SECTIONS.has(section)) {
-    await requireModuleAccess(tenant, "staff");
-    return;
+  const { access, keys } = await accessContext(tenant);
+  if (!access.allowBackOfficeAccess) throw new AccountAccessDeniedError();
+  if (!access.isOwner && !settingsSectionAllows(keys, section, "view")) {
+    throw new PermissionDeniedError(section);
   }
-  await requireModuleAccess(tenant, "settings");
+  if (section === "roles" || STAFF_SETTINGS_SECTIONS.has(section)) {
+    if (!access.isOwner && !isCanonicalModuleEnabled("staff", keys) && !isCanonicalModuleEnabled("settings", keys)) {
+      throw new AccountAccessDeniedError();
+    }
+    return access;
+  }
+  if (!access.isOwner && !isCanonicalModuleEnabled("settings", keys)) throw new AccountAccessDeniedError();
+  return access;
+}
+
+export async function requireSettingsSectionEdit(tenant: TenantContext, section: SettingsSectionId) {
+  const { access, keys } = await accessContext(tenant);
+  if (!access.allowBackOfficeAccess) throw new AccountAccessDeniedError();
+  if (access.isOwner || (settingsSectionAllows(keys, section, "view") && settingsSectionAllows(keys, section, "edit"))) return tenant;
+  throw new PermissionDeniedError(section);
 }
 
 export async function readNavigationAccess(tenant: TenantContext) {

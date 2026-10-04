@@ -177,7 +177,12 @@ export function grantExceedsActor(input: {
   if (input.nextPos && !input.actorPos) return true;
   if (input.nextBackOffice && !input.actorBackOffice) return true;
   const actor = new Set(input.actorKeys);
-  return input.roleKeys.some((key) => key !== FINE_MARKER && !key.endsWith(".access") && !actor.has(key));
+  const phase3 = input.roleKeys.includes("access.phase3");
+  return input.roleKeys.some((key) => {
+    if (key === FINE_MARKER || key === "access.phase3" || key.endsWith(".access")) return false;
+    if (phase3 && (key === "settings.view" || key === "settings.edit" || key === "settings.manage")) return false;
+    return !actor.has(key);
+  });
 }
 
 export function legacyFineKeys(existing: readonly string[], templateKey: string) {

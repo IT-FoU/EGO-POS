@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
+import { accountGateForPermission, requireAccountGate, requireActiveMembership } from "@/lib/auth/account-access";
+import { grantExceedsActor } from "@/features/access-control/fine-permissions";
 import { requireFinePermission } from "@/lib/auth/fine-access";
-import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { requireSettingsSectionEdit } from "@/lib/auth/module-access";
+import { PermissionDeniedError, requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 import { requireSession } from "@/lib/auth/session";
-import { tenantFromSession } from "@/lib/db/write-context";
-import { writeFailure, writeSuccess } from "@/lib/db/write-context";
+import { tenantFromSession, writeFailure, writeSuccess } from "@/lib/db/write-context";
 import {
   deactivateStaffMember,
   decideApproval,
@@ -17,6 +18,7 @@ import {
   saveCompanyStaffCreateDefault,
   saveRolePermissions,
   saveStaffMember,
+  getUserPermissionKeys,
 } from "@/features/access-control/prisma-repository";
 import type {
   DecideApprovalInput,
@@ -124,7 +126,21 @@ export async function reactivateStaffMemberAction(membershipId: string) {
 
 export async function saveRolePermissionsAction(input: SaveRolePermissionsInput) {
   try {
-    const data = await saveRolePermissions(input, await requireWritePermission(WRITE_PERMISSIONS.rolesManage));
+    const tenant = await requireWritePermission(WRITE_PERMISSIONS.rolesManage);
+    const access = await requireActiveMembership(tenant);
+    const actorKeys = access.isOwner ? ["*"] : await getUserPermissionKeys(tenant);
+    if (grantExceedsActor({
+      actorBackOffice: access.allowBackOfficeAccess,
+      actorKeys,
+      actorPos: access.allowPosAccess,
+      isOwner: access.isOwner,
+      nextBackOffice: false,
+      nextPos: false,
+      roleKeys: input.permissions,
+    })) {
+      throw new PermissionDeniedError(WRITE_PERMISSIONS.rolesManage);
+    }
+    const data = await saveRolePermissions(input, tenant);
     revalidateStaffPaths();
     return writeSuccess(data);
   } catch (error) {
@@ -134,7 +150,9 @@ export async function saveRolePermissionsAction(input: SaveRolePermissionsInput)
 
 export async function saveApprovalRuleAction(input: SaveApprovalRuleInput) {
   try {
-    const data = await saveApprovalRule(input, await requireWritePermission(WRITE_PERMISSIONS.approvalsManage));
+    const tenant = tenantFromSession(await requireSession());
+    await requireSettingsSectionEdit(tenant, "approval-rules");
+    const data = await saveApprovalRule(input, tenant);
     revalidateStaffPaths();
     return writeSuccess(data);
   } catch (error) {

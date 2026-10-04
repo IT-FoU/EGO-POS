@@ -136,6 +136,7 @@ export type DashboardSnapshot = {
     salesTodayLak: number;
     supplierPayablesDueLak: number;
     totalBillsToday: number;
+    averageBillLak?: number;
     voidCount: number;
   };
   closeDay: {

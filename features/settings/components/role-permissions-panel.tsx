@@ -19,7 +19,8 @@ import {
 } from "@/features/access-control/role-permission-v2";
 import { readRetainedRoleDraft, writeRetainedRoleDraft } from "@/features/access-control/staff-presets";
 import type { StaffAccessSnapshot } from "@/features/access-control/types";
-import type { RoleTemplateLabel } from "@/features/access-control/permission-catalog";
+import { expandPhase3Keys } from "@/features/access-control/phase3-permissions";
+import { ROLE_TEMPLATE_KEY_BY_LABEL, type RoleTemplateLabel } from "@/features/access-control/permission-catalog";
 import { AppSmallModal } from "@/components/ui/app-small-modal";
 import type { SupportedLocale } from "@/lib/constants";
 import { fillSettingsCopy, localizeRoleTemplate, localizeSettingsError, tSettings } from "@/lib/i18n/settings-copy";
@@ -51,7 +52,8 @@ export function RolePermissionsPanel({
   const dirty = !roleDraftsEqual(draft, baseline);
 
   useEffect(() => {
-    const next = draftFromPermissionKeys(snapshot.permissionKeysByRole?.[selectedId] ?? [], selected?.templateKey === "Owner" ? null : readRetainedRoleDraft(selectedId));
+    const templateKey = selected?.templateKey ? ROLE_TEMPLATE_KEY_BY_LABEL[selected.templateKey] : "";
+    const next = draftFromPermissionKeys(expandPhase3Keys(snapshot.permissionKeysByRole?.[selectedId] ?? [], templateKey), selected?.templateKey === "Owner" ? null : readRetainedRoleDraft(selectedId));
     const resolved = selected?.templateKey === "Owner" ? recommendedRoleDraft("Owner") : next;
     setDraft(resolved);
     setBaseline(resolved);
@@ -196,8 +198,12 @@ export function RolePermissionsPanel({
                       <summary className="cursor-pointer text-sm font-semibold text-primary">{tSettings("advancedPermissions", locale)}</summary>
                       <div className={enabled ? "mt-2 grid gap-2" : "mt-2 grid gap-2 opacity-60"} id={`${entry.id}-advanced`}>
                         {!enabled ? <p className="text-xs text-muted-foreground">{tSettings("moduleOffRetained", locale)}</p> : null}
-                        {permissions.map((item) => (
-                          <label className="flex items-center justify-between gap-3 text-sm" key={item.id}>
+                        {permissions.map((item, index) => (
+                          <div className="grid gap-2" key={item.id}>
+                            {item.groupKey && item.groupKey !== permissions[index - 1]?.groupKey ? (
+                              <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{tSettings(item.groupKey, locale)}</p>
+                            ) : null}
+                          <label className="flex items-center justify-between gap-3 text-sm">
                             <span>
                               {tSettings(item.labelKey, locale)}
                               {item.deferred ? <span className="ml-2 text-xs text-muted-foreground">{tSettings("notEnforcedYet", locale)}</span> : null}
@@ -211,6 +217,7 @@ export function RolePermissionsPanel({
                               onChange={() => setDraft((current) => toggleRoleAdvanced(current, entry.id, item.id))}
                             />
                           </label>
+                          </div>
                         ))}
                       </div>
                     </details>
@@ -324,7 +331,8 @@ function ModalActions({ cancelLabel, confirmLabel, onCancel, onConfirm }: { canc
 function savedDraft(snapshot: StaffAccessSnapshot, roleId: string) {
   const role = snapshot.roles.find((entry) => entry.id === roleId);
   if (role?.templateKey === "Owner") return recommendedRoleDraft("Owner");
-  return draftFromPermissionKeys(snapshot.permissionKeysByRole?.[roleId] ?? []);
+  const templateKey = role?.templateKey ? ROLE_TEMPLATE_KEY_BY_LABEL[role.templateKey] : "";
+  return draftFromPermissionKeys(expandPhase3Keys(snapshot.permissionKeysByRole?.[roleId] ?? [], templateKey));
 }
 
 function sortRoles(roles: StaffAccessSnapshot["roles"]) {

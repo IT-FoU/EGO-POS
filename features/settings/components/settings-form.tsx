@@ -55,8 +55,9 @@ export type SettingsDetailSection =
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
   | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
     actorIsOwner?: boolean;
+    canEdit?: boolean;
     actorUserId?: string;
     initialActiveBranch?: import("@/features/settings/branch-information").ActiveBranchInformation | null;
     initialBusinessLogoUrl?: string | null;
@@ -364,6 +365,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
         });
     }
     function saveSettings() {
+        if (!canEdit) return;
         const validationError = validate();
         if (validationError) {
             setMessage({ text: validationError, tone: "error" });
@@ -454,7 +456,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
         writeReceiptPrintModePreference(value);
         setMessage({ text: tSettings("savedOnThisDevice", locale), tone: "success" });
     }
-    const canSaveCompanySettings = ["company-profile", "tax", "cash-shift", "receipt", "loyalty"].includes(section);
+    const canSaveCompanySettings = canEdit && ["company-profile", "tax", "cash-shift", "receipt", "loyalty"].includes(section);
     const detailTitle: Record<SettingsDetailSection, string> = {
       "company-profile": tSettings("companyProfile", locale),
       "business-logo": tSettings("businessLogo", locale),
@@ -501,6 +503,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
         <ArrowLeft className="size-4" aria-hidden="true" />
         {tSettings("backToSettings", locale)}
       </Link>
+      <fieldset className="contents" disabled={!canEdit}>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-3xl font-semibold">{detailTitle[section]}</h1>
@@ -955,5 +958,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, initialActiveB
           )}
           {settingsConfirm === "resetAll" ? (<p className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>) : null}
         </AppSmallModal>) : null}
+      </fieldset>
     </div>);
 }

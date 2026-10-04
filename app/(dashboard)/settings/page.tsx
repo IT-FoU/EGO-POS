@@ -3,6 +3,7 @@ import { StoreAccessDenied } from "@/components/permissions/store-access-denied"
 import { getPrismaSettings, getSettingsLandingSummary } from "@/features/settings/prisma-repository";
 import { SettingsLanding } from "@/features/settings/components/settings-landing";
 import { isCanonicalModuleEnabled, settingsLandingHrefs } from "@/features/access-control/module-access";
+import { redactSettingsRead } from "@/features/access-control/phase3-permissions";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
 import { readNavigationAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
@@ -45,7 +46,7 @@ export default async function SettingsPage() {
         activeStaff: summary.activeStaff,
         approvalRulesEnabled: summary.approvalRulesEnabled,
         hasLogo: summary.hasLogo,
-        settings,
+        settings: settings ? redactSettingsRead(settings, navigation.keys) : null,
       }}
       locale={locale}
     />
