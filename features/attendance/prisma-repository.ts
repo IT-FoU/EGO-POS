@@ -279,8 +279,8 @@ export async function assertOpenAttendanceForSale(
   tx: Record<string, any>,
   cashSessionId: string,
 ) {
-  // R9C: if Auto End is due, close before sale gate check.
-  await reconcileDueAutoEndForUser(tenant).catch(() => null);
+  // R9C: if Auto End is due, close on this sale transaction before the gate check.
+  await reconcileDueAutoEndForUser(tenant, new Date(), tx).catch(() => null);
 
   const scope = await resolveTenantScope(tenant, tx);
   const session = await tx.staffAttendanceSession.findFirst({
