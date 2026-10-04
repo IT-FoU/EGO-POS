@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SuperAdminSupportInbox } from "@/features/support/components/super-admin-support-inbox";
 import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
@@ -425,6 +426,7 @@ function canViewNavHref(role: string | null | undefined, href: string) {
     "/super-admin/templates": "templates",
     "/super-admin/users": "users",
   };
+  if (href === "/super-admin/support-center") return canUsePlatformAction(role, PLATFORM_ACTIONS.SUPPORT_MANAGE);
   const section = sectionByHref[href];
   return section === "dashboard" || (section ? canViewSuperAdminSection(role, section) : false);
 }
@@ -11059,7 +11061,7 @@ export function EgoPosCenterOperationalPage({
   } else if (section === "backupRestore") {
     body = canViewSuperAdminSection(role, "settings") ? <BackupRestorePage onAction={open} /> : <AccessDeniedPanel />;
   } else if (section === "supportCenter") {
-    body = canViewSuperAdminSection(role, "settings") ? <SupportCenterPage onAction={open} /> : <AccessDeniedPanel />;
+    body = canUsePlatformAction(role, PLATFORM_ACTIONS.SUPPORT_MANAGE) ? <SuperAdminSupportInbox /> : <AccessDeniedPanel />;
   } else {
     body = <EgoPosCenterPlaceholderPage section={section} />;
   }

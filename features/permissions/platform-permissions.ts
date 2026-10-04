@@ -31,6 +31,7 @@ export const PLATFORM_ACTIONS = {
   POS_TEMPLATE_VIEW: "pos_template.view",
   ROLES_EDIT: "roles.edit",
   SETTINGS_UPDATE: "settings.update",
+  SUPPORT_MANAGE: "support.manage",
   STORE_ACTIVITY_LOGS_VIEW_ALL: "store_activity_logs.view_all",
   STORE_ACTIVITY_LOGS_VIEW_ASSIGNED: "store_activity_logs.view_assigned",
   SUBSCRIPTION_CANCEL: "subscription.cancel",
@@ -84,6 +85,7 @@ const supportAdminAllowed = new Set<PlatformAction>([
   PLATFORM_ACTIONS.USER_RESET_PASSWORD,
   PLATFORM_ACTIONS.PLATFORM_AUDIT_LOGS_VIEW_SCOPED,
   PLATFORM_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_ASSIGNED,
+  PLATFORM_ACTIONS.SUPPORT_MANAGE,
 ]);
 
 const billingAdminAllowed = new Set<PlatformAction>([

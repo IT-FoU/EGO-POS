@@ -35,7 +35,7 @@ export const SETTINGS_SECTION_ACCESS = {
   "company-profile": { edit: "settings.company_profile.edit", view: "settings.company_profile.view" },
   "customer-display": { edit: "settings.customer_display.edit", view: "settings.customer_display.view" },
   "day-off": { edit: "settings.day_off.edit", view: "settings.day_off.view" },
-  help: { view: "settings.help.view" },
+  help: { edit: "settings.help.submit", view: "settings.help.view" },
   loyalty: { edit: "settings.loyalty.edit", view: "settings.loyalty.view" },
   ot: { edit: "settings.ot.edit", view: "settings.ot.view" },
   "qr-payments": { edit: "settings.qr.edit", view: "settings.qr.view" },
@@ -92,6 +92,7 @@ export const PHASE3_PERMISSION_ENTRIES = [
   ["settings.loyalty.view", "View loyalty settings", "settings"],
   ["settings.loyalty.edit", "Edit loyalty settings", "settings"],
   ["settings.help.view", "View help and support", "settings"],
+  ["settings.help.submit", "Submit and reply to help and support", "settings"],
   [PHASE3_MARKER, "Phase 3 permission baseline", "access"],
 ] as const;
 

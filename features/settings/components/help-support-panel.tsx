@@ -8,6 +8,8 @@ import { APP_NAME } from "@/lib/constants";
 import { tSettings } from "@/lib/i18n/settings-copy";
 import { filterHelpTopics } from "@/features/settings/help-topics";
 import { SectionTitle } from "@/features/settings/components/settings-fields";
+import { SupportDesk } from "@/features/support/components/support-desk";
+import type { SupportTicketSummary } from "@/features/support/support-types";
 
 export type HelpSystemContext = {
   branchName: string;
@@ -42,11 +44,15 @@ function buildCopyText(context: HelpSystemContext, includeBrowser: boolean) {
 }
 
 export function HelpSupportPanel({
+  canSubmit,
   context,
   locale,
+  tickets,
 }: {
+  canSubmit: boolean;
   context: HelpSystemContext;
   locale: SupportedLocale;
+  tickets: SupportTicketSummary[];
 }) {
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: "error" | "success" } | null>(null);
@@ -67,6 +73,7 @@ export function HelpSupportPanel({
 
   return (
     <div className="grid gap-6">
+      <SupportDesk canSubmit={canSubmit} initialTickets={tickets} locale={locale} />
       {message ? (
         <div
           className={
@@ -128,9 +135,6 @@ export function HelpSupportPanel({
             ))
           )}
         </div>
-        <p className="mt-4 rounded-md border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
-          {tSettings("supportTicketsDeferred", locale)}
-        </p>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">

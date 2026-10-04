@@ -288,6 +288,7 @@ model Company {
   membershipLevels   MembershipLevel[]
   loyaltyPointLedger LoyaltyPointLedger[]
   loyaltyEarningRules LoyaltyEarningRule[]
+  supportTickets SupportTicket[]
   customerPayments   CustomerPayment[]
   promotionUsages    PromotionUsage[]
   auditLogs      AuditLog[]
@@ -1180,6 +1181,48 @@ model LoyaltyEarningRule {
 
   @@index([companyId, status, sortOrder])
   @@map("loyalty_earning_rules")
+}
+
+model SupportTicket {
+  id              String    @id @default(cuid())
+  companyId       String    @map("company_id")
+  createdByUserId String    @map("created_by_user_id")
+  type            String
+  subject         String
+  status          String
+  priority        String    @default("normal")
+  category        String?
+  affectedArea    String?   @map("affected_area")
+  sourcePath      String?   @map("source_path")
+  appVersion      String?   @map("app_version")
+  browserSummary  String?   @map("browser_summary")
+  companyName     String?   @map("company_name")
+  userName        String?   @map("user_name")
+  storeUnread     Boolean   @default(false) @map("store_unread")
+  adminUnread     Boolean   @default(true) @map("admin_unread")
+  closedAt        DateTime? @map("closed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  messages        SupportMessage[]
+
+  @@index([companyId, updatedAt])
+  @@index([status, type])
+  @@index([adminUnread])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id           String   @id @default(cuid())
+  ticketId     String   @map("ticket_id")
+  senderUserId String?  @map("sender_user_id")
+  senderSide   String   @map("sender_side")
+  message      String
+  createdAt    DateTime @default(now()) @map("created_at")
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
 }
 
 model CustomerPayment {

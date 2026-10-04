@@ -6,7 +6,8 @@ export type NotificationCategory =
   | "out_of_stock"
   | "membership_expiring"
   | "promotion_starting"
-  | "promotion_ending";
+  | "promotion_ending"
+  | "support_reply";
 
 export type NotificationItem = {
   category: NotificationCategory;
