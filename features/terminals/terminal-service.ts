@@ -1,4 +1,6 @@
+import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db/prisma";
+import { resolveTenantMembership } from "@/lib/db/resolve-tenant-user";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
 import { readPosDeviceId } from "@/features/terminals/device-cookie";
@@ -55,7 +57,7 @@ export async function listStoreTerminals(tenant: TenantContext): Promise<Termina
   const deviceId = await readPosDeviceId();
   const rows = await db.posTerminal.findMany({
     orderBy: { terminalCode: "asc" },
-    where: { branchId: scope.branchId, companyId: tenant.companyId },
+    where: { branchId: scope.branchId, companyId: tenant.companyId, status: { not: "ARCHIVED" } },
   });
   const terminalIds = rows.map((row: { id: string }) => row.id);
   const openShifts = terminalIds.length === 0
@@ -109,7 +111,7 @@ async function ownedTerminal(tenant: TenantContext, terminalId: string) {
   const row = await db.posTerminal.findFirst({
     where: { branchId: scope.branchId, companyId: tenant.companyId, id: String(terminalId) },
   });
-  if (!row) throw new TerminalAccessError("Terminal was not found.", 404);
+  if (!row || row.status === "ARCHIVED") throw new TerminalAccessError("Terminal was not found.", 404);
   return row;
 }
 
@@ -184,6 +186,45 @@ export async function unbindTerminal(tenant: TenantContext, terminalId: string) 
   return listStoreTerminals(tenant);
 }
 
+async function assertOwnerDeleteCredential(tenant: TenantContext, ownerPassword: unknown) {
+  const secret = String(ownerPassword ?? "");
+  if (!secret.trim()) throw new TerminalAccessError("Owner password is required.");
+  const actor = await resolveTenantMembership(tenant);
+  if (!actor.isOwner) throw new TerminalAccessError("Only the owner can delete a terminal.", 403);
+  const ownerUser = await db.user.findFirst({
+    select: { passwordHash: true },
+    where: { id: actor.effectiveUserId, status: "active" },
+  });
+  if (!ownerUser?.passwordHash) throw new TerminalAccessError("Only the owner can delete a terminal.", 403);
+  const passwordMatches = await compare(secret, ownerUser.passwordHash);
+  if (!passwordMatches) throw new TerminalAccessError("Owner password is incorrect.");
+}
+
+export async function deleteStoreTerminal(tenant: TenantContext, terminalId: string, input: Record<string, unknown>) {
+  await assertOwnerDeleteCredential(tenant, input.ownerPassword);
+  const existing = await ownedTerminal(tenant, terminalId);
+  const openShift = await db.cashSession.findFirst({
+    where: { closedAt: null, companyId: tenant.companyId, terminalId: existing.id },
+  });
+  if (openShift) throw new TerminalAccessError("Close this terminal's cash shift before deleting it.");
+  if (existing.boundDeviceId) throw new TerminalAccessError("Unbind this device before deleting the terminal.");
+
+  const [sales, shifts, activity] = await Promise.all([
+    db.sale.count({ where: { companyId: tenant.companyId, terminalId: existing.id } }),
+    db.cashSession.count({ where: { companyId: tenant.companyId, terminalId: existing.id } }),
+    db.storeActivityLog.count({ where: { businessId: tenant.companyId, terminalId: existing.id } }),
+  ]);
+  if (sales > 0 || shifts > 0 || activity > 0) {
+    await db.posTerminal.update({
+      data: { boundDeviceId: null, status: "ARCHIVED" },
+      where: { id: existing.id },
+    });
+  } else {
+    await db.posTerminal.delete({ where: { id: existing.id } });
+  }
+  return listStoreTerminals(tenant);
+}
+
 export async function recordTerminalActivity(
   tx: Record<string, any>,
   input: {
@@ -226,7 +267,7 @@ export async function resolveBoundTerminal(tenant: TenantContext, deviceId: stri
   if (!deviceId) return null;
   const scope = await resolveTenantScope(tenant);
   const row = await db.posTerminal.findFirst({
-    where: { boundDeviceId: deviceId, companyId: tenant.companyId, branchId: scope.branchId },
+    where: { boundDeviceId: deviceId, companyId: tenant.companyId, branchId: scope.branchId, status: { not: "ARCHIVED" } },
   });
   return row ?? null;
 }
