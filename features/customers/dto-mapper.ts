@@ -69,7 +69,7 @@ export function mapPrismaCustomerPurchase(sale: Row, loyaltySpendPerPointLak = 1
     customerId: sale.customerId ?? "",
     id: sale.id,
     paymentType: sale.payments?.length > 1 ? "mixed" : (sale.payments?.[0]?.paymentMethod ?? "cash"),
-    pointsEarned: ledger.length > 0 ? netEarn : Math.floor(toNumber(sale.totalAmount) / spendPerPoint),
+    pointsEarned: Array.isArray(sale.loyaltyPointLedger) ? netEarn : Math.floor(toNumber(sale.totalAmount) / spendPerPoint),
     saleDate: dateOnly(sale.createdAt),
     saleNo: sale.saleNo,
     totalLak: toNumber(sale.totalAmount),

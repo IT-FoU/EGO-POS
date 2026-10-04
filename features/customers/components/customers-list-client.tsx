@@ -89,7 +89,7 @@ export function CustomersListClient({
     return customers.map((customer) => {
       const customerPurchases = purchases.filter((purchase) => purchase.customerId === customer.id);
       const lastPurchase = [...customerPurchases].sort((left, right) => right.saleDate.localeCompare(left.saleDate))[0];
-      const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints);
+      const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints, customer.pointsBalance);
       const totalVisits = customerPurchases.length || Math.max(1, Math.round(customer.totalPurchasesLak / 2500000));
       const segmentName = getCustomerSegment(customer, lastPurchase?.saleDate);
       return {
@@ -129,7 +129,7 @@ export function CustomersListClient({
 
   const activeCustomers = customers.filter((customer) => customer.status === "active").length;
   const totalOutstanding = customers.reduce((total, customer) => total + customer.outstandingBalanceLak, 0);
-  const totalPoints = customers.reduce((total, customer) => total + calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints), 0);
+  const totalPoints = customers.reduce((total, customer) => total + calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints, customer.pointsBalance), 0);
   const newCustomersThisMonth = customers.filter((customer) => customer.customerCode.endsWith("1") || customer.customerCode.endsWith("2")).length;
   const vipCustomers = customerInsights.filter((customer) => customer.segment === "vip").length;
   const customersWithDebt = customers.filter((customer) => customer.outstandingBalanceLak > 0).length;

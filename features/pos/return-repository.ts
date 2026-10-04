@@ -930,12 +930,27 @@ async function persistReturnOrExchange(
     refundedAmountLak: remainingBySaleItem(reloadedForQty).returnedPaidTotal,
   });
 
-  if (input.kind === "exchange" && sale.customerId && input.paymentAmountLak + input.returnValueLak > 0) {
+  if (input.kind === "exchange" && sale.customerId) {
     const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
+    const replacements = input.pricedReplacements ?? [];
+    const productIds = [...new Set(replacements.map((item) => String(item.productId)))];
+    const products = productIds.length
+      ? await tx.product.findMany({
+          select: { categoryId: true, id: true },
+          where: { companyId: tenant.companyId, id: { in: productIds } },
+        })
+      : [];
+    const categoryByProduct = new Map<string, string | null>(products.map((product: Record<string, any>) => [String(product.id), product.categoryId ? String(product.categoryId) : null]));
     await applyExchangeLoyaltyEarn(tx, {
-      amountLak: amount(input.pricedReplacements?.reduce((total, item) => total + amount(item.totalAmount), 0)),
+      amountLak: amount(replacements.reduce((total, item) => total + amount(item.totalAmount), 0)),
       companyId: tenant.companyId,
       customerId: String(sale.customerId),
+      enabled: settings?.loyaltyEnabled !== false,
+      lines: replacements.map((item) => ({
+        categoryId: categoryByProduct.get(String(item.productId)) ?? null,
+        productId: String(item.productId),
+        quantity: amount(item.quantity),
+      })),
       refundNo,
       saleId: sale.id,
       spendPerPointLak: Math.max(amount(settings?.loyaltySpendPerPointLak) || DEFAULT_LOYALTY_EARN_SPEND_LAK, 1),

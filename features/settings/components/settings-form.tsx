@@ -10,6 +10,8 @@ import Link from "next/link";
 import { ArrowLeft, Building2, Banknote, Gift, ImagePlus, MonitorPlay, Percent, ReceiptText, Save, Trash2 } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { removeCompanyLogoAction, saveCompanyLogoAction, updateSettingsAction } from "@/features/settings/actions";
+import { LoyaltyRulesPanel, type LoyaltyCatalogItem } from "@/features/settings/components/loyalty-rules-panel";
+import type { LoyaltyEarningRuleRecord } from "@/features/loyalty/earning-rules";
 import { ACTIVE_COMPANY_NAME_CHANGE_EVENT } from "@/lib/auth/active-company-name";
 import type { SettingsFormData } from "@/features/settings/types";
 import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "@/features/qr-payments/types";
@@ -55,9 +57,11 @@ export type SettingsDetailSection =
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
   | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialLoyaltyCatalog = { categories: [], products: [] }, initialLoyaltyRules = [], initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
     actorIsOwner?: boolean;
     canEdit?: boolean;
+    initialLoyaltyCatalog?: { categories: LoyaltyCatalogItem[]; products: LoyaltyCatalogItem[] };
+    initialLoyaltyRules?: LoyaltyEarningRuleRecord[];
     actorUserId?: string;
     initialActiveBranch?: import("@/features/settings/branch-information").ActiveBranchInformation | null;
     initialBusinessLogoUrl?: string | null;
@@ -245,8 +249,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
             return tSettings("companyNameRequired", locale);
         if (section === "tax" && (settings.vatRate < 0 || settings.vatRate > 100))
             return tSettings("vatRateRange", locale);
-        if (section === "loyalty" && settings.loyaltySpendPerPointLak <= 0)
-            return tSettings("loyaltySpendRequired", locale);
         if (section === "loyalty" && settings.loyaltyPointValueLak < 0)
             return tSettings("loyaltyPointValueNegative", locale);
         if (section === "loyalty" && settings.loyaltyMinRedeemPoints < 1)
@@ -276,7 +278,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
             lines.push(settings.loyaltyEnabled ? tSettings("loyaltyEnableConfirm", locale) : tSettings("loyaltyDisableConfirm", locale));
         }
         if (
-            Number(settings.loyaltySpendPerPointLak) !== Number(baseline.loyaltySpendPerPointLak) ||
             Number(settings.loyaltyPointValueLak) !== Number(baseline.loyaltyPointValueLak) ||
             Number(settings.loyaltyMinRedeemPoints) !== Number(baseline.loyaltyMinRedeemPoints)
         ) {
@@ -337,7 +338,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
                     loyaltyEnabled: settings.loyaltyEnabled,
                     loyaltyMinRedeemPoints: settings.loyaltyMinRedeemPoints,
                     loyaltyPointValueLak: settings.loyaltyPointValueLak,
-                    loyaltySpendPerPointLak: settings.loyaltySpendPerPointLak,
                 };
             }
             const result = await updateSettingsAction(payload);
@@ -445,8 +445,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
             return (
                 settings.loyaltyEnabled !== baseline.loyaltyEnabled ||
                 settings.loyaltyMinRedeemPoints !== baseline.loyaltyMinRedeemPoints ||
-                settings.loyaltyPointValueLak !== baseline.loyaltyPointValueLak ||
-                settings.loyaltySpendPerPointLak !== baseline.loyaltySpendPerPointLak
+                settings.loyaltyPointValueLak !== baseline.loyaltyPointValueLak
             );
         }
         return false;
@@ -869,11 +868,8 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
           {settings.loyaltyEnabled ? tSettings("loyaltyStatusOn", locale) : tSettings("loyaltyStatusOff", locale)}
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{tSettings("loyaltyHelp", locale)}</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
           <Toggle label={tSettings("enableLoyalty", locale)} checked={settings.loyaltyEnabled} onChange={(value) => update("loyaltyEnabled", value)}/>
-          <Field label={tSettings("spendLakPerPoint", locale)}>
-            <input className="field-input" min="1" type="number" value={settings.loyaltySpendPerPointLak} onChange={(event) => update("loyaltySpendPerPointLak", Number(event.target.value))}/>
-          </Field>
           <Field label={tSettings("pointValueLak", locale)}>
             <input className="field-input" min="0" type="number" value={settings.loyaltyPointValueLak} onChange={(event) => update("loyaltyPointValueLak", Number(event.target.value))}/>
           </Field>
@@ -881,6 +877,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
             <input className="field-input" min="1" type="number" value={settings.loyaltyMinRedeemPoints} onChange={(event) => update("loyaltyMinRedeemPoints", Number(event.target.value))}/>
           </Field>
         </div>
+        <LoyaltyRulesPanel categories={initialLoyaltyCatalog.categories} initialRules={initialLoyaltyRules} locale={locale} products={initialLoyaltyCatalog.products} />
       </section>
       ) : null}
 

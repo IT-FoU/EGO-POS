@@ -100,7 +100,7 @@ check(
 check(
   "7. customer business logic remains unchanged",
   list.includes("function calculateAvailablePoints") === false &&
-    list.includes("const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints)") &&
+    list.includes("const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints, customer.pointsBalance)") &&
     list.includes("return customers.filter((customer) => customer.status === \"active\")") &&
     list.includes("return customers.filter((customer) => customer.outstandingBalanceLak > 0)") &&
     list.includes("return [...customers].sort((left, right) => right.lifetimeSpendingLak - left.lifetimeSpendingLak).slice(0, 10)") &&

@@ -11,6 +11,8 @@ import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repo
 import { getActiveBranchInformation } from "@/features/settings/branch-information";
 import { SettingsForm, type SettingsDetailSection } from "@/features/settings/components/settings-form";
 import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
+import { listLoyaltyEarningRules } from "@/features/loyalty/earning-rule-repository";
+import { prisma } from "@/lib/db/prisma";
 import { getReceiptPreviewQrImageUrl } from "@/features/settings/receipt-preview-qr";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
@@ -75,6 +77,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
     }
     throw error;
   }
+  const needsLoyalty = section === "loyalty";
   const needsQr = section === "qr-payments";
   const needsStaff = section === "staff" || section === "roles" || section === "approval-rules" || section === "day-off" || section === "ot";
   const needsLogo = section === "business-logo" || section === "receipt";
@@ -97,6 +100,23 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
     );
   }
 
+  const loyaltyRules = needsLoyalty ? await listLoyaltyEarningRules(tenant) : [];
+  const [loyaltyProducts, loyaltyCategories] = needsLoyalty
+    ? await Promise.all([
+        prisma.product.findMany({
+          orderBy: { nameEn: "asc" },
+          select: { id: true, nameEn: true, nameLo: true },
+          take: 500,
+          where: { companyId: tenant.companyId, isActive: true },
+        }),
+        prisma.category.findMany({
+          orderBy: { nameEn: "asc" },
+          select: { id: true, nameEn: true, nameLo: true },
+          where: { companyId: tenant.companyId },
+        }),
+      ])
+    : [[], []];
+  const catalogName = (row: { nameEn: string | null; nameLo: string }) => (locale === "lo" ? row.nameLo : row.nameEn || row.nameLo);
   const permissionKeys = await getUserPermissionKeys(tenant);
   const canEdit = settingsSectionAllows(permissionKeys, section, "edit");
   const visibleSettings = redactSettingsRead(settings, permissionKeys);
@@ -108,6 +128,11 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
       actorUserId={session.user.id}
       initialActiveBranch={activeBranch}
       initialBusinessLogoUrl={businessLogoUrl}
+      initialLoyaltyCatalog={{
+        categories: loyaltyCategories.map((row) => ({ id: row.id, name: catalogName(row) })),
+        products: loyaltyProducts.map((row) => ({ id: row.id, name: catalogName(row) })),
+      }}
+      initialLoyaltyRules={loyaltyRules}
       initialHelpContext={
         section === "help"
           ? {
