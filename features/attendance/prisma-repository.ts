@@ -297,7 +297,17 @@ export async function assertOpenAttendanceForSale(
   }
 
   if (session.cashSessionId && session.cashSessionId !== cashSessionId) {
-    throw new Error("Open attendance is not linked to the active cash session.");
+    const saleSession = await tx.cashSession.findFirst({
+      where: {
+        closedAt: null,
+        companyId: tenant.companyId,
+        id: cashSessionId,
+        terminalId: { not: null },
+      },
+    });
+    if (!saleSession) {
+      throw new Error("Open attendance is not linked to the active cash session.");
+    }
   }
 
   return session;

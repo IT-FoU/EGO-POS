@@ -1,5 +1,6 @@
 import { InventoryCountConflictError } from "@/features/inventory/stock-count-errors";
 import { SupportAccessError } from "@/features/support/support-service";
+import { TerminalAccessError } from "@/features/terminals/terminal-service";
 import { NextResponse } from "next/server";
 import { moduleForApiPath } from "@/features/access-control/module-access";
 import { AccountAccessDeniedError, accountGateForApiPath, accountGateForPermission, requireAccountGate } from "@/lib/auth/account-access";
@@ -57,7 +58,7 @@ function apiStatusFromError(error: unknown): number {
   if (error instanceof InventoryCountConflictError) {
     return 409;
   }
-  if (error instanceof SupportAccessError) {
+  if (error instanceof SupportAccessError || error instanceof TerminalAccessError) {
     return error.status;
   }
   return 400;
@@ -74,7 +75,7 @@ export function apiJsonFromError(error: unknown) {
       { status: 403 },
     );
   }
-  if (error instanceof SupportAccessError) {
+  if (error instanceof SupportAccessError || error instanceof TerminalAccessError) {
     return NextResponse.json({ error: error.message, message: error.message, ok: false }, { status: error.status });
   }
   if (error instanceof InventoryCountConflictError) {

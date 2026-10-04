@@ -205,7 +205,7 @@ check("staff snapshot for day-off/ot", () => {
 });
 check("no new migration", () => {
   const dirs = readdirSync(join(root, "prisma/migrations"));
-  assert(!dirs.some((name) => /settings_v2_step5|20261002[1-9]|20261003|20261004/.test(name) && !name.includes("loyalty_earning_rules") && !name.includes("loyalty_point_policy") && !name.includes("support_tickets")), "unexpected post-step2 settings migration");
+  assert(!dirs.some((name) => /settings_v2_step5|20261002[1-9]|20261003|20261004/.test(name) && !name.includes("loyalty_earning_rules") && !name.includes("loyalty_point_policy") && !name.includes("support_tickets") && !name.includes("pos_terminals")), "unexpected post-step2 settings migration");
 });
 check("EN/LO copy parity keys present", () => {
   assert(copy.includes("deactivateStaffConfirm") && copy.includes("employeePickerHelp"), "step5 copy incomplete");

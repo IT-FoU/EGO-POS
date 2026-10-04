@@ -1,6 +1,9 @@
 import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { assertOpenCashSessionForSale, getOpenCashSession } from "@/features/cash-sessions/prisma-repository";
+import { readPosDeviceId } from "@/features/terminals/device-cookie";
+import { recordTerminalActivity, requireActiveBoundTerminal } from "@/features/terminals/terminal-service";
+import type { PosCurrentTerminal } from "@/features/terminals/terminal-types";
 import { getOpenAttendanceSession } from "@/features/attendance/prisma-repository";
 import { attachPosProductImageDelivery } from "@/features/products/product-image-delivery";
 import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-policy";
@@ -188,6 +191,20 @@ async function timedPosLoad<T>(label: string, fn: () => Promise<T>): Promise<T> 
 export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const started = posLoadTimingEnabled() ? Date.now() : 0;
   const scope = await timedPosLoad("scope", () => resolveTenantScope(tenant));
+  const deviceId = await readPosDeviceId();
+  const boundTerminal = deviceId
+    ? await db.posTerminal.findFirst({
+        where: { boundDeviceId: deviceId, branchId: scope.branchId, companyId: scope.companyId },
+      })
+    : null;
+  const currentTerminal: PosCurrentTerminal | null = boundTerminal
+    ? {
+        id: String(boundTerminal.id),
+        status: boundTerminal.status === "DISABLED" ? "DISABLED" : "ACTIVE",
+        terminalCode: String(boundTerminal.terminalCode),
+        terminalName: String(boundTerminal.terminalName),
+      }
+    : null;
   const sellWarehouseIds = scope.warehouseId ? [scope.warehouseId] : scope.warehouseIds;
   const now = new Date();
   // STEP 7: do not boot-load the full customer/member table into the POS client.
@@ -231,7 +248,10 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
           select: { discountPercent: true, id: true, name: true },
           where: { companyId: scope.companyId, isActive: true },
         }),
-        getOpenCashSession(tenant, { scope }),
+        getOpenCashSession(tenant, {
+          scope,
+          terminalId: currentTerminal?.status === "ACTIVE" ? currentTerminal.id : null,
+        }),
         getOpenAttendanceSession(tenant),
         getPrismaPosQrBanks(tenant, scope.branchId),
         db.branchFavoriteProduct.findMany({
@@ -308,6 +328,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     branchId: scope.branchId,
     branchName: scope.branchName,
     cashierName: "Current Cashier",
+    currentTerminal,
     cashSession: openSession
       ? {
           attendanceCashSessionId: openAttendance?.cashSessionId ?? null,
@@ -433,6 +454,7 @@ export type CompletePrismaSaleInput = {
   qrAmount: number;
   redeemPoints?: number;
   saleNo: string;
+  terminalId?: string | null;
   taxAmount: number;
   taxRate: number;
   totalAmount: number;
@@ -469,7 +491,11 @@ export async function writeCompletePrismaSale(
   if (branchScope.branchId !== warehouseScope.branchId) {
     throw new Error("POS branch and warehouse scopes do not match.");
   }
-  await assertOpenCashSessionForSale(tenant, tx);
+  const terminal = await requireActiveBoundTerminal(tx, tenant, input.terminalId);
+  const cashSession = await assertOpenCashSessionForSale(tenant, tx);
+  if (cashSession && cashSession.terminalId !== terminal.id) {
+    throw new Error("This cash session belongs to another terminal.");
+  }
   rejectClientPromotionClaims(input.items);
   const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
   const receiptPrefix = settings?.receiptPrefix ?? "INV";
@@ -744,6 +770,7 @@ export async function writeCompletePrismaSale(
           subtotal,
           taxAmount,
           taxRate,
+          terminalId: terminal.id,
           totalAmount,
           warehouseId: input.warehouseId,
         },
@@ -756,6 +783,19 @@ export async function writeCompletePrismaSale(
           },
           payments: true,
         },
+      });
+
+      await recordTerminalActivity(tx, {
+        action: "pos.sale.complete",
+        branchId: input.branchId,
+        companyId: tenant.companyId,
+        targetId: String(sale.id),
+        targetName: String(sale.saleNo),
+        targetType: "sale",
+        terminalCode: String(terminal.terminalCode),
+        terminalId: String(terminal.id),
+        terminalName: String(terminal.terminalName),
+        userId: tenant.userId,
       });
 
       const runningQtyByProduct = new Map<string, number>();

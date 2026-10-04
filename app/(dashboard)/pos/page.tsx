@@ -44,6 +44,7 @@ export default async function PosPage() {
       branchName={snapshot.branchName}
       cashierName={snapshot.cashierName}
       cashSession={snapshot.cashSession}
+      currentTerminal={snapshot.currentTerminal}
       customers={snapshot.customers}
       loyaltySettings={snapshot.loyaltySettings}
       nextSaleNo={snapshot.nextSaleNo}
