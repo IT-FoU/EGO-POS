@@ -11,6 +11,7 @@ import { writeFailure, writeSuccess } from "@/lib/db/write-context";
 import {
   deactivateStaffMember,
   decideApproval,
+  deleteStaffMember,
   reactivateStaffMember,
   saveApprovalRule,
   saveCompanyStaffCreateDefault,
@@ -85,6 +86,20 @@ async function staffTenant(permission: string) {
   const tenant = tenantFromSession(await requireSession());
   await requireFinePermission(tenant, permission);
   return tenant;
+}
+
+export async function deleteStaffMemberAction(input: { membershipId: string; ownerPassword: string }) {
+  try {
+    const tenant = tenantFromSession(await requireSession());
+    await requireAccountGate(tenant, "back-office");
+    const data = await deleteStaffMember(input.membershipId, input.ownerPassword, tenant);
+    after(() => {
+      revalidateStaffPaths();
+    });
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
 }
 
 export async function deactivateStaffMemberAction(membershipId: string) {

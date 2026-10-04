@@ -6,6 +6,7 @@ import { CheckCircle2, KeyRound, Plus, ShieldCheck, type LucideIcon } from "luci
 import {
   decideApprovalAction,
   deactivateStaffMemberAction,
+  deleteStaffMemberAction,
   reactivateStaffMemberAction,
   saveApprovalRuleAction,
   saveStaffCreateDefaultAction,
@@ -133,6 +134,9 @@ export function StaffControlSection({
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [staffDraft, setStaffDraft] = useState<StaffDraft>(() => emptyStaffDraft(initialSnapshot.branches, initialSnapshot.roles));
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmReactivateId, setConfirmReactivateId] = useState<string | null>(null);
   const [confirmApprovalRule, setConfirmApprovalRule] = useState<keyof typeof APPROVAL_RULE_LABELS | null>(null);
   const [staffPreset, setStaffPreset] = useState<StaffPresetChoice>("cashier");
@@ -173,6 +177,7 @@ export function StaffControlSection({
   });
   const editingSelf = Boolean(editingStaffId && actorUserId && staff.find((member) => member.id === editingStaffId)?.userId === actorUserId);
   const deactivateTarget = staff.find((member) => member.id === confirmDeactivateId);
+  const deleteTarget = staff.find((member) => member.id === confirmDeleteId);
   const reactivateTarget = staff.find((member) => member.id === confirmReactivateId);
 
   function runMutation(action: () => Promise<{ error?: string; ok: boolean }>, successMessage: string) {
@@ -335,6 +340,47 @@ export function StaffControlSection({
   function commitReactivateStaff(memberId: string) {
     setConfirmReactivateId(null);
     runMutation(() => reactivateStaffMemberAction(memberId), tSettings("staffReactivated", locale));
+  }
+
+  function openDeleteStaff(memberId: string) {
+    setDeletePassword("");
+    setDeleteError(null);
+    setConfirmDeleteId(memberId);
+  }
+
+  function closeDeleteStaff() {
+    setConfirmDeleteId(null);
+    setDeletePassword("");
+    setDeleteError(null);
+  }
+
+  function commitDeleteStaff() {
+    if (!confirmDeleteId || submitLock.current) return;
+    if (!deletePassword.trim()) {
+      setDeleteError(tSettings("ownerPasswordRequired", locale));
+      return;
+    }
+    const membershipId = confirmDeleteId;
+    const ownerPassword = deletePassword;
+    submitLock.current = true;
+    startTransition(async () => {
+      try {
+        const result = await deleteStaffMemberAction({ membershipId, ownerPassword });
+        if (!result.ok) {
+          setDeletePassword("");
+          setDeleteError(localizeSettingsError(result.error, locale));
+          return;
+        }
+        confirmedStaffRef.current = confirmedStaffRef.current.filter((member) => member.id !== membershipId);
+        setStaff((current) => current.filter((member) => member.id !== membershipId));
+        closeDeleteStaff();
+        const success = tSettings("staffDeleted", locale);
+        setStaffNotice(success);
+        onNotify({ text: success, tone: "success" });
+      } finally {
+        submitLock.current = false;
+      }
+    });
   }
 
   function branchLabel(member: Pick<StaffMemberRecord, "branchName">) {
@@ -553,7 +599,7 @@ export function StaffControlSection({
                       <td className="px-3 py-3">{branchLabel(member)}</td>
                       <td className="px-3 py-3"><AccessMarks locale={locale} member={member} /></td>
                       <td className="px-3 py-3"><StatusBadge locale={locale} member={member} /></td>
-                      <td className="px-3 py-3"><StaffActions locale={locale} member={member} onDeactivate={disableStaff} onEdit={openEditStaff} onReactivate={setConfirmReactivateId} /></td>
+                      <td className="px-3 py-3"><StaffActions actorIsOwner={actorIsOwner} locale={locale} member={member} onDeactivate={disableStaff} onDelete={openDeleteStaff} onEdit={openEditStaff} onReactivate={setConfirmReactivateId} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -570,7 +616,7 @@ export function StaffControlSection({
                     <div><dt className="text-xs text-muted-foreground">{tSettings("access", locale)}</dt><dd><AccessMarks locale={locale} member={member} /></dd></div>
                     <div><dt className="text-xs text-muted-foreground">{tSettings("status", locale)}</dt><dd><StatusBadge locale={locale} member={member} /></dd></div>
                   </dl>
-                  <div className="mt-3"><StaffActions locale={locale} member={member} onDeactivate={disableStaff} onEdit={openEditStaff} onReactivate={setConfirmReactivateId} /></div>
+                  <div className="mt-3"><StaffActions actorIsOwner={actorIsOwner} locale={locale} member={member} onDeactivate={disableStaff} onDelete={openDeleteStaff} onEdit={openEditStaff} onReactivate={setConfirmReactivateId} /></div>
                 </article>
               ))}
             </div>
@@ -770,6 +816,32 @@ export function StaffControlSection({
         </AppSmallModal>
       ) : null}
 
+      {confirmDeleteId ? (
+        <AppSmallModal
+          closeAriaLabel={tSettings("closeModal", locale)}
+          closeOnBackdrop={false}
+          closeOnEscape={false}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={closeDeleteStaff}>{tSettings("cancel", locale)}</button>
+              <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white disabled:opacity-60" disabled={isPending} type="button" onClick={commitDeleteStaff}>{tSettings("delete", locale)}</button>
+            </div>
+          )}
+          onClose={closeDeleteStaff}
+          size="sm"
+          title={fillSettingsCopy(tSettings("deleteStaffNamed", locale), { name: deleteTarget?.fullName ?? "" })}
+        >
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">{tSettings("deleteStaffHistory", locale)}</p>
+            {deleteError ? <p className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-foreground" role="alert">{deleteError}</p> : null}
+            <label className="grid gap-1 text-sm font-medium" htmlFor="staff-delete-owner-password">
+              {tSettings("ownerPassword", locale)}
+              <input autoComplete="current-password" className="field-input" id="staff-delete-owner-password" type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
+            </label>
+          </div>
+        </AppSmallModal>
+      ) : null}
+
       {confirmReactivateId ? (
         <AppSmallModal
           closeAriaLabel={tSettings("closeModal", locale)}
@@ -944,15 +1016,19 @@ function StatusBadge({ locale, member }: { locale: SupportedLocale; member: Staf
 }
 
 function StaffActions({
+  actorIsOwner,
   locale,
   member,
   onDeactivate,
+  onDelete,
   onEdit,
   onReactivate,
 }: {
+  actorIsOwner: boolean;
   locale: SupportedLocale;
   member: StaffMemberRecord;
   onDeactivate: (id: string) => void;
+  onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   onReactivate: (id: string) => void;
 }) {
@@ -972,6 +1048,9 @@ function StaffActions({
       ) : (
         <button aria-label={`${tSettings("reactivate", locale)} ${member.fullName}`} className="h-8 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => onReactivate(member.id)}>{tSettings("reactivate", locale)}</button>
       )}
+      {actorIsOwner ? (
+        <button aria-label={`${tSettings("delete", locale)} ${member.fullName}`} className="h-8 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger" type="button" onClick={() => onDelete(member.id)}>{tSettings("delete", locale)}</button>
+      ) : null}
     </div>
   );
 }

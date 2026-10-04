@@ -205,6 +205,11 @@ textarea {
   transition-duration: 100ms;
 }
 
+[data-settings-ui] button[class~="bg-danger"]:not(:disabled):hover {
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--foreground) 14%, transparent);
+  filter: brightness(1.05);
+}
+
 [data-settings-ui] .settings-motion-save:not(:disabled):hover,
 [data-settings-ui] button[class~="bg-primary"]:not(:disabled):not(.settings-motion-tab):hover {
   box-shadow: 0 2px 0 color-mix(in srgb, var(--foreground) 14%, transparent);
@@ -235,7 +240,7 @@ textarea {
 }
 
 [data-settings-ui] .settings-motion-icon:not(:disabled):hover,
-[data-settings-ui] button:not(:disabled):not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-switch):not(.settings-motion-close):not([class~="bg-primary"]):not([class*="border-danger"]):hover {
+[data-settings-ui] button:not(:disabled):not(.settings-motion-save):not(.settings-motion-tab):not(.settings-motion-switch):not(.settings-motion-close):not([class~="bg-primary"]):not([class~="bg-danger"]):not([class*="border-danger"]):hover {
   background-color: color-mix(in srgb, var(--primary) 10%, var(--background));
   border-color: var(--primary);
 }

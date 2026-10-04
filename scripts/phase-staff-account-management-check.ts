@@ -42,7 +42,7 @@ check("10. password is hashed and omitted from the audit payload", repo.includes
 check("11. update does not rewrite requirePasswordChange", !repo.slice(repo.indexOf("if (input.id)"), repo.indexOf("const user = await tx.user.create")).includes("requirePasswordChange"));
 check("12. branch is scoped to the company", repo.includes("companyId: tenant.companyId, id: branchId"));
 check("13. self role and owner assignment stay blocked", repo.includes("change your own role") && repo.includes("isProtectedOwnerRole(role)") && repo.includes("membership.isOwner"));
-check("14. staff UI has no PIN field and no hard delete", !staffUi.toLowerCase().includes("pin") && !staffUi.includes("deleteStaff"));
+check("14. staff UI has no PIN field and no hard delete", !staffUi.toLowerCase().includes("pin") && !staffUi.includes(".delete(") && !repo.includes("tx.user.delete") && !repo.includes("tx.companyUser.delete"));
 check("15. staff UI uses disabled and reactivate", staffUi.includes('value="disabled"') && staffUi.includes("reactivateStaffMemberAction") && !staffUi.includes('value="inactive"'));
 check("16. owner row stays protected in the list", staffUi.includes('member.isOwner') && staffUi.includes('tSettings("protected"'));
 check("17. both-access warning is present", staffUi.includes("bothAccessOffWarning"));
@@ -54,6 +54,9 @@ check("22. missing access flags are rejected", (() => { try { assertStaffAccessF
 check("23. new staff defaults are cashier-safe", NEW_STAFF_DEFAULTS.allowPosAccess === true && NEW_STAFF_DEFAULTS.allowBackOfficeAccess === false && NEW_STAFF_DEFAULTS.status === "active");
 check("24. canonical roles exclude owner", CANONICAL_ASSIGNABLE_ROLES.every((role) => role.templateKey !== "manager" || role.name === "Manager") && !CANONICAL_ASSIGNABLE_ROLES.some((role) => role.name === "Owner" || role.templateKey === "cashier" && role.label !== "Staff/Cashier") && CANONICAL_ASSIGNABLE_ROLES.some((role) => role.templateKey === "cashier") && CANONICAL_ASSIGNABLE_ROLES.some((role) => role.templateKey === "manager"));
 check("25. staff page ensures assignable roles", repo.includes("ensureAssignableStaffRoles") && repo.includes("assertStaffAccessFlags") && !repo.includes("if (!input.allowPosAccess)") && !repo.includes("if (!allowPosAccess)"));
+check("26. staff delete marks deleted and keeps the user row", repo.includes('status: "deleted"') && repo.includes("Owner account cannot be deleted.") && repo.includes("compare(secret, ownerUser.passwordHash)") && !repo.includes("tx.user.delete") && !repo.includes("tx.companyUser.delete"));
+check("27. staff delete is owner-only and not deactivate", actions.includes("deleteStaffMemberAction") && actions.includes('requireAccountGate(tenant, "back-office")') && !actions.slice(actions.indexOf("export async function deleteStaffMemberAction"), actions.indexOf("export async function deactivateStaffMemberAction")).includes("staff.delete"));
+check("28. staff delete UI confirms with owner password", staffUi.includes("deleteStaffNamed") && staffUi.includes("ownerPassword") && staffUi.includes("commitDeleteStaff") && staffUi.includes("bg-danger"));
 
 console.log(`\nStaff account management: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
