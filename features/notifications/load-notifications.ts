@@ -1,3 +1,4 @@
+import { countUnreadStoreSupport } from "@/features/support/support-service";
 import { prisma } from "@/lib/db/prisma";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -190,5 +191,10 @@ export async function loadNotifications(
     }
   }
 
-  return [...stockItems, ...nearExpiryItems, ...membershipItems, ...promotionItems].slice(0, 100);
+  const supportReplies = await countUnreadStoreSupport(tenant.companyId);
+  const supportItems: NotificationItem[] = supportReplies > 0
+    ? [{ category: "support_reply", count: supportReplies, href: "/settings/help", id: "support-reply" }]
+    : [];
+
+  return [...supportItems, ...stockItems, ...nearExpiryItems, ...membershipItems, ...promotionItems].slice(0, 100);
 }

@@ -3,7 +3,7 @@
 import { fillPosCopy, tPos } from "@/lib/i18n/pos-copy";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, CalendarClock, CreditCard, PackageCheck, PackageX, Percent } from "lucide-react";
+import { Bell, CalendarClock, CreditCard, LifeBuoy, PackageCheck, PackageX, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { NotificationCategory, NotificationItem } from "@/features/notifications/notification-types";
@@ -16,6 +16,7 @@ const iconByCategory = {
   membership_expiring: CreditCard,
   promotion_starting: Percent,
   promotion_ending: Percent,
+  support_reply: LifeBuoy,
 } satisfies Record<NotificationCategory, typeof PackageCheck>;
 
 function categoryLabel(category: NotificationCategory, locale: string) {

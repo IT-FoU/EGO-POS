@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { getSettingsSectionStaffSnapshot } from "@/features/access-control/prisma-repository";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
-import { settingsSectionAllows, redactSettingsRead } from "@/features/access-control/phase3-permissions";
+import { allowsPermission, settingsSectionAllows, redactSettingsRead } from "@/features/access-control/phase3-permissions";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { requireSettingsDestination } from "@/lib/auth/module-access";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
@@ -12,6 +12,7 @@ import { getActiveBranchInformation } from "@/features/settings/branch-informati
 import { SettingsForm, type SettingsDetailSection } from "@/features/settings/components/settings-form";
 import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
 import { listLoyaltyEarningRules } from "@/features/loyalty/earning-rule-repository";
+import { listStoreSupportTickets } from "@/features/support/support-service";
 import { prisma } from "@/lib/db/prisma";
 import { getReceiptPreviewQrImageUrl } from "@/features/settings/receipt-preview-qr";
 import { requireSession } from "@/lib/auth/session";
@@ -107,6 +108,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
   }
 
   const loyaltyRules = needsLoyalty ? await listLoyaltyEarningRules(tenant) : [];
+  const supportTickets = section === "help" ? await listStoreSupportTickets(tenant) : [];
   const [loyaltyProducts, loyaltyCategories] = needsLoyalty
     ? await Promise.all([
         prisma.product.findMany({
@@ -131,6 +133,8 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
     <SettingsForm
       actorIsOwner={session.user.roles?.includes("Owner") ?? false}
       canEdit={canEdit}
+      canSubmitSupport={allowsPermission(permissionKeys, "settings.help.submit")}
+      initialSupportTickets={supportTickets}
       actorUserId={session.user.id}
       initialActiveBranch={activeBranch}
       initialBusinessLogoUrl={businessLogoUrl}

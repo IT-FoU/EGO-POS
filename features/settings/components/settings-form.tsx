@@ -57,9 +57,11 @@ export type SettingsDetailSection =
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
   | "day-off" | "ot" | "loyalty" | "help";
 
-export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialLoyaltyCatalog = { categories: [], products: [] }, initialLoyaltyRules = [], initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, canSubmitSupport = false, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialLoyaltyCatalog = { categories: [], products: [] }, initialLoyaltyRules = [], initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, initialSupportTickets = [], locale: localeProp, qrBranches = [], section, }: {
     actorIsOwner?: boolean;
     canEdit?: boolean;
+    canSubmitSupport?: boolean;
+    initialSupportTickets?: import("@/features/support/support-types").SupportTicketSummary[];
     initialLoyaltyCatalog?: { categories: LoyaltyCatalogItem[]; products: LoyaltyCatalogItem[] };
     initialLoyaltyRules?: LoyaltyEarningRuleRecord[];
     actorUserId?: string;
@@ -938,9 +940,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
         <BranchInformationPanel initialBranch={initialActiveBranch} locale={locale} />
       ) : null}
 
-      {section === "help" && initialHelpContext ? (
-        <HelpSupportPanel context={initialHelpContext} locale={locale} />
-      ) : null}
 
       {section === "tax" ? (
       <section className="rounded-lg border border-border bg-card p-5">
@@ -1009,5 +1008,8 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
           {settingsConfirm === "resetAll" ? (<p className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>) : null}
         </AppSmallModal>) : null}
       </fieldset>
+      {section === "help" && initialHelpContext ? (
+        <HelpSupportPanel canSubmit={canSubmitSupport} context={initialHelpContext} locale={locale} tickets={initialSupportTickets} />
+      ) : null}
     </div>);
 }

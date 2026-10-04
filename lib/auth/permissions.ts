@@ -42,6 +42,7 @@ export const WRITE_PERMISSIONS = {
   purchasingPayment: "purchasing.payment",
   purchasingReceive: "purchasing.receive",
   settingsManage: "settings.manage",
+  helpSubmit: "settings.help.submit",
   staffManage: "staff.edit",
   rolesManage: "roles.manage",
   approvalsManage: "approvals.approve",
@@ -63,6 +64,7 @@ export const READ_PERMISSIONS = {
   purchasingView: "purchasing.view",
   reportsView: "reports.view",
   settingsView: "settings.view",
+  helpView: "settings.help.view",
   staffView: "staff.view",
 } as const;
 

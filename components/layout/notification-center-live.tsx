@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bell, CalendarClock, CreditCard, PackageCheck, PackageX, Percent } from "lucide-react";
+import { Bell, CalendarClock, CreditCard, LifeBuoy, PackageCheck, PackageX, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { fillPosCopy, tPos } from "@/lib/i18n/pos-copy";
@@ -15,6 +15,7 @@ const iconByCategory = {
   membership_expiring: CreditCard,
   promotion_starting: Percent,
   promotion_ending: Percent,
+  support_reply: LifeBuoy,
 } satisfies Record<NotificationCategory, typeof PackageCheck>;
 
 const itemClass = "border-warning/40 bg-warning/10 text-warning";
