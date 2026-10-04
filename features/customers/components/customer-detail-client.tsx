@@ -4,11 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleDollarSign, CreditCard, Gift, Barcode, Phone, QrCode, ReceiptText, Star, Tags, User } from "lucide-react";
-import type { Customer, CustomerPayment, CustomerPurchase } from "@/features/customers/types";
+import type { Customer, CustomerPayment, CustomerPointEntry, CustomerPurchase } from "@/features/customers/types";
 import { CustomerStatusBadge } from "@/features/customers/components/customer-status-badge";
 import { MembershipBadge } from "@/features/customers/components/membership-badge";
 import { calculateAvailablePoints, formatLak } from "@/features/customers/format";
-import { createCustomerPaymentAction, updateCustomerAction } from "@/features/customers/actions";
+import { adjustCustomerPointsAction, createCustomerPaymentAction, updateCustomerAction } from "@/features/customers/actions";
 import type { SupportedLocale } from "@/lib/constants";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import {
@@ -29,14 +29,18 @@ const categoryLabelKeys: Record<string, string> = {
 };
 
 export function CustomerDetailClient({
+  canAdjustPoints = false,
   customer,
   locale: localeProp,
   payments,
+  pointEntries = [],
   purchases,
 }: {
+  canAdjustPoints?: boolean;
   customer: Customer;
   locale?: SupportedLocale;
   payments: CustomerPayment[];
+  pointEntries?: CustomerPointEntry[];
   purchases: CustomerPurchase[];
 }) {
   const router = useRouter();
@@ -276,7 +280,7 @@ export function CustomerDetailClient({
 
       {activeTab === "purchases" ? <HistoryTable locale={locale} purchases={purchases} /> : null}
       {activeTab === "points" ? (
-        <PointsHistory availablePoints={availablePoints} customer={customer} locale={locale} purchases={purchases} />
+        <PointsHistory availablePoints={availablePoints} canAdjustPoints={canAdjustPoints} customer={customer} locale={locale} pointEntries={pointEntries} />
       ) : null}
       {activeTab === "credit" ? (
         <section className="grid min-w-0 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -359,16 +363,80 @@ function MembershipQrCard({
   );
 }
 
+function pointTypeLabel(pointType: CustomerPointEntry["pointType"], locale: SupportedLocale) {
+  if (pointType === "earn") return tCustomers("pointTypeEarn", locale);
+  if (pointType === "redeem") return tCustomers("pointTypeRedeem", locale);
+  if (pointType === "expire") return tCustomers("pointTypeExpire", locale);
+  return tCustomers("pointTypeAdjust", locale);
+}
+
+function PointAdjustForm({ customerId, locale }: { customerId: string; locale: SupportedLocale }) {
+  const router = useRouter();
+  const t = (key: string) => tCustomers(key, locale);
+  const [direction, setDirection] = useState<"add" | "remove">("add");
+  const [points, setPoints] = useState(1);
+  const [reason, setReason] = useState("");
+  const [message, setMessage] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    if (!reason.trim()) {
+      setMessage(t("adjustReasonRequired"));
+      return;
+    }
+    const amount = Math.max(Math.trunc(Number(points) || 0), 0);
+    if (amount <= 0) return;
+    startTransition(async () => {
+      const result = await adjustCustomerPointsAction({
+        customerId,
+        note: reason.trim(),
+        pointsDelta: direction === "remove" ? -amount : amount,
+      });
+      if (!result.ok) {
+        setMessage(localizeCustomerError(result.error, locale));
+        return;
+      }
+      setReason("");
+      setMessage(t("pointAdjustSaved"));
+      router.refresh();
+    });
+  }
+
+  return (
+    <form className="grid gap-3 rounded-md border border-border bg-background p-4 md:grid-cols-[160px_140px_minmax(0,1fr)_auto]" data-point-adjust onSubmit={(event) => { event.preventDefault(); submit(); }}>
+      <label className="grid gap-1 text-sm">
+        <span className="font-semibold">{t("adjustPoints")}</span>
+        <select className="field-input" value={direction} onChange={(event) => setDirection(event.target.value === "remove" ? "remove" : "add")}>
+          <option value="add">{t("addPoints")}</option>
+          <option value="remove">{t("removePoints")}</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm">
+        <span className="font-semibold">{t("pointsToAdjust")}</span>
+        <input className="field-input" min="1" type="number" value={points} onChange={(event) => setPoints(Number(event.target.value))} />
+      </label>
+      <label className="grid gap-1 text-sm">
+        <span className="font-semibold">{t("adjustReason")}</span>
+        <input className="field-input" value={reason} onChange={(event) => setReason(event.target.value)} />
+      </label>
+      <button className="h-10 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60" disabled={pending} type="submit">{t("adjustPoints")}</button>
+      {message ? <p className="text-sm text-muted-foreground md:col-span-4">{message}</p> : null}
+    </form>
+  );
+}
+
 function PointsHistory({
   availablePoints,
+  canAdjustPoints,
   customer,
   locale,
-  purchases,
+  pointEntries,
 }: {
   availablePoints: number;
+  canAdjustPoints: boolean;
   customer: Customer;
   locale: SupportedLocale;
-  purchases: CustomerPurchase[];
+  pointEntries: CustomerPointEntry[];
 }) {
   const t = (key: string) => tCustomers(key, locale);
   return (
@@ -379,31 +447,30 @@ function PointsHistory({
         <Summary label={t("membershipLevel")} value={localizedMembershipLabel(customer.membershipLevel, locale)} />
         <Summary label={t("currentPoints")} value={formatLak(availablePoints)} />
       </div>
+      {canAdjustPoints ? <PointAdjustForm customerId={customer.id} locale={locale} /> : null}
       <div className="max-w-full overflow-x-auto">
         <table className="w-full min-w-[620px] text-left text-sm">
           <thead className="border-b border-border text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-3 py-3">{t("date")}</th>
+              <th className="px-3 py-3">{t("type")}</th>
               <th className="px-3 py-3">{t("reference")}</th>
-              <th className="px-3 py-3 text-right">{t("earned")}</th>
-              <th className="px-3 py-3 text-right">{t("redeemed")}</th>
-              <th className="px-3 py-3 text-right">{t("balance")}</th>
+              <th className="px-3 py-3 text-right">{t("pointsToAdjust")}</th>
             </tr>
           </thead>
           <tbody>
-            {purchases.map((purchase) => (
-              <tr className="border-b border-border last:border-b-0" key={purchase.id}>
-                <td className="px-3 py-3">{formatCustomerDisplayDate(purchase.saleDate, locale)}</td>
-                <td className="px-3 py-3 font-mono">{purchase.saleNo}</td>
-                <td className="px-3 py-3 text-right font-semibold">{formatLak(purchase.pointsEarned)}</td>
-                <td className="px-3 py-3 text-right">0</td>
-                <td className="px-3 py-3 text-right">{formatLak(availablePoints)}</td>
+            {pointEntries.map((entry) => (
+              <tr className="border-b border-border last:border-b-0" key={entry.id}>
+                <td className="px-3 py-3">{formatCustomerDisplayDate(entry.createdAt.slice(0, 10), locale)}</td>
+                <td className="px-3 py-3">{pointTypeLabel(entry.pointType, locale)}</td>
+                <td className="px-3 py-3">{entry.note}</td>
+                <td className="px-3 py-3 text-right font-semibold">{entry.points > 0 ? `+${formatLak(entry.points)}` : formatLak(entry.points)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {purchases.length === 0 ? (
+      {pointEntries.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">{t("noPointsHistory")}</p>
       ) : null}
     </InfoCard>

@@ -17,6 +17,7 @@ export const WRITE_PERMISSIONS = {
   membershipEdit: "membership.edit",
   membershipDelete: "membership.delete",
   membershipLevelChange: "membership.level.change",
+  membershipPointsAdjust: "membership.points.adjust",
   posSell: "pos.sell",
   posCashSessionManage: "pos.cash_session.manage",
   productsCreate: "products.create",

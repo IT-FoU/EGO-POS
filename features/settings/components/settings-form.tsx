@@ -253,6 +253,12 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
             return tSettings("loyaltyPointValueNegative", locale);
         if (section === "loyalty" && settings.loyaltyMinRedeemPoints < 1)
             return tSettings("minRedeemPointsMin", locale);
+        if (section === "loyalty" && settings.loyaltyMaxRedeemPoints < 0)
+            return tSettings("maxRedeemPointsNegative", locale);
+        if (section === "loyalty" && settings.loyaltyMaxRedeemPoints > 0 && settings.loyaltyMaxRedeemPoints < settings.loyaltyMinRedeemPoints)
+            return tSettings("maxRedeemBelowMin", locale);
+        if (section === "loyalty" && settings.loyaltyExpiryEnabled && settings.loyaltyExpiryDays < 1)
+            return tSettings("expiryDaysMin", locale);
         if (section === "receipt" && settings.receiptPaperSize === "custom") {
             const custom = validateCustomPaperDimensions(settings.receiptCustomWidthMm, settings.receiptCustomHeightMm);
             if (!custom.ok) return tSettings(custom.errorKey, locale);
@@ -279,7 +285,13 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
         }
         if (
             Number(settings.loyaltyPointValueLak) !== Number(baseline.loyaltyPointValueLak) ||
-            Number(settings.loyaltyMinRedeemPoints) !== Number(baseline.loyaltyMinRedeemPoints)
+            Number(settings.loyaltyMinRedeemPoints) !== Number(baseline.loyaltyMinRedeemPoints) ||
+            Number(settings.loyaltyMaxRedeemPoints) !== Number(baseline.loyaltyMaxRedeemPoints) ||
+            settings.loyaltyAllowPartial !== baseline.loyaltyAllowPartial ||
+            settings.loyaltyAllowRedeemWithDiscount !== baseline.loyaltyAllowRedeemWithDiscount ||
+            settings.loyaltyExpiryEnabled !== baseline.loyaltyExpiryEnabled ||
+            Number(settings.loyaltyExpiryDays) !== Number(baseline.loyaltyExpiryDays) ||
+            settings.loyaltyExpiryUnit !== baseline.loyaltyExpiryUnit
         ) {
             lines.push(tSettings("loyaltyRateChangeConfirm", locale));
         }
@@ -335,7 +347,13 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
                 };
             } else {
                 payload = {
+                    loyaltyAllowPartial: settings.loyaltyAllowPartial,
+                    loyaltyAllowRedeemWithDiscount: settings.loyaltyAllowRedeemWithDiscount,
                     loyaltyEnabled: settings.loyaltyEnabled,
+                    loyaltyExpiryDays: settings.loyaltyExpiryDays,
+                    loyaltyExpiryEnabled: settings.loyaltyExpiryEnabled,
+                    loyaltyExpiryUnit: settings.loyaltyExpiryUnit,
+                    loyaltyMaxRedeemPoints: settings.loyaltyMaxRedeemPoints,
                     loyaltyMinRedeemPoints: settings.loyaltyMinRedeemPoints,
                     loyaltyPointValueLak: settings.loyaltyPointValueLak,
                 };
@@ -444,6 +462,12 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
         if (section === "loyalty") {
             return (
                 settings.loyaltyEnabled !== baseline.loyaltyEnabled ||
+                settings.loyaltyAllowPartial !== baseline.loyaltyAllowPartial ||
+                settings.loyaltyAllowRedeemWithDiscount !== baseline.loyaltyAllowRedeemWithDiscount ||
+                settings.loyaltyExpiryEnabled !== baseline.loyaltyExpiryEnabled ||
+                settings.loyaltyExpiryUnit !== baseline.loyaltyExpiryUnit ||
+                settings.loyaltyExpiryDays !== baseline.loyaltyExpiryDays ||
+                settings.loyaltyMaxRedeemPoints !== baseline.loyaltyMaxRedeemPoints ||
                 settings.loyaltyMinRedeemPoints !== baseline.loyaltyMinRedeemPoints ||
                 settings.loyaltyPointValueLak !== baseline.loyaltyPointValueLak
             );
@@ -868,16 +892,45 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
           {settings.loyaltyEnabled ? tSettings("loyaltyStatusOn", locale) : tSettings("loyaltyStatusOff", locale)}
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{tSettings("loyaltyHelp", locale)}</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <div className="mt-5">
           <Toggle label={tSettings("enableLoyalty", locale)} checked={settings.loyaltyEnabled} onChange={(value) => update("loyaltyEnabled", value)}/>
-          <Field label={tSettings("pointValueLak", locale)}>
-            <input className="field-input" min="0" type="number" value={settings.loyaltyPointValueLak} onChange={(event) => update("loyaltyPointValueLak", Number(event.target.value))}/>
-          </Field>
-          <Field label={tSettings("minRedeemPoints", locale)}>
-            <input className="field-input" min="1" type="number" value={settings.loyaltyMinRedeemPoints} onChange={(event) => update("loyaltyMinRedeemPoints", Number(event.target.value))}/>
-          </Field>
         </div>
         <LoyaltyRulesPanel categories={initialLoyaltyCatalog.categories} initialRules={initialLoyaltyRules} locale={locale} products={initialLoyaltyCatalog.products} />
+        <div className="mt-6 rounded-lg border border-border bg-background p-4" data-loyalty-policy>
+          <h3 className="text-sm font-semibold">{tSettings("redemptionRules", locale)}</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <Field label={tSettings("pointValueLak", locale)}>
+              <input className="field-input" min="0" type="number" value={settings.loyaltyPointValueLak} onChange={(event) => update("loyaltyPointValueLak", Number(event.target.value))}/>
+            </Field>
+            <Field label={tSettings("minRedeemPoints", locale)}>
+              <input className="field-input" min="1" type="number" value={settings.loyaltyMinRedeemPoints} onChange={(event) => update("loyaltyMinRedeemPoints", Number(event.target.value))}/>
+            </Field>
+            <Field label={tSettings("maximumRedeemPoints", locale)}>
+              <input className="field-input" min="0" type="number" value={settings.loyaltyMaxRedeemPoints} onChange={(event) => update("loyaltyMaxRedeemPoints", Number(event.target.value))}/>
+            </Field>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{tSettings("maximumRedeemHelp", locale)}</p>
+          <div className="mt-4 grid gap-3">
+            <Toggle label={tSettings("allowPartialRedemption", locale)} checked={settings.loyaltyAllowPartial} onChange={(value) => update("loyaltyAllowPartial", value)}/>
+            <Toggle label={tSettings("allowRedeemWithDiscount", locale)} checked={settings.loyaltyAllowRedeemWithDiscount} onChange={(value) => update("loyaltyAllowRedeemWithDiscount", value)}/>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">{tSettings("pointPolicy", locale)}</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-[auto_160px_160px] md:items-end">
+            <Toggle label={tSettings("pointsExpire", locale)} checked={settings.loyaltyExpiryEnabled} onChange={(value) => update("loyaltyExpiryEnabled", value)}/>
+            <Field label={tSettings("expiryAmount", locale)}>
+              <input className="field-input" disabled={!settings.loyaltyExpiryEnabled} min="1" type="number" value={settings.loyaltyExpiryDays} onChange={(event) => update("loyaltyExpiryDays", Number(event.target.value))}/>
+            </Field>
+            <Field label={tSettings("expiryUnit", locale)}>
+              <select className="field-input" disabled={!settings.loyaltyExpiryEnabled} value={settings.loyaltyExpiryUnit} onChange={(event) => update("loyaltyExpiryUnit", event.target.value === "months" ? "months" : "days")}>
+                <option value="days">{tSettings("expiryDays", locale)}</option>
+                <option value="months">{tSettings("expiryMonths", locale)}</option>
+              </select>
+            </Field>
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">{tSettings("loyaltyCalcHelp", locale)}</p>
+        </div>
       </section>
       ) : null}
 

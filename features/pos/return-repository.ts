@@ -926,6 +926,7 @@ async function persistReturnOrExchange(
   const nextStatus = nextLifecycleSaleStatus(reloadedForQty, remainingQty);
 
   await reverseSaleLoyaltyPortion(tx, sale, {
+    createdBy: tenant.userId,
     fullyReturned: remainingQty <= 1e-9,
     refundedAmountLak: remainingBySaleItem(reloadedForQty).returnedPaidTotal,
   });
@@ -944,6 +945,7 @@ async function persistReturnOrExchange(
     await applyExchangeLoyaltyEarn(tx, {
       amountLak: amount(replacements.reduce((total, item) => total + amount(item.totalAmount), 0)),
       companyId: tenant.companyId,
+      createdBy: tenant.userId,
       customerId: String(sale.customerId),
       enabled: settings?.loyaltyEnabled !== false,
       lines: replacements.map((item) => ({

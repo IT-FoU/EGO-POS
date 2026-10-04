@@ -65,6 +65,7 @@ export const PHASE3_PERMISSION_ENTRIES = [
   [DASHBOARD_WIDGET.recentBills, "Dashboard recent bills", "dashboard"],
   [DASHBOARD_WIDGET.cashSession, "Dashboard cash session", "dashboard"],
   ["membership.level.change", "Change a customer's membership level", "membership"],
+  ["membership.points.adjust", "Adjust a customer's loyalty points", "membership"],
   ["settings.company_profile.view", "View company profile", "settings"],
   ["settings.company_profile.edit", "Edit company profile", "settings"],
   ["settings.logo.view", "View business logo", "settings"],
@@ -302,7 +303,13 @@ const RECEIPT_FIELDS = new Set([
   "showLogoOnReceipt",
 ]);
 const LOYALTY_FIELDS = new Set([
+  "loyaltyAllowPartial",
+  "loyaltyAllowRedeemWithDiscount",
   "loyaltyEnabled",
+  "loyaltyExpiryDays",
+  "loyaltyExpiryEnabled",
+  "loyaltyExpiryUnit",
+  "loyaltyMaxRedeemPoints",
   "loyaltyMinRedeemPoints",
   "loyaltyPointValueLak",
   "loyaltySpendPerPointLak",

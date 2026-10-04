@@ -29,6 +29,7 @@ import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
 import { evaluateLoyaltyEarning } from "@/features/loyalty/earning-rules";
+import { acceptedRedeemPoints } from "@/features/loyalty/point-policy";
 import {
   canStartWork,
   deriveCashShiftUiState,
@@ -592,15 +593,28 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const manualDiscountTotal = Math.min(subtotal, discountAmount + percentDiscountValue);
     const discountTotal = Math.min(subtotal, promotionDiscountTotal + manualDiscountTotal);
     const maxRedeemablePoints = loyaltySettings.loyaltyEnabled && selectedCustomer
-        ? Math.min(
-            selectedCustomer.pointsBalance,
-            loyaltySettings.loyaltyPointValueLak > 0
-                ? Math.floor(Math.max(subtotal - discountTotal, 0) / loyaltySettings.loyaltyPointValueLak)
-                : 0,
-        )
+        ? acceptedRedeemPoints({
+            allowPartial: true,
+            allowRedeemWithDiscount: loyaltySettings.loyaltyAllowRedeemWithDiscount !== false,
+            balance: selectedCustomer.pointsBalance,
+            hasPromotionOrManualDiscount: discountTotal > 0,
+            maxRedeemPoints: loyaltySettings.loyaltyMaxRedeemPoints > 0 ? loyaltySettings.loyaltyMaxRedeemPoints : null,
+            payableLak: Math.max(subtotal - discountTotal, 0),
+            pointValueLak: loyaltySettings.loyaltyPointValueLak,
+            requestedPoints: Number.MAX_SAFE_INTEGER,
+        })
         : 0;
-    const effectiveRedeemPoints = loyaltySettings.loyaltyEnabled
-        ? Math.min(Math.max(redeemPoints, 0), maxRedeemablePoints)
+    const effectiveRedeemPoints = loyaltySettings.loyaltyEnabled && selectedCustomer
+        ? acceptedRedeemPoints({
+            allowPartial: loyaltySettings.loyaltyAllowPartial !== false,
+            allowRedeemWithDiscount: loyaltySettings.loyaltyAllowRedeemWithDiscount !== false,
+            balance: selectedCustomer.pointsBalance,
+            hasPromotionOrManualDiscount: discountTotal > 0,
+            maxRedeemPoints: loyaltySettings.loyaltyMaxRedeemPoints > 0 ? loyaltySettings.loyaltyMaxRedeemPoints : null,
+            payableLak: Math.max(subtotal - discountTotal, 0),
+            pointValueLak: loyaltySettings.loyaltyPointValueLak,
+            requestedPoints: redeemPoints,
+        })
         : 0;
     const loyaltyRedeemDiscount = effectiveRedeemPoints * loyaltySettings.loyaltyPointValueLak;
     const taxableAmount = Math.max(subtotal - discountTotal - loyaltyRedeemDiscount, 0);

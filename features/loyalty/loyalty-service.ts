@@ -4,6 +4,14 @@ import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { assertPermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 import { evaluateLoyaltyEarning, formatEarnNote, type LoyaltyEarnLine } from "@/features/loyalty/earning-rules";
 import { listActiveLoyaltyRules } from "@/features/loyalty/earning-rule-repository";
+import {
+  assertRedemptionAllowed,
+  expiredPointsFromLedger,
+  expiryWindowDays,
+  loyaltyPolicyFromSettingsRow,
+  loyaltyReversalDelta,
+  type LoyaltyPointPolicy,
+} from "@/features/loyalty/point-policy";
 
 function amount(value: unknown) {
   const parsed = Number(value ?? 0);
@@ -76,6 +84,7 @@ export async function applyLoyaltyLedger(
     earnedPoints: number;
     redeemDiscountLak: number;
     redeemPoints: number;
+    createdBy?: string | null;
     earnNote?: string;
     saleId: string;
     saleNo: string;
@@ -90,6 +99,7 @@ export async function applyLoyaltyLedger(
         amountLak: input.redeemDiscountLak,
         companyId: input.companyId,
         customerId: input.customerId,
+        createdBy: input.createdBy ?? null,
         note: `Redeemed on POS sale ${input.saleNo}`,
         pointType: "redeem",
         points: -input.redeemPoints,
@@ -105,6 +115,7 @@ export async function applyLoyaltyLedger(
         amountLak: input.totalAmountLak,
         companyId: input.companyId,
         customerId: input.customerId,
+        createdBy: input.createdBy ?? null,
         note: input.earnNote ?? `Earned from POS sale ${input.saleNo}`,
         pointType: "earn",
         points: input.earnedPoints,
@@ -164,7 +175,7 @@ export async function recomputeMembershipTier(tx: Record<string, any>, companyId
 export async function reverseSaleLoyaltyPortion(
   tx: Record<string, any>,
   sale: Record<string, any>,
-  input: { fullyReturned: boolean; refundedAmountLak: number },
+  input: { createdBy?: string | null; fullyReturned: boolean; refundedAmountLak: number },
 ) {
   if (!sale.customerId) {
     return;
@@ -221,14 +232,19 @@ export async function reverseSaleLoyaltyPortion(
     throw new Error("Loyalty impact was already reversed for this sale.");
   }
 
-  const ratio = originalTotal > 0 ? Math.min(Math.max(amount(input.refundedAmountLak) / originalTotal, 0), 1) : 0;
-  const targetEarn = input.fullyReturned ? originalEarn : Math.floor(originalEarn * ratio);
-  const targetEarnAmount = input.fullyReturned ? originalEarnAmount : Math.round(originalEarnAmount * ratio);
-  const targetRedeem = input.fullyReturned ? originalRedeem : 0;
-
-  const deltaEarn = Math.max(targetEarn - reversedEarn, 0);
+  const reversal = loyaltyReversalDelta({
+    fullyReturned: input.fullyReturned,
+    originalEarn,
+    originalRedeem,
+    originalTotal,
+    refundedAmountLak: amount(input.refundedAmountLak),
+    reversedEarn,
+    reversedRedeem,
+  });
+  const targetEarnAmount = input.fullyReturned ? originalEarnAmount : Math.round(originalEarnAmount * (originalTotal > 0 ? Math.min(amount(input.refundedAmountLak) / originalTotal, 1) : 0));
+  const deltaEarn = reversal.deltaEarn;
   const deltaEarnAmount = Math.max(targetEarnAmount - reversedEarnAmount, 0);
-  const deltaRedeem = Math.max(targetRedeem - reversedRedeem, 0);
+  const deltaRedeem = reversal.deltaRedeem;
   if (deltaEarn === 0 && deltaRedeem === 0) {
     return;
   }
@@ -239,6 +255,7 @@ export async function reverseSaleLoyaltyPortion(
         amountLak: -deltaEarnAmount,
         companyId: sale.companyId,
         customerId: sale.customerId,
+        createdBy: input.createdBy ?? null,
         note: `Reversed earn from sale ${sale.saleNo}`,
         pointType: "adjust",
         points: -deltaEarn,
@@ -252,6 +269,7 @@ export async function reverseSaleLoyaltyPortion(
         amountLak: 0,
         companyId: sale.companyId,
         customerId: sale.customerId,
+        createdBy: input.createdBy ?? null,
         note: `Reversed redeem from sale ${sale.saleNo}`,
         pointType: "adjust",
         points: deltaRedeem,
@@ -288,6 +306,7 @@ export async function applyExchangeLoyaltyEarn(
     customerId: string;
     enabled: boolean;
     lines?: LoyaltyEarnLine[];
+    createdBy?: string | null;
     refundNo: string;
     saleId: string;
     spendPerPointLak?: number;
@@ -328,6 +347,7 @@ export async function applyExchangeLoyaltyEarn(
       amountLak: amount(input.amountLak),
       companyId: input.companyId,
       customerId: input.customerId,
+      createdBy: input.createdBy ?? null,
       note: formatEarnNote(`Exchange earn from ${input.refundNo}`, evaluated.breakdown),
       pointType: "adjust",
       points: earnedPoints,
@@ -346,11 +366,69 @@ export async function applyExchangeLoyaltyEarn(
   return earnedPoints;
 }
 
-export async function reverseSaleLoyalty(tx: Record<string, any>, sale: Record<string, any>) {
+export async function reverseSaleLoyalty(tx: Record<string, any>, sale: Record<string, any>, createdBy?: string | null) {
   return reverseSaleLoyaltyPortion(tx, sale, {
+    createdBy,
     fullyReturned: true,
     refundedAmountLak: amount(sale.totalAmount),
   });
+}
+
+const RESERVED_ADJUST_PREFIXES = ["Reversed ", "Exchange earn", "Expired points"];
+
+export async function settleCustomerPointExpiry(
+  tx: Record<string, any>,
+  companyId: string,
+  customerId: string,
+  policy: LoyaltyPointPolicy,
+  now = new Date(),
+) {
+  const expiryDays = expiryWindowDays(policy);
+  if (expiryDays < 1) return 0;
+  await lockCustomerRow(tx, companyId, customerId);
+  const rows = await tx.loyaltyPointLedger.findMany({
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    where: { companyId, customerId },
+  });
+  const overdue = expiredPointsFromLedger(rows, now, expiryDays);
+  if (overdue <= 0) return 0;
+  const customer = await tx.customer.findFirst({
+    select: { pointsBalance: true },
+    where: { companyId, id: customerId },
+  });
+  const burn = Math.min(overdue, Math.max(amount(customer?.pointsBalance), 0));
+  if (burn <= 0) return 0;
+  await tx.loyaltyPointLedger.create({
+    data: {
+      amountLak: 0,
+      companyId,
+      customerId,
+      note: "Expired points",
+      pointType: "expire",
+      points: -burn,
+    },
+  });
+  await tx.customer.update({
+    data: { pointsBalance: { decrement: burn } },
+    where: { id: customerId },
+  });
+  return burn;
+}
+
+export async function settleCompanyLoyaltyExpiry(client: Record<string, any>, companyId: string) {
+  const settings = await client.companySetting.findUnique({ where: { companyId } });
+  const policy = loyaltyPolicyFromSettingsRow(settings);
+  if (expiryWindowDays(policy) < 1) return;
+  const customers = await client.customer.findMany({
+    select: { id: true },
+    take: 200,
+    where: { companyId, pointsBalance: { gt: 0 } },
+  });
+  for (const customer of customers as Array<{ id: string }>) {
+    await client.$transaction(async (tx: Record<string, any>) => {
+      await settleCustomerPointExpiry(tx, companyId, customer.id, policy);
+    });
+  }
 }
 
 export async function adjustCustomerLoyaltyPoints(
@@ -359,22 +437,31 @@ export async function adjustCustomerLoyaltyPoints(
 ) {
   const customerId = String(input.customerId).trim();
   const pointsDelta = Math.trunc(numberValue(input.pointsDelta));
+  const note = String(input.note ?? "").trim();
   if (!customerId) {
     throw new Error("Customer id is required.");
   }
   if (pointsDelta === 0) {
     throw new Error("Point adjustment cannot be zero.");
   }
+  if (!note || note.length > 240) {
+    throw new Error("A reason is required for a point adjustment.");
+  }
+  if (RESERVED_ADJUST_PREFIXES.some((prefix) => note.startsWith(prefix))) {
+    throw new Error("Point adjustment reason is not allowed.");
+  }
 
-  await assertPermission(tenant, WRITE_PERMISSIONS.customersUpdate);
+  await assertPermission(tenant, WRITE_PERMISSIONS.membershipPointsAdjust);
 
   return withTenantTransaction({
     action: "adjust_points",
     module: "customers",
-    newData: input,
+    newData: { customerId, note, pointsDelta },
     tenant,
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
+      const settings = await tx.companySetting.findUnique({ where: { companyId: tenant.companyId } });
+      await settleCustomerPointExpiry(tx, tenant.companyId, customerId, loyaltyPolicyFromSettingsRow(settings));
       await lockCustomerRow(tx, tenant.companyId, customerId);
       const customer = await tx.customer.findFirst({
         select: { id: true, pointsBalance: true },
@@ -393,8 +480,9 @@ export async function adjustCustomerLoyaltyPoints(
         data: {
           amountLak: 0,
           companyId: tenant.companyId,
+          createdBy: tenant.userId,
           customerId,
-          note: input.note?.trim() || "Manual point adjustment",
+          note,
           pointType: "adjust",
           points: pointsDelta,
         },
@@ -413,31 +501,45 @@ export async function adjustCustomerLoyaltyPoints(
 export async function calculateLoyaltyRedemption(
   tx: Record<string, any>,
   input: {
+    allowPartial?: boolean;
+    allowRedeemWithDiscount?: boolean;
     companyId: string;
     customerId?: string;
     enabled: boolean;
+    hasPromotionOrManualDiscount?: boolean;
+    maxRedeemPoints?: number | null;
     minRedeemPoints: number;
     pointValueLak: number;
+    policy?: LoyaltyPointPolicy;
     redeemableAmountLak: number;
     redeemPoints?: number;
   },
 ) {
-  const redeemPoints = Math.max(Math.floor(numberValue(input.redeemPoints)), 0);
+  const requestedPoints = Math.max(Math.floor(numberValue(input.redeemPoints)), 0);
+  const policy = input.policy ?? {
+    allowPartial: input.allowPartial !== false,
+    allowRedeemWithDiscount: input.allowRedeemWithDiscount !== false,
+    expiryDays: null,
+    expiryEnabled: false,
+    expiryUnit: "days" as const,
+    maxRedeemPoints: input.maxRedeemPoints ?? null,
+  };
 
   if (!input.enabled) {
-    if (redeemPoints > 0) {
+    if (requestedPoints > 0) {
       throw new Error("Loyalty point redemption is disabled.");
     }
     return { customer: null, discountAmountLak: 0, redeemPoints: 0 };
   }
 
   if (!input.customerId) {
-    if (redeemPoints > 0) {
+    if (requestedPoints > 0) {
       throw new Error("A customer is required to redeem loyalty points.");
     }
     return { customer: null, discountAmountLak: 0, redeemPoints: 0 };
   }
 
+  await settleCustomerPointExpiry(tx, input.companyId, input.customerId, policy);
   await lockCustomerRow(tx, input.companyId, input.customerId);
   const customer = await tx.customer.findFirst({
     select: { id: true, pointsBalance: true, status: true },
@@ -448,28 +550,25 @@ export async function calculateLoyaltyRedemption(
     throw new Error("Active customer was not found for loyalty points.");
   }
 
-  if (redeemPoints <= 0) {
+  if (requestedPoints <= 0) {
     return { customer, discountAmountLak: 0, redeemPoints: 0 };
   }
 
-  if (redeemPoints < input.minRedeemPoints) {
-    throw new Error(`Minimum redeem points is ${input.minRedeemPoints}.`);
-  }
-
-  const currentBalance = Number(customer.pointsBalance ?? 0);
-  if (currentBalance < redeemPoints) {
-    throw new Error(`Insufficient loyalty points. Available ${currentBalance}, requested ${redeemPoints}.`);
-  }
-
-  const maxRedeemablePoints =
-    input.pointValueLak > 0 ? Math.floor(input.redeemableAmountLak / input.pointValueLak) : 0;
-  if (redeemPoints > maxRedeemablePoints) {
-    throw new Error(`Redeem points exceed sale amount. Maximum redeemable points ${maxRedeemablePoints}.`);
-  }
+  const decision = assertRedemptionAllowed({
+    allowPartial: policy.allowPartial,
+    allowRedeemWithDiscount: policy.allowRedeemWithDiscount,
+    balance: Number(customer.pointsBalance ?? 0),
+    hasPromotionOrManualDiscount: input.hasPromotionOrManualDiscount === true,
+    maxRedeemPoints: policy.maxRedeemPoints,
+    minRedeemPoints: input.minRedeemPoints,
+    payableLak: input.redeemableAmountLak,
+    pointValueLak: input.pointValueLak,
+    redeemPoints: requestedPoints,
+  });
 
   return {
     customer,
-    discountAmountLak: redeemPoints * input.pointValueLak,
-    redeemPoints,
+    discountAmountLak: decision.redeemPoints * input.pointValueLak,
+    redeemPoints: decision.redeemPoints,
   };
 }

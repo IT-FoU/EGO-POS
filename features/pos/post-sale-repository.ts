@@ -506,7 +506,7 @@ export async function voidSaleCore(
   assertSaleVoidable(sale);
   await lockSaleForUpdate(tx, tenant, String(sale.id));
   await restoreSaleStock(tx, tenant, sale, `Void sale ${sale.saleNo}${reason ? `: ${reason}` : ""}`);
-  await reverseSaleLoyalty(tx, sale);
+  await reverseSaleLoyalty(tx, sale, tenant.userId);
   await reverseSalePromotions(tx, sale);
 
   await tx.sale.update({

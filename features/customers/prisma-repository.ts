@@ -18,7 +18,7 @@ import {
   type CustomerPaymentInput,
   type CustomerUpdateInput,
 } from "@/features/customers/dto";
-import { adjustCustomerLoyaltyPoints } from "@/features/loyalty/loyalty-service";
+import { adjustCustomerLoyaltyPoints, settleCompanyLoyaltyExpiry } from "@/features/loyalty/loyalty-service";
 import {
   CUSTOMER_CODE_PREFIX,
   CUSTOMER_CODE_RETRY_LIMIT,
@@ -39,6 +39,7 @@ export async function getPrismaCustomersSnapshot(tenant: TenantContext, client: 
     where: { companyId: scope.companyId },
   });
   const loyaltySpendPerPointLak = Math.max(Number(settings?.loyaltySpendPerPointLak ?? 10_000), 1);
+  await settleCompanyLoyaltyExpiry(client, scope.companyId);
   const [customers, levels, payments, purchases] = await Promise.all([
     client.customer.findMany({
       include: { loyaltyPointLedger: true, membershipLevel: true },
@@ -90,12 +91,31 @@ export async function getPrismaCustomerDetail(customerId: string, tenant: Tenant
     getPrismaCustomerById(customerId, tenant),
   ]);
 
+  const ledger = customer
+    ? await clientLedger(db, tenant.companyId, customerId)
+    : [];
+
   return {
     customer,
     levels: snapshot.levels,
     payments: snapshot.payments.filter((payment: CustomerPayment) => payment.customerId === customerId),
+    pointEntries: ledger,
     purchases: snapshot.purchases.filter((purchase: CustomerPurchase) => purchase.customerId === customerId),
   };
+}
+
+function clientLedger(client: any, companyId: string, customerId: string) {
+  return client.loyaltyPointLedger.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 30,
+    where: { companyId, customerId },
+  }).then((rows: Array<Record<string, unknown>>) => rows.map((row) => ({
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt ?? ""),
+    id: String(row.id),
+    note: String(row.note ?? ""),
+    pointType: String(row.pointType ?? "adjust") as "earn" | "redeem" | "adjust" | "expire",
+    points: Number(row.points ?? 0),
+  })));
 }
 
 async function allocateMemberCode(tx: Record<string, any>, companyId: string) {

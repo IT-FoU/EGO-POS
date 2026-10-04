@@ -15,6 +15,7 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { assertBranchInScope, assertWarehouseInScope, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { taxAndLoyaltyFromSettingsRow } from "@/features/settings/prisma-repository";
+import { loyaltyPolicyFromSettingsRow } from "@/features/loyalty/point-policy";
 import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
 import {
   consumeInventoryForSale,
@@ -340,7 +341,10 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     customers: [] as PosCustomer[],
     loyaltySettings: {
       earningRules: previewEarningRules,
+      loyaltyAllowPartial: taxAndLoyalty.loyaltyAllowPartial,
+      loyaltyAllowRedeemWithDiscount: taxAndLoyalty.loyaltyAllowRedeemWithDiscount,
       loyaltyEnabled: taxAndLoyalty.loyaltyEnabled,
+      loyaltyMaxRedeemPoints: taxAndLoyalty.loyaltyMaxRedeemPoints,
       loyaltyMinRedeemPoints: taxAndLoyalty.loyaltyMinRedeemPoints,
       loyaltyPointValueLak: taxAndLoyalty.loyaltyPointValueLak,
       loyaltySpendPerPointLak: taxAndLoyalty.loyaltySpendPerPointLak,
@@ -596,12 +600,15 @@ export async function writeCompletePrismaSale(
         const effectiveDiscountPercent = subtotal > 0 ? manualDiscountAmount / subtotal * 100 : requestedDiscountPercent;
         assertPosActionAllowed(policy, "apply_discount", { discountPercent: effectiveDiscountPercent });
       }
+      const loyaltyPolicy = loyaltyPolicyFromSettingsRow(settings);
       const loyaltyRedemption = await calculateLoyaltyRedemption(tx, {
         companyId: tenant.companyId,
         customerId: input.customerId,
         enabled: loyaltyEnabled,
+        hasPromotionOrManualDiscount: promotionDiscountAmount + manualDiscountAmount > 0,
         minRedeemPoints: loyaltyMinRedeemPoints,
         pointValueLak: loyaltyPointValueLak,
+        policy: loyaltyPolicy,
         redeemableAmountLak: Math.max(subtotal - promotionDiscountAmount - manualDiscountAmount, 0),
         redeemPoints: input.redeemPoints,
       });
@@ -824,6 +831,7 @@ export async function writeCompletePrismaSale(
         await applyLoyaltyLedger(tx, {
           companyId: tenant.companyId,
           customerId: loyaltyRedemption.customer.id,
+          createdBy: tenant.userId,
           earnedPoints,
           earnNote: formatEarnNote(`Earned from POS sale ${sale.saleNo}`, earning.breakdown),
           redeemDiscountLak: loyaltyRedemption.discountAmountLak,

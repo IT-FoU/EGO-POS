@@ -33,7 +33,7 @@ export async function createCustomerPaymentAction(input: Parameters<typeof creat
 
 export async function adjustCustomerPointsAction(input: { customerId: string; note?: string; pointsDelta: number }) {
   try {
-    return writeSuccess(await adjustCustomerLoyaltyPoints(await tenant(WRITE_PERMISSIONS.customersUpdate), input));
+    return writeSuccess(await adjustCustomerLoyaltyPoints(await tenant(WRITE_PERMISSIONS.membershipPointsAdjust), input));
   } catch (error) {
     return writeFailure(error);
   }

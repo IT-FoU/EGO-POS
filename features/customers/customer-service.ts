@@ -29,6 +29,7 @@ export async function getCustomerDetail(customerId: string): Promise<{
   customer: Customer | undefined;
   levels: MembershipLevel[];
   payments: CustomerPayment[];
+  pointEntries: import("@/features/customers/types").CustomerPointEntry[];
   purchases: CustomerPurchase[];
 }> {
   return getPrismaCustomerDetail(customerId, tenantFromSession(await requireSession()));

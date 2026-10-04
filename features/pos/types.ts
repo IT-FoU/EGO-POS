@@ -169,7 +169,10 @@ export type PosLoyaltySettings = {
     sortOrder: number;
     status: "active";
   }>;
+  loyaltyAllowPartial: boolean;
+  loyaltyAllowRedeemWithDiscount: boolean;
   loyaltyEnabled: boolean;
+  loyaltyMaxRedeemPoints: number;
   loyaltyMinRedeemPoints: number;
   loyaltyPointValueLak: number;
   loyaltySpendPerPointLak: number;
