@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, withTenantTransaction } from "@/lib/db/write-context";
 import { applyAtomicStockDelta } from "@/features/inventory/stock-concurrency";
@@ -76,6 +77,41 @@ export function evaluateApprovalRequirement(
     return numberValue(context.amountLak) >= thresholdLak;
   }
   return true;
+}
+
+function accessMeetsApprover(actor: UserAccess, approverRole: string) {
+  if (actor.isOwner || actor.roleTemplate === "owner") return true;
+  return approverRole.toLowerCase() === "manager" && actor.roleTemplate === "manager";
+}
+
+function roleNameMeetsApprover(role: string, approverRole: string) {
+  const normalized = role.toLowerCase();
+  if (normalized === "owner") return true;
+  return approverRole.toLowerCase() === "manager" && normalized === "manager";
+}
+
+// Server gate for a saved ApprovalRule. A disabled or missing rule adds nothing.
+// An enabled rule requires the saved approver role, or a PIN approver of that role.
+// Owner always satisfies the role. This does not create a pending request.
+export async function assertConfiguredApprovalSatisfied(input: {
+  amountLak?: number;
+  discountPercent?: number;
+  pinApproverRole?: string | null;
+  ruleKey: ApprovalRuleKey;
+  tenant: TenantContext;
+}) {
+  const rule = await (prisma as any).approvalRule.findUnique({
+    where: { companyId_ruleKey: { companyId: input.tenant.companyId, ruleKey: input.ruleKey } },
+  });
+  if (!evaluateApprovalRequirement(rule, { amountLak: input.amountLak, discountPercent: input.discountPercent })) {
+    return;
+  }
+  const actor = await resolveUserAccess(prisma as any, input.tenant.companyId, input.tenant.userId);
+  const approverRole = String(rule?.approverRole ?? "owner");
+  if (actor && accessMeetsApprover(actor, approverRole)) return;
+  if (input.pinApproverRole && roleNameMeetsApprover(input.pinApproverRole, approverRole)) return;
+  const who = approverRole.toLowerCase() === "manager" ? "manager or owner" : "owner";
+  throw new Error(`This action requires ${who} approval.`);
 }
 
 function mapApproval(row: Record<string, any>, extra: { executed?: boolean; executionDetail?: string } = {}): ApprovalRecord {

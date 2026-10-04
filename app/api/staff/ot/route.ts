@@ -11,6 +11,11 @@ import {
   upsertOtWeeklyPolicy,
 } from "@/features/ot/prisma-repository";
 
+function nullableUserId(value: unknown) {
+  if (value === undefined || value === null || value === "" || value === "null" || value === "undefined") return null;
+  return String(value);
+}
+
 export async function GET(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
@@ -26,8 +31,7 @@ export async function GET(request: Request) {
   const view = url.searchParams.get("view");
   try {
     if (view === "policies") {
-      const userId = url.searchParams.get("userId");
-      const data = await listOtWeeklyPolicies(tenant, userId);
+      const data = await listOtWeeklyPolicies(tenant, nullableUserId(url.searchParams.get("userId")));
       return NextResponse.json({ ok: true, data });
     }
     const data = await listBranchOtApprovals(tenant);
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
             enabled: body.enabled !== false,
             endMinute: Number(body.endMinute),
             startMinute: Number(body.startMinute),
-            userId: body.userId === undefined || body.userId === "" ? null : String(body.userId),
+            userId: nullableUserId(body.userId),
             weekday: Number(body.weekday),
           }),
         });

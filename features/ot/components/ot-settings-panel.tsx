@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EmployeePicker, type EmployeePickerOption } from "@/features/settings/components/employee-picker";
 import type { SupportedLocale } from "@/lib/constants";
 import { tSettings } from "@/lib/i18n/settings-copy";
@@ -30,6 +30,23 @@ function timeToMinutes(value: string) {
   return Math.max(0, Math.min(24 * 60 - 1, hours * 60 + minutes));
 }
 
+type OtPolicyRow = {
+  enabled: boolean;
+  endMinute: number;
+  startMinute: number;
+  userId: string | null;
+  weekday: number;
+};
+
+function matchingTemplate(rows: OtPolicyRow[], selectedUserId: string | null, weekday: string) {
+  const day = Number(weekday);
+  const employee = selectedUserId
+    ? rows.find((row) => row.enabled && row.userId === selectedUserId && row.weekday === day)
+    : null;
+  const company = rows.find((row) => row.enabled && !row.userId && row.weekday === day);
+  return { company, employee };
+}
+
 export function OtSettingsPanel({
   employees,
   locale,
@@ -41,8 +58,49 @@ export function OtSettingsPanel({
   const [weekday, setWeekday] = useState("1");
   const [startTime, setStartTime] = useState("20:00");
   const [endTime, setEndTime] = useState("22:00");
+  const [loadedNote, setLoadedNote] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: "error" | "success" } | null>(null);
   const [pending, setPending] = useState(false);
+
+  function showTemplate(rows: OtPolicyRow[], selectedUserId: string | null, selectedWeekday: string) {
+    const match = matchingTemplate(rows, selectedUserId, selectedWeekday);
+    const chosen = match.employee ?? match.company;
+    if (!chosen) {
+      setStartTime("");
+      setEndTime("");
+      setLoadedNote(tSettings("otNoSavedTemplate", locale));
+      return;
+    }
+    setStartTime(minutesToTime(chosen.startMinute));
+    setEndTime(minutesToTime(chosen.endMinute));
+    setLoadedNote(
+      match.employee
+        ? tSettings("otLoadedEmployee", locale)
+        : selectedUserId
+          ? tSettings("otLoadedCompanyFallback", locale)
+          : tSettings("otLoadedCompany", locale),
+    );
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const params = new URLSearchParams({ view: "policies" });
+      if (userId) params.set("userId", userId);
+      const response = await fetch(`/api/staff/ot?${params.toString()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (cancelled) return;
+      if (!response.ok || payload.ok === false) {
+        setMessage({ text: String(payload.error || tSettings("otSaveFailed", locale)), tone: "error" });
+        return;
+      }
+      const rows = Array.isArray(payload.data) ? (payload.data as OtPolicyRow[]) : [];
+      showTemplate(rows, userId, weekday);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, userId, weekday]);
 
   async function post(body: Record<string, unknown>) {
     setPending(true);
@@ -57,6 +115,13 @@ export function OtSettingsPanel({
       if (!response.ok || payload.ok === false) {
         setMessage({ text: String(payload.error || tSettings("otSaveFailed", locale)), tone: "error" });
         return;
+      }
+      const params = new URLSearchParams({ view: "policies" });
+      if (userId) params.set("userId", userId);
+      const reload = await fetch(`/api/staff/ot?${params.toString()}`, { cache: "no-store" });
+      const saved = await reload.json().catch(() => ({}));
+      if (reload.ok && saved.ok !== false && Array.isArray(saved.data)) {
+        showTemplate(saved.data as OtPolicyRow[], userId, weekday);
       }
       setMessage({ text: tSettings("otSaved", locale), tone: "success" });
     } catch {
@@ -130,7 +195,9 @@ export function OtSettingsPanel({
         </div>
       </div>
 
+      <p className="text-xs text-muted-foreground">{tSettings("otTemplateDefaultHelp", locale)}</p>
       <p className="text-xs text-muted-foreground">{tSettings("otNoPayrollHelp", locale)}</p>
+      {loadedNote ? <p className="text-sm text-muted-foreground">{loadedNote}</p> : null}
 
       <a className="inline-flex text-sm font-medium text-primary underline" href="/staff/ot">
         {tSettings("openOtApprovals", locale)}

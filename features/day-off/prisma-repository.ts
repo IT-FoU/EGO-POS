@@ -151,6 +151,43 @@ export async function listWeeklyDayOffs(tenant: TenantContext, userId: string): 
   return rows.map((row: any) => Number(row.weekday));
 }
 
+export type DayOffSettingsSnapshot = {
+  companyQuotaDays: number | null;
+  employeeQuotaDays: number | null;
+  specialGrants: Array<{ id: string; requestDate: string; status: string }>;
+  weekdays: number[];
+};
+
+export async function getDayOffSettingsSnapshot(
+  tenant: TenantContext,
+  userId: string | null,
+): Promise<DayOffSettingsSnapshot> {
+  const companyPolicy = await db.staffDayOffQuotaPolicy.findFirst({
+    where: { companyId: tenant.companyId, userId: null },
+  });
+  const employeePolicy = userId
+    ? await db.staffDayOffQuotaPolicy.findFirst({ where: { companyId: tenant.companyId, userId } })
+    : null;
+  const weekdays = userId ? await listWeeklyDayOffs(tenant, userId) : [];
+  const grants = userId
+    ? await db.staffDayOffRequest.findMany({
+        orderBy: { requestDate: "desc" },
+        take: 8,
+        where: { companyId: tenant.companyId, kind: DAY_OFF_REQUEST_KIND.SPECIAL, userId },
+      })
+    : [];
+  return {
+    companyQuotaDays: companyPolicy ? Number(companyPolicy.monthlyQuotaDays) : null,
+    employeeQuotaDays: employeePolicy ? Number(employeePolicy.monthlyQuotaDays) : null,
+    specialGrants: grants.map((row: { id: string; requestDate: Date; status: string }) => ({
+      id: String(row.id),
+      requestDate: requestDateLabel(new Date(row.requestDate)),
+      status: String(row.status),
+    })),
+    weekdays,
+  };
+}
+
 export async function upsertWeeklyDayOff(
   tenant: TenantContext,
   input: { userId: string; weekday: number },

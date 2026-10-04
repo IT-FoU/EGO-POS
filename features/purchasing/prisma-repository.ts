@@ -1,4 +1,6 @@
+import { assertConfiguredApprovalSatisfied } from "@/features/approvals/approval-engine";
 import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
+import { STORE_MANAGER_APPROVAL_BODY_KEY } from "@/lib/auth/store-manager-approval";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { prisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -97,7 +99,10 @@ export async function getPrismaPurchasingSnapshot(tenant: TenantContext) {
 }
 
 export async function createPurchaseOrder(input: PurchaseOrderInput, tenant: TenantContext) {
-  const data = parsePurchaseOrderInput(input);
+  const raw = { ...(input as PurchaseOrderInput & Record<string, unknown>) };
+  const pin = raw[STORE_MANAGER_APPROVAL_BODY_KEY] as { approvedByRole?: string } | undefined;
+  delete raw[STORE_MANAGER_APPROVAL_BODY_KEY];
+  const data = parsePurchaseOrderInput(raw);
   const subtotal = data.items.reduce((total, item) => total + numberValue(item.quantity) * numberValue(item.unitCost), 0);
   const paidAmount = numberValue(data.paidAmount);
   if (!Number.isFinite(subtotal) || subtotal < 0) {
@@ -106,6 +111,12 @@ export async function createPurchaseOrder(input: PurchaseOrderInput, tenant: Ten
   if (paidAmount > subtotal) {
     throw new Error("Paid amount cannot exceed purchase order total.");
   }
+  await assertConfiguredApprovalSatisfied({
+    amountLak: subtotal,
+    pinApproverRole: pin?.approvedByRole ?? null,
+    ruleKey: "purchasing",
+    tenant,
+  });
   return withTenantTransaction({
     action: "create",
     module: "purchasing",

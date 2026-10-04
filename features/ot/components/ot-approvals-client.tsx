@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { weekdayForBusinessInstant } from "@/features/attendance/attendance-math";
+import { businessDateMinuteInstant } from "@/features/ot/ot-math";
 
 export function OtApprovalsClient() {
   const [rows, setRows] = useState<any[]>([]);
@@ -23,6 +25,28 @@ export function OtApprovalsClient() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!userId || !businessDate) return;
+    let cancelled = false;
+    void (async () => {
+      const params = new URLSearchParams({ userId, view: "policies" });
+      const response = await fetch(`/api/staff/ot?${params.toString()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (cancelled || !response.ok || payload.ok === false || !Array.isArray(payload.data)) return;
+      const weekday = weekdayForBusinessInstant(businessDateMinuteInstant(businessDate, 12 * 60));
+      const rows = payload.data as Array<{ enabled?: boolean; endMinute: number; startMinute: number; userId?: string | null; weekday: number }>;
+      const employee = rows.find((row) => row.enabled !== false && row.userId === userId && row.weekday === weekday);
+      const company = rows.find((row) => row.enabled !== false && !row.userId && row.weekday === weekday);
+      const chosen = employee ?? company;
+      if (!chosen) return;
+      setStartMinute(String(chosen.startMinute));
+      setEndMinute(String(chosen.endMinute));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [businessDate, userId]);
 
   async function post(body: Record<string, unknown>) {
     const response = await fetch("/api/staff/ot", {

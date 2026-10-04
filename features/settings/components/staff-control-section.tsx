@@ -507,6 +507,7 @@ export function StaffControlSection({
       <div className="mt-5 grid gap-4">
         {section === "approval-rules" ? (
         <aside className="rounded-lg border border-border bg-background p-4">
+          <p className="text-sm text-muted-foreground">{tSettings("voidProtectionNote", locale)}</p>
           <div className="mt-4 grid gap-3">
             {(Object.keys(APPROVAL_RULE_LABELS) as Array<keyof typeof APPROVAL_RULE_LABELS>).map((ruleKey) => {
               const rule = approvalRules.find((entry) => entry.ruleKey === ruleKey);
@@ -525,13 +526,29 @@ export function StaffControlSection({
                     <label className="mt-2 grid gap-1 text-xs">
                       <span className="font-medium">{tSettings("thresholdPercent", locale)}</span>
                       <input className="field-input h-9 text-xs" min="0" type="number" value={rule?.thresholdPercent ?? 10} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, thresholdPercent: Number(event.target.value) } : entry))} />
+                      <span className="text-muted-foreground">
+                        {rule?.isEnabled === false
+                          ? tSettings("discountRuleOff", locale)
+                          : (rule?.approverRole ?? "owner") === "manager"
+                            ? tSettings("discountRuleOnManager", locale)
+                            : tSettings("discountRuleOnOwner", locale)}
+                      </span>
                     </label>
+                  ) : null}
+                  {ruleKey === "refund" ? (
+                    <p className="mt-2 text-xs text-muted-foreground">{tSettings("refundRuleVoidSeparate", locale)}</p>
                   ) : null}
                   {ruleKey === "refund" || ruleKey === "purchasing" ? (
                     <label className="mt-2 grid gap-1 text-xs">
                       <span className="font-medium">{tSettings("thresholdLak", locale)}</span>
                       <input className="field-input h-9 text-xs" min="0" type="number" value={rule?.thresholdLak ?? 100000} onChange={(event) => setApprovalRules((current) => current.map((entry) => entry.ruleKey === ruleKey ? { ...entry, thresholdLak: Number(event.target.value) } : entry))} />
+                      {ruleKey === "purchasing" ? (
+                        <span className="text-muted-foreground">{rule?.isEnabled === false ? tSettings("purchasingRuleOff", locale) : tSettings("purchasingRuleOn", locale)}</span>
+                      ) : null}
                     </label>
+                  ) : null}
+                  {ruleKey === "stock_adjustment" ? (
+                    <p className="mt-2 text-xs text-muted-foreground">{rule?.isEnabled === false ? tSettings("stockRuleOff", locale) : tSettings("stockRuleOn", locale)}</p>
                   ) : null}
                   <button className="mt-2 h-8 w-full rounded-md border border-border text-xs font-semibold" disabled={isPending} type="button" onClick={() => saveRule(ruleKey)}>
                     {tSettings("saveRule", locale)}
