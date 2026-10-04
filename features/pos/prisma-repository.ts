@@ -7,7 +7,7 @@ import { readCompanyRequireCashShift } from "@/features/settings/cash-shift-poli
 import { parseReceiptLayoutPrefs, receiptFormFieldsFromLayout } from "@/features/settings/receipt-layout";
 import { signCompanyLogoUrl } from "@/lib/storage/company-logo-storage";
 import { mapPaymentModeToSalePayments, mapPrismaPosProduct } from "@/features/pos/dto-mapper";
-import type { PosCustomer } from "@/features/pos/types";
+import type { PosCustomer, PosLoyaltySettings } from "@/features/pos/types";
 import { getPrismaPosQrBanks } from "@/features/qr-payments/prisma-repository";
 import type { PaymentMode } from "@/features/pos/types";
 import { prisma } from "@/lib/db/prisma";
@@ -79,6 +79,8 @@ import {
   isMembershipEligibleForBenefits,
   resolveMembershipDiscountPercent,
 } from "@/features/loyalty/loyalty-service";
+import { evaluateLoyaltyEarning, formatEarnNote, isLoyaltyRuleType, legacySpendRule, parseLoyaltyRuleConfig } from "@/features/loyalty/earning-rules";
+import { listActiveLoyaltyRules } from "@/features/loyalty/earning-rule-repository";
 import {
   applyActivePromotions,
   assertPromotionProfitSafe,
@@ -189,7 +191,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
   const now = new Date();
   // STEP 7: do not boot-load the full customer/member table into the POS client.
   // Member Search uses /api/pos/members/search; Hold/Resume embeds customer in snapshot.
-  const [products, settings, promotions, membershipLevels, openSession, openAttendance, qrBanks, favoriteProductIds] = await timedPosLoad(
+  const [products, settings, promotions, membershipLevels, openSession, openAttendance, qrBanks, favoriteProductIds, earningRuleRows] = await timedPosLoad(
     "parallel-reads",
     () =>
       Promise.all([
@@ -238,9 +240,27 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
             companyId: scope.companyId,
           },
         }),
+        db.loyaltyEarningRule.findMany({
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          where: { companyId: scope.companyId, enabled: true, status: "active" },
+        }),
       ]),
   );
   const taxAndLoyalty = taxAndLoyaltyFromSettingsRow(settings);
+  const storedEarningRules = (earningRuleRows as Array<Record<string, unknown>>)
+    .filter((row) => isLoyaltyRuleType(row.ruleType))
+    .map((row) => ({
+      config: parseLoyaltyRuleConfig(row.config),
+      enabled: true as const,
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      ruleType: row.ruleType as PosLoyaltySettings["earningRules"][number]["ruleType"],
+      sortOrder: Number(row.sortOrder ?? 0),
+      status: "active" as const,
+    }));
+  const previewEarningRules = storedEarningRules.length > 0
+    ? storedEarningRules
+    : [{ ...legacySpendRule(taxAndLoyalty.loyaltySpendPerPointLak), status: "active" as const }];
   const requireCashShiftBeforeSale = readCompanyRequireCashShift(settings);
   const receiptLayout = receiptFormFieldsFromLayout(parseReceiptLayoutPrefs(settings?.unitPricingDefaults));
   const [businessLogoUrl, companyRow] = await Promise.all([
@@ -319,6 +339,7 @@ export async function getPrismaPosSnapshot(tenant: TenantContext) {
     companyName,
     customers: [] as PosCustomer[],
     loyaltySettings: {
+      earningRules: previewEarningRules,
       loyaltyEnabled: taxAndLoyalty.loyaltyEnabled,
       loyaltyMinRedeemPoints: taxAndLoyalty.loyaltyMinRedeemPoints,
       loyaltyPointValueLak: taxAndLoyalty.loyaltyPointValueLak,
@@ -596,9 +617,21 @@ export async function writeCompletePrismaSale(
       if (!Number.isFinite(totalAmount) || totalAmount < 0) {
         throw new Error("Computed sale total is invalid.");
       }
-      const earnedPoints = loyaltyRedemption.customer
-        ? Math.floor(totalAmount / loyaltySpendPerPointLak)
-        : 0;
+      const earningRules = loyaltyEnabled
+        ? await listActiveLoyaltyRules(tx, tenant.companyId, loyaltySpendPerPointLak)
+        : [];
+      const earning = evaluateLoyaltyEarning({
+        enabled: loyaltyEnabled,
+        hasCustomer: Boolean(loyaltyRedemption.customer),
+        lines: saleItems.map((item) => ({
+          categoryId: categoryByProduct.get(item.productId) ?? null,
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+        payableLak: totalAmount,
+        rules: earningRules,
+      });
+      const earnedPoints = earning.totalPoints;
 
       // Server total is authoritative. A client total below the server total beyond
       // the rounding tolerance indicates tampering/divergence and is rejected so the
@@ -792,6 +825,7 @@ export async function writeCompletePrismaSale(
           companyId: tenant.companyId,
           customerId: loyaltyRedemption.customer.id,
           earnedPoints,
+          earnNote: formatEarnNote(`Earned from POS sale ${sale.saleNo}`, earning.breakdown),
           redeemDiscountLak: loyaltyRedemption.discountAmountLak,
           redeemPoints: loyaltyRedemption.redeemPoints,
           saleId: sale.id,

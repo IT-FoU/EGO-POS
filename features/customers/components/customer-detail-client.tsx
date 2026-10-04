@@ -47,7 +47,7 @@ export function CustomerDetailClient({
   const [activeTab, setActiveTab] = useState<CustomerTab>("profile");
   const locale = useAppLocale(localeProp);
   const t = (key: string) => tCustomers(key, locale);
-  const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints);
+  const availablePoints = calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints, customer.pointsBalance);
   const remainingCredit = Math.max(customer.creditLimitLak - customer.outstandingBalanceLak, 0);
   const totalVisits = purchases.length || Math.max(1, Math.round(customer.totalPurchasesLak / 2500000));
   const averageSpend = totalVisits > 0 ? Math.round(customer.totalPurchasesLak / totalVisits) : 0;

@@ -153,6 +153,22 @@ export type PosReceiptSettings = {
 };
 
 export type PosLoyaltySettings = {
+  earningRules: Array<{
+    config: {
+      categoryIds?: string[];
+      points?: number;
+      productIds?: string[];
+      quantity?: number;
+      spendLak?: number;
+      thresholdLak?: number;
+    };
+    enabled: boolean;
+    id: string;
+    name: string;
+    ruleType: "SPEND_AMOUNT" | "ITEM_QUANTITY" | "MINIMUM_BASKET" | "PRODUCT_BONUS" | "CATEGORY_BONUS";
+    sortOrder: number;
+    status: "active";
+  }>;
   loyaltyEnabled: boolean;
   loyaltyMinRedeemPoints: number;
   loyaltyPointValueLak: number;

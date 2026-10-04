@@ -28,6 +28,7 @@ import { ReturnExchangeVoidModal, type ReturnExchangeTab } from "@/features/pos/
 import { SaleStatusBadge, SaleStatusIndicator } from "@/features/pos/components/sale-status-badge";
 import { resolveSaleStatusVisual } from "@/features/pos/sale-status-presentation";
 import { formatLak } from "@/features/pos/format";
+import { evaluateLoyaltyEarning } from "@/features/loyalty/earning-rules";
 import {
   canStartWork,
   deriveCashShiftUiState,
@@ -607,8 +608,18 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         ? Math.round(taxInclusive ? taxableAmount * (taxRatePercent / (100 + taxRatePercent)) : taxableAmount * (taxRatePercent / 100))
         : 0;
     const totalAmount = taxInclusive ? taxableAmount : taxableAmount + taxAmount;
-    const pointsEarned = loyaltySettings.loyaltyEnabled
-        ? Math.floor(totalAmount / Math.max(loyaltySettings.loyaltySpendPerPointLak, 1))
+    const pointsEarned = loyaltySettings.loyaltyEnabled && selectedCustomer
+        ? evaluateLoyaltyEarning({
+            enabled: true,
+            hasCustomer: true,
+            lines: cartItems.map((item) => ({
+                categoryId: item.categoryId ?? null,
+                productId: item.id,
+                quantity: item.quantity,
+            })),
+            payableLak: totalAmount,
+            rules: loyaltySettings.earningRules ?? [],
+        }).totalPoints
         : 0;
     const paidAmount = paymentMode === "cash"
         ? cashAmount

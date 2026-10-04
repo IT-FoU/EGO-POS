@@ -2,6 +2,8 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { assertPermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { evaluateLoyaltyEarning, formatEarnNote, type LoyaltyEarnLine } from "@/features/loyalty/earning-rules";
+import { listActiveLoyaltyRules } from "@/features/loyalty/earning-rule-repository";
 
 function amount(value: unknown) {
   const parsed = Number(value ?? 0);
@@ -74,6 +76,7 @@ export async function applyLoyaltyLedger(
     earnedPoints: number;
     redeemDiscountLak: number;
     redeemPoints: number;
+    earnNote?: string;
     saleId: string;
     saleNo: string;
     totalAmountLak: number;
@@ -102,7 +105,7 @@ export async function applyLoyaltyLedger(
         amountLak: input.totalAmountLak,
         companyId: input.companyId,
         customerId: input.customerId,
-        note: `Earned from POS sale ${input.saleNo}`,
+        note: input.earnNote ?? `Earned from POS sale ${input.saleNo}`,
         pointType: "earn",
         points: input.earnedPoints,
         saleId: input.saleId,
@@ -283,12 +286,37 @@ export async function applyExchangeLoyaltyEarn(
     amountLak: number;
     companyId: string;
     customerId: string;
+    enabled: boolean;
+    lines?: LoyaltyEarnLine[];
     refundNo: string;
     saleId: string;
-    spendPerPointLak: number;
+    spendPerPointLak?: number;
   },
 ) {
-  const earnedPoints = Math.floor(Math.max(amount(input.amountLak), 0) / Math.max(input.spendPerPointLak, 1));
+  if (!input.enabled) return 0;
+  const customer = await tx.customer.findFirst({
+    select: { status: true },
+    where: { companyId: input.companyId, id: input.customerId },
+  });
+  if (!customer || customer.status !== "active") return 0;
+  const existing = await tx.loyaltyPointLedger.findFirst({
+    where: {
+      companyId: input.companyId,
+      note: { startsWith: `Exchange earn from ${input.refundNo}` },
+      pointType: "adjust",
+      saleId: input.saleId,
+    },
+  });
+  if (existing) return 0;
+  const rules = await listActiveLoyaltyRules(tx, input.companyId, input.spendPerPointLak ?? 10000);
+  const evaluated = evaluateLoyaltyEarning({
+    enabled: true,
+    hasCustomer: true,
+    lines: input.lines ?? [],
+    payableLak: Math.max(amount(input.amountLak), 0),
+    rules,
+  });
+  const earnedPoints = evaluated.totalPoints;
   if (earnedPoints <= 0) {
     return 0;
   }
@@ -300,7 +328,7 @@ export async function applyExchangeLoyaltyEarn(
       amountLak: amount(input.amountLak),
       companyId: input.companyId,
       customerId: input.customerId,
-      note: `Exchange earn from ${input.refundNo}`,
+      note: formatEarnNote(`Exchange earn from ${input.refundNo}`, evaluated.breakdown),
       pointType: "adjust",
       points: earnedPoints,
       saleId: input.saleId,

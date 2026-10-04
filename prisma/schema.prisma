@@ -239,6 +239,19 @@ enum LoyaltyPointType {
   expire
 }
 
+enum LoyaltyEarningRuleType {
+  SPEND_AMOUNT
+  ITEM_QUANTITY
+  MINIMUM_BASKET
+  PRODUCT_BONUS
+  CATEGORY_BONUS
+}
+
+enum LoyaltyEarningRuleStatus {
+  active
+  archived
+}
+
 enum StockReservationStatus {
   ACTIVE
   RELEASED
@@ -274,6 +287,7 @@ model Company {
   cashSessions   CashSession[]
   membershipLevels   MembershipLevel[]
   loyaltyPointLedger LoyaltyPointLedger[]
+  loyaltyEarningRules LoyaltyEarningRule[]
   customerPayments   CustomerPayment[]
   promotionUsages    PromotionUsage[]
   auditLogs      AuditLog[]
@@ -1141,6 +1155,24 @@ model LoyaltyPointLedger {
   @@index([companyId, customerId])
   @@index([saleId])
   @@map("loyalty_point_ledger")
+}
+
+model LoyaltyEarningRule {
+  id         String                   @id @default(cuid())
+  companyId  String                   @map("company_id")
+  name       String
+  ruleType   LoyaltyEarningRuleType   @map("rule_type")
+  enabled    Boolean                  @default(true)
+  status     LoyaltyEarningRuleStatus @default(active)
+  sortOrder  Int                      @default(0) @map("sort_order")
+  config     Json
+  archivedAt DateTime?                @map("archived_at")
+  createdAt  DateTime                 @default(now()) @map("created_at")
+  updatedAt  DateTime                 @updatedAt @map("updated_at")
+  company    Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status, sortOrder])
+  @@map("loyalty_earning_rules")
 }
 
 model CustomerPayment {

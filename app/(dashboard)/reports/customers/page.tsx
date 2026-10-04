@@ -17,7 +17,7 @@ export default async function CustomerReportPage() {
   const topCustomers = [...customers].sort((a, b) => b.totalPurchasesLak - a.totalPurchasesLak);
   const totalSpending = customers.reduce((total, customer) => total + customer.totalPurchasesLak, 0);
   const totalPoints = customers.reduce(
-    (total, customer) => total + calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints),
+    (total, customer) => total + calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints, customer.pointsBalance),
     0,
   );
 
@@ -59,7 +59,7 @@ export default async function CustomerReportPage() {
           `${formatLak(customer.totalPurchasesLak)} LAK`,
           formatNumber(customer.earnedPoints),
           formatNumber(customer.redeemedPoints),
-          formatNumber(calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints)),
+          formatNumber(calculateAvailablePoints(customer.earnedPoints, customer.redeemedPoints, customer.pointsBalance)),
         ])}
       />
     </div>
