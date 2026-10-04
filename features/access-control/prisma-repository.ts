@@ -1,4 +1,4 @@
-import { hash } from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { staffStatusForDisplay, staffStatusForStorage } from "@/lib/auth/account-access";
 import { assertStaffAccessFlags, CANONICAL_ASSIGNABLE_ROLES, isProtectedOwnerRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
 import { cache } from "react";
@@ -183,6 +183,14 @@ export async function ensureAssignableStaffRoles(companyId: string, dbClient: an
   await seedRoleTemplatePermissions(companyId, created, dbClient, { skipCatalogEnsure: true });
 }
 
+function visibleStaffWhere(companyId: string) {
+  return {
+    companyId,
+    status: { not: "deleted" },
+    user: { status: { not: "deleted" } },
+  };
+}
+
 export async function getStaffAccessSnapshot(tenant: TenantContext, client: any = db): Promise<StaffAccessSnapshot> {
   await ensureAssignableStaffRoles(tenant.companyId, client);
   const [branches, roles, staffRows, approvalRules, pendingApprovals, rolePermissionRows, companySetting] = await Promise.all([
@@ -208,7 +216,7 @@ export async function getStaffAccessSnapshot(tenant: TenantContext, client: any 
         },
       },
       orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
-      where: { companyId: tenant.companyId },
+      where: visibleStaffWhere(tenant.companyId),
     }),
     client.approvalRule.findMany({
       orderBy: { ruleKey: "asc" },
@@ -301,7 +309,7 @@ export async function getSettingsSectionStaffSnapshot(
         user: { select: { fullName: true, id: true, username: true } },
       },
       orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
-      where: { companyId: tenant.companyId },
+      where: visibleStaffWhere(tenant.companyId),
     });
     return emptySettingsStaffSnapshot(tenant.companyId, { staff: staffRows.map(mapStaffMember) });
   }
@@ -374,7 +382,7 @@ export async function getSettingsSectionStaffSnapshot(
         },
       },
       orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
-      where: { companyId: tenant.companyId },
+      where: visibleStaffWhere(tenant.companyId),
     }),
     db.companySetting.findUnique({
       select: { unitPricingDefaults: true },
@@ -604,6 +612,9 @@ export async function saveStaffMember(
         if (membership.isOwner) {
           throw new Error("Owner membership cannot be edited from staff management.");
         }
+        if (membership.status === "deleted" || membership.user.status === "deleted") {
+          throw new Error("Staff member was not found.");
+        }
         const currentRoleId = membership.user.roles[0]?.roleId ?? "";
         if (!actor.isOwner) {
           if (currentRoleId !== roleId && !allowsFine(actorKeys, FINE.staffChangeRole)) throw new PermissionDeniedError(FINE.staffChangeRole);
@@ -798,6 +809,9 @@ export async function deactivateStaffMember(membershipId: string, tenant: Tenant
       if (membership.isOwner) {
         throw new Error("Owner cannot be deactivated.");
       }
+      if (membership.status === "deleted" || membership.user.status === "deleted") {
+        throw new Error("Staff member was not found.");
+      }
 
       await tx.companyUser.update({
         data: { status: "disabled" },
@@ -844,6 +858,9 @@ export async function reactivateStaffMember(membershipId: string, tenant: Tenant
       if (membership.isOwner) {
         throw new Error("Owner membership cannot be edited from staff management.");
       }
+      if (membership.status === "deleted" || membership.user.status === "deleted") {
+        throw new Error("Deleted staff cannot be restored.");
+      }
 
       await tx.companyUser.update({
         data: { status: "active" },
@@ -859,6 +876,102 @@ export async function reactivateStaffMember(membershipId: string, tenant: Tenant
         status: "active",
         user: { ...membership.user, status: "active" },
       });
+    },
+  });
+}
+
+export async function deleteStaffMember(membershipId: string, ownerPassword: string, tenant: TenantContext) {
+  const secret = String(ownerPassword ?? "");
+  if (!secret.trim()) {
+    throw new Error("Owner password is required.");
+  }
+
+  const actor = await resolveTenantMembership(tenant);
+  if (!actor.isOwner) {
+    throw new Error("You do not have permission to delete staff.");
+  }
+
+  const [ownerUser, ownerMembership] = await Promise.all([
+    db.user.findFirst({
+      select: { passwordHash: true, pinHash: true },
+      where: { id: actor.effectiveUserId, status: "active" },
+    }),
+    db.companyUser.findFirst({
+      select: { id: true },
+      where: {
+        companyId: tenant.companyId,
+        isOwner: true,
+        status: "active",
+        userId: actor.effectiveUserId,
+      },
+    }),
+  ]);
+  if (!ownerUser?.passwordHash || !ownerMembership) {
+    throw new Error("You do not have permission to delete staff.");
+  }
+
+  const pinMatches = ownerUser.pinHash ? await compare(secret, ownerUser.pinHash) : false;
+  const passwordMatches = pinMatches || await compare(secret, ownerUser.passwordHash);
+  if (!passwordMatches) {
+    throw new Error("Owner password is incorrect.");
+  }
+
+  return withTenantTransaction({
+    action: "delete",
+    module: "staff",
+    newData: { membershipId, status: "deleted" },
+    tenant,
+    write: async (tx) => {
+      const actorMembership = await tx.companyUser.findFirst({
+        select: { id: true, isOwner: true, userId: true },
+        where: {
+          companyId: tenant.companyId,
+          status: "active",
+          userId: actor.effectiveUserId,
+        },
+      });
+      if (!actorMembership?.isOwner || actorMembership.userId !== actor.effectiveUserId) {
+        throw new Error("You do not have permission to delete staff.");
+      }
+
+      const membership = await tx.companyUser.findFirst({
+        select: { id: true, isOwner: true, status: true, userId: true, user: { select: { status: true } } },
+        where: { companyId: tenant.companyId, id: membershipId },
+      });
+      if (!membership || membership.status === "deleted" || membership.user.status === "deleted") {
+        throw new Error("Staff member was not found.");
+      }
+      if (membership.isOwner) {
+        throw new Error("Owner account cannot be deleted.");
+      }
+      if (membership.userId === actor.effectiveUserId) {
+        throw new Error("You cannot delete your own account.");
+      }
+
+      const otherActive = await tx.companyUser.count({
+        where: {
+          id: { not: membership.id },
+          status: "active",
+          userId: membership.userId,
+        },
+      });
+
+      await tx.companyUser.update({
+        data: {
+          allowBackOfficeAccess: false,
+          allowPosAccess: false,
+          status: "deleted",
+        },
+        where: { id: membership.id },
+      });
+      if (otherActive === 0) {
+        await tx.user.update({
+          data: { status: "deleted" },
+          where: { id: membership.userId },
+        });
+      }
+
+      return { id: membership.id };
     },
   });
 }
