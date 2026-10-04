@@ -89,6 +89,20 @@ check("add terminal keeps the name when save fails", () => {
   assert(panel.includes("/api/settings/terminals"), "add endpoint missing");
 });
 
+check("terminal edit and delete stay safe", () => {
+  const route = read("app/api/settings/terminals/[id]/route.ts");
+  assert(panel.includes("terminalCodeLabel") && !panel.includes("terminalCode:"), "edit exposes terminal code as a field");
+  assert(panel.includes("ownerPassword") && panel.includes("bg-danger"), "delete confirmation missing");
+  assert(service.includes("Only the owner can delete a terminal."), "owner delete gate missing");
+  assert(service.includes("Close this terminal's cash shift before deleting it."), "open shift delete guard missing");
+  assert(service.includes("Unbind this device before deleting the terminal."), "bound delete guard missing");
+  assert(service.includes('status: "ARCHIVED"'), "history archive missing");
+  assert(service.includes("posTerminal.delete"), "unused hard delete missing");
+  assert(service.includes('status: { not: "ARCHIVED" }'), "archived terminals stay in the list");
+  assert(route.includes("deleteStoreTerminal") && route.includes("WRITE_PERMISSIONS.terminalsEdit"), "delete permission missing");
+  assert(service.includes("Terminal code stays fixed after the terminal is created."), "code lock missing");
+});
+
 let failed = 0;
 for (const [name, fn] of checks) {
   try {
