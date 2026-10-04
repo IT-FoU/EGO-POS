@@ -21,7 +21,13 @@ const DEFAULT_SETTINGS = {
   baseCurrency: "LAK" as const,
   currencyDisplay: "LAK",
   decimalPlaces: 0,
+  loyaltyAllowPartial: true,
+  loyaltyAllowRedeemWithDiscount: true,
   loyaltyEnabled: true,
+  loyaltyExpiryDays: 0,
+  loyaltyExpiryEnabled: false,
+  loyaltyExpiryUnit: "days" as const,
+  loyaltyMaxRedeemPoints: 0,
   loyaltyMinRedeemPoints: 1,
   loyaltyPointValueLak: 1000,
   loyaltySpendPerPointLak: 10000,
@@ -94,13 +100,28 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
   const loyaltySpendPerPointLak = Math.max(numberValue(input.loyaltySpendPerPointLak, DEFAULT_SETTINGS.loyaltySpendPerPointLak), 1);
   const loyaltyPointValueLak = Math.max(numberValue(input.loyaltyPointValueLak, DEFAULT_SETTINGS.loyaltyPointValueLak), 0);
   const loyaltyMinRedeemPoints = Math.max(Math.floor(numberValue(input.loyaltyMinRedeemPoints, DEFAULT_SETTINGS.loyaltyMinRedeemPoints)), 1);
+  const loyaltyMaxRedeemPoints = Math.max(Math.floor(numberValue(input.loyaltyMaxRedeemPoints, DEFAULT_SETTINGS.loyaltyMaxRedeemPoints)), 0);
+  const loyaltyExpiryDays = Math.max(Math.floor(numberValue(input.loyaltyExpiryDays, DEFAULT_SETTINGS.loyaltyExpiryDays)), 0);
+  const loyaltyExpiryEnabled = input.loyaltyExpiryEnabled === true;
+  if (loyaltyExpiryEnabled && loyaltyExpiryDays < 1) {
+    throw new Error("Point expiry days must be at least 1.");
+  }
+  if (loyaltyMaxRedeemPoints > 0 && loyaltyMaxRedeemPoints < loyaltyMinRedeemPoints) {
+    throw new Error("Maximum redeem points cannot be below the minimum.");
+  }
 
   return {
     baseCurrency: normalizeCurrency(input.baseCurrency),
     companyName: stringValue(input.companyName),
     currencyDisplay: stringValue(input.currencyDisplay, DEFAULT_SETTINGS.currencyDisplay),
     decimalPlaces,
+    loyaltyAllowPartial: input.loyaltyAllowPartial !== false,
+    loyaltyAllowRedeemWithDiscount: input.loyaltyAllowRedeemWithDiscount !== false,
     loyaltyEnabled: Boolean(input.loyaltyEnabled),
+    loyaltyExpiryDays,
+    loyaltyExpiryEnabled,
+    loyaltyExpiryUnit: input.loyaltyExpiryUnit === "months" ? "months" : "days",
+    loyaltyMaxRedeemPoints,
     loyaltyMinRedeemPoints,
     loyaltyPointValueLak,
     loyaltySpendPerPointLak,
@@ -132,7 +153,13 @@ function normalizeSettingsInput(input: Partial<SettingsFormData>): SettingsFormD
 export function taxAndLoyaltyFromSettingsRow(settings: SettingsRow | null | undefined) {
   const row = settings ?? {};
   return {
+    loyaltyAllowPartial: row.loyaltyAllowPartial !== false,
+    loyaltyAllowRedeemWithDiscount: row.loyaltyAllowRedeemWithDiscount !== false,
     loyaltyEnabled: row.loyaltyEnabled ?? DEFAULT_SETTINGS.loyaltyEnabled,
+    loyaltyExpiryDays: toNumber(row.loyaltyExpiryDays, DEFAULT_SETTINGS.loyaltyExpiryDays),
+    loyaltyExpiryEnabled: row.loyaltyExpiryEnabled === true,
+    loyaltyExpiryUnit: row.loyaltyExpiryUnit === "months" ? "months" : "days",
+    loyaltyMaxRedeemPoints: toNumber(row.loyaltyMaxRedeemPoints, DEFAULT_SETTINGS.loyaltyMaxRedeemPoints),
     loyaltyMinRedeemPoints: toNumber(row.loyaltyMinRedeemPoints, DEFAULT_SETTINGS.loyaltyMinRedeemPoints),
     loyaltyPointValueLak: toNumber(row.loyaltyPointValueLak, DEFAULT_SETTINGS.loyaltyPointValueLak),
     loyaltySpendPerPointLak: toNumber(row.loyaltySpendPerPointLak, DEFAULT_SETTINGS.loyaltySpendPerPointLak),
@@ -156,7 +183,13 @@ function mapSettings(company: SettingsRow): SettingsFormData {
     companyName: company.name ?? "",
     currencyDisplay: settings.currencyDisplay ?? DEFAULT_SETTINGS.currencyDisplay,
     decimalPlaces: toNumber(settings.decimalPlaces, DEFAULT_SETTINGS.decimalPlaces),
+    loyaltyAllowPartial: settings.loyaltyAllowPartial !== false,
+    loyaltyAllowRedeemWithDiscount: settings.loyaltyAllowRedeemWithDiscount !== false,
     loyaltyEnabled: settings.loyaltyEnabled ?? DEFAULT_SETTINGS.loyaltyEnabled,
+    loyaltyExpiryDays: toNumber(settings.loyaltyExpiryDays, DEFAULT_SETTINGS.loyaltyExpiryDays),
+    loyaltyExpiryEnabled: settings.loyaltyExpiryEnabled === true,
+    loyaltyExpiryUnit: settings.loyaltyExpiryUnit === "months" ? "months" : "days",
+    loyaltyMaxRedeemPoints: toNumber(settings.loyaltyMaxRedeemPoints, DEFAULT_SETTINGS.loyaltyMaxRedeemPoints),
     loyaltyMinRedeemPoints: toNumber(settings.loyaltyMinRedeemPoints, DEFAULT_SETTINGS.loyaltyMinRedeemPoints),
     loyaltyPointValueLak: toNumber(settings.loyaltyPointValueLak, DEFAULT_SETTINGS.loyaltyPointValueLak),
     loyaltySpendPerPointLak: toNumber(settings.loyaltySpendPerPointLak, DEFAULT_SETTINGS.loyaltySpendPerPointLak),
@@ -294,7 +327,13 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
           companyId: company.id,
           currencyDisplay: normalized.currencyDisplay,
           decimalPlaces: normalized.decimalPlaces,
+          loyaltyAllowPartial: normalized.loyaltyAllowPartial,
+          loyaltyAllowRedeemWithDiscount: normalized.loyaltyAllowRedeemWithDiscount,
           loyaltyEnabled: normalized.loyaltyEnabled,
+          loyaltyExpiryDays: normalized.loyaltyExpiryDays > 0 ? normalized.loyaltyExpiryDays : null,
+          loyaltyExpiryEnabled: normalized.loyaltyExpiryEnabled,
+          loyaltyExpiryUnit: normalized.loyaltyExpiryUnit,
+          loyaltyMaxRedeemPoints: normalized.loyaltyMaxRedeemPoints > 0 ? normalized.loyaltyMaxRedeemPoints : null,
           loyaltyMinRedeemPoints: normalized.loyaltyMinRedeemPoints,
           loyaltyPointValueLak: normalized.loyaltyPointValueLak,
           loyaltySpendPerPointLak: normalized.loyaltySpendPerPointLak,
@@ -318,7 +357,13 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
           baseCurrency: normalized.baseCurrency,
           currencyDisplay: normalized.currencyDisplay,
           decimalPlaces: normalized.decimalPlaces,
+          loyaltyAllowPartial: normalized.loyaltyAllowPartial,
+          loyaltyAllowRedeemWithDiscount: normalized.loyaltyAllowRedeemWithDiscount,
           loyaltyEnabled: normalized.loyaltyEnabled,
+          loyaltyExpiryDays: normalized.loyaltyExpiryDays > 0 ? normalized.loyaltyExpiryDays : null,
+          loyaltyExpiryEnabled: normalized.loyaltyExpiryEnabled,
+          loyaltyExpiryUnit: normalized.loyaltyExpiryUnit,
+          loyaltyMaxRedeemPoints: normalized.loyaltyMaxRedeemPoints > 0 ? normalized.loyaltyMaxRedeemPoints : null,
           loyaltyMinRedeemPoints: normalized.loyaltyMinRedeemPoints,
           loyaltyPointValueLak: normalized.loyaltyPointValueLak,
           loyaltySpendPerPointLak: normalized.loyaltySpendPerPointLak,

@@ -750,7 +750,10 @@ export async function getPrismaReportsSnapshot(
       _sum: { balanceAmount: true },
       where: { companyId: scope.companyId },
     })),
-    settleReportQuery("customersSnapshot", false, () => client.customer.findMany({
+    settleReportQuery("customersSnapshot", false, async () => {
+      const { settleCompanyLoyaltyExpiry } = await import("@/features/loyalty/loyalty-service");
+      await settleCompanyLoyaltyExpiry(client, scope.companyId);
+      return client.customer.findMany({
       orderBy: { createdAt: "desc" },
       select: {
         address: true,
@@ -771,7 +774,8 @@ export async function getPrismaReportsSnapshot(
         totalSpent: true,
       },
       where: { companyId: scope.companyId, ...branchWhere },
-    })),
+    });
+    }),
     settleReportQuery("productsSnapshot", false, () => client.product.findMany({
       select: {
         barcode: true,

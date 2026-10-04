@@ -103,6 +103,7 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("membership.edit", "permissionEdit", ["membership.edit"], ["membership.edit", "membership_levels.manage"]),
     perm("membership.delete", "permArchiveLevel", ["membership.delete"]),
     perm("membership.level.change", "permChangeMemberLevel", ["membership.level.change"]),
+    perm("membership.points.adjust", "permPointsAdjust", ["membership.points.adjust"]),
   ]),
   module("promotions", "modulePromotions", [
     perm("promotions.view", "permissionView", ["promotions.view"]),

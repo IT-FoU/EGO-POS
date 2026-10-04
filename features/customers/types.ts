@@ -30,6 +30,14 @@ export type Customer = {
   notes: string;
 };
 
+export type CustomerPointEntry = {
+  createdAt: string;
+  id: string;
+  note: string;
+  pointType: "earn" | "redeem" | "adjust" | "expire";
+  points: number;
+};
+
 export type CustomerPurchase = {
   id: string;
   customerId: string;

@@ -248,7 +248,7 @@ await expectThrow("E. Insufficient points redemption blocked", () =>
 );
 
 await expectThrow("F. Negative manual adjustment blocked", () =>
-  adjustCustomerLoyaltyPoints(ownerTenant, { customerId: CUSTOMER_ID, pointsDelta: -10_000 }),
+  adjustCustomerLoyaltyPoints(ownerTenant, { customerId: CUSTOMER_ID, note: "B87 too many", pointsDelta: -10_000 }),
 );
 
 const adjustResult = await adjustCustomerLoyaltyPoints(ownerTenant, { customerId: CUSTOMER_ID, note: "B87 bonus", pointsDelta: 50 });
@@ -371,7 +371,7 @@ await expectThrow("P. Unauthorized point adjustment blocked", () =>
 );
 
 await expectThrow("Q. Cross-company point adjustment blocked", () =>
-  adjustCustomerLoyaltyPoints(foreignTenant, { customerId: CUSTOMER_ID, pointsDelta: 10 }),
+  adjustCustomerLoyaltyPoints(foreignTenant, { customerId: CUSTOMER_ID, note: "B87 foreign", pointsDelta: 10 }),
 );
 
 try {

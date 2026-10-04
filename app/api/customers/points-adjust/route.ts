@@ -12,7 +12,7 @@ export async function POST(request: Request) {
         pointsDelta: Number(body.pointsDelta ?? 0),
       }),
     request,
-    WRITE_PERMISSIONS.customersUpdate,
+    WRITE_PERMISSIONS.membershipPointsAdjust,
     { allowManagerPinApproval: true, route: "/api/customers/points-adjust", storeAction: STORE_ACTIONS.CUSTOMER_CREDIT_UPDATE, targetType: "customer" },
   );
 }

@@ -8,7 +8,13 @@ export type SettingsFormData = {
   companyName: string;
   currencyDisplay: string;
   decimalPlaces: number;
+  loyaltyAllowPartial: boolean;
+  loyaltyAllowRedeemWithDiscount: boolean;
   loyaltyEnabled: boolean;
+  loyaltyExpiryDays: number;
+  loyaltyExpiryEnabled: boolean;
+  loyaltyExpiryUnit: "days" | "months";
+  loyaltyMaxRedeemPoints: number;
   loyaltyMinRedeemPoints: number;
   loyaltyPointValueLak: number;
   loyaltySpendPerPointLak: number;
