@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SupportedLocale } from "@/lib/constants";
 import { tSettings, localizeSettingsError } from "@/lib/i18n/settings-copy";
@@ -50,6 +50,10 @@ export function TerminalsPanel({
   const [deleteError, setDeleteError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const deleteInFlight = useRef(false);
+  const closeDeleteDialog = useCallback(() => {
+    setDeleteTarget(null);
+  }, []);
 
   async function run(task: () => Promise<TerminalCard[]>, success: string) {
     setBusy(true);
@@ -68,11 +72,12 @@ export function TerminalsPanel({
   }
 
   async function commitDelete() {
-    if (!deleteTarget) return;
+    if (deleteInFlight.current || !deleteTarget) return;
     if (!deletePassword.trim()) {
       setDeleteError(tSettings("ownerPasswordRequired", locale));
       return;
     }
+    deleteInFlight.current = true;
     setBusy(true);
     setDeleteError("");
     try {
@@ -86,6 +91,7 @@ export function TerminalsPanel({
     } catch (error) {
       setDeleteError(localizeSettingsError(error instanceof Error ? error.message : "", locale));
     } finally {
+      deleteInFlight.current = false;
       setBusy(false);
     }
   }
@@ -239,15 +245,22 @@ export function TerminalsPanel({
           closeOnEscape={false}
           footer={(
             <div className="flex justify-end gap-2">
-              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setDeleteTarget(null)}>{tSettings("cancel", locale)}</button>
-              <button className="settings-motion-save h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white disabled:opacity-60" disabled={busy} type="button" onClick={() => void commitDelete()}>{tSettings("delete", locale)}</button>
+              <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={closeDeleteDialog}>{tSettings("cancel", locale)}</button>
+              <button className="settings-motion-save h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white disabled:opacity-60" disabled={busy} form="terminal-delete-form" type="submit">{tSettings("delete", locale)}</button>
             </div>
           )}
-          onClose={() => setDeleteTarget(null)}
+          onClose={closeDeleteDialog}
           size="sm"
           title={`${tSettings("delete", locale)} ${deleteTarget.terminalCode}`}
         >
-          <div className="grid gap-3">
+          <form
+            className="grid gap-3"
+            id="terminal-delete-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void commitDelete();
+            }}
+          >
             <p className="text-sm text-muted-foreground">{tSettings("terminalDeleteConfirm", locale)}</p>
             {deleteError ? <p className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm" role="alert">{deleteError}</p> : null}
             <label className="grid gap-1 text-sm font-medium" htmlFor="terminal-delete-owner-password">
@@ -261,7 +274,7 @@ export function TerminalsPanel({
                 onChange={(event) => setDeletePassword(event.target.value)}
               />
             </label>
-          </div>
+          </form>
         </AppSmallModal>
       ) : null}
     </section>
