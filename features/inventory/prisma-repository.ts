@@ -1,4 +1,6 @@
+import { assertConfiguredApprovalSatisfied } from "@/features/approvals/approval-engine";
 import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
+import { STORE_MANAGER_APPROVAL_BODY_KEY } from "@/lib/auth/store-manager-approval";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import { prisma } from "@/lib/db/prisma";
@@ -482,7 +484,15 @@ export async function getPrismaProductStockSnapshot(
 }
 
 export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext) {
-  const data = parseStockAdjustmentInput(input);
+  const raw = { ...(input as StockAdjustmentInput & Record<string, unknown>) };
+  const pin = raw[STORE_MANAGER_APPROVAL_BODY_KEY] as { approvedByRole?: string } | undefined;
+  delete raw[STORE_MANAGER_APPROVAL_BODY_KEY];
+  const data = parseStockAdjustmentInput(raw);
+  await assertConfiguredApprovalSatisfied({
+    pinApproverRole: pin?.approvedByRole ?? null,
+    ruleKey: "stock_adjustment",
+    tenant,
+  });
   return withTenantTransaction({
     action: "adjustment",
     module: "inventory",

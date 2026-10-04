@@ -73,15 +73,22 @@ export async function createPosPermissionPolicyFromDatabase(input: {
 
   const discountRule = rules.discount;
   const refundRule = rules.refund;
+  const discountEnabled = Boolean(discountRule?.isEnabled);
+  const discountApprover = String(discountRule?.approverRole ?? "owner").toLowerCase();
+  const managerIsDiscountApprover = role === "Manager" && discountApprover === "manager";
+  const discountCeiling = discountRule?.thresholdPercent != null ? Number(discountRule.thresholdPercent) : 10;
 
   const approvalRules: PosPermissionPolicy["approvalRules"] =
     role === "Owner"
       ? {}
       : {
-          apply_discount: discountRule?.isEnabled ? "owner_above_threshold" : undefined,
+          // The saved approver may exceed the percent. Everyone else is capped
+          // while the rule is on. A disabled rule does not add this ceiling.
+          apply_discount: discountEnabled && !managerIsDiscountApprover ? "owner_above_threshold" : undefined,
           manual_price_override: "owner",
           refund_bill:
             refundRule?.isEnabled && role === "Manager" ? "owner_above_threshold" : refundRule?.isEnabled ? "manager" : undefined,
+          // Void stays a separate always-on non-owner approval. The Refund toggle does not control it.
           void_bill: "manager",
         };
 
@@ -90,18 +97,18 @@ export async function createPosPermissionPolicyFromDatabase(input: {
     assignedTerminal: input.assignedTerminal ?? "POS-01",
     branchName: input.branchName ?? "Main Branch",
     displayName: input.displayName ?? input.username ?? role,
-    // Role hierarchy is preserved: Owner is unlimited, Manager is capped at the
-    // company discount threshold (default 10%), Cashier cannot apply manual
-    // discounts (0%). The threshold only raises the Manager ceiling, never the
-    // Cashier's.
+    // Cashier max is 0 as an independent role limit, whether or not the Discount
+    // approval rule is enabled. Owner is unlimited. A Manager is capped at the
+    // saved percent only while the rule is on and Manager is not the approver.
+    // A disabled rule does not fall back to a hardcoded 10% ceiling.
     maxDiscountPercent:
       role === "Owner"
         ? 100
-        : role === "Manager"
-          ? discountRule?.thresholdPercent != null
-            ? Number(discountRule.thresholdPercent)
-            : 10
-          : 0,
+        : role === "Cashier"
+          ? 0
+          : !discountEnabled || managerIsDiscountApprover
+            ? 100
+            : discountCeiling,
     permissions: Object.fromEntries(
       allPosActions.map((action) => [action, posActionFromPermissionKeys(permissionKeys, action)]),
     ) as Record<PosPermissionAction, boolean>,

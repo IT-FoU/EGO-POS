@@ -6,6 +6,7 @@ import { tenantFromSession } from "@/lib/db/write-context";
 import {
   approveDayOffRequest,
   cancelDayOffRequest,
+  getDayOffSettingsSnapshot,
   grantSpecialDayOff,
   listPendingDayOffRequests,
   rejectDayOffRequest,
@@ -14,7 +15,19 @@ import {
   upsertWeeklyDayOff,
 } from "@/features/day-off/prisma-repository";
 
-export async function GET() {
+function employeeId(value: unknown) {
+  if (value === undefined || value === null || value === "" || value === "null" || value === "undefined") {
+    throw new Error("Select an employee first.");
+  }
+  return String(value);
+}
+
+function nullableEmployeeId(value: unknown) {
+  if (value === undefined || value === null || value === "" || value === "null" || value === "undefined") return null;
+  return String(value);
+}
+
+export async function GET(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   try {
@@ -26,6 +39,12 @@ export async function GET() {
     throw error;
   }
   try {
+    const view = new URL(request.url).searchParams.get("view");
+    if (view === "settings") {
+      const rawUserId = new URL(request.url).searchParams.get("userId");
+      const data = await getDayOffSettingsSnapshot(tenant, nullableEmployeeId(rawUserId));
+      return NextResponse.json({ ok: true, data });
+    }
     const data = await listPendingDayOffRequests(tenant);
     return NextResponse.json({ ok: true, data });
   } catch (error) {
@@ -72,14 +91,14 @@ export async function POST(request: Request) {
           data: await grantSpecialDayOff(tenant, {
             reason: body.reason,
             requestDate: String(body.requestDate),
-            userId: String(body.userId),
+            userId: employeeId(body.userId),
           }),
         });
       case "upsert_weekly":
         return NextResponse.json({
           ok: true,
           data: await upsertWeeklyDayOff(tenant, {
-            userId: String(body.userId),
+            userId: employeeId(body.userId),
             weekday: Number(body.weekday),
           }),
         });
@@ -87,7 +106,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           ok: true,
           data: await removeWeeklyDayOff(tenant, {
-            userId: String(body.userId),
+            userId: employeeId(body.userId),
             weekday: Number(body.weekday),
           }),
         });
@@ -96,7 +115,7 @@ export async function POST(request: Request) {
           ok: true,
           data: await upsertQuotaPolicy(tenant, {
             monthlyQuotaDays: Number(body.monthlyQuotaDays),
-            userId: body.userId === undefined ? null : body.userId ? String(body.userId) : null,
+            userId: nullableEmployeeId(body.userId),
           }),
         });
       default:
