@@ -289,6 +289,7 @@ model Company {
   loyaltyPointLedger LoyaltyPointLedger[]
   loyaltyEarningRules LoyaltyEarningRule[]
   supportTickets SupportTicket[]
+  posTerminals PosTerminal[]
   customerPayments   CustomerPayment[]
   promotionUsages    PromotionUsage[]
   auditLogs      AuditLog[]
@@ -375,6 +376,7 @@ model Branch {
   cashSessions CashSession[]
   sales        Sale[]
   devices      PosDevice[]
+  posTerminals PosTerminal[]
   qrPaymentAccounts QrPaymentAccount[]
   storeActivityLogs StoreActivityLog[]
   companyUsers CompanyUser[]
@@ -1292,10 +1294,12 @@ model Sale {
   saleStatus     SaleStatus    @default(completed) @map("sale_status")
   heldFromId     String?       @map("held_from_id")
   paymentStatus  String        @default("unpaid") @map("payment_status")
+  terminalId     String?       @map("terminal_id")
   createdBy      String?       @map("created_by")
   createdAt      DateTime      @default(now()) @map("created_at")
   company        Company       @relation(fields: [companyId], references: [id])
   branch         Branch        @relation(fields: [branchId], references: [id])
+  terminal       PosTerminal?  @relation(fields: [terminalId], references: [id], onDelete: Restrict)
   warehouse      Warehouse     @relation(fields: [warehouseId], references: [id])
   customer       Customer?     @relation(fields: [customerId], references: [id])
   items          SaleItem[]
@@ -1308,6 +1312,7 @@ model Sale {
   @@index([companyId, createdAt])
   @@index([branchId, createdAt])
   @@index([customerId, createdAt])
+  @@index([terminalId])
   @@map("sales")
 }
 
@@ -1510,14 +1515,17 @@ model CashSession {
   cashDifference Decimal?  @map("cash_difference") @db.Decimal(18, 2)
   /// Audit-only denomination qty map. Authoritative totals remain opening/closing/expected/difference columns.
   countBreakdown Json?     @map("count_breakdown")
+  terminalId     String?   @map("terminal_id")
   openedAt       DateTime  @default(now()) @map("opened_at")
   closedAt       DateTime? @map("closed_at")
   company        Company   @relation(fields: [companyId], references: [id])
   branch         Branch    @relation(fields: [branchId], references: [id])
+  terminal       PosTerminal? @relation(fields: [terminalId], references: [id], onDelete: Restrict)
   transactions   CashTransaction[]
   attendanceSessions StaffAttendanceSession[]
 
   @@index([companyId, cashierId])
+  @@index([terminalId])
   @@map("cash_sessions")
 }
 
@@ -1766,6 +1774,28 @@ model PosDevice {
 
   @@index([companyId, branchId])
   @@map("pos_devices")
+}
+
+/// Store register. One company can have many terminals. Stock stays on the branch.
+model PosTerminal {
+  id            String    @id @default(cuid())
+  companyId     String    @map("company_id")
+  branchId      String    @map("branch_id")
+  terminalCode  String    @map("terminal_code")
+  terminalName  String    @map("terminal_name")
+  status        String    @default("ACTIVE")
+  boundDeviceId String?   @unique @map("bound_device_id")
+  lastSeenAt    DateTime? @map("last_seen_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch        Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+  cashSessions  CashSession[]
+
+  @@unique([companyId, terminalCode])
+  @@index([companyId, branchId])
+  @@map("pos_terminals")
 }
 
 model Promotion {

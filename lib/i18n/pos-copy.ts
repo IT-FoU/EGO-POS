@@ -432,6 +432,11 @@ const en = {
   "ui.work.hours": "Work Hours",
   "ui.work.ot": "Work {work}h | OT {ot}h",
   "ui.yesterday": "Yesterday",
+  "ui.terminal.bind.required": "Choose a POS terminal for this device before selling.",
+  "ui.terminal.bind": "Use",
+  "ui.terminal.rebind": "Rebind",
+  "ui.terminal.rebind.confirm": "Use this device on the selected terminal?",
+  "ui.terminal.disabled": "Disabled",
 } as const;
 
 const lo = {
@@ -866,6 +871,11 @@ const lo = {
   "ui.work.hours": "ຊົ່ວໂມງ ວຍກ",
   "ui.work.ot": "ວຍກ {work}h | OT {ot}h",
   "ui.yesterday": "ມື້ວານ",
+  "ui.terminal.bind.required": "ເລືອກເຄື່ອງ POS ສຳລັບອຸປະກອນນີ້ກ່ອນຂາຍ.",
+  "ui.terminal.bind": "ໃຊ້",
+  "ui.terminal.rebind": "ຜູກໃໝ່",
+  "ui.terminal.rebind.confirm": "ໃຊ້ອຸປະກອນນີ້ກັບເຄື່ອງທີ່ເລືອກບໍ?",
+  "ui.terminal.disabled": "ປິດໃຊ້",
 } as const;
 
 export type PosCopyKey = keyof typeof en;

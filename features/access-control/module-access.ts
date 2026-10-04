@@ -163,6 +163,7 @@ const SETTINGS_PAGE_HREFS = [
   "/settings/branch-information",
   "/settings/tax",
   "/settings/cash-shift",
+  "/settings/pos-terminals",
   "/settings/receipt",
   "/settings/qr-payments",
   "/settings/customer-display",

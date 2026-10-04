@@ -26,6 +26,8 @@ import {
   assertOpenAttendanceForSale,
   createOpenAttendanceInTx,
 } from "@/features/attendance/prisma-repository";
+import { readPosDeviceId } from "@/features/terminals/device-cookie";
+import { recordTerminalActivity, requireActiveBoundTerminal } from "@/features/terminals/terminal-service";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, withTenantTransaction } from "@/lib/db/write-context";
@@ -339,13 +341,32 @@ async function getScopedSession(
     throw new PermissionDeniedError("pos.cash_session.manage");
   }
 
+  if (session.terminalId) {
+    const deviceId = await readPosDeviceId();
+    const terminal = deviceId
+      ? await tx.posTerminal.findFirst({
+          where: {
+            boundDeviceId: deviceId,
+            companyId: tenant.companyId,
+            id: session.terminalId,
+          },
+        })
+      : null;
+    if (!terminal) {
+      throw new Error("This cash session belongs to another terminal.");
+    }
+  }
+
   return session;
 }
 
 export async function getOpenCashSession(
   tenant: TenantContext,
-  options?: { client?: any; scope?: BranchScope },
+  options?: { client?: any; scope?: BranchScope; terminalId?: string | null },
 ) {
+  if (options && "terminalId" in options && !options.terminalId) {
+    return null;
+  }
   const client = options?.client ?? db;
   const scope = options?.scope ?? (await resolveTenantScope(tenant, client));
   const session = await client.cashSession.findFirst({
@@ -353,9 +374,9 @@ export async function getOpenCashSession(
     orderBy: { openedAt: "desc" },
     where: {
       branchId: scope.branchId,
-      cashierId: tenant.userId,
       closedAt: null,
       companyId: tenant.companyId,
+      ...(options?.terminalId ? { terminalId: options.terminalId } : { cashierId: tenant.userId }),
     },
   });
 
@@ -405,17 +426,18 @@ export async function openCashSession(input: OpenCashSessionInput, tenant: Tenan
     tenant,
     write: async (tx) => {
       const scope = await resolveTenantScope(tenant, tx);
+      const terminal = await requireActiveBoundTerminal(tx, tenant);
       const existing = await tx.cashSession.findFirst({
         where: {
           branchId: scope.branchId,
-          cashierId: tenant.userId,
           closedAt: null,
           companyId: tenant.companyId,
+          terminalId: terminal.id,
         },
       });
 
       if (existing) {
-        throw new Error("An open cash session already exists for this cashier.");
+        throw new Error("An open cash session already exists for this terminal.");
       }
 
       const session = await tx.cashSession.create({
@@ -423,6 +445,7 @@ export async function openCashSession(input: OpenCashSessionInput, tenant: Tenan
           branchId: scope.branchId,
           cashierId: tenant.userId,
           companyId: tenant.companyId,
+          terminalId: terminal.id,
           ...(openingBreakdown
             ? { countBreakdown: { opening: openingBreakdown } }
             : {}),
@@ -431,12 +454,33 @@ export async function openCashSession(input: OpenCashSessionInput, tenant: Tenan
         include: { transactions: true },
       });
 
-      // R9A: Start Work must create attendance in the same transaction as cash open.
-      await createOpenAttendanceInTx(tx, tenant, {
+      const openAttendance = await tx.staffAttendanceSession.findFirst({
+        where: {
+          companyId: tenant.companyId,
+          status: "open",
+          userId: tenant.userId,
+        },
+      });
+      if (!openAttendance) {
+        await createOpenAttendanceInTx(tx, tenant, {
+          branchId: scope.branchId,
+          cashSessionId: session.id,
+          note: input.note,
+          startedAt: session.openedAt ? new Date(session.openedAt) : new Date(),
+        });
+      }
+
+      await recordTerminalActivity(tx, {
+        action: "pos.shift.open",
         branchId: scope.branchId,
-        cashSessionId: session.id,
-        note: input.note,
-        startedAt: session.openedAt ? new Date(session.openedAt) : new Date(),
+        companyId: tenant.companyId,
+        targetId: String(session.id),
+        targetName: String(terminal.terminalCode),
+        targetType: "cash_session",
+        terminalCode: String(terminal.terminalCode),
+        terminalId: String(terminal.id),
+        terminalName: String(terminal.terminalName),
+        userId: tenant.userId,
       });
 
       const totals = await loadSessionTotals(tx, session);
@@ -556,12 +600,24 @@ export async function computeCashSessionTotalsForShift(
 
 async function findOpenCashSessionForCashier(tenant: TenantContext, tx: Record<string, any>) {
   const scope = await resolveTenantScope(tenant, tx);
+  const deviceId = await readPosDeviceId();
+  const terminal = deviceId
+    ? await tx.posTerminal.findFirst({
+        where: {
+          boundDeviceId: deviceId,
+          branchId: scope.branchId,
+          companyId: tenant.companyId,
+          status: "ACTIVE",
+        },
+      })
+    : null;
   return tx.cashSession.findFirst({
+    orderBy: { openedAt: "desc" },
     where: {
       branchId: scope.branchId,
-      cashierId: tenant.userId,
       closedAt: null,
       companyId: tenant.companyId,
+      ...(terminal ? { terminalId: terminal.id } : { cashierId: tenant.userId }),
     },
   });
 }
@@ -579,7 +635,16 @@ export async function assertOpenCashSessionForSale(tenant: TenantContext, tx: Re
     return null;
   }
 
-  const session = await findOpenCashSessionForCashier(tenant, tx);
+  const terminal = await requireActiveBoundTerminal(tx, tenant);
+  const scope = await resolveTenantScope(tenant, tx);
+  const session = await tx.cashSession.findFirst({
+    where: {
+      branchId: scope.branchId,
+      closedAt: null,
+      companyId: tenant.companyId,
+      terminalId: terminal.id,
+    },
+  });
 
   if (!session) {
     throw new Error("An open cash session is required before completing a sale.");

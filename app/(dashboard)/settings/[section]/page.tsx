@@ -13,6 +13,7 @@ import { SettingsForm, type SettingsDetailSection } from "@/features/settings/co
 import { getCompanyBusinessLogoUrl, getPrismaSettings } from "@/features/settings/prisma-repository";
 import { listLoyaltyEarningRules } from "@/features/loyalty/earning-rule-repository";
 import { listStoreSupportTickets } from "@/features/support/support-service";
+import { listStoreTerminals } from "@/features/terminals/terminal-service";
 import { prisma } from "@/lib/db/prisma";
 import { getReceiptPreviewQrImageUrl } from "@/features/settings/receipt-preview-qr";
 import { requireSession } from "@/lib/auth/session";
@@ -65,7 +66,7 @@ const blankSettings: SettingsFormData = {
 const sections = new Set<SettingsDetailSection>([
   "company-profile", "business-logo", "branch-information", "tax", "cash-shift", "receipt",
   "qr-payments", "customer-display", "staff", "roles", "approval-rules",
-  "day-off", "ot", "loyalty", "help",
+  "day-off", "ot", "loyalty", "help", "pos-terminals",
 ]);
 
 export default async function SettingsDetailPage({ params }: { params: Promise<{ section: string }> }) {
@@ -109,6 +110,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
 
   const loyaltyRules = needsLoyalty ? await listLoyaltyEarningRules(tenant) : [];
   const supportTickets = section === "help" ? await listStoreSupportTickets(tenant) : [];
+  const terminals = section === "pos-terminals" ? await listStoreTerminals(tenant) : [];
   const [loyaltyProducts, loyaltyCategories] = needsLoyalty
     ? await Promise.all([
         prisma.product.findMany({
@@ -135,6 +137,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
       canEdit={canEdit}
       canSubmitSupport={allowsPermission(permissionKeys, "settings.help.submit")}
       initialSupportTickets={supportTickets}
+      initialTerminals={terminals}
       actorUserId={session.user.id}
       initialActiveBranch={activeBranch}
       initialBusinessLogoUrl={businessLogoUrl}

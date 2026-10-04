@@ -151,6 +151,8 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("settings.loyalty.edit", "permLoyaltyEdit", ["settings.loyalty.edit"], ["settings.loyalty.edit"], { groupKey: "groupCustomersSettings" }),
     perm("settings.help.view", "permHelpView", ["settings.help.view"], ["settings.help.view"], { groupKey: "groupHelp" }),
     perm("settings.help.submit", "permHelpSubmit", ["settings.help.submit"], ["settings.help.submit"], { groupKey: "groupHelp" }),
+    perm("settings.terminals.view", "permTerminalsView", ["settings.terminals.view"], ["settings.terminals.view"], { groupKey: "groupPosPayments" }),
+    perm("settings.terminals.edit", "permTerminalsEdit", ["settings.terminals.edit"], ["settings.terminals.edit"], { groupKey: "groupPosPayments" }),
   ]),
   module("staff", "moduleStaff", [
     perm("staff.view", "permissionView", ["staff.view"]),

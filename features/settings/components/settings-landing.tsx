@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import {
-  Banknote, Building2, CalendarOff, ChevronRight, CircleHelp, Clock3, Gift, Image,
+  Banknote, Building2, CalendarOff, ChevronRight, CircleHelp, Clock3, Gift, Image, Monitor,
   MapPin, MonitorPlay, Percent, QrCode, ReceiptText, Search, ShieldCheck, Users,
   UserRoundCog, type LucideIcon,
 } from "lucide-react";
@@ -42,6 +42,7 @@ const SETTINGS_PREFETCH_ORDER = [
   "/settings/branch-information",
   "/settings/tax",
   "/settings/cash-shift",
+  "/settings/pos-terminals",
   "/settings/customer-display",
   "/settings/loyalty",
   "/settings/help",
@@ -73,6 +74,7 @@ const groups: Group[] = [
     title: text("POS & Payments", "POS ແລະ ການຊຳລະ"),
     rows: [
       { description: text("Whether sales require an open shift", "ກຳນົດວ່າຕ້ອງເປີດກະກ່ອນຂາຍຫຼືບໍ່"), href: "/settings/cash-shift", icon: Banknote, keywords: "cash shift start work required sale ກະ ເງິນສົດ ເລີ່ມວຽກ", scope: "company", summary: ({ settings }, locale) => settings?.requireCashShiftBeforeSale ? (locale === "lo" ? "ບັງຄັບ" : "Required") : (locale === "lo" ? "ບໍ່ບັງຄັບ" : "Not required"), title: text("Cash Shift", "ກະເງິນສົດ") },
+      { description: text("Registers that share this store", "ເຄື່ອງຂາຍທີ່ໃຊ້ຮ້ານນີ້ຮ່ວມກັນ"), href: "/settings/pos-terminals", icon: Monitor, keywords: "pos terminal register device counter ເຄື່ອງ ຄັງ", scope: "company", summary: (_, locale) => locale === "lo" ? "ຫຼາຍເຄື່ອງ" : "Multi terminal", title: text("POS Terminals", "ເຄື່ອງ POS") },
       { description: text("Receipt text and printing behavior", "ຂໍ້ຄວາມໃບບິນ ແລະ ການພິມ"), href: "/settings/receipt", icon: ReceiptText, keywords: "receipt printing print header footer prefix auto ask ໃບບິນ ພິມ", scope: "company", summary: (_, locale, mode) => printModeLabel(mode, locale), title: text("Receipt & Printing", "ໃບບິນ ແລະ ການພິມ") },
       { description: text("Banks and branch QR accounts", "ທະນາຄານ ແລະ ບັນຊີ QR ປະຈຳສາຂາ"), href: "/settings/qr-payments", icon: QrCode, keywords: "qr payments bank account branch scan ຊຳລະ ທະນາຄານ ບັນຊີ", scope: "company", summary: ({ activeQrAccounts, activeQrBanks }, locale) => locale === "lo" ? `${activeQrBanks} ທະນາຄານ • ${activeQrAccounts} ບັນຊີ` : `${activeQrBanks} bank${activeQrBanks === 1 ? "" : "s"} • ${activeQrAccounts} account${activeQrAccounts === 1 ? "" : "s"}`, title: text("QR Payments", "ການຊຳລະ QR") },
       { description: text("Screen layout and media", "ຮູບແບບຈໍ ແລະ ສື່ໂຄສະນາ"), href: "/settings/customer-display", icon: MonitorPlay, keywords: "customer display screen ads media promotion monitor ຈໍລູກຄ້າ ໂຄສະນາ", scope: "device", summary: (_, locale) => locale === "lo" ? "ສະເພາະອຸປະກອນນີ້" : "This device only", title: text("Customer Display", "ຈໍລູກຄ້າ") },
@@ -116,7 +118,7 @@ const explanations = [
   { description: text("POS currently uses LAK; currency and decimals are not editable here.", "POS ໃຊ້ LAK ໃນປັດຈຸບັນ; ບໍ່ສາມາດປ່ຽນສະກຸນເງິນ ຫຼື ທົດສະນິຍົມຢູ່ນີ້."), keywords: "currency lak decimal rounding ສະກຸນເງິນ ທົດສະນິຍົມ", title: text("Currency", "ສະກຸນເງິນ") },
   { description: text("Alerts remain active; no category toggle exists.", "ການແຈ້ງເຕືອນຍັງເຮັດວຽກ; ຍັງບໍ່ມີປຸ່ມປິດເປີດຕາມປະເພດ."), keywords: "notification alerts low stock ແຈ້ງເຕືອນ ສິນຄ້າໃກ້ໝົດ", title: text("Notifications", "ການແຈ້ງເຕືອນ") },
   { description: text("Support ticket submission is not available yet.", "ຍັງບໍ່ສາມາດສົ່ງບັດສະໜັບສະໜູນໄດ້ເທື່ອ."), keywords: "problem bug feedback feature request ticket support ບັນຫາ ບັກ ຄຳຕິຊົມ ຄຳຂໍຟີເຈີ", title: text("Support tickets", "ບັດສະໜັບສະໜູນ") },
-  { description: text("This is not a configurable setting in this release.", "ລາຍການນີ້ຍັງບໍ່ແມ່ນການຕັ້ງຄ່າໃນລຸ້ນນີ້."), keywords: "hours business hours holiday printer payroll terminal session timeout pin ເວລາເປີດຮ້ານ ວັນພັກ ເຄື່ອງພິມ ເງິນເດືອນ", title: text("Not available in this release", "ຍັງບໍ່ມີໃນລຸ້ນນີ້") },
+  { description: text("This is not a configurable setting in this release.", "ລາຍການນີ້ຍັງບໍ່ແມ່ນການຕັ້ງຄ່າໃນລຸ້ນນີ້."), keywords: "hours business hours holiday printer payroll session timeout pin ເວລາເປີດຮ້ານ ວັນພັກ ເຄື່ອງພິມ ເງິນເດືອນ", title: text("Not available in this release", "ຍັງບໍ່ມີໃນລຸ້ນນີ້") },
 ] as const;
 
 function printModeLabel(mode: ReceiptPrintMode, locale: SupportedLocale) {

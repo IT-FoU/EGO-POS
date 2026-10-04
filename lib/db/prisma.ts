@@ -84,6 +84,7 @@ function createPrismaClient() {
 }
 
 const prismaForRequest = cache(createPrismaClient);
+const REQUEST_PRISMA = Symbol.for("ego.pos.requestPrisma");
 
 function getPrismaClient(): PrismaClient {
   if (process.env.NODE_ENV !== "production") {
@@ -91,7 +92,21 @@ function getPrismaClient(): PrismaClient {
     return globalForPrisma.prisma;
   }
 
-  return prismaForRequest();
+  // Route handlers do not keep a React cache() scope. A new Prisma client on
+  // every property read made Add Terminal exceed the Worker CPU limit (HTTP 503).
+  // The OpenNext request store is per request, so one client lives for that
+  // request only. Do not cache it on the isolate: a shared client hangs the
+  // next invocation on a frozen Hyperdrive socket.
+  try {
+    const context = getCloudflareContext() as Record<symbol, PrismaClient | undefined>;
+    const existing = context[REQUEST_PRISMA];
+    if (existing) return existing;
+    const client = createPrismaClient();
+    context[REQUEST_PRISMA] = client;
+    return client;
+  } catch {
+    return prismaForRequest();
+  }
 }
 
 export const prisma = new Proxy({} as PrismaClient, {

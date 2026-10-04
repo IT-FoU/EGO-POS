@@ -51,17 +51,19 @@ const DayOffSettingsPanel = dynamic(() => import("@/features/day-off/components/
 const OtSettingsPanel = dynamic(() => import("@/features/ot/components/ot-settings-panel").then((module) => module.OtSettingsPanel));
 const BranchInformationPanel = dynamic(() => import("@/features/settings/components/branch-information-panel").then((module) => module.BranchInformationPanel));
 const HelpSupportPanel = dynamic(() => import("@/features/settings/components/help-support-panel").then((module) => module.HelpSupportPanel));
+const TerminalsPanel = dynamic(() => import("@/features/terminals/components/terminals-panel").then((module) => module.TerminalsPanel));
 
 export type SettingsDetailSection =
   | "company-profile" | "business-logo" | "branch-information" | "tax" | "cash-shift" | "receipt"
   | "qr-payments" | "customer-display" | "staff" | "roles" | "approval-rules"
-  | "day-off" | "ot" | "loyalty" | "help";
+  | "day-off" | "ot" | "loyalty" | "help" | "pos-terminals";
 
-export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, canSubmitSupport = false, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialLoyaltyCatalog = { categories: [], products: [] }, initialLoyaltyRules = [], initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, initialSupportTickets = [], locale: localeProp, qrBranches = [], section, }: {
+export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true, canSubmitSupport = false, initialActiveBranch = null, initialBusinessLogoUrl = null, initialHelpContext = null, initialLoyaltyCatalog = { categories: [], products: [] }, initialLoyaltyRules = [], initialQrAccounts = [], initialQrBanks = [], initialReceiptPreviewQrUrl = null, initialSettings, initialStaffSnapshot, initialSupportTickets = [], initialTerminals = [], locale: localeProp, qrBranches = [], section, }: {
     actorIsOwner?: boolean;
     canEdit?: boolean;
     canSubmitSupport?: boolean;
     initialSupportTickets?: import("@/features/support/support-types").SupportTicketSummary[];
+    initialTerminals?: import("@/features/terminals/terminal-types").TerminalCard[];
     initialLoyaltyCatalog?: { categories: LoyaltyCatalogItem[]; products: LoyaltyCatalogItem[] };
     initialLoyaltyRules?: LoyaltyEarningRuleRecord[];
     actorUserId?: string;
@@ -498,6 +500,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
       "ot": tSettings("otSettingsTitle", locale),
       "loyalty": tSettings("loyaltyRules", locale),
       "help": tSettings("helpAndSupport", locale),
+      "pos-terminals": tSettings("posTerminals", locale),
     };
     const detailDescription: Record<SettingsDetailSection, { en: string; lo: string }> = {
       "company-profile": { en: "Store name and contact details.", lo: "ຊື່ຮ້ານ ແລະ ຂໍ້ມູນຕິດຕໍ່." },
@@ -515,6 +518,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
       "ot": { en: "Manage overtime time windows.", lo: "ຈັດການຊ່ວງເວລາເຮັດວຽກລ່ວງເວລາ." },
       "loyalty": { en: "Manage how points are earned and redeemed.", lo: "ຈັດການວິທີໄດ້ ແລະ ແລກຄະແນນ." },
       "help": { en: "Help topics and safe system information for this store.", lo: "ຫົວຂໍ້ຊ່ວຍເຫຼືອ ແລະ ຂໍ້ມູນລະບົບທີ່ປອດໄພສຳລັບຮ້ານນີ້." },
+      "pos-terminals": { en: "Registers for this store. Stock and customers stay shared.", lo: "ເຄື່ອງຂາຍຂອງຮ້ານນີ້. ສະຕັອກ ແລະ ລູກຄ້າຍັງໃຊ້ຮ່ວມກັນ." },
     };
     const detailScope = section === "customer-display"
       ? tSettings("scopeThisDevice", locale)
@@ -1007,6 +1011,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
           )}
           {settingsConfirm === "resetAll" ? (<p className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>) : null}
         </AppSmallModal>) : null}
+      {section === "pos-terminals" ? <TerminalsPanel canEdit={canEdit} initialTerminals={initialTerminals} locale={locale} /> : null}
       </fieldset>
       {section === "help" && initialHelpContext ? (
         <HelpSupportPanel canSubmit={canSubmitSupport} context={initialHelpContext} locale={locale} tickets={initialSupportTickets} />

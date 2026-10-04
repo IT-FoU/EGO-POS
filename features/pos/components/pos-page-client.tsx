@@ -68,6 +68,8 @@ import {
   resolveFavoriteQtyAdjustTarget,
 } from "@/features/pos/favorites-client";
 import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
+import { PosTerminalChip } from "@/features/terminals/components/pos-terminal-chip";
+import type { PosCurrentTerminal } from "@/features/terminals/terminal-types";
 import {
   applyPosCatalogueRefresh,
   isPosCatalogueStorageEvent,
@@ -217,11 +219,12 @@ type ResolvedPayment = {
 };
 const POS_PRODUCT_GRID_VISIBILITY_KEY = "ego.pos.productGridVisible";
 
-export function PosPageClient({ branchName, branchId, cashierName, cashSession, customers: _bootCustomers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
+export function PosPageClient({ branchName, branchId, cashierName, cashSession, currentTerminal = null, customers: _bootCustomers, demoMode, devDebug, loyaltySettings, nextSaleNo, posPermissionPolicy, products, promotionBanners, promotions = [], qrBanks, receiptSettings, taxInclusive, taxRatePercent, warehouseId, }: {
     branchId: string;
     branchName: string;
     cashierName: string;
     cashSession: PosCashSessionContext;
+    currentTerminal?: PosCurrentTerminal | null;
     customers: PosCustomer[];
     demoMode: boolean;
     devDebug?: boolean;
@@ -1268,6 +1271,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setMessage(t("ui.cart.is.empty"));
             return;
         }
+        if (!demoMode && (!currentTerminal || currentTerminal.status !== "ACTIVE")) {
+            setMessage(t("ui.terminal.bind.required"));
+            return;
+        }
         // Soft UX guard when Require Cash Shift Before Sale is ON (server still enforces).
         if (activeCashSession.requireCashShiftBeforeSale !== false) {
             const cashOk = activeCashSession.status === "open" && Boolean(activeCashSession.sessionId);
@@ -1327,6 +1334,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 paymentMode,
                 qrAccountId: payment.qrAmount > 0 ? selectedQrBank?.id : undefined,
                 qrAmount: payment.qrAmount,
+                terminalId: currentTerminal?.id,
                 redeemPoints: effectiveRedeemPoints,
                 saleNo,
                 taxAmount,
@@ -2000,6 +2008,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
 
       <section className={cn("relative grid min-w-0 gap-4", productGridVisible ? "xl:grid-cols-[minmax(0,1fr)_420px] xl:grid-rows-[auto_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_460px]" : "flex flex-col")}>
           <Panel className={cn("order-1 min-w-0 overflow-hidden p-3 shadow-sm", productGridVisible && "xl:col-start-1 xl:row-start-1")}>
+            <PosTerminalChip terminal={currentTerminal} />
             <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <label className="relative">
                 <Barcode className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-primary" aria-hidden="true"/>
