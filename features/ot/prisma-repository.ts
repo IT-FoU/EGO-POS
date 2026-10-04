@@ -696,9 +696,41 @@ export async function runAutoEndSweep(now = new Date()): Promise<{ closed: numbe
   return { closed, skipped };
 }
 
+async function closeDueAttendance(tx: any, tenant: TenantContext, attendanceId: string, now: Date) {
+  const row = await tx.staffAttendanceSession.findFirst({
+    where: {
+      autoEndAt: { lte: now },
+      id: attendanceId,
+      status: "open",
+    },
+  });
+  if (!row?.autoEndAt) return null;
+  const intendedEnd = new Date(row.autoEndAt);
+  const computed = await computeClosePersistence(
+    tx,
+    tenant.companyId,
+    row,
+    intendedEnd,
+    row.otApprovalId ? ATTENDANCE_END_SOURCE_R9C.AUTO_OT : ATTENDANCE_END_SOURCE_R9C.AUTO_SCHEDULE,
+  );
+  return tx.staffAttendanceSession.update({
+    data: {
+      autoEndAt: null,
+      endSource: computed.endSource,
+      endedAt: intendedEnd,
+      otApprovalId: computed.otApprovalId,
+      otMinutes: computed.otMinutes,
+      regularMinutes: computed.regularMinutes,
+      status: "closed",
+    },
+    where: { id: row.id, status: "open" },
+  });
+}
+
 /** Lazy reconcile for a single tenant open attendance (sale/attendance paths). */
-export async function reconcileDueAutoEndForUser(tenant: TenantContext, now = new Date()) {
-  const open = await db.staffAttendanceSession.findFirst({
+export async function reconcileDueAutoEndForUser(tenant: TenantContext, now = new Date(), client?: any) {
+  const reader = client ?? db;
+  const open = await reader.staffAttendanceSession.findFirst({
     where: {
       companyId: tenant.companyId,
       status: "open",
@@ -708,44 +740,17 @@ export async function reconcileDueAutoEndForUser(tenant: TenantContext, now = ne
   if (!open?.autoEndAt) return null;
   if (new Date(open.autoEndAt).getTime() > now.getTime()) return null;
 
-  const result = await withTenantTransaction({
+  // Checkout already holds the request's only Worker database connection.
+  // Opening a second transaction here waits until that sale transaction expires.
+  if (client) return closeDueAttendance(client, tenant, open.id, now);
+
+  return withTenantTransaction({
     action: "lazy_auto_end_attendance",
     module: "attendance",
     newData: { attendanceId: open.id },
     tenant,
-    write: async (tx) => {
-      const row = await tx.staffAttendanceSession.findFirst({
-        where: {
-          autoEndAt: { lte: now },
-          id: open.id,
-          status: "open",
-        },
-      });
-      if (!row?.autoEndAt) return null;
-      const intendedEnd = new Date(row.autoEndAt);
-      const computed = await computeClosePersistence(
-        tx,
-        tenant.companyId,
-        row,
-        intendedEnd,
-        row.otApprovalId ? ATTENDANCE_END_SOURCE_R9C.AUTO_OT : ATTENDANCE_END_SOURCE_R9C.AUTO_SCHEDULE,
-      );
-      const closed = await tx.staffAttendanceSession.update({
-        data: {
-          autoEndAt: null,
-          endSource: computed.endSource,
-          endedAt: intendedEnd,
-          otApprovalId: computed.otApprovalId,
-          otMinutes: computed.otMinutes,
-          regularMinutes: computed.regularMinutes,
-          status: "closed",
-        },
-        where: { id: row.id, status: "open" },
-      });
-      return closed;
-    },
+    write: (tx) => closeDueAttendance(tx, tenant, open.id, now),
   });
-  return result;
 }
 
 export { resolveOtPolicy };
