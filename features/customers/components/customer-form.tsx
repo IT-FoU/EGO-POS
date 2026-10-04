@@ -12,9 +12,11 @@ import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { localizeCustomerError, localizedMembershipLabel, tCustomers } from "@/lib/i18n/customers-copy";
 
 export function CustomerForm({
+  canChangeLevel = false,
   levels,
   locale: localeProp,
 }: {
+  canChangeLevel?: boolean;
   levels: MembershipLevel[];
   locale?: SupportedLocale;
 }) {
@@ -38,7 +40,7 @@ export function CustomerForm({
       customerCode: String(formData.get("customerCode") ?? "").trim() || undefined,
       email: String(formData.get("email") ?? "").trim() || undefined,
       fullName: String(formData.get("fullName") ?? "").trim(),
-      membershipLevelId: String(formData.get("membershipLevelId") ?? "").trim() || undefined,
+      membershipLevelId: canChangeLevel ? String(formData.get("membershipLevelId") ?? "").trim() || undefined : undefined,
       notes: String(formData.get("notes") ?? "").trim() || undefined,
       openingBalance: Number(formData.get("openingBalance") ?? 0),
       phone: String(formData.get("phone") ?? "").trim() || undefined,
@@ -106,6 +108,7 @@ export function CustomerForm({
             <Field label={t("birthday")}>
               <input className="field-input" name="birthday" type="date" />
             </Field>
+            {canChangeLevel ? (
             <Field label={t("membershipLevel")}>
               <select className="field-input" name="membershipLevelId" defaultValue="">
                 <option value="">{t("noMembership")}</option>
@@ -117,6 +120,7 @@ export function CustomerForm({
                 ))}
               </select>
             </Field>
+            ) : null}
             <Field label={t("creditLimit")}>
               <input
                 className="field-input"

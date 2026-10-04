@@ -15,6 +15,7 @@ import {
 } from "@/features/dashboard/dashboard-service";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { dashboardWidgets, redactDashboardSnapshot } from "@/features/access-control/phase3-permissions";
 import { readNavigationAccess, requireModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
@@ -53,11 +54,6 @@ function parseDateRange(params: Record<string, string | string[] | undefined>): 
   };
 }
 
-function canSessionViewProfit(roles: string[] = []) {
-  const normalized = roles.map((role) => role.toLowerCase());
-  return !normalized.some((role) => ["cashier", "staff"].includes(role));
-}
-
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -76,13 +72,17 @@ export default async function DashboardPage({
     if (error instanceof AccountAccessDeniedError) return <StoreAccessDenied />;
     throw error;
   }
+  if (!navigation.keys.includes("*") && !navigation.keys.includes("dashboard.view")) {
+    return <StoreAccessDenied />;
+  }
 
   const cookieStore = await cookies();
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value, session.user.locale);
   const copy = getDashboardCopy(locale);
   const params = await searchParams;
   const dateRange = parseDateRange(params);
-  const snapshot = await getMiniMartDashboardCriticalSnapshot(dateRange);
+  const widgets = dashboardWidgets(navigation.keys);
+  const snapshot = redactDashboardSnapshot(await getMiniMartDashboardCriticalSnapshot(dateRange), widgets);
   const periodStart = new Date(snapshot.period.start);
   const periodEnd = new Date(snapshot.period.end);
   const customStart = dateRange.start ? dateInputValue(dateRange.start) : dateInputValue(periodStart);
@@ -94,12 +94,13 @@ export default async function DashboardPage({
         <Suspense fallback={<DashboardAlertsFallback initialLocale={locale} />}>
           <DashboardAlertsLoader
             dateRange={dateRange}
-            salesTodayLak={snapshot.cards.salesTodayLak}
+            salesTodayLak={widgets.sales ? snapshot.cards.salesTodayLak : 0}
             shiftSummaries={snapshot.closeDay.shiftSummaries}
           />
         </Suspense>
       }
-      canViewProfit={canSessionViewProfit(session.user.roles ?? [])}
+      canViewProfit={widgets.profit}
+      widgets={widgets}
       copy={copy}
       customEnd={customEnd}
       customStart={customStart}

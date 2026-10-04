@@ -12,7 +12,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return runWrite(
     (tenant, body) => updatePrismaMembershipLevel(id, body, tenant),
     request,
-    WRITE_PERMISSIONS.membershipLevelsManage,
+    WRITE_PERMISSIONS.membershipEdit,
   );
 }
 
@@ -21,6 +21,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   return runWrite(
     (tenant) => deletePrismaMembershipLevel(id, tenant),
     undefined,
-    WRITE_PERMISSIONS.membershipLevelsManage,
+    WRITE_PERMISSIONS.membershipDelete,
   );
 }

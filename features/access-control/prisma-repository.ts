@@ -8,6 +8,7 @@ import { stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { resolveTenantMembership, type TenantMembership } from "@/lib/db/resolve-tenant-user";
 import { decideApprovalRequest } from "@/features/approvals/approval-engine";
 import { allowsFine, FINE, FINE_MARKER, FINE_PERMISSION_ENTRIES, grantExceedsActor, legacyFineKeys } from "@/features/access-control/fine-permissions";
+import { expandPhase3Keys, PHASE3_PERMISSION_ENTRIES } from "@/features/access-control/phase3-permissions";
 import { parseStaffCreateDefaults, recommendedStaffSetup, withStaffCreateDefaults, type StaffCreateDefaults } from "@/features/access-control/staff-create-defaults";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import {
@@ -1080,6 +1081,7 @@ async function getUserPermissionKeysUncached(tenant: TenantContext, client: any)
               permission: { select: { key: true } },
             },
           },
+          templateKey: true,
         },
       },
     },
@@ -1092,7 +1094,8 @@ async function getUserPermissionKeysUncached(tenant: TenantContext, client: any)
   const keys = rows.flatMap((row: Record<string, unknown>) => {
     const role = row.role as Record<string, unknown>;
     const permissions = (Array.isArray(role?.permissions) ? role.permissions : []) as Array<Record<string, unknown>>;
-    return permissions.map((entry) => String((entry.permission as Record<string, unknown> | undefined)?.key ?? ""));
+    const roleKeys = permissions.map((entry) => String((entry.permission as Record<string, unknown> | undefined)?.key ?? "")).filter(Boolean);
+    return expandPhase3Keys(roleKeys, String(role?.templateKey ?? ""));
   });
   return [...new Set(keys)].filter((key): key is string => typeof key === "string" && key.length > 0);
 }
@@ -1126,6 +1129,14 @@ export async function ensureAccessControlCatalog(dbClient: any = db) {
   }
 
   for (const [key, name, module] of FINE_PERMISSION_ENTRIES) {
+    await dbClient.permission.upsert({
+      create: { key, module, name },
+      update: { module, name },
+      where: { key },
+    });
+  }
+
+  for (const [key, name, module] of PHASE3_PERMISSION_ENTRIES) {
     await dbClient.permission.upsert({
       create: { key, module, name },
       update: { module, name },

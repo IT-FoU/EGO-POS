@@ -17,6 +17,6 @@ export async function POST(request: Request) {
   return runWrite(
     (tenant, body) => createPrismaMembershipLevel(body, tenant),
     request,
-    WRITE_PERMISSIONS.membershipLevelsManage,
+    WRITE_PERMISSIONS.membershipCreate,
   );
 }

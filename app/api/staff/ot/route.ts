@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
-import { requireModuleAccess } from "@/lib/auth/module-access";
+import { requireSettingsDestination, requireSettingsSectionEdit } from "@/lib/auth/module-access";
+import { PermissionDeniedError } from "@/lib/auth/permissions";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
 import {
@@ -20,9 +21,9 @@ export async function GET(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   try {
-    await requireModuleAccess(tenant, "staff");
+    await requireSettingsDestination(tenant, "ot");
   } catch (error) {
-    if (error instanceof AccountAccessDeniedError) {
+    if (error instanceof AccountAccessDeniedError || error instanceof PermissionDeniedError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
     }
     throw error;
@@ -48,9 +49,10 @@ export async function POST(request: Request) {
   const session = await requireSession();
   const tenant = tenantFromSession(session);
   try {
-    await requireModuleAccess(tenant, "staff");
+    await requireSettingsDestination(tenant, "ot");
+    await requireSettingsSectionEdit(tenant, "ot");
   } catch (error) {
-    if (error instanceof AccountAccessDeniedError) {
+    if (error instanceof AccountAccessDeniedError || error instanceof PermissionDeniedError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
     }
     throw error;

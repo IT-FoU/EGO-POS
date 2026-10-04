@@ -1,4 +1,5 @@
 import { draftFromPermissionKeys } from "@/features/access-control/role-permission-v2";
+import { expandPhase3Keys, settingsSectionAllows } from "@/features/access-control/phase3-permissions";
 
 /**
  * Canonical module access for Phase 4.
@@ -138,9 +139,10 @@ export function landingPathForAccess(input: {
   isOwner: boolean;
   keys: readonly string[];
 }) {
+  const effective = input.isOwner ? ["*"] : expandPhase3Keys(input.keys);
   const allowed = (moduleId: CanonicalModuleId) => {
     if (moduleId === "pos" ? !input.allowPosAccess : !input.allowBackOfficeAccess) return false;
-    return input.isOwner || isCanonicalModuleEnabled(moduleId, input.keys);
+    return input.isOwner || isCanonicalModuleEnabled(moduleId, effective);
   };
   if (allowed("dashboard")) return MODULE_PAGE_HREFS.dashboard;
   if (allowed("pos")) return MODULE_PAGE_HREFS.pos;
@@ -181,11 +183,22 @@ export function settingsLandingHrefs(input: {
   keys: readonly string[];
 }) {
   if (!input.allowBackOfficeAccess) return [];
-  const enabled = (moduleId: CanonicalModuleId) => input.isOwner || isCanonicalModuleEnabled(moduleId, input.keys);
+  const keys = input.isOwner ? ["*"] : expandPhase3Keys(input.keys);
+  const enabled = (moduleId: CanonicalModuleId) => input.isOwner || isCanonicalModuleEnabled(moduleId, keys);
   const hrefs: string[] = [];
-  if (enabled("settings")) hrefs.push(...SETTINGS_PAGE_HREFS);
-  if (enabled("staff")) hrefs.push(...STAFF_PAGE_HREFS);
-  if (input.isOwner || input.keys.includes("*") || input.keys.includes("roles.manage")) hrefs.push("/settings/roles");
+  if (enabled("settings")) {
+    for (const href of SETTINGS_PAGE_HREFS) {
+      const section = href.replace("/settings/", "");
+      if (settingsSectionAllows(keys, section, "view")) hrefs.push(href);
+    }
+  }
+  if (enabled("staff") || enabled("settings")) {
+    for (const href of STAFF_PAGE_HREFS) {
+      const section = href.replace("/settings/", "");
+      if (settingsSectionAllows(keys, section, "view")) hrefs.push(href);
+    }
+  }
+  if (settingsSectionAllows(keys, "roles", "view")) hrefs.push("/settings/roles");
   if (enabled("membership")) hrefs.push(MODULE_PAGE_HREFS.membership);
   if (enabled("reports")) hrefs.push("/reports/inventory/reorder");
   if (enabled("settings") || enabled("staff")) hrefs.push(MODULE_PAGE_HREFS.activity);
@@ -199,7 +212,8 @@ export function visibleNavigationKeys(input: {
   keys: readonly string[];
 }) {
   const keys: string[] = [];
-  const enabled = (moduleId: CanonicalModuleId) => input.isOwner || isCanonicalModuleEnabled(moduleId, input.keys);
+  const effective = input.isOwner ? ["*"] : expandPhase3Keys(input.keys);
+  const enabled = (moduleId: CanonicalModuleId) => input.isOwner || isCanonicalModuleEnabled(moduleId, effective);
   if (input.allowBackOfficeAccess && enabled("dashboard")) keys.push("dashboard");
   if (input.allowPosAccess && enabled("pos")) keys.push("pos");
   if (input.allowBackOfficeAccess) {

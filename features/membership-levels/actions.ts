@@ -21,7 +21,7 @@ export async function createMembershipLevelAction(input: MembershipLevelCreateIn
   try {
     const result = await createPrismaMembershipLevel(
       input,
-      await requireWritePermission(WRITE_PERMISSIONS.membershipLevelsManage),
+      await requireWritePermission(WRITE_PERMISSIONS.membershipCreate),
     );
     revalidateMembershipLevelPaths();
     return writeSuccess(result);
@@ -35,7 +35,7 @@ export async function updateMembershipLevelAction(membershipLevelId: string, inp
     const result = await updatePrismaMembershipLevel(
       membershipLevelId,
       input,
-      await requireWritePermission(WRITE_PERMISSIONS.membershipLevelsManage),
+      await requireWritePermission(WRITE_PERMISSIONS.membershipEdit),
     );
     revalidateMembershipLevelPaths();
     return writeSuccess(result);
@@ -48,7 +48,7 @@ export async function archiveMembershipLevelAction(membershipLevelId: string) {
   try {
     const result = await archivePrismaMembershipLevel(
       membershipLevelId,
-      await requireWritePermission(WRITE_PERMISSIONS.membershipLevelsManage),
+      await requireWritePermission(WRITE_PERMISSIONS.membershipDelete),
     );
     revalidateMembershipLevelPaths();
     return writeSuccess(result);
@@ -61,7 +61,7 @@ export async function deleteMembershipLevelAction(membershipLevelId: string) {
   try {
     const result = await deletePrismaMembershipLevel(
       membershipLevelId,
-      await requireWritePermission(WRITE_PERMISSIONS.membershipLevelsManage),
+      await requireWritePermission(WRITE_PERMISSIONS.membershipDelete),
     );
     revalidateMembershipLevelPaths();
     return writeSuccess(result);

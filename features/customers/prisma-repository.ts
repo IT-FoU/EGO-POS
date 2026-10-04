@@ -146,6 +146,9 @@ async function createCustomerRecord(
 export async function createPrismaCustomer(input: CustomerCreateInput, tenant: TenantContext) {
   await assertPermission(tenant, WRITE_PERMISSIONS.customersCreate);
   const data = parseCustomerCreateInput(input);
+  if (data.membershipLevelId) {
+    await assertPermission(tenant, WRITE_PERMISSIONS.membershipLevelChange);
+  }
   const phone = stringValue(data.phone);
   if (!phone) {
     throw new Error("Phone is required.");
@@ -172,6 +175,15 @@ export async function createPrismaCustomer(input: CustomerCreateInput, tenant: T
 export async function updatePrismaCustomer(customerId: string, input: CustomerUpdateInput, tenant: TenantContext) {
   await assertPermission(tenant, WRITE_PERMISSIONS.customersUpdate);
   const data = parseCustomerUpdateInput(input);
+  if (data.membershipLevelId !== undefined) {
+    const existing = await prisma.customer.findFirst({
+      select: { membershipLevelId: true },
+      where: { companyId: tenant.companyId, id: customerId },
+    });
+    if (existing && String(existing.membershipLevelId ?? "") !== String(data.membershipLevelId ?? "")) {
+      await assertPermission(tenant, WRITE_PERMISSIONS.membershipLevelChange);
+    }
+  }
   return withTenantTransaction({
     action: "update",
     module: "customers",

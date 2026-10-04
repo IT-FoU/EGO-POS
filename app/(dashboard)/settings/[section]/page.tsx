@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
 import { getSettingsSectionStaffSnapshot } from "@/features/access-control/prisma-repository";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
+import { settingsSectionAllows, redactSettingsRead } from "@/features/access-control/phase3-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { requireSettingsDestination } from "@/lib/auth/module-access";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import { getQrPaymentSettingsSnapshot } from "@/features/qr-payments/prisma-repository";
@@ -95,9 +97,14 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
     );
   }
 
+  const permissionKeys = await getUserPermissionKeys(tenant);
+  const canEdit = settingsSectionAllows(permissionKeys, section, "edit");
+  const visibleSettings = redactSettingsRead(settings, permissionKeys);
+
   return (
     <SettingsForm
       actorIsOwner={session.user.roles?.includes("Owner") ?? false}
+      canEdit={canEdit}
       actorUserId={session.user.id}
       initialActiveBranch={activeBranch}
       initialBusinessLogoUrl={businessLogoUrl}
@@ -105,7 +112,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
         section === "help"
           ? {
               branchName: activeBranch?.name ?? "",
-              companyName: settings.companyName || session.user.activeCompanyName || "",
+              companyName: visibleSettings.companyName || session.user.activeCompanyName || "",
               locale,
               pagePath: "/settings/help",
               userDisplayName: session.user.name || "",
@@ -116,7 +123,7 @@ export default async function SettingsDetailPage({ params }: { params: Promise<{
       initialQrAccounts={qrSnapshot?.accounts}
       initialQrBanks={qrSnapshot?.banks}
       initialReceiptPreviewQrUrl={receiptPreviewQrUrl}
-      initialSettings={settings}
+      initialSettings={visibleSettings}
       initialStaffSnapshot={staffSnapshot}
       locale={locale}
       qrBranches={qrSnapshot?.branches}

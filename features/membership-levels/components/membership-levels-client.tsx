@@ -71,9 +71,11 @@ function formatLak(value: number) {
 }
 
 export function MembershipLevelsClient({
+  access = { archive: true, create: true, edit: true },
   levels,
   locale: localeProp,
 }: {
+  access?: { archive: boolean; create: boolean; edit: boolean };
   levels: MembershipLevelRecord[];
   locale?: SupportedLocale;
 }) {
@@ -81,12 +83,12 @@ export function MembershipLevelsClient({
 
   return (
     <MembershipsLocaleContext.Provider value={locale}>
-      <MembershipLevelsView levels={levels} />
+      <MembershipLevelsView access={access} levels={levels} />
     </MembershipsLocaleContext.Provider>
   );
 }
 
-function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
+function MembershipLevelsView({ access, levels }: { access: { archive: boolean; create: boolean; edit: boolean }; levels: MembershipLevelRecord[] }) {
   const copy = useCopy();
   const locale = useMembershipsLocale();
   const router = useRouter();
@@ -264,10 +266,10 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
               {copy("filters")}
               {activeFilterCount ? <span className="rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">{activeFilterCount}</span> : null}
             </button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={openCreateDrawer}>
+            {access.create ? <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={openCreateDrawer}>
               <Plus aria-hidden="true" className="size-4" />
               {copy("createLevel")}
-            </button>
+            </button> : null}
           </div>
         </div>
 
@@ -311,9 +313,9 @@ function MembershipLevelsView({ levels }: { levels: MembershipLevelRecord[] }) {
                             setOpenMenuId(null);
                             setDrawer({ type: "view", level });
                           }} />
-                          <MenuButton icon={Edit3} label={copy("edit")} onClick={() => openEditDrawer(level)} />
-                          {level.isActive ? <MenuButton icon={Trash2} label={copy("archive")} onClick={() => archiveLevel(level)} /> : null}
-                          <MenuButton icon={Trash2} label={copy("delete")} onClick={() => deleteLevel(level)} tone="danger" />
+                          {access.edit ? <MenuButton icon={Edit3} label={copy("edit")} onClick={() => openEditDrawer(level)} /> : null}
+                          {access.archive && level.isActive ? <MenuButton icon={Trash2} label={copy("archive")} onClick={() => archiveLevel(level)} /> : null}
+                          {access.archive ? <MenuButton icon={Trash2} label={copy("delete")} onClick={() => deleteLevel(level)} tone="danger" /> : null}
                         </div>
                       ) : null}
                     </td>

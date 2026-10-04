@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireWritePermission, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { requireSettingsSectionEdit } from "@/lib/auth/module-access";
+import { requireWritePermission, PermissionDeniedError, WRITE_PERMISSIONS } from "@/lib/auth/permissions";
+import { settingsSectionsInPayload, unknownSettingsWriteFields, redactSettingsRead } from "@/features/access-control/phase3-permissions";
+import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { getCurrentSession } from "@/lib/auth/session";
 import { updateActiveCompanySession } from "@/lib/auth/update-active-company-session";
 import { writeFailure, writeSuccess } from "@/lib/db/write-context";
@@ -12,6 +15,14 @@ import type { SettingsFormData } from "@/features/settings/types";
 export async function updateSettingsAction(input: Partial<SettingsFormData>) {
   try {
     const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const payload = input as Record<string, unknown>;
+    const sections = settingsSectionsInPayload(payload);
+    if (unknownSettingsWriteFields(payload).length > 0 || sections.length === 0) {
+      throw new PermissionDeniedError(WRITE_PERMISSIONS.settingsManage);
+    }
+    for (const section of sections) {
+      await requireSettingsSectionEdit(tenant, section);
+    }
     const settings = await updatePrismaSettings(input, tenant);
     const session = await getCurrentSession();
     if (session?.user?.id) {
@@ -24,7 +35,8 @@ export async function updateSettingsAction(input: Partial<SettingsFormData>) {
     revalidatePath("/settings", "layout");
     revalidatePath("/dashboard");
     revalidatePath("/pos");
-    return writeSuccess(settings);
+    const keys = await getUserPermissionKeys(tenant);
+    return writeSuccess(redactSettingsRead(settings, keys));
   } catch (error) {
     return writeFailure(error);
   }
@@ -32,7 +44,7 @@ export async function updateSettingsAction(input: Partial<SettingsFormData>) {
 
 export async function saveCompanyLogoAction(formData: FormData) {
   try {
-    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const tenant = await requireSettingsSectionEdit(await requireWritePermission(WRITE_PERMISSIONS.settingsManage), "business-logo");
     const file = formData.get("file");
     if (!(file instanceof File)) {
       throw new Error("Image upload is empty.");
@@ -49,7 +61,7 @@ export async function saveCompanyLogoAction(formData: FormData) {
 
 export async function removeCompanyLogoAction() {
   try {
-    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const tenant = await requireSettingsSectionEdit(await requireWritePermission(WRITE_PERMISSIONS.settingsManage), "business-logo");
     await removeCompanyBusinessLogo(tenant);
     revalidatePath("/settings", "layout");
     revalidatePath("/pos");
@@ -79,7 +91,7 @@ export async function updateActiveBranchInformationAction(input: {
   phone?: string | null;
 }) {
   try {
-    const tenant = await requireWritePermission(WRITE_PERMISSIONS.settingsManage);
+    const tenant = await requireSettingsSectionEdit(await requireWritePermission(WRITE_PERMISSIONS.settingsManage), "branch-information");
     const branch = await updateActiveBranchInformation(
       {
         address: input.address,

@@ -1,4 +1,5 @@
 import { FINE, FINE_MARKER, moduleAccessKey } from "@/features/access-control/fine-permissions";
+import { DASHBOARD_WIDGET, PHASE3_MARKER } from "@/features/access-control/phase3-permissions";
 import {
   buildDefaultMatrix,
   matrixToPermissionKeys,
@@ -7,6 +8,7 @@ import {
 
 export type RolePermissionDef = {
   deferred?: boolean;
+  groupKey?: string;
   id: string;
   labelKey: string;
   readKeys: readonly string[];
@@ -31,6 +33,15 @@ export type RolePermissionDraft = Record<string, RoleModuleDraft>;
 export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
   module("dashboard", "moduleDashboard", [
     perm("dashboard.view", "permissionView", ["dashboard.view"]),
+    perm("dashboard.sales", "permTodaySales", [DASHBOARD_WIDGET.sales]),
+    perm("dashboard.profit", "permDashboardProfit", [DASHBOARD_WIDGET.profit], [DASHBOARD_WIDGET.profit], { sensitive: true }),
+    perm("dashboard.cost", "permDashboardCost", [DASHBOARD_WIDGET.cost], [DASHBOARD_WIDGET.cost], { sensitive: true }),
+    perm("dashboard.bills", "permDashboardBills", [DASHBOARD_WIDGET.bills]),
+    perm("dashboard.avgBill", "permAverageBill", [DASHBOARD_WIDGET.avgBill]),
+    perm("dashboard.trend", "permSalesTrend", [DASHBOARD_WIDGET.trend]),
+    perm("dashboard.bestSellers", "permBestSellers", [DASHBOARD_WIDGET.bestSellers]),
+    perm("dashboard.recentBills", "permRecentBills", [DASHBOARD_WIDGET.recentBills]),
+    perm("dashboard.cashSession", "permCashSession", [DASHBOARD_WIDGET.cashSession]),
   ]),
   module("pos", "modulePos", [
     perm("pos.view", "permissionView", ["pos.view"]),
@@ -88,7 +99,10 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
   ]),
   module("membership", "moduleMembership", [
     perm("membership.view", "permissionView", ["membership.view"]),
+    perm("membership.create", "permAddLevel", ["membership.create"]),
     perm("membership.edit", "permissionEdit", ["membership.edit"], ["membership.edit", "membership_levels.manage"]),
+    perm("membership.delete", "permArchiveLevel", ["membership.delete"]),
+    perm("membership.level.change", "permChangeMemberLevel", ["membership.level.change"]),
   ]),
   module("promotions", "modulePromotions", [
     perm("promotions.view", "permissionView", ["promotions.view"]),
@@ -106,8 +120,35 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("reports.export", "permissionExport", ["reports.export"], ["reports.export"], { report: true }),
   ]),
   module("settings", "moduleSettings", [
-    perm("settings.view", "permissionView", ["settings.view"]),
-    perm("settings.edit", "permissionEdit", ["settings.edit"], ["settings.edit", "settings.manage"]),
+    perm("settings.companyProfile.view", "permCompanyProfileView", ["settings.company_profile.view"], ["settings.company_profile.view"], { groupKey: "groupBusiness" }),
+    perm("settings.companyProfile.edit", "permCompanyProfileEdit", ["settings.company_profile.edit"], ["settings.company_profile.edit"], { groupKey: "groupBusiness" }),
+    perm("settings.logo.view", "permLogoView", ["settings.logo.view"], ["settings.logo.view"], { groupKey: "groupBusiness" }),
+    perm("settings.logo.edit", "permLogoEdit", ["settings.logo.edit"], ["settings.logo.edit"], { groupKey: "groupBusiness" }),
+    perm("settings.branch.view", "permBranchView", ["settings.branch.view"], ["settings.branch.view"], { groupKey: "groupBusiness" }),
+    perm("settings.branch.edit", "permBranchEdit", ["settings.branch.edit"], ["settings.branch.edit"], { groupKey: "groupBusiness" }),
+    perm("settings.tax.view", "permTaxView", ["settings.tax.view"], ["settings.tax.view"], { groupKey: "groupBusiness" }),
+    perm("settings.tax.edit", "permTaxEdit", ["settings.tax.edit"], ["settings.tax.edit"], { groupKey: "groupBusiness" }),
+    perm("settings.cashShift.view", "permCashShiftView", ["settings.cash_shift.view"], ["settings.cash_shift.view"], { groupKey: "groupPosPayments" }),
+    perm("settings.cashShift.edit", "permCashShiftEdit", ["settings.cash_shift.edit"], ["settings.cash_shift.edit"], { groupKey: "groupPosPayments" }),
+    perm("settings.receipt.view", "permReceiptView", ["settings.receipt.view"], ["settings.receipt.view"], { groupKey: "groupPosPayments" }),
+    perm("settings.receipt.edit", "permReceiptEdit", ["settings.receipt.edit"], ["settings.receipt.edit"], { groupKey: "groupPosPayments" }),
+    perm("settings.qr.view", "permQrView", ["settings.qr.view"], ["settings.qr.view"], { groupKey: "groupPosPayments" }),
+    perm("settings.qr.edit", "permQrEdit", ["settings.qr.edit"], ["settings.qr.edit"], { groupKey: "groupPosPayments" }),
+    perm("settings.customerDisplay.view", "permCustomerDisplayView", ["settings.customer_display.view"], ["settings.customer_display.view"], { groupKey: "groupPosPayments" }),
+    perm("settings.customerDisplay.edit", "permCustomerDisplayEdit", ["settings.customer_display.edit"], ["settings.customer_display.edit"], { groupKey: "groupPosPayments" }),
+    perm("settings.staff.view", "permSettingsStaffView", ["staff.view"], ["staff.view"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.staff.edit", "permSettingsStaffEdit", ["staff.edit"], ["staff.edit", "users.manage"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.roles.view", "permRolesView", ["settings.roles.view"], ["settings.roles.view", "roles.manage"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.roles.edit", "permRolesEdit", ["roles.manage"], ["roles.manage"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.approval.view", "permApprovalRulesView", ["settings.approval_rules.view"], ["settings.approval_rules.view"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.approval.edit", "permApprovalRulesEdit", ["settings.approval_rules.edit"], ["settings.approval_rules.edit"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.dayOff.view", "permDayOffView", ["settings.day_off.view"], ["settings.day_off.view"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.dayOff.edit", "permDayOffEdit", ["settings.day_off.edit"], ["settings.day_off.edit"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.ot.view", "permOtView", ["settings.ot.view"], ["settings.ot.view"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.ot.edit", "permOtEdit", ["settings.ot.edit"], ["settings.ot.edit"], { groupKey: "groupStaffSecurity" }),
+    perm("settings.loyalty.view", "permLoyaltyView", ["settings.loyalty.view"], ["settings.loyalty.view"], { groupKey: "groupCustomersSettings" }),
+    perm("settings.loyalty.edit", "permLoyaltyEdit", ["settings.loyalty.edit"], ["settings.loyalty.edit"], { groupKey: "groupCustomersSettings" }),
+    perm("settings.help.view", "permHelpView", ["settings.help.view"], ["settings.help.view"], { groupKey: "groupHelp" }),
   ]),
   module("staff", "moduleStaff", [
     perm("staff.view", "permissionView", ["staff.view"]),
@@ -158,7 +199,11 @@ export function draftFromPermissionKeys(keys: readonly string[], retained?: Role
       }
       draft[entry.id].advanced[item.id] = item.readKeys.some((key) => granted.has(key));
     }
-    const savedEnabled = granted.has(moduleAccessKey(entry.id)) || entry.permissions.some((item) => !item.deferred && draft[entry.id].advanced[item.id]);
+    const savedEnabled = granted.has(moduleAccessKey(entry.id)) || entry.permissions.some((item) => {
+      if (item.deferred || !draft[entry.id].advanced[item.id]) return false;
+      if (entry.id === "settings" && item.writeKeys.every((key) => !key.startsWith("settings."))) return false;
+      return true;
+    });
     draft[entry.id].enabled = savedEnabled;
     if (!savedEnabled && retained?.[entry.id]) {
       draft[entry.id].advanced = { ...retained[entry.id].advanced };
@@ -176,12 +221,29 @@ export function recommendedRoleDraft(template: RoleTemplateLabel): RolePermissio
     draft.pos.advanced["pos.cashIn"] = true;
     draft.pos.advanced["pos.cashOut"] = true;
   }
+  if (template === "Owner") {
+    for (const entry of ROLE_PERMISSION_MODULES) {
+      draft[entry.id].enabled = true;
+      for (const item of entry.permissions) {
+        if (!item.deferred) draft[entry.id].advanced[item.id] = true;
+      }
+    }
+  }
   if (template === "Manager") {
     enableRecommended(draft, "reports", ["reports.historical", "reports.cost", "reports.profit", "reports.margin", "reports.export"]);
     enableRecommended(draft, "products", ["products.viewCost", "products.changeCost", "products.changePrice"]);
     enableRecommended(draft, "inventory", ["inventory.movement", "inventory.viewCost"]);
     enableRecommended(draft, "pos", ["pos.hold", "pos.discount", "pos.priceOverride", "pos.refund", "pos.void", "pos.reprint", "pos.cashIn", "pos.cashOut", "pos.openShift", "pos.closeShift"]);
     enableRecommended(draft, "staff", ["staff.changeRole", "staff.changeBranch", "staff.resetPassword", "staff.posAccess", "staff.backOfficeAccess"]);
+    enableRecommended(draft, "dashboard", ["dashboard.sales", "dashboard.profit", "dashboard.cost", "dashboard.bills", "dashboard.avgBill", "dashboard.trend", "dashboard.bestSellers", "dashboard.recentBills", "dashboard.cashSession"]);
+    enableRecommended(draft, "membership", ["membership.create", "membership.level.change"]);
+  }
+  if (template === "Staff/Cashier" && draft.dashboard) {
+    for (const id of ["dashboard.sales", "dashboard.bills", "dashboard.avgBill", "dashboard.trend", "dashboard.bestSellers", "dashboard.recentBills", "dashboard.cashSession"]) {
+      draft.dashboard.advanced[id] = true;
+    }
+    draft.dashboard.advanced["dashboard.profit"] = false;
+    draft.dashboard.advanced["dashboard.cost"] = false;
   }
   return draft;
 }
@@ -218,7 +280,13 @@ export function permissionKeysForDraft(draft: RolePermissionDraft, currentKeys: 
       for (const key of item.writeKeys) next.add(key);
     }
   }
+  if ([...next].some((key) => key.startsWith("settings.") && key.endsWith(".view"))) next.add("settings.view");
+  if ([...next].some((key) => key.startsWith("settings.") && key.endsWith(".edit"))) {
+    next.add("settings.edit");
+    next.add("settings.manage");
+  }
   next.add(FINE_MARKER);
+  next.add(PHASE3_MARKER);
   return [...next];
 }
 
@@ -303,7 +371,7 @@ function perm(
   labelKey: string,
   writeKeys: readonly string[],
   readKeys: readonly string[] = writeKeys,
-  flags: { report?: boolean; sensitive?: boolean } = {},
+  flags: { groupKey?: string; report?: boolean; sensitive?: boolean } = {},
 ): RolePermissionDef {
   return { id, labelKey, readKeys, writeKeys, ...flags };
 }

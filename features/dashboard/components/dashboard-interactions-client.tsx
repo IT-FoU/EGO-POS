@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DashboardDateRangeControls } from "@/features/dashboard/components/dashboard-date-range-controls";
+import type { DashboardWidgets } from "@/features/access-control/phase3-permissions";
 import type { DashboardAlert, DashboardRangeKey, DashboardSnapshot } from "@/features/dashboard/dashboard-service";
 import { formatBusinessDateLabel, formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
 import {
@@ -26,7 +27,7 @@ import {
 import { getDashboardCopy, type DashboardCopy } from "@/lib/i18n/dashboard-copy";
 import { AppLocaleProvider, useAppLocale } from "@/lib/i18n/use-app-locale";
 
-type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "sales" | "top_products";
+type DetailKind = "alerts" | "cash_session" | "payment" | "profit" | "recent_bills" | "sales" | "top_products";
 
 type DashboardInteractionsClientProps = {
   alertsSlot?: ReactNode;
@@ -38,6 +39,7 @@ type DashboardInteractionsClientProps = {
   customStart: string;
   snapshot: DashboardSnapshot;
   storeName: string;
+  widgets: DashboardWidgets;
 };
 
 type DetailPanel = {
@@ -79,6 +81,7 @@ export function DashboardInteractionsClient({
   customStart,
   snapshot,
   storeName,
+  widgets,
 }: DashboardInteractionsClientProps) {
   const locale = useAppLocale();
   const copy = getDashboardCopy(locale);
@@ -89,8 +92,8 @@ export function DashboardInteractionsClient({
   const maxTrendSales = Math.max(...trendPoints.map((point) => point.salesLak), 1);
   const hasSalesData = trendPoints.some((point) => point.salesLak > 0);
   const hasDashboardError = snapshot.dataStatus.hasError;
-  const averageBillLak =
-    snapshot.cards.totalBillsToday > 0 ? snapshot.cards.salesTodayLak / snapshot.cards.totalBillsToday : 0;
+  const averageBillLak = snapshot.cards.averageBillLak
+    ?? (snapshot.cards.totalBillsToday > 0 ? snapshot.cards.salesTodayLak / snapshot.cards.totalBillsToday : 0);
   const profitMargin = snapshot.cards.salesTodayLak > 0
     ? Math.round((snapshot.cards.profitTodayLak / snapshot.cards.salesTodayLak) * 1000) / 10
     : 0;
@@ -104,39 +107,46 @@ export function DashboardInteractionsClient({
             copy,
             detail,
             profitMargin,
+            showCost: widgets.cost,
             snapshot,
             totalPaymentsLak,
           })
         : null,
-    [averageBillLak, canViewProfit, copy, detail, profitMargin, snapshot, totalPaymentsLak],
+    [averageBillLak, canViewProfit, copy, detail, profitMargin, snapshot, totalPaymentsLak, widgets.cost],
   );
 
   const metrics = [
-    {
+    widgets.sales ? {
       helper: formatRangeLabel(snapshot.period.key, copy),
       icon: WalletCards,
       label: copy.todaySales,
       value: formatMoney(snapshot.cards.salesTodayLak),
-    },
-    {
+    } : null,
+    widgets.profit ? {
       helper: copy.totalProfit,
       icon: TrendingUp,
       label: copy.todayProfit,
-      value: canViewProfit ? (hasDashboardError ? copy.unavailable : formatMoney(snapshot.cards.profitTodayLak)) : "****",
-    },
-    {
+      value: hasDashboardError ? copy.unavailable : formatMoney(snapshot.cards.profitTodayLak),
+    } : null,
+    widgets.bills ? {
+      helper: copy.totalBills,
+      icon: ReceiptText,
+      label: copy.totalBills,
+      value: hasDashboardError ? copy.unavailable : formatNumber(snapshot.cards.totalBillsToday),
+    } : null,
+    widgets.avgBill ? {
       helper: copy.averageBill,
       icon: ShoppingCart,
       label: copy.averageBill,
       value: hasDashboardError ? copy.unavailable : formatMoney(averageBillLak),
-    },
-    {
+    } : null,
+    widgets.cashSession ? {
       helper: copy.cashSessionStatus,
       icon: Banknote,
       label: copy.cashDrawerExpected,
       value: hasDashboardError ? copy.unavailable : cashSessionValue(snapshot, copy),
-    },
-  ];
+    } : null,
+  ].filter((metric): metric is NonNullable<typeof metric> => Boolean(metric));
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -177,6 +187,7 @@ export function DashboardInteractionsClient({
         startDate={customStart}
       />
 
+      {metrics.length > 0 ? (
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
           <MetricCard
@@ -188,8 +199,11 @@ export function DashboardInteractionsClient({
           />
         ))}
       </section>
+      ) : null}
 
+      {widgets.trend || widgets.sales || widgets.cashSession ? (
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]">
+        {widgets.trend ? (
         <Panel
           actionLabel={copy.viewDetails}
           onAction={() => setDetail("sales")}
@@ -208,8 +222,10 @@ export function DashboardInteractionsClient({
             />
           )}
         </Panel>
+        ) : null}
 
         <div className="grid min-w-0 content-start gap-5">
+          {widgets.sales ? (
           <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("payment")} title={copy.paymentBreakdown}>
             {snapshot.paymentBreakdown.length === 0 ? (
               <EmptyState compact icon={CreditCard} title={copy.noPaymentData} description={copy.paymentBreakdown} />
@@ -229,19 +245,42 @@ export function DashboardInteractionsClient({
               </div>
             )}
           </Panel>
+          ) : null}
 
+          {widgets.cashSession ? (
           <Panel actionLabel={copy.viewDetails} onAction={() => setDetail("cash_session")} title={copy.cashSessionStatus}>
             <CashSessionSummary snapshot={snapshot} copy={copy} />
           </Panel>
+          ) : null}
         </div>
       </section>
+      ) : null}
 
       <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.75fr)]">
+        {widgets.bestSellers ? (
         <Panel actionLabel={copy.viewMore} onAction={() => setDetail("top_products")} title={copy.bestSellersByRevenue}>
           <BestSellersList copy={copy} products={snapshot.topProducts.slice(0, 10)} />
         </Panel>
+        ) : null}
         {alertsSlot ?? <ImportantAlertsCard alerts={snapshot.alerts} dataStatus={snapshot.dataStatus} />}
       </section>
+
+      {widgets.recentBills ? (
+        <Panel actionLabel={copy.viewMore} onAction={() => setDetail("recent_bills")} title={copy.recentSales}>
+          {snapshot.recentSales.length === 0 ? (
+            <EmptyState compact icon={ReceiptText} title={copy.recentSales} description={copy.emptySales} />
+          ) : (
+            <div className="grid gap-2">
+              {snapshot.recentSales.slice(0, 8).map((sale) => (
+                <div className="flex items-center justify-between gap-3 text-sm" key={sale.saleNo}>
+                  <span className="min-w-0 truncate font-medium">{sale.saleNo}</span>
+                  <span className="shrink-0 text-muted-foreground">{formatMoney(sale.totalLak)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      ) : null}
 
       {insightsSlot}
 
@@ -630,6 +669,7 @@ function buildDetailPanel({
   copy,
   detail,
   profitMargin,
+  showCost,
   snapshot,
   totalPaymentsLak,
 }: {
@@ -638,6 +678,7 @@ function buildDetailPanel({
   copy: DashboardCopy;
   detail: DetailKind;
   profitMargin: number;
+  showCost: boolean;
   snapshot: DashboardSnapshot;
   totalPaymentsLak: number;
 }): DetailPanel {
@@ -664,7 +705,7 @@ function buildDetailPanel({
         ? [
             { label: copy.todayProfit, value: snapshot.dataStatus.hasError ? copy.unavailable : formatMoney(snapshot.cards.profitTodayLak) },
             { label: copy.totalSales, value: formatMoney(snapshot.cards.salesTodayLak) },
-            { label: copy.cogs, value: formatMoney(snapshot.cards.cogsLak) },
+            ...(showCost ? [{ label: copy.cogs, value: formatMoney(snapshot.cards.cogsLak) }] : []),
             { label: copy.discount, value: formatMoney(snapshot.cards.discountLak) },
             { label: copy.profitMargin, value: `${profitMargin}%` },
           ]
@@ -706,6 +747,17 @@ function buildDetailPanel({
         { label: copy.cashOut, value: formatMoney(snapshot.shift.cashOutLak) },
       ],
       title: copy.cashSessionDetails,
+    };
+  }
+
+  if (detail === "recent_bills") {
+    return {
+      table: snapshot.recentSales.map((sale) => ({
+        label: sale.saleNo,
+        meta: formatPaymentMethod(sale.paymentMethod, copy),
+        value: formatMoney(sale.totalLak),
+      })),
+      title: copy.recentSales,
     };
   }
 
