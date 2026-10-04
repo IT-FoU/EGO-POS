@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, KeyRound, Plus, ShieldCheck, type LucideIcon } from "lucide-react";
 import {
@@ -348,11 +348,11 @@ export function StaffControlSection({
     setConfirmDeleteId(memberId);
   }
 
-  function closeDeleteStaff() {
+  const closeDeleteStaff = useCallback(() => {
     setConfirmDeleteId(null);
     setDeletePassword("");
     setDeleteError(null);
-  }
+  }, []);
 
   function commitDeleteStaff() {
     if (!confirmDeleteId || submitLock.current) return;
@@ -836,7 +836,19 @@ export function StaffControlSection({
             {deleteError ? <p className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-foreground" role="alert">{deleteError}</p> : null}
             <label className="grid gap-1 text-sm font-medium" htmlFor="staff-delete-owner-password">
               {tSettings("ownerPassword", locale)}
-              <input autoComplete="current-password" className="field-input" id="staff-delete-owner-password" type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
+              <input
+                autoComplete="current-password"
+                className="field-input"
+                id="staff-delete-owner-password"
+                type="password"
+                value={deletePassword}
+                onChange={(event) => setDeletePassword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                  event.preventDefault();
+                  commitDeleteStaff();
+                }}
+              />
             </label>
           </div>
         </AppSmallModal>
