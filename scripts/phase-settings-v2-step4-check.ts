@@ -68,8 +68,8 @@ check("36. showOnCustomerDisplay preserved", qr.includes("showOnCustomerDisplay"
 check("37. QR image preserved", qr.includes("qrImageUrl") && qr.includes("qrImageHelp"));
 check("38. Customer Display This device", form.includes("scopeThisDevice") && form.includes("customerDisplayThisBrowser"));
 check("39. CD local persistence", form.includes("writeCustomerDisplaySettingsToStorage") && form.includes("savedOnThisDevice"));
-check("40. CD reset confirmation", form.includes("resetThisPageConfirm") && form.includes("resetAllCustomerDisplayConfirm"));
-check("41. reset does not delete company/QR", form.includes("resetCustomerDisplayAppearanceSettings") && form.includes("resetAllCustomerDisplaySettings") && !form.includes("deleteQrPaymentAccountAction"));
+check("40. CD reset confirmation", !form.includes("resetThisPageConfirm") && form.includes("resetAllCustomerDisplayConfirm"));
+check("41. reset does not delete company/QR", !form.includes("resetCustomerDisplayAppearanceSettings") && form.includes("resetAllCustomerDisplaySettings") && !form.includes("deleteQrPaymentAccountAction"));
 check("42. canonical company identity for CD page", form.includes("customer-display") && detail.includes("getPrismaSettings"));
 check("43. Step 3 routes unchanged", detail.includes('"company-profile"') && detail.includes('"qr-payments"') && detail.includes('"customer-display"') && landing.includes('id: "business"') && landing.includes('id: "pos-payments"'));
 check("44. landing statuses remain real", landing.includes("hasLogo") && landing.includes("vatEnabled") && landing.includes("requireCashShiftBeforeSale") && landing.includes("activeQrBanks"));

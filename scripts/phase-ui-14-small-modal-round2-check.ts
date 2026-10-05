@@ -212,11 +212,10 @@ check(
 );
 
 check(
-  "12. Settings CD page reset no native confirm",
-  settingsConfirm.includes('settingsConfirm === "resetThisPage"') &&
-    settingsConfirm.includes('tSettings("resetThisPageConfirm"') &&
-    settingsConfirm.includes('tSettings("resetThisPage"') &&
-    settingsForm.includes("resetCustomerDisplayAppearanceSettings(displaySettings)"),
+  "12. Settings CD page reset is removed",
+  !settingsConfirm.includes('settingsConfirm === "resetThisPage"') &&
+    !settingsForm.includes('tSettings("resetThisPage"') &&
+    !settingsForm.includes("resetAppearancePage"),
 );
 
 check(

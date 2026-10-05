@@ -15,7 +15,7 @@ import type { LoyaltyEarningRuleRecord } from "@/features/loyalty/earning-rules"
 import { ACTIVE_COMPANY_NAME_CHANGE_EVENT } from "@/lib/auth/active-company-name";
 import type { SettingsFormData } from "@/features/settings/types";
 import type { BranchOption, QrPaymentAccountRecord, QrPaymentBankRecord } from "@/features/qr-payments/types";
-import { DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, resetAllCustomerDisplaySettings, resetCustomerDisplayAppearanceSettings, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
+import { DEFAULT_CUSTOMER_DISPLAY_SETTINGS, readCustomerDisplaySettingsFromStorage, resetAllCustomerDisplaySettings, writeCustomerDisplaySettingsToStorage, type CustomerDisplayMedia, type CustomerDisplaySettings, type CustomerDisplayTemplate, } from "@/features/pos/customer-display-settings";
 import { CUSTOMER_DISPLAY_TEMPLATE_OPTIONS } from "@/features/pos/customer-display-templates";
 import { CUSTOMER_DISPLAY_QR_STYLE_OPTIONS, type CustomerDisplayQrStyle } from "@/features/pos/customer-display-qr-style";
 import {
@@ -83,7 +83,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [logoStage, setLogoStage] = useState<StagedImageState>(emptyStagedImage());
-    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetThisPage" | "resetAll" | "taxChange" | "cashShiftOff" | "loyaltyChange" | null>(null);
+    const [settingsConfirm, setSettingsConfirm] = useState<"removeLogo" | "resetAll" | "taxChange" | "cashShiftOff" | "loyaltyChange" | null>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const logoFileRef = useRef<File | null>(null);
     const [displaySettings, setDisplaySettings] = useState<CustomerDisplaySettings>(DEFAULT_CUSTOMER_DISPLAY_SETTINGS);
@@ -183,14 +183,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
     }
     function updateDisplayVisibility(key: "showDiscountDetails" | "showPromotionInformation", value: boolean) {
         persistCustomerDisplaySettings({ ...displaySettings, [key]: value });
-    }
-    function resetAppearancePage() {
-        setSettingsConfirm("resetThisPage");
-    }
-    function applyResetAppearancePage() {
-        persistCustomerDisplaySettings(resetCustomerDisplayAppearanceSettings(displaySettings), false);
-        setMessage({ text: tSettings("resetThisPageSuccess", locale), tone: "success" });
-        setSettingsConfirm(null);
     }
     function resetAllDisplaySettings() {
         setSettingsConfirm("resetAll");
@@ -765,12 +757,6 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
           <span className="text-sm text-muted-foreground">{tSettings("customerDisplayThisBrowser", locale)}</span>
         </div>
         <div className="mt-5 grid gap-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm font-semibold">{tSettings("customerDisplay", locale)}</div>
-            <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={resetAppearancePage}>
-              {tSettings("resetThisPage", locale)}
-            </button>
-          </div>
           <p className="text-xs leading-5 text-muted-foreground">{tSettings("adsInsideCustomerDisplayHelp", locale)}</p>
           <div>
             <div className="text-sm font-semibold">{tSettings("displayTemplate", locale)}</div>
@@ -1011,10 +997,9 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
       {settingsConfirm ? (<AppSmallModal closeAriaLabel={tSettings("closeModal", locale)} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
             <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setSettingsConfirm(null)}>{tSettings("cancel", locale)}</button>
             {settingsConfirm === "removeLogo" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyRemoveLogo}>{tSettings("remove", locale)}</button>) : null}
-            {settingsConfirm === "resetThisPage" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAppearancePage}>{tSettings("resetThisPage", locale)}</button>) : null}
             {settingsConfirm === "resetAll" ? (<button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white" type="button" onClick={applyResetAllDisplaySettings}>{tSettings("resetAllCustomerDisplay", locale)}</button>) : null}
             {settingsConfirm === "taxChange" || settingsConfirm === "cashShiftOff" || settingsConfirm === "loyaltyChange" ? (<button className="settings-motion-save h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground" type="button" onClick={commitSettingsSave}>{tSettings("applyChanges", locale)}</button>) : null}
-          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPage", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplay", locale) : settingsConfirm === "taxChange" ? tSettings("taxChangeConfirmTitle", locale) : settingsConfirm === "loyaltyChange" ? tSettings("loyaltyChangeConfirmTitle", locale) : tSettings("cashShiftDisableConfirmTitle", locale)}>
+          </div>} onClose={() => setSettingsConfirm(null)} size="sm" title={settingsConfirm === "removeLogo" ? tSettings("remove", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplay", locale) : settingsConfirm === "taxChange" ? tSettings("taxChangeConfirmTitle", locale) : settingsConfirm === "loyaltyChange" ? tSettings("loyaltyChangeConfirmTitle", locale) : tSettings("cashShiftDisableConfirmTitle", locale)}>
           {settingsConfirm === "taxChange" ? (
             <ul className="grid gap-2 text-sm text-muted-foreground">
               {taxConfirmLines.map((line) => <li key={line}>{line}</li>)}
@@ -1024,7 +1009,7 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
               {loyaltyConfirmLines.map((line) => <li key={line}>{line}</li>)}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">{settingsConfirm === "removeLogo" ? tSettings("removeLogoConfirm", locale) : settingsConfirm === "resetThisPage" ? tSettings("resetThisPageConfirm", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplayConfirm", locale) : tSettings("cashShiftDisableConfirmBody", locale)}</p>
+            <p className="text-sm text-muted-foreground">{settingsConfirm === "removeLogo" ? tSettings("removeLogoConfirm", locale) : settingsConfirm === "resetAll" ? tSettings("resetAllCustomerDisplayConfirm", locale) : tSettings("cashShiftDisableConfirmBody", locale)}</p>
           )}
           {settingsConfirm === "resetAll" ? (<p className="mt-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">{tSettings("resetAllCustomerDisplayHelp", locale)}</p>) : null}
         </AppSmallModal>) : null}

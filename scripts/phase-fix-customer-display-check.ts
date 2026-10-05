@@ -24,7 +24,6 @@ import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
   normalizeCustomerDisplaySettings,
   resetAllCustomerDisplaySettings,
-  resetCustomerDisplayAppearanceSettings,
 } from "../features/pos/customer-display-settings";
 import {
   CUSTOMER_DISPLAY_TEMPLATES,
@@ -232,9 +231,8 @@ await check("source: settings expose templates, QR styles, and scoped resets", (
   assert(settingsForm.includes("updateDisplayTemplate"), "template setter missing");
   assert(settingsForm.includes("CUSTOMER_DISPLAY_TEMPLATE_OPTIONS"), "template options missing");
   assert(settingsForm.includes("CUSTOMER_DISPLAY_QR_STYLE_OPTIONS"), "QR style options missing");
-  assert(settingsForm.includes("resetAppearancePage"), "Reset This Page missing");
+  assert(!settingsForm.includes("resetAppearancePage") && !settingsForm.includes("resetThisPage"), "Reset This Page must be removed");
   assert(settingsForm.includes("resetAllDisplaySettings"), "Reset All Customer Display Settings missing");
-  assert(settingsForm.includes("resetCustomerDisplayAppearanceSettings"), "appearance reset helper missing");
   assert(settingsForm.includes("resetAllCustomerDisplaySettings"), "full CD reset helper missing");
   assert(settingsForm.includes("saveCompanyLogoAction"), "company logo must persist through the company asset action");
   assert(!settingsForm.includes("writeCompanyLogoUrl"), "company logo must not use browser storage as canonical");
@@ -576,20 +574,17 @@ await check("company logo uses persisted source and customer fallback", () => {
   assert(!posClient.includes("readCompanyLogoUrl()"), "POS must not publish the browser-local logo");
 });
 
-await check("reset this page vs reset all stays Customer Display only", () => {
+await check("reset all stays Customer Display only", () => {
   const current = normalizeCustomerDisplaySettings({
     autoReturnSeconds: 12,
     media: [{ id: "m1", name: "promo.png", type: "image", url: "https://example.com/promo.png" }],
     promotionMessages: ["Keep this"],
     qrDisplayStyle: "black-gold",
+    showDiscountDetails: false,
+    showPromotionInformation: false,
     template: "premium-dark-green",
   });
-  const pageReset = resetCustomerDisplayAppearanceSettings(current);
-  assert(pageReset.template === "ocean-blue", pageReset.template);
-  assert(pageReset.qrDisplayStyle === "green-clean", pageReset.qrDisplayStyle);
-  assert(pageReset.autoReturnSeconds === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds, String(pageReset.autoReturnSeconds));
-  assert(pageReset.promotionMessages.join("|") === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages.join("|"), pageReset.promotionMessages.join(","));
-  assert(pageReset.media.length === 0, String(pageReset.media.length));
+  assert(current.template === "premium-dark" && current.showDiscountDetails === false, "stored CD settings normalize before reset");
   const allReset = resetAllCustomerDisplaySettings();
   assert(allReset.template === "ocean-blue" && allReset.qrDisplayStyle === "green-clean", JSON.stringify(allReset));
   assert(allReset.autoReturnSeconds === DEFAULT_CUSTOMER_DISPLAY_SETTINGS.autoReturnSeconds, String(allReset.autoReturnSeconds));

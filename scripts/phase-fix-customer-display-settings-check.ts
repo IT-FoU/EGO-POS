@@ -13,7 +13,7 @@ import {
   buildCustomerDisplayQrCatalog,
   customerDisplayQrBanks,
 } from "../features/pos/customer-display-qr";
-import { resetAllCustomerDisplaySettings, resetCustomerDisplayAppearanceSettings } from "../features/pos/customer-display-settings";
+import { resetAllCustomerDisplaySettings } from "../features/pos/customer-display-settings";
 
 const results: Array<{ detail?: string; name: string; status: "FAIL" | "PASS" }> = [];
 
@@ -56,20 +56,15 @@ check("logo choose does not persist before confirm", () => {
   assert(settingsForm.includes("removeLogo") && settingsForm.includes("ui.remove.logo"), "remove logo missing");
 });
 
-check("reset this page restores the visible customer display section", () => {
-  const reset = resetCustomerDisplayAppearanceSettings({
-    autoReturnSeconds: 99,
-    media: [{ id: "x", name: "x.png", type: "image", url: "https://example.com/x.png" }],
-    promotionMessages: ["Custom"],
-    qrDisplayStyle: "black-gold",
-    template: "premium-dark",
-  });
-  const all = resetAllCustomerDisplaySettings();
-  assert(reset.template === all.template && reset.qrDisplayStyle === all.qrDisplayStyle, "page reset must restore CD appearance");
-  assert(reset.autoReturnSeconds === all.autoReturnSeconds, "page reset must restore timing");
-  assert(reset.media.length === 0 && reset.promotionMessages.join("|") === all.promotionMessages.join("|"), "page reset must restore media and messages");
-  assert(settingsForm.includes("resetAppearancePage") && settingsForm.includes("resetAllDisplaySettings"), "both reset actions must remain");
-  assert(!settingsForm.includes("factory reset"), "must not touch whole-system reset");
+check("reset all restores customer display device settings only", () => {
+  const reset = resetAllCustomerDisplaySettings();
+  assert(reset.template === "ocean-blue" && reset.qrDisplayStyle === "green-clean", "reset restores template and QR style");
+  assert(reset.autoReturnSeconds === 5, "reset restores timing");
+  assert(reset.media.length === 0, "reset clears idle media");
+  assert(reset.showDiscountDetails === true && reset.showPromotionInformation === true, "reset restores visibility toggles");
+  assert(settingsForm.includes("resetAllDisplaySettings") && settingsForm.includes("resetAllCustomerDisplaySettings()"), "reset all action must remain");
+  assert(!settingsForm.includes("resetAppearancePage") && !settingsForm.includes("resetThisPage"), "duplicate reset this page action must be gone");
+  assert(!settingsForm.includes("factory reset") && !settingsForm.includes("deleteQrPaymentAccountAction"), "must not touch QR accounts or whole-system reset");
 });
 
 check("add bank and add QR account keep existing actions", () => {

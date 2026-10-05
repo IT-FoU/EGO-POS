@@ -104,10 +104,6 @@ export function writeCustomerDisplaySettingsToStorage(settings: CustomerDisplayS
   writeJsonToStorage(CUSTOMER_DISPLAY_SETTINGS_KEY, settings);
 }
 
-export function resetCustomerDisplayAppearanceSettings(_current?: CustomerDisplaySettings): CustomerDisplaySettings {
-  return resetAllCustomerDisplaySettings();
-}
-
 export function resetAllCustomerDisplaySettings(): CustomerDisplaySettings {
   return {
     ...DEFAULT_CUSTOMER_DISPLAY_SETTINGS,

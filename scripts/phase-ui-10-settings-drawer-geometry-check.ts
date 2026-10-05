@@ -147,10 +147,10 @@ check(
 check(
   "12. Customer Display confirms remain unchanged",
   settingsForm.includes('tSettings("removeLogoConfirm"') &&
-    settingsForm.includes('tSettings("resetThisPageConfirm"') &&
+    !settingsForm.includes('tSettings("resetThisPageConfirm"') &&
     settingsForm.includes('tSettings("resetAllCustomerDisplayConfirm"') &&
     settingsForm.includes('settingsConfirm === "removeLogo"') &&
-    settingsForm.includes('settingsConfirm === "resetThisPage"') &&
+    !settingsForm.includes('settingsConfirm === "resetThisPage"') &&
     settingsForm.includes('settingsConfirm === "resetAll"') &&
     !settingsForm.includes("window.confirm") &&
     settingsForm.includes("persistCustomerDisplaySettings") &&

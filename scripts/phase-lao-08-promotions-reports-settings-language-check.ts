@@ -113,7 +113,9 @@ check(
   "3. Settings Lao copy",
   settingsCopy.includes("export const SETTINGS_COPY") &&
     Boolean(sen.settings && slo.settings) &&
-    Boolean(sen.resetThisPage && slo.resetThisPage) &&
+    Boolean(sen.resetAllCustomerDisplay && slo.resetAllCustomerDisplay) &&
+    !("resetThisPage" in sen) &&
+    !("resetThisPage" in slo) &&
     Boolean(sen.customerDisplay && slo.customerDisplay) &&
     settingsForm.includes('from "@/lib/i18n/settings-copy"') &&
     settingsStaff.includes('from "@/lib/i18n/settings-copy"'),
@@ -217,7 +219,7 @@ check(
   "15. Customer Display settings labels localized",
   settingsForm.includes('tSettings("customerDisplay"') &&
     settingsForm.includes('tSettings("displayTemplate"') &&
-    settingsForm.includes('tSettings("resetThisPage"') &&
+    !settingsForm.includes('tSettings("resetThisPage"') &&
     settingsForm.includes('tSettings("resetAllCustomerDisplay"') &&
     !displayClient.includes("settings-copy") &&
     !displayClient.includes("promotions-copy"),
@@ -225,11 +227,9 @@ check(
 
 check(
   "16. Reset behavior source remains unchanged",
-  settingsForm.includes("function resetAppearancePage") &&
+  !settingsForm.includes("function resetAppearancePage") &&
     settingsForm.includes("function resetAllDisplaySettings") &&
-    settingsForm.includes("resetCustomerDisplayAppearanceSettings(displaySettings)") &&
     settingsForm.includes("resetAllCustomerDisplaySettings()") &&
-    displaySettings.includes("export function resetCustomerDisplayAppearanceSettings") &&
     displaySettings.includes("export function resetAllCustomerDisplaySettings") &&
     displaySettings.includes("DEFAULT_CUSTOMER_DISPLAY_SETTINGS"),
 );

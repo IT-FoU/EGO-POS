@@ -209,14 +209,14 @@ check(
 check(
   "6. Confirmation and reset dialogs are localized",
   settingsForm.includes('tSettings("removeLogoConfirm"') &&
-    settingsForm.includes('tSettings("resetThisPageConfirm"') &&
     settingsForm.includes('tSettings("resetAllCustomerDisplayConfirm"') &&
+    !settingsForm.includes('tSettings("resetThisPage"') &&
     settingsQr.includes('tSettings("deleteBankTitle"') &&
     settingsQr.includes('tSettings("deleteQrAccountTitle"') &&
     settingsQr.includes('tSettings("confirmQr"') &&
     laoScript.test(lo.removeLogoConfirm) &&
     laoScript.test(lo.deleteBankConfirm) &&
-    lo.resetThisPageConfirm !== en.resetThisPageConfirm,
+    lo.resetAllCustomerDisplayConfirm !== en.resetAllCustomerDisplayConfirm,
 );
 
 check(
@@ -314,11 +314,9 @@ check(
 
 check(
   "13. No Settings functional behavior changed",
-  settingsForm.includes("function resetAppearancePage") &&
+  !settingsForm.includes("function resetAppearancePage") &&
     settingsForm.includes("function resetAllDisplaySettings") &&
-    settingsForm.includes("resetCustomerDisplayAppearanceSettings(displaySettings)") &&
     settingsForm.includes("resetAllCustomerDisplaySettings()") &&
-    displaySettings.includes("export function resetCustomerDisplayAppearanceSettings") &&
     displaySettings.includes("export function resetAllCustomerDisplaySettings") &&
     settingsActions.includes("updateSettingsAction") &&
     settingsRepo.includes("getPrismaSettings") &&
