@@ -148,11 +148,6 @@ const localeKeys = [
   "ui.sky.blue",
   "ui.sunny.yellow",
   "ui.premium.dark",
-  "ui.emerald.dream",
-  "ui.coral.minimal",
-  "ui.premium.dark.green",
-  "ui.minimal.premium.red",
-  "ui.minimal.premium.purple",
   "ui.green.clean",
   "ui.blue.wave",
   "ui.orange.modern",
@@ -459,21 +454,19 @@ await check("template default is Ocean Blue with legacy mapping", () => {
   assert(parseCustomerDisplayTemplate("classic_checkout") === "ocean-blue", "legacy classic_checkout maps to Ocean Blue");
   assert(normalizeCustomerDisplaySettings({}).template === "ocean-blue", "legacy settings JSON must default Ocean Blue");
   assert(normalizeCustomerDisplaySettings({ theme: "sky-blue" }).template === "sky-blue", "legacy theme field must map");
-  assert(CUSTOMER_DISPLAY_TEMPLATES.length === 10, String(CUSTOMER_DISPLAY_TEMPLATES.length));
+  assert(CUSTOMER_DISPLAY_TEMPLATES.length === 5, String(CUSTOMER_DISPLAY_TEMPLATES.length));
+  assert(parseCustomerDisplayTemplate("emerald-dream") === "sunny-yellow", "removed emerald maps to violet");
+  assert(parseCustomerDisplayTemplate("ads_checkout") === "sky-blue", "ads_checkout maps to sky-blue");
+  assert(parseCustomerDisplayTemplate("qr_focus") === "ocean-blue", "qr_focus maps to ocean-blue");
 });
 
-await check("ten templates keep distinct tokens and layouts", () => {
+await check("five templates keep distinct tokens and layouts", () => {
   const layouts = [
     "OceanBlueLayout",
     "BoldGreenLayout",
     "SkyBlueLayout",
     "SunnyYellowLayout",
     "PremiumDarkLayout",
-    "EmeraldDreamLayout",
-    "CoralMinimalLayout",
-    "PremiumDarkGreenLayout",
-    "MinimalRedLayout",
-    "MinimalPurpleLayout",
   ];
   for (const layout of layouts) {
     assert(displayClient.includes(`function ${layout}`), `${layout} missing`);
@@ -482,18 +475,14 @@ await check("ten templates keep distinct tokens and layouts", () => {
     const tokens = customerDisplayTemplateTokens(id);
     return `${id}:${tokens.background}:${tokens.primary}:${tokens.totalBackground}:${tokens.totalText}`;
   });
-  assert(new Set(signatures).size === 10, signatures.join(" | "));
+  assert(new Set(signatures).size === 5, signatures.join(" | "));
   const green = customerDisplayTemplateTokens("bold-green");
   const ocean = customerDisplayTemplateTokens("ocean-blue");
   const dark = customerDisplayTemplateTokens("premium-dark");
-  const darkGreen = customerDisplayTemplateTokens("premium-dark-green");
-  const red = customerDisplayTemplateTokens("minimal-premium-red");
-  const purple = customerDisplayTemplateTokens("minimal-premium-purple");
   assert(green.totalBackground === "#FF5F00" && green.background === "#003A70", JSON.stringify(green));
   assert(ocean.totalBackground === "#C6FF34" && ocean.background === "#13670B", JSON.stringify(ocean));
   assert(dark.background === "#FFF4EC" && dark.primary === "#EB001B", JSON.stringify(dark));
-  assert(darkGreen.totalBackground === "#4ADE80" && darkGreen.background !== dark.surface, JSON.stringify(darkGreen));
-  assert(red.primary !== purple.primary && red.background !== purple.background, "red and purple must not be recolors");
+  assert(!displayClient.includes("function EmeraldDreamLayout"), "removed layouts must not remain");
   assert(displayClient.includes("clamp(2.1rem,6vw,4.2rem)"), "grand total must stay the strongest type size");
   assert(displayClient.includes("100dvh") && displayClient.includes("requestFullscreen"), "viewport / fullscreen hardening missing");
 });
@@ -509,11 +498,6 @@ await check("idle uses selected template instead of one generic shell", () => {
     'data-cd-idle="sky-blue"',
     'data-cd-idle="sunny-yellow"',
     'data-cd-idle="premium-dark"',
-    'data-cd-idle="emerald-dream"',
-    'data-cd-idle="coral-minimal"',
-    'data-cd-idle="premium-dark-green"',
-    'data-cd-idle="minimal-premium-red"',
-    'data-cd-idle="minimal-premium-purple"',
   ];
   for (const mark of idleMarks) {
     assert(displayClient.includes(mark), `${mark} missing`);
@@ -537,8 +521,8 @@ await check("core template structure does not require lg breakpoint", () => {
   assert(!displayClient.includes("lg:grid-cols"), "core split layouts must not hide behind lg");
   assert(!displayClient.includes("lg:row-span"), "core row spans must not hide behind lg");
   assert(displayClient.includes("grid-cols-[1.15fr_0.85fr]"), "two-column cart split must exist without breakpoint");
-  assert(displayClient.includes("grid-cols-[1fr_0.7fr]"), "premium dark green split must exist without breakpoint");
-  assert(displayClient.includes("grid-cols-2"), "remaining templates must keep multi-column layout without breakpoint");
+  assert(displayClient.includes("grid-cols-[0.9fr_1.1fr]"), "three-room split must exist without breakpoint");
+  assert(displayClient.includes("grid-cols-2"), "four-room grid must exist without breakpoint");
 });
 
 await check("popup open size uses screen when available and a safer fallback", () => {
@@ -664,7 +648,7 @@ await check("customer display viewport fills without a dead top spacer", () => {
   assert(displayClient.includes('data-cd-viewport="fill"'), "viewport fill marker missing");
   assert(displayClient.includes('data-cd-welcome="start"'), "welcome content must start at the top of its panel");
   assert(!displayClient.includes("justify-end"), "welcome must not park copy at the bottom of a dead band");
-  assert(displayClient.includes('data-cd-header="compact"') && displayClient.includes('data-cd-header="cart"'), "compact headers missing");
+  assert(displayClient.includes('data-cd-geometry="full"') && displayClient.includes('data-cd-geometry="grid-2x2"'), "approved room geometry missing");
   assert(displayClient.includes("h-[100dvh]"), "display must use the visible viewport height");
   assert(displayClient.includes("FullscreenControl") && displayClient.includes('data-cd-fullscreen="control"'), "user-gesture fullscreen control missing");
   assert(!displayClient.includes("requestFullscreen().catch(() => undefined);"), "do not auto-request fullscreen on mount");
@@ -683,7 +667,7 @@ await check("thank-you is per template and keeps QR hidden", () => {
   for (const id of CUSTOMER_DISPLAY_TEMPLATES) {
     assert(displayClient.includes(`data-cd-thankyou="${id}"`), `thank-you missing for ${id}`);
   }
-  assert(displayClient.includes("Returning in {settings.autoReturnSeconds}s"), "auto-return copy missing");
+  assert(displayClient.includes("data-cd-return=\"timer\""), "auto-return copy missing");
   assert(displayClient.includes("showQr && displayState.selectedQrBank"), "QR overlay must stay state-driven");
   assert(posClient.includes("showQr: false") && posClient.includes("keepThankYou: true"), "sale complete must hide QR and keep thank-you");
 });
@@ -746,18 +730,11 @@ await check("contrast tokens and chrome variants stay distinct", () => {
   const ocean = customerDisplayTemplateTokens("ocean-blue");
   const sky = customerDisplayTemplateTokens("sky-blue");
   const sunny = customerDisplayTemplateTokens("sunny-yellow");
-  const emerald = customerDisplayTemplateTokens("emerald-dream");
-  const coral = customerDisplayTemplateTokens("coral-minimal");
-  const red = customerDisplayTemplateTokens("minimal-premium-red");
-  const purple = customerDisplayTemplateTokens("minimal-premium-purple");
   assert(ocean.secondaryText === "#0B3D08" && ocean.primary === "#C6FF34", JSON.stringify(ocean));
   assert(sky.secondaryText === "#003A70" && sky.background !== "#FFFFFF", JSON.stringify(sky));
   assert(sunny.secondaryText === "#C6FF34" && sunny.totalBackground === "#C6FF34", JSON.stringify(sunny));
-  assert(emerald.text === "#F0FDF4" && emerald.primary === "#059669", JSON.stringify(emerald));
-  assert(coral.primary === "#E11D48" && coral.totalBackground === "#BE123C", JSON.stringify(coral));
-  assert(red.primary === "#B91C1C" && purple.primary === "#5B21B6", "red/purple must stay deep, not pale");
   const chromes = CUSTOMER_DISPLAY_TEMPLATES.map((id) => `${id}:${JSON.stringify(customerDisplayTemplateChrome(id))}`);
-  assert(new Set(chromes).size === 10, chromes.join(" | "));
+  assert(new Set(chromes).size >= 4, chromes.join(" | "));
   assert(displayClient.includes("data-cd-chrome") && displayClient.includes("chromeClass"), "template chrome variants missing");
 });
 

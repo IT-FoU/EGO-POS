@@ -242,7 +242,7 @@ check(
     localizeCustomerDisplayTemplateDescription("ocean-blue", "fallback", "en") !== lo.templateOceanBlueDesc &&
     settingsForm.includes("localizeCustomerDisplayTemplateDescription(template.id, template.description") &&
     !formSource.includes("{template.description}") &&
-    displayTemplates.includes('name: "Ocean Blue"') &&
+    displayTemplates.includes('name: "Green Lime"') &&
     displayQrStyle.includes('name: "Green Clean"') &&
     !displayClient.includes("settings-copy"),
 );

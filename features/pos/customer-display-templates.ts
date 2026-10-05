@@ -4,11 +4,6 @@ export const CUSTOMER_DISPLAY_TEMPLATES = [
   "sky-blue",
   "sunny-yellow",
   "premium-dark",
-  "emerald-dream",
-  "coral-minimal",
-  "premium-dark-green",
-  "minimal-premium-red",
-  "minimal-premium-purple",
 ] as const;
 
 export type CustomerDisplayTemplate = (typeof CUSTOMER_DISPLAY_TEMPLATES)[number];
@@ -16,15 +11,18 @@ export type CustomerDisplayTemplate = (typeof CUSTOMER_DISPLAY_TEMPLATES)[number
 export const DEFAULT_CUSTOMER_DISPLAY_TEMPLATE: CustomerDisplayTemplate = "ocean-blue";
 
 const LEGACY_TEMPLATE_MAP: Record<string, CustomerDisplayTemplate> = {
-  ads_checkout: "sunny-yellow",
+  ads_checkout: "sky-blue",
   classic_checkout: "ocean-blue",
+  "coral-minimal": "premium-dark",
+  "emerald-dream": "sunny-yellow",
   "follow-pos": "premium-dark",
   "fresh-green": "bold-green",
-  fullscreen_promotion: "coral-minimal",
-  qr_focus: "sky-blue",
-  "sky-blue": "sky-blue",
-  "sunny-yellow": "sunny-yellow",
-  vip_membership: "emerald-dream",
+  fullscreen_promotion: "premium-dark",
+  "minimal-premium-purple": "sky-blue",
+  "minimal-premium-red": "ocean-blue",
+  "premium-dark-green": "premium-dark",
+  qr_focus: "ocean-blue",
+  vip_membership: "sunny-yellow",
 };
 
 export const CUSTOMER_DISPLAY_TEMPLATE_OPTIONS: Array<{
@@ -39,11 +37,6 @@ export const CUSTOMER_DISPLAY_TEMPLATE_OPTIONS: Array<{
   { id: "sky-blue", name: "Blue Yellow", labelKey: "ui.sky.blue", sections: "2", description: "Friendly two-column Mini Mart layout with yellow totals." },
   { id: "sunny-yellow", name: "Violet Lime", labelKey: "ui.sunny.yellow", sections: "3-4", description: "Black, violet, and lime premium contrast with a clear payable total." },
   { id: "premium-dark", name: "Red Orange", labelKey: "ui.premium.dark", sections: "3", description: "Bright red/orange retail banner with a clean transaction area." },
-  { id: "emerald-dream", name: "Emerald Dream", labelKey: "ui.emerald.dream", sections: "4-5", description: "Card grid with stronger member emphasis." },
-  { id: "coral-minimal", name: "Coral Minimal", labelKey: "ui.coral.minimal", sections: "3-4", description: "Light stacked composition with warm coral accents." },
-  { id: "premium-dark-green", name: "Premium Dark Green", labelKey: "ui.premium.dark.green", sections: "4-5", description: "Dark layout with a bright green grand-total focus." },
-  { id: "minimal-premium-red", name: "Minimal Premium Red", labelKey: "ui.minimal.premium.red", sections: "3-4", description: "Structured typography-first red and white layout." },
-  { id: "minimal-premium-purple", name: "Minimal Premium Purple", labelKey: "ui.minimal.premium.purple", sections: "4-5", description: "Elegant split composition with a purple banner." },
 ];
 
 export type CustomerDisplayThemeTokens = {
@@ -79,16 +72,6 @@ export function customerDisplayTemplateChrome(template: CustomerDisplayTemplate)
       return { items: "square", member: "flat", panel: "square", totals: "banner" };
     case "premium-dark":
       return { items: "square", member: "flat", panel: "banner", totals: "full-width" };
-    case "emerald-dream":
-      return { items: "thin", member: "card", panel: "rail", totals: "card" };
-    case "coral-minimal":
-      return { items: "flat", member: "flat", panel: "flat", totals: "outlined" };
-    case "premium-dark-green":
-      return { items: "square", member: "square", panel: "rail", totals: "full-width" };
-    case "minimal-premium-red":
-      return { items: "outlined", member: "outlined", panel: "thin", totals: "outlined" };
-    case "minimal-premium-purple":
-      return { items: "thin", member: "flat", panel: "banner", totals: "banner" };
     case "ocean-blue":
     default:
       return { items: "thin", member: "square", panel: "thin", totals: "outlined" };
@@ -176,86 +159,6 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
         surface: WHITE,
         text: DARK_TEXT,
         totalBackground: "#EB001B",
-        totalText: WHITE,
-      };
-    case "emerald-dream":
-      return {
-        accent: "#6EE7B7",
-        background: "#022C22",
-        badgeBackground: "#065F46",
-        badgeText: "#ECFDF5",
-        border: "#34D399",
-        muted: "#A7F3D0",
-        primary: "#059669",
-        secondaryText: "#D1FAE5",
-        soft: "#064E3B",
-        surface: "#04332A",
-        text: "#F0FDF4",
-        totalBackground: "#059669",
-        totalText: "#ECFDF5",
-      };
-    case "coral-minimal":
-      return {
-        accent: "#BE123C",
-        background: WHITE,
-        badgeBackground: "#FECDD3",
-        badgeText: "#881337",
-        border: "#E11D48",
-        muted: "#9F1239",
-        primary: "#E11D48",
-        secondaryText: "#881337",
-        soft: "#FFE4E6",
-        surface: WHITE,
-        text: DARK_TEXT,
-        totalBackground: "#BE123C",
-        totalText: WHITE,
-      };
-    case "premium-dark-green":
-      return {
-        accent: "#4ADE80",
-        background: "#020617",
-        badgeBackground: "#14532D",
-        badgeText: "#DCFCE7",
-        border: "#4ADE80",
-        muted: "#DCFCE7",
-        primary: "#4ADE80",
-        secondaryText: "#BBF7D0",
-        soft: "#052E16",
-        surface: "#07140D",
-        text: "#F8FAFC",
-        totalBackground: "#4ADE80",
-        totalText: "#022C22",
-      };
-    case "minimal-premium-red":
-      return {
-        accent: "#991B1B",
-        background: WHITE,
-        badgeBackground: "#7F1D1D",
-        badgeText: WHITE,
-        border: "#B91C1C",
-        muted: "#7F1D1D",
-        primary: "#B91C1C",
-        secondaryText: "#450A0A",
-        soft: "#FEE2E2",
-        surface: "#FFF7F7",
-        text: DARK_TEXT,
-        totalBackground: "#B91C1C",
-        totalText: WHITE,
-      };
-    case "minimal-premium-purple":
-      return {
-        accent: "#4C1D95",
-        background: "#FAF5FF",
-        badgeBackground: "#5B21B6",
-        badgeText: WHITE,
-        border: "#5B21B6",
-        muted: "#4C1D95",
-        primary: "#5B21B6",
-        secondaryText: "#3B0764",
-        soft: "#EDE9FE",
-        surface: WHITE,
-        text: DARK_TEXT,
-        totalBackground: "#6D28D9",
         totalText: WHITE,
       };
     case "ocean-blue":

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
+  customerDisplaySettingsNeedTemplateMigration,
   normalizeCustomerDisplaySettings,
 } from "../features/pos/customer-display-settings";
 import {
@@ -46,19 +47,44 @@ function check(name: string, run: () => void) {
   }
 }
 
-check("1-5 template IDs still parse and 6-10 remain", () => {
+check("exactly 5 selectable templates and legacy IDs map safely", () => {
+  assert(CUSTOMER_DISPLAY_TEMPLATES.length === 5, String(CUSTOMER_DISPLAY_TEMPLATES.length));
   assert(parseCustomerDisplayTemplate("ocean-blue") === "ocean-blue", "ocean-blue");
   assert(parseCustomerDisplayTemplate("bold-green") === "bold-green", "bold-green");
   assert(parseCustomerDisplayTemplate("sky-blue") === "sky-blue", "sky-blue");
   assert(parseCustomerDisplayTemplate("sunny-yellow") === "sunny-yellow", "sunny-yellow");
   assert(parseCustomerDisplayTemplate("premium-dark") === "premium-dark", "premium-dark");
-  assert(parseCustomerDisplayTemplate("emerald-dream") === "emerald-dream", "emerald-dream");
-  assert(parseCustomerDisplayTemplate("coral-minimal") === "coral-minimal", "coral-minimal");
-  assert(parseCustomerDisplayTemplate("premium-dark-green") === "premium-dark-green", "premium-dark-green");
-  assert(parseCustomerDisplayTemplate("minimal-premium-red") === "minimal-premium-red", "minimal-premium-red");
-  assert(parseCustomerDisplayTemplate("minimal-premium-purple") === "minimal-premium-purple", "minimal-premium-purple");
-  assert(CUSTOMER_DISPLAY_TEMPLATES.length === 10, String(CUSTOMER_DISPLAY_TEMPLATES.length));
-  assert(parseCustomerDisplayTemplate("missing-id") === "ocean-blue", "unknown must fall back");
+  assert(parseCustomerDisplayTemplate("emerald-dream") === "sunny-yellow", "emerald-dream");
+  assert(parseCustomerDisplayTemplate("coral-minimal") === "premium-dark", "coral-minimal");
+  assert(parseCustomerDisplayTemplate("premium-dark-green") === "premium-dark", "premium-dark-green");
+  assert(parseCustomerDisplayTemplate("minimal-premium-red") === "ocean-blue", "minimal-premium-red");
+  assert(parseCustomerDisplayTemplate("minimal-premium-purple") === "sky-blue", "minimal-premium-purple");
+  assert(parseCustomerDisplayTemplate("ads_checkout") === "sky-blue", "ads_checkout");
+  assert(parseCustomerDisplayTemplate("classic_checkout") === "ocean-blue", "classic_checkout");
+  assert(parseCustomerDisplayTemplate("follow-pos") === "premium-dark", "follow-pos");
+  assert(parseCustomerDisplayTemplate("fresh-green") === "bold-green", "fresh-green");
+  assert(parseCustomerDisplayTemplate("fullscreen_promotion") === "premium-dark", "fullscreen_promotion");
+  assert(parseCustomerDisplayTemplate("qr_focus") === "ocean-blue", "qr_focus");
+  assert(parseCustomerDisplayTemplate("vip_membership") === "sunny-yellow", "vip_membership");
+  assert(parseCustomerDisplayTemplate("unknown-template-id") === "ocean-blue", "unknown");
+  assert(parseCustomerDisplayTemplate(undefined) === "ocean-blue", "missing");
+  assert(parseCustomerDisplayTemplate(null) === "ocean-blue", "corrupt null");
+  const migrated = normalizeCustomerDisplaySettings({
+    autoReturnSeconds: 9,
+    media: [{ id: "img", name: "a.png", type: "image", url: "https://cdn.test/a.png" }],
+    promotionMessages: ["Keep this"],
+    qrDisplayStyle: "black-gold",
+    showDiscountDetails: false,
+    showPromotionInformation: false,
+    template: "emerald-dream",
+  });
+  assert(migrated.template === "sunny-yellow", "normalized template");
+  assert(migrated.autoReturnSeconds === 9 && migrated.media.length === 1, "unrelated settings stay");
+  assert(migrated.showDiscountDetails === false && migrated.showPromotionInformation === false, "visibility stays");
+  assert(migrated.promotionMessages[0] === "Keep this", "message stays");
+  assert(customerDisplaySettingsNeedTemplateMigration({ template: "emerald-dream" }) === true, "persist removed id");
+  assert(customerDisplaySettingsNeedTemplateMigration({ template: "ocean-blue" }) === false, "do not rewrite surviving id");
+  assert(normalizeCustomerDisplaySettings({ template: { bad: true } }).template === "ocean-blue", "corrupt object falls back");
 });
 
 check("redesigned 1-5 tokens stay distinct from 6-10", () => {
@@ -67,19 +93,17 @@ check("redesigned 1-5 tokens stay distinct from 6-10", () => {
   const sky = customerDisplayTemplateTokens("sky-blue");
   const violet = customerDisplayTemplateTokens("sunny-yellow");
   const red = customerDisplayTemplateTokens("premium-dark");
-  const emerald = customerDisplayTemplateTokens("emerald-dream");
   assert(ocean.background === "#13670B" && ocean.accent === "#C6FF34", JSON.stringify(ocean));
   assert(navy.background === "#003A70" && navy.primary === "#FF5F00", JSON.stringify(navy));
   assert(sky.accent === "#FFCB05" && sky.background === "#003A70", JSON.stringify(sky));
   assert(violet.background === "#000000" && violet.primary === "#7F3AED" && violet.accent === "#C6FF34", JSON.stringify(violet));
   assert(red.primary === "#EB001B" && red.accent === "#FF5F00", JSON.stringify(red));
-  assert(emerald.primary === "#059669", "template 6 tokens must stay");
-  assert(templates.includes("EmeraldDreamLayout") === false, "templates file is tokens only");
-  assert(displayClient.includes("function EmeraldDreamLayout"), "template 6 layout must remain");
-  assert(displayClient.includes("function CoralMinimalLayout"), "template 7 layout must remain");
-  assert(displayClient.includes("function PremiumDarkGreenLayout"), "template 8 layout must remain");
-  assert(displayClient.includes("function MinimalRedLayout"), "template 9 layout must remain");
-  assert(displayClient.includes("function MinimalPurpleLayout"), "template 10 layout must remain");
+  assert(!(CUSTOMER_DISPLAY_TEMPLATES as readonly string[]).includes("emerald-dream"), "removed ids must leave the selectable list");
+  assert(!displayClient.includes("function EmeraldDreamLayout"), "template 6 layout must be removed");
+  assert(!displayClient.includes("function CoralMinimalLayout"), "template 7 layout must be removed");
+  assert(!displayClient.includes("function PremiumDarkGreenLayout"), "template 8 layout must be removed");
+  assert(!displayClient.includes("function MinimalRedLayout"), "template 9 layout must be removed");
+  assert(!displayClient.includes("function MinimalPurpleLayout"), "template 10 layout must be removed");
 });
 
 check("QR overlay and window transport stay unchanged", () => {
@@ -154,12 +178,12 @@ check("templates 1-5 use owner room geometry", () => {
   assert(displayClient.includes('data-cd-geometry="top-split"') && displayClient.includes("grid-rows-[minmax(0,0.78fr)_minmax(0,1.22fr)]") && displayClient.includes('marker="top"') && displayClient.includes('marker="bottom-left"') && displayClient.includes('marker="bottom-right"'), "t3 top split");
   assert(displayClient.includes('data-cd-geometry="grid-2x2"') && displayClient.includes("grid-cols-2 grid-rows-2") && displayClient.includes('marker="top-left"') && displayClient.includes('marker="bottom-right"'), "t4 grid");
   assert(displayClient.includes('data-cd-geometry="left-stack-right"') && displayClient.includes("grid-cols-[0.9fr_1.1fr] grid-rows-2") && displayClient.includes("row-span-2") && displayClient.includes('marker="left-top"') && displayClient.includes('marker="left-bottom"'), "t5 three rooms");
-  assert(displayClient.includes("function EmeraldDreamLayout"), "template 6 layout must stay");
+  assert(!displayClient.includes("function EmeraldDreamLayout"), "template 6 layout must stay removed");
 });
 
 check("thank-you and QR stay on existing channel", () => {
   assert(displayClient.includes("data-cd-thankyou=\"ocean-blue\""), "t1 thank you");
-  assert(displayClient.includes("data-cd-thankyou=\"emerald-dream\""), "t6 thank you remains");
+  assert(!displayClient.includes("data-cd-thankyou=\"emerald-dream\""), "t6 thank you must be gone");
   assert(posClient.includes("keepThankYou: true"), "auto-return snapshot remains");
 });
 

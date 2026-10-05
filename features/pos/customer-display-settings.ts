@@ -2,6 +2,7 @@ import { DemoStorageKeys } from "@/lib/demo/storage-keys";
 import { readJsonFromStorage, writeJsonToStorage } from "@/lib/demo/storage";
 import {
   DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
+  isCustomerDisplayTemplate,
   parseCustomerDisplayTemplate,
   type CustomerDisplayTemplate,
 } from "@/features/pos/customer-display-templates";
@@ -56,15 +57,31 @@ export function readCustomerDisplaySettingsFromStorage(): CustomerDisplaySetting
     return DEFAULT_CUSTOMER_DISPLAY_SETTINGS;
   }
 
-  const parsed = readJsonFromStorage<Partial<CustomerDisplaySettings> & { theme?: string }>(
+  const parsed = readJsonFromStorage<StoredCustomerDisplaySettings>(
     CUSTOMER_DISPLAY_SETTINGS_KEY,
     {},
   );
-  return normalizeCustomerDisplaySettings(parsed);
+  const normalized = normalizeCustomerDisplaySettings(parsed);
+  if (customerDisplaySettingsNeedTemplateMigration(parsed)) {
+    writeCustomerDisplaySettingsToStorage(normalized);
+  }
+  return normalized;
+}
+
+type StoredCustomerDisplaySettings = Partial<Omit<CustomerDisplaySettings, "template">> & {
+  template?: unknown;
+  theme?: string;
+};
+
+export function customerDisplaySettingsNeedTemplateMigration(
+  parsed: StoredCustomerDisplaySettings | null | undefined,
+) {
+  const rawTemplate = parsed?.template ?? parsed?.theme;
+  return typeof rawTemplate === "string" && !isCustomerDisplayTemplate(rawTemplate);
 }
 
 export function normalizeCustomerDisplaySettings(
-  parsed: (Partial<CustomerDisplaySettings> & { theme?: string }) | null | undefined,
+  parsed: StoredCustomerDisplaySettings | null | undefined,
 ): CustomerDisplaySettings {
   const source = parsed ?? {};
   return {
