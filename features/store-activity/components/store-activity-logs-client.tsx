@@ -5,7 +5,8 @@ import { ChevronRight, Filter, RefreshCw, X } from "lucide-react";
 
 import type { StoreActivityLogOptions, StoreActivityLogRecord } from "@/features/store-activity/store-activity-log-service";
 import type { SupportedLocale } from "@/lib/constants";
-import { fillSettingsCopy, getSettingsCopy, localizeActivityStatus, localizeRoleTemplate, localizeTerminalOption, tSettings } from "@/lib/i18n/settings-copy";
+import { formatBusinessDateTimeLabel, formatBusinessTimeLabel } from "@/lib/datetime/business-timezone";
+import { fillSettingsCopy, getSettingsCopy, localizeActivityStatus, localizeRoleTemplate, localizeTerminalOption, tSettings, type SettingsCopyKey } from "@/lib/i18n/settings-copy";
 import { cn } from "@/lib/utils";
 
 type StoreActivityResponse = {
@@ -22,36 +23,54 @@ type StoreActivityResponse = {
 type StoreActivityFilters = {
   action: string;
   actorId: string;
-  branchId: string;
   dateFrom: string;
-  dateTo: string;
-  status: string;
+  datePreset: "custom" | "month" | "today";
+  module: string;
   terminalId: string;
 };
 
 const emptyOptions: StoreActivityLogOptions = {
   actions: [],
   actors: [],
-  branches: [],
-  statuses: [],
+  modules: [],
   terminals: [],
 };
 
 const initialFilters: StoreActivityFilters = {
   action: "",
   actorId: "",
-  branchId: "",
-  dateFrom: defaultDateFrom(),
-  dateTo: "",
-  status: "",
+  dateFrom: "",
+  datePreset: "today",
+  module: "",
   terminalId: "",
 };
 
-function defaultDateFrom() {
-  const date = new Date();
-  date.setDate(date.getDate() - 7);
-  return date.toISOString().slice(0, 10);
-}
+const actionLabelKeys: Record<string, SettingsCopyKey> = {
+  "inventory.adjust": "activityStockAdjustment",
+  "pos.cash.in": "activityCashIn",
+  "pos.cash.out": "activityCashOut",
+  "pos.sale.complete": "activitySaleCompleted",
+  "pos.sale.refund": "activityRefund",
+  "pos.sale.void": "activityVoid",
+  "product.create": "activityProductCreated",
+  "product.update": "activityProductEdited",
+  "settings.update": "activitySettingsUpdated",
+  "staff.create": "activityStaffCreated",
+  "staff.delete": "activityStaffDeleted",
+  "staff.role_change": "activityRoleChanged",
+  "terminal.bind": "activityTerminalBind",
+  "terminal.delete": "activityTerminalDelete",
+  "terminal.edit": "activityTerminalEdit",
+  "terminal.unbind": "activityTerminalUnbind",
+};
+
+const moduleLabelKeys: Record<string, SettingsCopyKey> = {
+  inventory: "activityModuleInventory",
+  pos: "activityModulePos",
+  products: "activityModuleProducts",
+  settings: "activityModuleSettings",
+  staff: "activityModuleStaff",
+};
 
 function activityCopy(locale?: SupportedLocale) {
   const settingsCopy = getSettingsCopy(locale);
@@ -92,7 +111,26 @@ function activityCopy(locale?: SupportedLocale) {
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : formatBusinessDateTimeLabel(date);
+}
+
+function formatActivityTime(value: string, preset: StoreActivityFilters["datePreset"]) {
+  return preset === "today" ? formatBusinessTimeLabel(value) : formatBusinessDateTimeLabel(value);
+}
+
+function actionMatchesModule(action: string, moduleName: string) {
+  if (!moduleName) return true;
+  if (moduleName === "pos") return action.startsWith("pos.");
+  if (moduleName === "products") return action.startsWith("product.");
+  if (moduleName === "inventory") return action.startsWith("inventory.");
+  if (moduleName === "staff") return action.startsWith("staff.");
+  if (moduleName === "settings") return action.startsWith("settings.") || action.startsWith("terminal.");
+  return false;
+}
+
+function actionLabel(action: string, locale?: SupportedLocale) {
+  const key = actionLabelKeys[action];
+  return key ? tSettings(key, locale) : titleize(action);
 }
 
 function titleize(value: string | null | undefined) {
@@ -224,12 +262,46 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
           {c.filters}
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <FilterField label={c.dateFrom}><input className="field-input" type="date" value={filters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></FilterField>
-          <FilterField label={c.dateTo}><input className="field-input" type="date" value={filters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></FilterField>
-          <FilterField label={c.action}><select className="field-input" value={filters.action} onChange={(event) => updateFilter("action", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.actions.map((action) => <option key={action} value={action}>{action}</option>)}</select></FilterField>
-          <FilterField label={c.status}><select className="field-input" value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.statuses.map((status) => <option key={status} value={status}>{localizeActivityStatus(status, locale)}</option>)}</select></FilterField>
-          <FilterField label={c.actor}><select className="field-input" value={filters.actorId} onChange={(event) => updateFilter("actorId", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.actors.map((actor) => <option key={actor.id} value={actor.id}>{actor.name}</option>)}</select></FilterField>
-          <FilterField label={c.branch}><select className="field-input" value={filters.branchId} onChange={(event) => updateFilter("branchId", event.target.value)}><option value="">{tSettings("all", locale)}</option>{options.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></FilterField>
+          <FilterField label={c.dateFrom}>
+            <select className="field-input" value={filters.datePreset} onChange={(event) => updateFilter("datePreset", event.target.value as StoreActivityFilters["datePreset"])}>
+              <option value="today">{tSettings("activityToday", locale)}</option>
+              <option value="month">{tSettings("activityThisMonth", locale)}</option>
+              <option value="custom">{tSettings("activityCustomDate", locale)}</option>
+            </select>
+          </FilterField>
+          {filters.datePreset === "custom" ? <FilterField label={tSettings("activityCustomDate", locale)}><input className="field-input" type="date" value={filters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></FilterField> : null}
+          <FilterField label={c.terminal}>
+            <select className="field-input" value={filters.terminalId} onChange={(event) => updateFilter("terminalId", event.target.value)}>
+              <option value="">{tSettings("activityAllTerminals", locale)}</option>
+              {options.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{localizeTerminalOption(terminal.name, locale)}</option>)}
+            </select>
+          </FilterField>
+          <FilterField label={tSettings("activityStaff", locale)}>
+            <select className="field-input" value={filters.actorId} onChange={(event) => updateFilter("actorId", event.target.value)}>
+              <option value="">{tSettings("activityAllStaff", locale)}</option>
+              {options.actors.map((actor) => <option key={actor.id} value={actor.id}>{actor.name}</option>)}
+            </select>
+          </FilterField>
+          <FilterField label={tSettings("activityModule", locale)}>
+            <select className="field-input" value={filters.module} onChange={(event) => {
+              const moduleName = event.target.value;
+              setPage(1);
+              setFilters((current) => ({
+                ...current,
+                action: current.action && actionMatchesModule(current.action, moduleName) ? current.action : "",
+                module: moduleName,
+              }));
+            }}>
+              <option value="">{tSettings("all", locale)}</option>
+              {options.modules.map((moduleName) => <option key={moduleName} value={moduleName}>{tSettings(moduleLabelKeys[moduleName] ?? "activityModule", locale)}</option>)}
+            </select>
+          </FilterField>
+          <FilterField label={c.action}>
+            <select className="field-input" value={filters.action} onChange={(event) => updateFilter("action", event.target.value)}>
+              <option value="">{tSettings("all", locale)}</option>
+              {options.actions.filter((action) => actionMatchesModule(action, filters.module)).map((action) => <option key={action} value={action}>{actionLabel(action, locale)}</option>)}
+            </select>
+          </FilterField>
         </div>
       </section>
 
@@ -237,31 +309,26 @@ export function StoreActivityLogsClient({ locale = "en" }: { locale?: SupportedL
 
       <section className="overflow-hidden rounded-lg border border-border">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-sm">
+          <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead className="bg-muted/40 text-left text-muted-foreground">
               <tr>
-                {[c.createdAt, c.actor, c.role, c.action, c.target, c.amount, c.currency, c.status, c.terminal, c.details].map((header) => (
+                {[tSettings("activityTime", locale), c.terminal, tSettings("activityStaff", locale), c.action, c.details].map((header) => (
                   <th className="px-4 py-3 font-semibold" key={header}>{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {logs.length === 0 ? (
-                <tr><td className="px-4 py-8 text-center text-muted-foreground" colSpan={10}>{isLoading ? tSettings("loadingSettings", locale) : c.empty}</td></tr>
+                <tr><td className="px-4 py-8 text-center text-muted-foreground" colSpan={5}>{isLoading ? tSettings("loadingSettings", locale) : c.empty}</td></tr>
               ) : logs.map((log) => (
                 <tr className="border-t border-border transition hover:bg-primary/5" key={log.id}>
-                  <td className="whitespace-nowrap px-4 py-3">{formatDate(log.createdAt)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">{formatActivityTime(log.createdAt, filters.datePreset)}</td>
+                  <td className="px-4 py-3">{localizeTerminalOption(log.terminalName ?? "-", locale)}</td>
                   <td className="px-4 py-3">{log.actorName}</td>
-                  <td className="px-4 py-3">{localizeRoleTemplate(titleize(log.actorRole), locale)}</td>
-                  <td className="px-4 py-3"><Badge value={log.action} tone="info" /></td>
-                  <td className="px-4 py-3">{log.targetName ?? log.targetType}</td>
-                  <td className="px-4 py-3">{log.amount ?? "-"}</td>
-                  <td className="px-4 py-3">{log.currency}</td>
-                  <td className="px-4 py-3"><Badge value={localizeActivityStatus(log.status, locale)} tone={log.status === "denied" || log.status === "failed" ? "danger" : "success"} /></td>
-                  <td className="px-4 py-3">{localizeTerminalOption(log.terminalName ?? log.deviceName ?? "-", locale)}</td>
+                  <td className="px-4 py-3"><Badge value={actionLabel(log.action, locale)} tone="info" /></td>
                   <td className="px-4 py-3">
-                    <button className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline" type="button" onClick={() => setSelected(log)}>
-                      {c.details}
+                    <button className="inline-flex items-center gap-1 text-left text-primary underline-offset-4 hover:underline" type="button" onClick={() => setSelected(log)}>
+                      {log.targetName ?? log.targetType}
                       <ChevronRight className="size-4" aria-hidden="true" />
                     </button>
                   </td>

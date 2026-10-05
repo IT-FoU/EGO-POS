@@ -100,6 +100,7 @@ export function ReportsAnalyticsClient({
     const [categoryId, setCategoryId] = useState(filters.categoryId ?? "");
     const [supplierId, setSupplierId] = useState(filters.supplierId ?? "");
     const [cashierId, setCashierId] = useState(filters.cashierId ?? "");
+    const [terminalId, setTerminalId] = useState(filters.terminalId ?? "");
     const [currency, setCurrency] = useState<ReportCurrency>("LAK");
     const [modal, setModal] = useState<ModalKind | null>(null);
     const [modalTitle, setModalTitle] = useState("");
@@ -134,6 +135,7 @@ export function ReportsAnalyticsClient({
             branchId: branchId || undefined,
             cashierId: cashierId || undefined,
             categoryId: categoryId || undefined,
+            terminalId: terminalId || undefined,
             dateFrom: filters.dateFrom,
             datePreset,
             dateTo: filters.dateTo,
@@ -150,6 +152,7 @@ export function ReportsAnalyticsClient({
         setCategoryId("");
         setSupplierId("");
         setCashierId("");
+        setTerminalId("");
         setCurrency("LAK");
         router.push("/reports/analytics");
         router.refresh();
@@ -199,6 +202,9 @@ export function ReportsAnalyticsClient({
         setBranchId={setBranchId}
         setCashierId={setCashierId}
         setCategoryId={setCategoryId}
+        setTerminalId={setTerminalId}
+        terminalId={terminalId}
+        terminalOptions={buildSelectOptions(t("allTerminals"), filterOptions.terminals)}
         setCurrency={setCurrency}
         setDatePreset={setDatePreset}
         setSupplierId={setSupplierId}
@@ -251,6 +257,8 @@ function FilterBar(props: {
     branchOptions: Array<{ label: string; value: string }>;
     cashierId: string;
     cashierOptions: Array<{ label: string; value: string }>;
+    terminalId: string;
+    terminalOptions: Array<{ label: string; value: string }>;
     categoryId: string;
     categoryOptions: Array<{ label: string; value: string }>;
     currency: ReportCurrency;
@@ -260,6 +268,7 @@ function FilterBar(props: {
     setBranchId: (value: string) => void;
     setCashierId: (value: string) => void;
     setCategoryId: (value: string) => void;
+    setTerminalId: (value: string) => void;
     setCurrency: (value: ReportCurrency) => void;
     setDatePreset: (value: ReportFilters["datePreset"]) => void;
     setSupplierId: (value: string) => void;
@@ -277,6 +286,7 @@ function FilterBar(props: {
         <Select label={t("category")} value={props.categoryId} onChange={props.setCategoryId} options={props.categoryOptions}/>
         <Select label={t("supplier")} value={props.supplierId} onChange={props.setSupplierId} options={props.supplierOptions}/>
         <Select label={t("cashier")} value={props.cashierId} onChange={props.setCashierId} options={props.cashierOptions}/>
+        <Select label={t("terminal")} value={props.terminalId} onChange={props.setTerminalId} options={props.terminalOptions}/>
         <Select label={t("currency")} value={props.currency} onChange={(value) => props.setCurrency(value as ReportCurrency)} options={[{ label: "LAK", value: "LAK" }, { label: "THB", value: "THB" }, { label: "USD", value: "USD" }]}/>
         <div className="flex items-end gap-2">
           <button className="h-10 flex-1 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" type="button" onClick={props.onApply}>{t("apply")}</button>

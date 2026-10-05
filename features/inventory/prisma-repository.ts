@@ -1,4 +1,5 @@
 import { assertConfiguredApprovalSatisfied } from "@/features/approvals/approval-engine";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { allowsFine, FINE, redactSensitiveFields } from "@/features/access-control/fine-permissions";
 import { STORE_MANAGER_APPROVAL_BODY_KEY } from "@/lib/auth/store-manager-approval";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
@@ -483,6 +484,30 @@ export async function getPrismaProductStockSnapshot(
   };
 }
 
+async function logStockAdjustment(
+  tx: any,
+  tenant: TenantContext,
+  input: { afterQty: number; beforeQty: number; productId: string; quantity: number; reason?: string | null },
+) {
+  const product = await tx.product.findFirst({
+    select: { nameEn: true, nameLo: true },
+    where: { companyId: tenant.companyId, id: input.productId },
+  });
+  await recordEssentialActivity(tx, {
+    action: "inventory.adjust",
+    after: { qty: input.afterQty },
+    before: { qty: input.beforeQty },
+    branchId: tenant.branchId ?? null,
+    companyId: tenant.companyId,
+    entityId: input.productId,
+    entityType: "product",
+    metadata: input.reason ? { reason: String(input.reason).slice(0, 80) } : undefined,
+    module: "inventory",
+    summary: String(product?.nameLo || product?.nameEn || "Product"),
+    userId: tenant.userId,
+  });
+}
+
 export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext) {
   const raw = { ...(input as StockAdjustmentInput & Record<string, unknown>) };
   const pin = raw[STORE_MANAGER_APPROVAL_BODY_KEY] as { approvedByRole?: string } | undefined;
@@ -550,13 +575,20 @@ export async function createStockAdjustment(input: StockAdjustmentInput, tenant:
           warehouseId: data.warehouseId,
         },
       });
+      await logStockAdjustment(tx, tenant, {
+        afterQty: balance.afterQty,
+        beforeQty: balance.beforeQty,
+        productId: data.productId,
+        quantity,
+        reason: data.reason,
+      });
 
       return balance;
     },
   });
 }
 
-export async function createStockCount(input: StockCountInput, tenant: TenantContext) {
+export async function createStockCount(input: StockCountInput, tenant: TenantContext, options?: { logAdjustment?: boolean }) {
   const data = parseStockCountInput(input);
   return withTenantTransaction({
     action: "count",
@@ -608,6 +640,15 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
           warehouseId: data.warehouseId,
         },
       });
+      if (options?.logAdjustment) {
+        await logStockAdjustment(tx, tenant, {
+          afterQty: balance.afterQty,
+          beforeQty: balance.beforeQty,
+          productId: data.productId,
+          quantity,
+          reason: data.note,
+        });
+      }
       return balance;
     },
   });
@@ -638,5 +679,6 @@ export async function adjustProductStockToActual(
       warehouseId: input.warehouseId,
     },
     tenant,
+    { logAdjustment: true },
   );
 }

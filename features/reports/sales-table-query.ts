@@ -39,6 +39,7 @@ export type SalesTableQuery = {
   saleId?: string;
   sort?: string;
   status?: SalesTableStatus;
+  terminalId?: string;
 };
 
 const ALL = "all";
@@ -114,6 +115,7 @@ export function parseSalesTableQuery(
   const query: SalesTableQuery = {
     branchId: get("branchId") && get("branchId") !== ALL ? get("branchId") : undefined,
     cashierId: get("cashierId") && get("cashierId") !== ALL ? get("cashierId") : undefined,
+    terminalId: get("terminalId") && get("terminalId") !== ALL ? get("terminalId") : undefined,
     date: date || undefined,
     datePreset,
     dir: parseDir(get("dir")),
@@ -152,6 +154,7 @@ export function salesTableQueryToSearchParams(query: SalesTableQuery, defaults: 
   }
   if (query.branchId) params.set("branchId", query.branchId);
   if (query.cashierId) params.set("cashierId", query.cashierId);
+  if (query.terminalId) params.set("terminalId", query.terminalId);
   if (query.paymentMethod) params.set("paymentMethod", query.paymentMethod);
   if (query.status) params.set("status", query.status);
   if (query.receiptQuery) params.set("q", query.receiptQuery);

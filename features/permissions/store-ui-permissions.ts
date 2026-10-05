@@ -85,7 +85,10 @@ export function canViewStoreNavigationItem(roleInput: StoreRoleInput, key: strin
     case "reports":
       return canUseStoreAction(roleInput, STORE_ACTIONS.REPORTS_VIEW_FULL);
     case "activity":
-      return canUseStoreAction(roleInput, STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE);
+      return canUseAnyStoreAction(roleInput, [
+        STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE,
+        STORE_ACTIONS.STORE_ACTIVITY_VIEW,
+      ]);
     case "settings":
       return canUseStoreAction(roleInput, STORE_ACTIONS.STAFF_MANAGE);
     default:

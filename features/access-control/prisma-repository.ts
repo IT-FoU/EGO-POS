@@ -1,4 +1,5 @@
 import { compare, hash } from "bcryptjs";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { staffStatusForDisplay, staffStatusForStorage } from "@/lib/auth/account-access";
 import { assertStaffAccessFlags, CANONICAL_ASSIGNABLE_ROLES, isProtectedOwnerRole, validateStaffAccountInput } from "@/features/access-control/staff-account";
 import { cache } from "react";
@@ -755,6 +756,16 @@ export async function saveStaffMember(
           userId: user.id,
         },
       });
+      await recordEssentialActivity(tx, {
+        action: "staff.create",
+        branchId: branchId ?? tenant.branchId ?? null,
+        companyId: tenant.companyId,
+        entityId: String(user.id),
+        entityType: "staff",
+        module: "staff",
+        summary: fullName,
+        userId: tenant.userId,
+      });
 
       return staffRecordFromWrite({
         allowBackOfficeAccess: Boolean(input.allowBackOfficeAccess),
@@ -936,7 +947,7 @@ export async function deleteStaffMember(membershipId: string, ownerPassword: str
       }
 
       const membership = await tx.companyUser.findFirst({
-        select: { id: true, isOwner: true, status: true, userId: true, user: { select: { status: true } } },
+        select: { id: true, isOwner: true, status: true, userId: true, user: { select: { fullName: true, status: true, username: true } } },
         where: { companyId: tenant.companyId, id: membershipId },
       });
       if (!membership || membership.status === "deleted" || membership.user.status === "deleted") {
@@ -971,6 +982,15 @@ export async function deleteStaffMember(membershipId: string, ownerPassword: str
           where: { id: membership.userId },
         });
       }
+      await recordEssentialActivity(tx, {
+        action: "staff.delete",
+        companyId: tenant.companyId,
+        entityId: String(membership.userId),
+        entityType: "staff",
+        module: "staff",
+        summary: String(membership.user.fullName || membership.user.username || "Staff"),
+        userId: tenant.userId,
+      });
 
       return { id: membership.id };
     },
@@ -999,6 +1019,7 @@ export async function saveRolePermissions(input: SaveRolePermissionsInput, tenan
         where: { key: { in: input.permissions } },
       });
 
+      const beforeCount = await tx.rolePermission.count({ where: { roleId: role.id } });
       await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
       if (permissions.length > 0) {
         await tx.rolePermission.createMany({
@@ -1010,6 +1031,17 @@ export async function saveRolePermissions(input: SaveRolePermissionsInput, tenan
         });
       }
 
+      await recordEssentialActivity(tx, {
+        action: "staff.role_change",
+        after: { permissionCount: permissions.length },
+        before: { permissionCount: beforeCount },
+        companyId: tenant.companyId,
+        entityId: String(role.id),
+        entityType: "role",
+        module: "staff",
+        summary: String(role.name),
+        userId: tenant.userId,
+      });
       return { roleId: role.id, permissionCount: permissions.length };
     },
   });

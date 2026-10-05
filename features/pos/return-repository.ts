@@ -1,4 +1,5 @@
 import { applyExchangeLoyaltyEarn, isMembershipEligibleForBenefits, resolveMembershipDiscountPercent, reverseSaleLoyaltyPortion } from "@/features/loyalty/loyalty-service";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
 import {
   consumeInventoryForSale,
@@ -1047,6 +1048,18 @@ export async function writeReturnPrismaSale(
       ?? "Cashier",
   );
   const updated = await tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
+  await recordEssentialActivity(tx, {
+    action: "pos.sale.refund",
+    amount: returnValueLak,
+    branchId: sale.branchId ? String(sale.branchId) : tenant.branchId ?? null,
+    companyId: tenant.companyId,
+    entityId: String(sale.id),
+    entityType: "sale",
+    fallbackTerminalId: sale.terminalId ? String(sale.terminalId) : null,
+    module: "pos",
+    summary: String(sale.saleNo),
+    userId: tenant.userId,
+  });
   return {
     receipt: await mapReturnReceipt(tx, refund, updated),
     refundId: String(refund.id),
@@ -1191,6 +1204,18 @@ export async function returnRemainingSaleCore(
     refundMethod: "cash",
     returnValueLak,
     sessionId,
+  });
+  await recordEssentialActivity(tx, {
+    action: "pos.sale.refund",
+    amount: returnValueLak,
+    branchId: sale.branchId ? String(sale.branchId) : tenant.branchId ?? null,
+    companyId: tenant.companyId,
+    entityId: String(sale.id),
+    entityType: "sale",
+    fallbackTerminalId: sale.terminalId ? String(sale.terminalId) : null,
+    module: "pos",
+    summary: String(sale.saleNo),
+    userId: tenant.userId,
   });
   return tx.sale.findFirstOrThrow({ include: saleInclude(), where: { id: sale.id } });
 }

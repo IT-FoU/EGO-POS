@@ -28,6 +28,8 @@ export function DashboardDateRangeControls({
   ];
 
   function applyRange(range: DashboardRangeKey) {
+    const current = new URLSearchParams(window.location.search);
+    const terminal = current.get("terminal");
     if (range === "custom") {
       const params = new URLSearchParams({ range });
       if (customStart) {
@@ -36,11 +38,14 @@ export function DashboardDateRangeControls({
       if (customEnd) {
         params.set("end", customEnd);
       }
+      if (terminal) params.set("terminal", terminal);
       router.push(`/dashboard?${params.toString()}`);
       return;
     }
 
-    router.push(`/dashboard?range=${range}`);
+    const params = new URLSearchParams({ range });
+    if (terminal) params.set("terminal", terminal);
+    router.push(`/dashboard?${params.toString()}`);
   }
 
   return (

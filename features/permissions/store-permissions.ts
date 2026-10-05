@@ -34,6 +34,7 @@ export const STORE_ACTIONS = {
   SHIFT_OPEN: "shift.open",
   STAFF_MANAGE: "staff.manage",
   STORE_ACTIVITY_LOGS_VIEW_OWN_STORE: "store_activity_logs.view_own_store",
+  STORE_ACTIVITY_VIEW: "store_activity.view",
   SUBSCRIPTION_BILLING_CHANGE: "subscription_billing.change",
   SUBSCRIPTION_BILLING_VIEW: "subscription_billing.view",
 } as const;
@@ -80,6 +81,7 @@ const managerAllowed = new Set<StoreAction>([
   // Own Shift Report (MY SHIFT) — branch list still gated by REPORTS_VIEW_FULL.
   STORE_ACTIONS.REPORTS_VIEW_OWN_SHIFT,
   STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE,
+  STORE_ACTIONS.STORE_ACTIVITY_VIEW,
 ]);
 
 const cashierAllowed = new Set<StoreAction>([

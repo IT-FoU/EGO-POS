@@ -119,6 +119,7 @@ export async function loadDashboardCriticalSalesKpis(
   scope: BranchScope,
   range: { dateFrom: Date; dateTo: Date },
   client: any,
+  terminalId = "",
 ): Promise<DashboardCriticalSalesLoad> {
   const rows = await client.$queryRaw<Array<{
     items: unknown;
@@ -138,12 +139,18 @@ export async function loadDashboardCriticalSalesKpis(
             s.sale_no AS "saleNo",
             s.sale_status AS "saleStatus",
             s.tax_amount AS "taxAmount",
-            s.total_amount AS "totalAmount"
+            s.total_amount AS "totalAmount",
+            t.terminal_code AS "terminalCode",
+            t.terminal_name AS "terminalName"
           FROM sales s
+          LEFT JOIN pos_terminals t
+            ON t.id = s.terminal_id
+           AND t.company_id = s.company_id
           WHERE s.company_id = ${scope.companyId}
             AND s.branch_id = ${scope.branchId}
             AND s.created_at >= ${range.dateFrom}
             AND s.created_at <= ${range.dateTo}
+            AND (${terminalId} = '' OR s.terminal_id = ${terminalId})
             AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
         ) sale_row
       ) AS sales,
@@ -166,6 +173,7 @@ export async function loadDashboardCriticalSalesKpis(
             AND s.branch_id = ${scope.branchId}
             AND s.created_at >= ${range.dateFrom}
             AND s.created_at <= ${range.dateTo}
+            AND (${terminalId} = '' OR s.terminal_id = ${terminalId})
             AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
         ) item_row
       ) AS items,
@@ -183,6 +191,7 @@ export async function loadDashboardCriticalSalesKpis(
             AND s.branch_id = ${scope.branchId}
             AND s.created_at >= ${range.dateFrom}
             AND s.created_at <= ${range.dateTo}
+            AND (${terminalId} = '' OR s.terminal_id = ${terminalId})
             AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
         ) payment_row
       ) AS payments,
@@ -225,6 +234,7 @@ export async function loadDashboardCriticalSalesKpis(
             AND s.branch_id = ${scope.branchId}
             AND s.created_at >= ${range.dateFrom}
             AND s.created_at <= ${range.dateTo}
+            AND (${terminalId} = '' OR s.terminal_id = ${terminalId})
             AND s.sale_status::text IN ('completed', 'partial_refunded', 'exchanged', 'adjusted', 'refunded')
         ) refund_row
       ) AS refunds

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { resolveTenantMembership } from "@/lib/db/resolve-tenant-user";
 import { resolveTenantScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
+import { activityModuleForAction, recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { readPosDeviceId } from "@/features/terminals/device-cookie";
 import type { TerminalCard } from "@/features/terminals/terminal-types";
 
@@ -133,9 +134,24 @@ export async function updateStoreTerminal(tenant: TenantContext, terminalId: str
     });
     if (openShift) throw new TerminalAccessError("Close this terminal's cash shift before disabling it.");
   }
-  await db.posTerminal.update({
-    data: { status, terminalName: name },
-    where: { id: existing.id },
+  await db.$transaction(async (tx: any) => {
+    await tx.posTerminal.update({
+      data: { status, terminalName: name },
+      where: { id: existing.id },
+    });
+    await recordEssentialActivity(tx, {
+      action: "terminal.edit",
+      companyId: tenant.companyId,
+      deviceId: existing.boundDeviceId ?? null,
+      entityId: existing.id,
+      entityType: "terminal",
+      module: "settings",
+      summary: `${existing.terminalCode} · ${name}`,
+      terminalCode: existing.terminalCode,
+      terminalId: existing.id,
+      terminalName: name,
+      userId: tenant.userId,
+    });
   });
   return listStoreTerminals(tenant);
 }
@@ -172,6 +188,19 @@ export async function bindCurrentDevice(tenant: TenantContext, terminalId: strin
       data: { boundDeviceId: deviceId, lastSeenAt: new Date() },
       where: { id: terminal.id },
     });
+    await recordEssentialActivity(tx, {
+      action: "terminal.bind",
+      companyId: tenant.companyId,
+      deviceId,
+      entityId: terminal.id,
+      entityType: "terminal",
+      module: "settings",
+      summary: terminal.terminalCode,
+      terminalCode: terminal.terminalCode,
+      terminalId: terminal.id,
+      terminalName: terminal.terminalName,
+      userId: tenant.userId,
+    });
   });
   return listStoreTerminals(tenant);
 }
@@ -182,7 +211,22 @@ export async function unbindTerminal(tenant: TenantContext, terminalId: string) 
     where: { closedAt: null, companyId: tenant.companyId, terminalId: terminal.id },
   });
   if (openShift) throw new TerminalAccessError("Close this terminal's cash shift before unbinding the device.");
-  await db.posTerminal.update({ data: { boundDeviceId: null }, where: { id: terminal.id } });
+  await db.$transaction(async (tx: any) => {
+    await tx.posTerminal.update({ data: { boundDeviceId: null }, where: { id: terminal.id } });
+    await recordEssentialActivity(tx, {
+      action: "terminal.unbind",
+      companyId: tenant.companyId,
+      deviceId: terminal.boundDeviceId ?? null,
+      entityId: terminal.id,
+      entityType: "terminal",
+      module: "settings",
+      summary: terminal.terminalCode,
+      terminalCode: terminal.terminalCode,
+      terminalId: terminal.id,
+      terminalName: terminal.terminalName,
+      userId: tenant.userId,
+    });
+  });
   return listStoreTerminals(tenant);
 }
 
@@ -214,14 +258,28 @@ export async function deleteStoreTerminal(tenant: TenantContext, terminalId: str
     db.cashSession.count({ where: { companyId: tenant.companyId, terminalId: existing.id } }),
     db.storeActivityLog.count({ where: { businessId: tenant.companyId, terminalId: existing.id } }),
   ]);
-  if (sales > 0 || shifts > 0 || activity > 0) {
-    await db.posTerminal.update({
-      data: { boundDeviceId: null, status: "ARCHIVED" },
-      where: { id: existing.id },
+  await db.$transaction(async (tx: any) => {
+    if (sales > 0 || shifts > 0 || activity > 0) {
+      await tx.posTerminal.update({
+        data: { boundDeviceId: null, status: "ARCHIVED" },
+        where: { id: existing.id },
+      });
+    } else {
+      await tx.posTerminal.delete({ where: { id: existing.id } });
+    }
+    await recordEssentialActivity(tx, {
+      action: "terminal.delete",
+      companyId: tenant.companyId,
+      entityId: existing.id,
+      entityType: "terminal",
+      module: "settings",
+      summary: existing.terminalCode,
+      terminalCode: existing.terminalCode,
+      terminalId: existing.id,
+      terminalName: existing.terminalName,
+      userId: tenant.userId,
     });
-  } else {
-    await db.posTerminal.delete({ where: { id: existing.id } });
-  }
+  });
   return listStoreTerminals(tenant);
 }
 
@@ -241,25 +299,19 @@ export async function recordTerminalActivity(
     userId: string;
   },
 ) {
-  const actor = await tx.user.findFirst({
-    select: { fullName: true, username: true },
-    where: { id: input.userId },
-  });
-  await tx.storeActivityLog.create({
-    data: {
-      action: input.action,
-      actorId: input.userId,
-      actorName: String(actor?.fullName || actor?.username || "Staff"),
-      actorRole: "staff",
-      amount: input.amount ?? null,
-      branchId: input.branchId,
-      businessId: input.companyId,
-      targetId: input.targetId,
-      targetName: input.targetName,
-      targetType: input.targetType,
-      terminalId: input.terminalId,
-      terminalName: `${input.terminalCode} · ${input.terminalName}`,
-    },
+  await recordEssentialActivity(tx, {
+    action: input.action,
+    amount: input.amount,
+    branchId: input.branchId,
+    companyId: input.companyId,
+    entityId: input.targetId,
+    entityType: input.targetType,
+    module: activityModuleForAction(input.action),
+    summary: input.targetName,
+    terminalCode: input.terminalCode,
+    terminalId: input.terminalId,
+    terminalName: input.terminalName,
+    userId: input.userId,
   });
 }
 

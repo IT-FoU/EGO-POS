@@ -5,6 +5,10 @@ import { mapPrismaSupplier, mapPrismaSupplierPurchaseOrder } from "@/features/su
 import { buildAnalyticsHub, type CategoryBreakdownRow } from "@/features/reports/build-analytics-hub";
 import { buildReportAnalytics } from "@/features/reports/dto-mapper";
 import type { ReportFilterOptions, ReportFilters } from "@/features/reports/report-filters";
+import {
+  listCompanyActiveTerminals,
+  resolveTerminalAnalyticsFilter,
+} from "@/features/terminals/terminal-analytics";
 import { resolveReportDateRange } from "@/features/reports/report-filters";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import {
@@ -271,6 +275,10 @@ function buildSaleWhere(
     where.payments = { some: { paymentMethod: filters.paymentMethod } };
   }
 
+  if (filters.terminalId) {
+    where.terminalId = filters.terminalId;
+  }
+
   return where;
 }
 
@@ -395,6 +403,7 @@ function toReportFilterOptions(
     categories: Array<{ id: string; nameEn: string; nameLo: string }>;
     customers: Array<{ customerCode: string | null; fullName: string; id: string; phone: string | null }>;
     suppliers: Array<{ companyName?: string | null; id: string; name: string }>;
+    terminals: Array<{ id: string; terminalCode: string; terminalName: string }>;
     warehouses: Array<{ id: string; name: string }>;
   },
 ): ReportFilterOptions {
@@ -420,13 +429,19 @@ function toReportFilterOptions(
       id: row.id,
       label: row.companyName || row.name,
     })),
+    terminals: lookups.terminals.map((row) => ({
+      id: row.id,
+      label: row.terminalName && row.terminalName !== row.terminalCode
+        ? `${row.terminalCode} · ${row.terminalName}`
+        : row.terminalCode,
+    })),
     warehouses: lookups.warehouses.map((row) => ({ id: row.id, label: row.name })),
   };
 }
 
 export async function getReportFilterOptions(tenant: TenantContext, client: any = db): Promise<ReportFilterOptions> {
   const scope = await resolveTenantScope(tenant, client);
-  const [branches, warehouses, categories, suppliers, customers, cashiers] = await Promise.all([
+  const [branches, warehouses, categories, suppliers, customers, cashiers, terminals] = await Promise.all([
     client.branch.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -458,6 +473,11 @@ export async function getReportFilterOptions(tenant: TenantContext, client: any 
       select: { fullName: true, id: true, username: true },
       where: { companies: { some: { companyId: scope.companyId } } },
     }),
+    client.posTerminal.findMany({
+      orderBy: { terminalCode: "asc" },
+      select: { id: true, terminalCode: true, terminalName: true },
+      where: { companyId: scope.companyId, status: "ACTIVE" },
+    }),
   ]);
 
   return toReportFilterOptions(scope, {
@@ -466,6 +486,7 @@ export async function getReportFilterOptions(tenant: TenantContext, client: any 
     categories,
     customers,
     suppliers,
+    terminals,
     warehouses,
   });
 }
@@ -490,6 +511,8 @@ export type DashboardSalesKpis = {
     profitAmount: number;
     saleNo: string;
     saleStatus: string;
+    terminalCode: string | null;
+    terminalName: string | null;
     totalAmount: number;
   }>;
   paymentBreakdown: Array<{ label: string; totalLak: number }>;
@@ -568,6 +591,8 @@ export function assembleDashboardSalesKpis(input: {
       profitAmount: amount(row.profitAmount),
       saleNo: String(row.saleNo ?? ""),
       saleStatus: String(row.saleStatus ?? ""),
+      terminalCode: row.terminalCode ? String(row.terminalCode) : null,
+      terminalName: row.terminalName ? String(row.terminalName) : null,
       totalAmount: amount(row.totalAmount),
     })),
     paymentBreakdown,
@@ -664,7 +689,13 @@ export async function getPrismaReportsSnapshot(
   const reportAccess = await readReportVisibility(tenant, client);
   const scope = await timedReportsLoad("scope", () => resolveTenantScope(tenant, client));
   const filters = clampReportFilters(scope, resolveEffectiveFilters(rawFilters));
-  const saleFilter = buildSaleWhere(scope, filters);
+  const terminalOptions = await listCompanyActiveTerminals(client, scope.companyId);
+  const terminalFilter = resolveTerminalAnalyticsFilter(terminalOptions, filters.terminalId);
+  const saleFilters: ReportFilters = {
+    ...filters,
+    terminalId: terminalFilter.mode === "all" ? undefined : terminalFilter.terminalId,
+  };
+  const saleFilter = buildSaleWhere(scope, saleFilters);
   const saleItemFilter = buildSaleItemWhere(saleFilter, filters);
   const purchaseFilter = buildPurchaseWhere(scope, filters);
   const now = new Date();
@@ -1030,6 +1061,7 @@ export async function getPrismaReportsSnapshot(
       id: row.id,
       name: row.companyName,
     })),
+    terminals: terminalOptions,
     warehouses: resultOrFallback(warehousesResult, []),
   });
 

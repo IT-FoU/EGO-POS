@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   const limit = url.searchParams.get("limit")
     ? clampRecentSalesLimit(Number(url.searchParams.get("limit")))
     : undefined;
+  const terminalId = url.searchParams.get("terminalId") ?? undefined;
 
   return runRead(
     (tenant) =>
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
         dateTo,
         limit,
         search,
+        terminalId,
       }),
     undefined,
     { request },

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Banknote,
@@ -18,6 +19,7 @@ import {
 import { DashboardDateRangeControls } from "@/features/dashboard/components/dashboard-date-range-controls";
 import type { DashboardWidgets } from "@/features/access-control/phase3-permissions";
 import type { DashboardAlert, DashboardRangeKey, DashboardSnapshot } from "@/features/dashboard/dashboard-service";
+import type { CompanyTerminalOption } from "@/features/terminals/terminal-analytics";
 import { formatBusinessDateLabel, formatBusinessDateTimeLabel } from "@/lib/datetime/business-timezone";
 import {
   buildImportantAlertsView,
@@ -37,8 +39,10 @@ type DashboardInteractionsClientProps = {
   copy: DashboardCopy;
   customEnd: string;
   customStart: string;
+  selectedTerminalId?: string;
   snapshot: DashboardSnapshot;
   storeName: string;
+  terminals?: CompanyTerminalOption[];
   widgets: DashboardWidgets;
 };
 
@@ -79,10 +83,13 @@ export function DashboardInteractionsClient({
   copy: _ssrCopy,
   customEnd,
   customStart,
+  selectedTerminalId = "",
   snapshot,
   storeName,
+  terminals = [],
   widgets,
 }: DashboardInteractionsClientProps) {
+  const router = useRouter();
   const locale = useAppLocale();
   const copy = getDashboardCopy(locale);
   const [detail, setDetail] = useState<DetailKind | null>(null);
@@ -186,6 +193,30 @@ export function DashboardInteractionsClient({
         endDate={customEnd}
         startDate={customStart}
       />
+      <label className="flex max-w-xs flex-col gap-1 text-xs font-medium text-muted-foreground">
+        {copy.terminal}
+        <select
+          className="field-input h-10"
+          value={selectedTerminalId}
+          onChange={(event) => {
+            const params = new URLSearchParams(window.location.search);
+            const value = event.target.value;
+            if (value) params.set("terminal", value);
+            else params.delete("terminal");
+            const search = params.toString();
+            router.push(search ? `/dashboard?${search}` : "/dashboard");
+          }}
+        >
+          <option value="">{copy.allTerminals}</option>
+          {terminals.map((terminal) => (
+            <option key={terminal.id} value={terminal.id}>
+              {terminal.terminalName && terminal.terminalName !== terminal.terminalCode
+                ? `${terminal.terminalCode} · ${terminal.terminalName}`
+                : terminal.terminalCode}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {metrics.length > 0 ? (
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -273,7 +304,10 @@ export function DashboardInteractionsClient({
             <div className="grid gap-2">
               {snapshot.recentSales.slice(0, 8).map((sale) => (
                 <div className="flex items-center justify-between gap-3 text-sm" key={sale.saleNo}>
-                  <span className="min-w-0 truncate font-medium">{sale.saleNo}</span>
+                  <span className="min-w-0 truncate font-medium">
+                    {sale.saleNo}
+                    {sale.terminalCode ? ` · ${sale.terminalCode}` : ""}
+                  </span>
                   <span className="shrink-0 text-muted-foreground">{formatMoney(sale.totalLak)}</span>
                 </div>
               ))}
@@ -753,7 +787,7 @@ function buildDetailPanel({
   if (detail === "recent_bills") {
     return {
       table: snapshot.recentSales.map((sale) => ({
-        label: sale.saleNo,
+        label: sale.terminalCode ? `${sale.saleNo} · ${sale.terminalCode}` : sale.saleNo,
         meta: formatPaymentMethod(sale.paymentMethod, copy),
         value: formatMoney(sale.totalLak),
       })),

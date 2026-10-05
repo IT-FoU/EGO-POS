@@ -76,6 +76,8 @@ export type DashboardRecentSale = {
   paymentMethod: string;
   saleNo: string;
   status: string;
+  terminalCode?: string | null;
+  terminalName?: string | null;
   totalLak: number;
 };
 
@@ -518,6 +520,7 @@ export async function getMiniMartDashboardSnapshot(
 
 export async function getMiniMartDashboardCriticalSnapshot(
   range: DashboardDateRange = { key: "today" },
+  terminalId = "",
 ): Promise<DashboardSnapshot> {
   const { requireSession } = await import("@/lib/auth/session");
   const session = await requireSession();
@@ -527,7 +530,7 @@ export async function getMiniMartDashboardCriticalSnapshot(
   const safeRange = visibility.historical || range.key === "today" ? range : { key: "today" as const };
 
   try {
-    const snapshot = await loadDashboardCriticalSnapshot(tenant, safeRange);
+    const snapshot = await loadDashboardCriticalSnapshot(tenant, safeRange, prisma, terminalId);
     return redactSensitiveFields(snapshot, visibility);
   } catch (error) {
     logDashboardQueryFailure("getMiniMartDashboardCriticalSnapshot", "dashboardCritical", error);
@@ -740,6 +743,7 @@ async function loadDashboardCriticalSnapshot(
   tenant: TenantContext,
   range: DashboardDateRange,
   client: any = prisma,
+  terminalId = "",
 ): Promise<DashboardSnapshot> {
   const db = client as any;
   const scope = await timedDashboardLoad("scope", () => resolveDashboardCriticalContext(tenant, client));
@@ -747,7 +751,7 @@ async function loadDashboardCriticalSnapshot(
   const dateTo = new Date(end.getTime() - 1);
 
   const salesKpis = (await timedDashboardLoad("critical-sales-kpis", () =>
-    loadDashboardCriticalSalesKpis(scope, { dateFrom: start, dateTo }, db),
+    loadDashboardCriticalSalesKpis(scope, { dateFrom: start, dateTo }, db, terminalId),
   )).kpis;
 
   const [sessionRows, companySettings] = await timedDashboardLoad("critical-cash-sessions", () =>
@@ -832,6 +836,8 @@ async function loadDashboardCriticalSnapshot(
     paymentMethod: sale.paymentMethod,
     saleNo: sale.saleNo,
     status: sale.saleStatus,
+    terminalCode: sale.terminalCode,
+    terminalName: sale.terminalName,
     totalLak: amount(sale.totalAmount),
   }));
   const paymentBreakdown = salesKpis.paymentBreakdown.map((row) => ({

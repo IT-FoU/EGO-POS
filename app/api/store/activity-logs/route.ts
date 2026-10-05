@@ -1,6 +1,5 @@
 import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import {
-  getStoreActivityLogFilterOptions,
   listStoreActivityLogsForTenant,
   parseStoreActivityLogFilters,
 } from "@/features/store-activity/store-activity-log-service";
@@ -10,17 +9,13 @@ export async function GET(request: Request) {
   const filters = parseStoreActivityLogFilters(new URL(request.url).searchParams);
   return runRead(
     async (tenant) => {
-      const [result, options] = await Promise.all([
-        listStoreActivityLogsForTenant(tenant, filters),
-        getStoreActivityLogFilterOptions(tenant),
-      ]);
-      return { ...result, options };
+      return listStoreActivityLogsForTenant(tenant, filters);
     },
     undefined,
     {
       request,
       route: "/api/store/activity-logs",
-      storeAction: STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE,
+      storeAction: STORE_ACTIONS.STORE_ACTIVITY_VIEW,
       targetType: "store_activity_logs",
     },
   );

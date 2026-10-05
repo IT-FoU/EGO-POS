@@ -56,6 +56,8 @@ export type PosRecentSaleRecord = {
   refundedAmountLak?: number;
   saleNo: string;
   status: PosRecentSaleStatus;
+  terminalCode?: string | null;
+  terminalName?: string | null;
   subtotal: number;
   taxAmount: number;
   timeline: PosRecentSaleTimelineEvent[];
@@ -68,6 +70,7 @@ export type PosRecentSalesPage = {
   items: PosRecentSaleRecord[];
   limit: number;
   nextCursor: string | null;
+  terminals: Array<{ id: string; terminalCode: string; terminalName: string }>;
 };
 
 export type PosReceiptSnapshot = {

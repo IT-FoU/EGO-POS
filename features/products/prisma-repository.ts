@@ -7,6 +7,7 @@ import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-map
 import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
 import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { applyPersistedHierarchyCosts } from "@/features/products/unit-hierarchy";
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
@@ -737,6 +738,16 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
   }
 
   await persistUnitPricingDefaults(tx, tenant.companyId, units);
+  await recordEssentialActivity(tx, {
+    action: "product.create",
+    branchId: scope.branchId,
+    companyId: tenant.companyId,
+    entityId: createdProduct.id,
+    entityType: "product",
+    module: "products",
+    summary: String(createdProduct.nameLo || createdProduct.nameEn || createdProduct.sku || "Product"),
+    userId: tenant.userId,
+  });
 
   return mapPrismaProduct(await loadCreatedProduct(tx, createdProduct.id));
 }
@@ -910,6 +921,16 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
         where: { id: existing.id },
       });
 
+      await recordEssentialActivity(tx, {
+        action: "product.update",
+        branchId: scope.branchId,
+        companyId: tenant.companyId,
+        entityId: updatedProduct.id,
+        entityType: "product",
+        module: "products",
+        summary: String(updatedProduct.nameLo || updatedProduct.nameEn || updatedProduct.sku || "Product"),
+        userId: tenant.userId,
+      });
       return mapPrismaProduct(updatedProduct);
 }
 

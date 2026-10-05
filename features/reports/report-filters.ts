@@ -24,6 +24,7 @@ export type ReportFilters = {
   datePreset: ReportDatePreset;
   paymentMethod?: string;
   supplierId?: string;
+  terminalId?: string;
   warehouseId?: string;
 };
 
@@ -33,6 +34,7 @@ export type ReportFilterOptions = {
   categories: Array<{ id: string; label: string }>;
   customers: Array<{ id: string; label: string }>;
   suppliers: Array<{ id: string; label: string }>;
+  terminals: Array<{ id: string; label: string }>;
   warehouses: Array<{ id: string; label: string }>;
 };
 
@@ -112,6 +114,7 @@ export function parseReportFilters(input: URLSearchParams | Record<string, strin
     datePreset,
     paymentMethod: idFromOption(get("paymentMethod")),
     supplierId: idFromOption(get("supplierId") ?? get("supplier")),
+    terminalId: idFromOption(get("terminalId") ?? get("terminal")),
     warehouseId: idFromOption(get("warehouseId") ?? get("warehouse")),
   };
 }
@@ -128,6 +131,7 @@ export function reportFiltersToSearchParams(filters: ReportFilters): URLSearchPa
   if (filters.paymentMethod) params.set("paymentMethod", filters.paymentMethod);
   if (filters.cashierId) params.set("cashierId", filters.cashierId);
   if (filters.customerId) params.set("customerId", filters.customerId);
+  if (filters.terminalId) params.set("terminalId", filters.terminalId);
   return params;
 }
 

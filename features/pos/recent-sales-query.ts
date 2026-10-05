@@ -12,6 +12,7 @@ export type RecentSalesListFilters = {
   dateTo?: string | null;
   limit?: number;
   search?: string | null;
+  terminalId?: string | null;
 };
 
 export type RecentSalesCursorPayload = {

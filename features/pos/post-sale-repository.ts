@@ -1,5 +1,10 @@
 import { parseQrAccountReference, resolveReceiptQrImage } from "@/features/pos/receipt-qr";
+import {
+  listCompanyActiveTerminals,
+  resolveTerminalAnalyticsFilter,
+} from "@/features/terminals/terminal-analytics";
 import { reverseSaleLoyalty } from "@/features/loyalty/loyalty-service";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { computeCashRefundLak } from "@/features/cash-sessions/cash-session-calculator";
 import { createApprovalRequest } from "@/features/approvals/approval-engine";
 import { applyAtomicStockDelta, lockInventoryMutationKey } from "@/features/inventory/stock-concurrency";
@@ -80,10 +85,13 @@ export async function listPrismaRecentSales(
     filters.dateTo,
   );
 
+  const terminals = await listCompanyActiveTerminals(db, tenant.companyId);
+  const terminalFilter = resolveTerminalAnalyticsFilter(terminals, filters.terminalId);
   const where: Record<string, unknown> = {
     companyId: tenant.companyId,
     saleStatus: { in: [...RECENT_SALE_STATUSES] },
     ...branchOwnedWhere(scope),
+    ...(terminalFilter.mode === "all" ? {} : { terminalId: terminalFilter.terminalId }),
   };
 
   if (dateRange.from || dateRange.to) {
@@ -153,7 +161,7 @@ export async function listPrismaRecentSales(
         })
       : null;
 
-  return { hasMore, items, limit, nextCursor };
+  return { hasMore, items, limit, nextCursor, terminals };
 }
 
 export async function getPrismaSaleReceipt(
@@ -515,6 +523,17 @@ export async function voidSaleCore(
       saleStatus: "cancelled",
     },
     where: { id: sale.id },
+  });
+  await recordEssentialActivity(tx, {
+    action: "pos.sale.void",
+    branchId: sale.branchId ? String(sale.branchId) : tenant.branchId ?? null,
+    companyId: tenant.companyId,
+    entityId: String(sale.id),
+    entityType: "sale",
+    fallbackTerminalId: sale.terminalId ? String(sale.terminalId) : null,
+    module: "pos",
+    summary: String(sale.saleNo),
+    userId: tenant.userId,
   });
 
   return tx.sale.findFirstOrThrow({ include: saleInclude, where: { id: sale.id } });

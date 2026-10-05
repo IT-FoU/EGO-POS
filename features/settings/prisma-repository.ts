@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import type { SettingsFormData } from "@/features/settings/types";
@@ -289,6 +290,7 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
   }
 
   const { receiptPrintMode: _devicePrintMode, ...companyPayload } = normalized;
+  const settingsSummary = importantSettingsSummary(current, normalized);
 
   return withTenantTransaction({
     action: "update",
@@ -403,12 +405,50 @@ export async function updatePrismaSettings(input: Partial<SettingsFormData>, ten
         );
       }
 
+      if (settingsSummary) {
+        await recordEssentialActivity(tx, {
+          action: "settings.update",
+          companyId: tenant.companyId,
+          entityId: tenant.companyId,
+          entityType: "settings",
+          module: "settings",
+          summary: settingsSummary,
+          userId: tenant.userId,
+        });
+      }
+
       return {
         ...mapSettings(updatedCompany),
         requireCashShiftBeforeSale: persistedFlag,
       };
     },
   });
+}
+
+function importantSettingsSummary(current: SettingsFormData, next: SettingsFormData) {
+  const fields: Array<[keyof SettingsFormData, string]> = [
+    ["companyName", "Company"],
+    ["profilePhone", "Phone"],
+    ["profileAddress", "Address"],
+    ["profileEmail", "Email"],
+    ["taxNumber", "Tax"],
+    ["vatEnabled", "VAT"],
+    ["vatRate", "VAT"],
+    ["taxInclusive", "Tax"],
+    ["receiptHeader", "Receipt"],
+    ["receiptFooter", "Receipt"],
+    ["receiptPrefix", "Receipt"],
+    ["showLogoOnReceipt", "Receipt"],
+    ["showTaxOnReceipt", "Receipt"],
+    ["requireCashShiftBeforeSale", "Cash shift"],
+    ["baseCurrency", "Currency"],
+    ["currencyDisplay", "Currency"],
+  ];
+  const labels = new Set<string>();
+  for (const [key, label] of fields) {
+    if (String(current[key] ?? "") !== String(next[key] ?? "")) labels.add(label);
+  }
+  return [...labels].join(", ");
 }
 
 async function assertCompanyMember(tenant: TenantContext) {

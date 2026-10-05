@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { StoreAccessDenied } from "@/components/permissions/store-access-denied";
-import { canUseStoreAction } from "@/features/permissions/store-ui-permissions";
+import { canUseAnyStoreAction } from "@/features/permissions/store-ui-permissions";
 import { STORE_ACTIONS } from "@/features/permissions/store-permissions";
 import { StoreActivityLogsClient } from "@/features/store-activity/components/store-activity-logs-client";
 import { AccountAccessDeniedError } from "@/lib/auth/account-access";
@@ -22,7 +22,7 @@ export default async function ActivityLogsPage() {
   }
   const cookieStore = await cookies();
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-  if (!canUseStoreAction(session.user.roles, STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE)) {
+  if (!canUseAnyStoreAction(session.user.roles, [STORE_ACTIONS.STORE_ACTIVITY_LOGS_VIEW_OWN_STORE, STORE_ACTIONS.STORE_ACTIVITY_VIEW])) {
     return <StoreAccessDenied description={tSettings("accessDeniedBody", locale)} title={tSettings("accessDeniedTitle", locale)} />;
   }
 

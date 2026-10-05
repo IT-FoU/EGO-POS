@@ -19,6 +19,12 @@ import { dashboardWidgets, redactDashboardSnapshot } from "@/features/access-con
 import { readNavigationAccess, requireModuleAccess } from "@/lib/auth/module-access";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
+import { prisma } from "@/lib/db/prisma";
+import {
+  listCompanyActiveTerminals,
+  resolveTerminalAnalyticsFilter,
+  terminalFilterId,
+} from "@/features/terminals/terminal-analytics";
 import { getDashboardCopy } from "@/lib/i18n/dashboard-copy";
 import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
@@ -81,8 +87,14 @@ export default async function DashboardPage({
   const copy = getDashboardCopy(locale);
   const params = await searchParams;
   const dateRange = parseDateRange(params);
+  const rawTerminal = typeof params.terminal === "string" ? params.terminal : "";
+  const terminals = await listCompanyActiveTerminals(prisma, tenant.companyId);
+  const terminalFilter = resolveTerminalAnalyticsFilter(terminals, rawTerminal);
   const widgets = dashboardWidgets(navigation.keys);
-  const snapshot = redactDashboardSnapshot(await getMiniMartDashboardCriticalSnapshot(dateRange), widgets);
+  const snapshot = redactDashboardSnapshot(
+    await getMiniMartDashboardCriticalSnapshot(dateRange, terminalFilterId(terminalFilter)),
+    widgets,
+  );
   const periodStart = new Date(snapshot.period.start);
   const periodEnd = new Date(snapshot.period.end);
   const customStart = dateRange.start ? dateInputValue(dateRange.start) : dateInputValue(periodStart);
@@ -104,6 +116,8 @@ export default async function DashboardPage({
       copy={copy}
       customEnd={customEnd}
       customStart={customStart}
+      selectedTerminalId={terminalFilter.mode === "one" ? terminalFilter.terminalId : ""}
+      terminals={terminals}
       insightsSlot={
         <Suspense
           fallback={<div className="h-96 animate-pulse rounded-lg border border-border bg-card" aria-hidden="true" />}

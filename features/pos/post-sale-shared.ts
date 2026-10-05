@@ -59,6 +59,7 @@ export const postSaleInclude = {
     },
   },
   payments: true,
+  terminal: { select: { terminalCode: true, terminalName: true } },
   refunds: {
     include: {
       exchangeItems: true,
@@ -117,6 +118,8 @@ export function mapSaleRow(sale: Record<string, any>, cashierName: string): PosR
     refundedAmountLak,
     saleNo: String(sale.saleNo),
     status: mapDbSaleStatus(String(sale.saleStatus)),
+    terminalCode: sale.terminal?.terminalCode ? String(sale.terminal.terminalCode) : null,
+    terminalName: sale.terminal?.terminalName ? String(sale.terminal.terminalName) : null,
     subtotal: amount(sale.subtotal),
     taxAmount: amount(sale.taxAmount),
     timeline,

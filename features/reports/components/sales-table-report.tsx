@@ -182,6 +182,16 @@ function SalesTableFilters({
           ]}
           value={query.cashierId}
         />
+        <FilterSelect
+          id="sales-terminal"
+          label={t("terminal", locale)}
+          name="terminalId"
+          options={[
+            { label: t("allTerminals", locale), value: "" },
+            ...filterOptions.terminals.map((row) => ({ label: row.label, value: row.id })),
+          ]}
+          value={query.terminalId}
+        />
         {showPayment ? (
           <FilterSelect
             id="sales-payment"

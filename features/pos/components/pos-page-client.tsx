@@ -198,6 +198,8 @@ type DemoSaleRecord = {
     receiptNo: string;
     saleNo: string;
     status: DemoSaleStatus;
+    terminalCode?: string | null;
+    terminalName?: string | null;
     subtotal: number;
     taxAmount: number;
     timeline: DemoSaleTimelineEvent[];
@@ -317,6 +319,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [returnExchangeSaleId, setReturnExchangeSaleId] = useState<string | undefined>();
     const [recentSales, setRecentSales] = useState<DemoSaleRecord[]>([]);
     const [recentSalesFilter, setRecentSalesFilter] = useState<"today" | "yesterday" | "week" | "month" | "custom">("today");
+    const [recentSalesTerminalId, setRecentSalesTerminalId] = useState("");
+    const [recentSalesTerminals, setRecentSalesTerminals] = useState<Array<{ id: string; terminalCode: string; terminalName: string }>>([]);
     const [recentSalesSearch, setRecentSalesSearch] = useState("");
     const [recentSalesCustomStart, setRecentSalesCustomStart] = useState("");
     const [recentSalesCustomEnd, setRecentSalesCustomEnd] = useState("");
@@ -702,6 +706,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
                 datePreset: recentSalesFilter,
                 limit: RECENT_SALES_DEFAULT_LIMIT,
                 search: recentSalesSearch,
+                terminalId: recentSalesTerminalId,
             });
             if (requestId !== recentSalesRequestId.current) {
                 return;
@@ -710,6 +715,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setRecentSales((current) => (append ? [...current, ...mapped] : mapped));
             setRecentSalesCursor(page.nextCursor);
             setRecentSalesHasMore(page.hasMore);
+            if (page.terminals) setRecentSalesTerminals(page.terminals);
             setRecentSalesLoaded(true);
             setRecentSalesError(null);
         } catch (error) {
@@ -742,7 +748,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         return () => window.clearTimeout(timer);
         // Reload when filters/search change while modal is open.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [recentSalesOpen, recentSalesSearch, recentSalesFilter, recentSalesCustomStart, recentSalesCustomEnd, demoMode]);
+    }, [recentSalesOpen, recentSalesSearch, recentSalesFilter, recentSalesCustomStart, recentSalesCustomEnd, recentSalesTerminalId, demoMode]);
     function recordPosAudit(action: PosPermissionAction, result: PosAuditEntry["result"], approvalStatus: PosAuditEntry["approvalStatus"], details: string) {
         const entry: PosAuditEntry = {
             action,
@@ -2477,6 +2483,9 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         onDuplicate={duplicateSaleToCart}
         onExchange={(sale) => openReturnExchange("exchange", sale)}
         onFilter={setRecentSalesFilter}
+        onTerminal={setRecentSalesTerminalId}
+        terminalId={recentSalesTerminalId}
+        terminals={recentSalesTerminals}
         onLoadMore={() => void refreshRecentSalesFromServer({ append: true })}
         onRefund={refundSale}
         onReprint={(sale) => openReceiptForSale(sale, true)}
@@ -3388,7 +3397,7 @@ function ManagerApprovalModal({ action, onClose, onPinChange, onReasonChange, on
       </div>
     </PosModal>);
 }
-function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, hasMore, loading, onBack, onClose, onCustomEnd, onCustomStart, onDuplicate, onExchange, onFilter, onLoadMore, onRefund, onReprint, onRetry, onSearch, onViewReceipt, onVoid, sales, search }: {
+function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, hasMore, loading, onBack, onClose, onCustomEnd, onCustomStart, onDuplicate, onExchange, onFilter, onLoadMore, onRefund, onReprint, onRetry, onSearch, onTerminal, onViewReceipt, onVoid, sales, search, terminalId, terminals }: {
     currentRole: string;
     customEnd: string;
     customStart: string;
@@ -3408,10 +3417,13 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
     onReprint: (sale: DemoSaleRecord) => void;
     onRetry: () => void;
     onSearch: (value: string) => void;
+    onTerminal: (value: string) => void;
     onViewReceipt: (sale: DemoSaleRecord) => void;
     onVoid: (sale: DemoSaleRecord) => void;
     sales: DemoSaleRecord[];
     search: string;
+    terminalId: string;
+    terminals: Array<{ id: string; terminalCode: string; terminalName: string }>;
 }) {
     const canRefundSale = canUseStoreAction(currentRole, STORE_ACTIONS.SALE_REFUND)
       && canUseStoreAction(currentRole, STORE_ACTIONS.PAYMENT_REFUND);
@@ -3438,6 +3450,19 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
               </button>))}
           </div>
         </div>
+        <label className="mt-3 flex max-w-xs flex-col gap-1 text-xs font-medium text-muted-foreground">
+          {t("ui.terminal")}
+          <select className="field-input h-10" value={terminalId} onChange={(event) => onTerminal(event.target.value)}>
+            <option value="">{t("ui.all.terminals")}</option>
+            {terminals.map((terminal) => (
+              <option key={terminal.id} value={terminal.id}>
+                {terminal.terminalName && terminal.terminalName !== terminal.terminalCode
+                  ? `${terminal.terminalCode} · ${terminal.terminalName}`
+                  : terminal.terminalCode}
+              </option>
+            ))}
+          </select>
+        </label>
         {filter === "custom" ? (<div className="mt-3 grid gap-3 sm:grid-cols-2">
             <input className="field-input" type="date" value={customStart} onChange={(event) => onCustomStart(event.target.value)}/>
             <input className="field-input" type="date" value={customEnd} onChange={(event) => onCustomEnd(event.target.value)}/>
@@ -3468,6 +3493,7 @@ function RecentSalesModal({ currentRole, customEnd, customStart, error, filter, 
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="font-mono text-sm font-semibold">{t("ui.receipt.number")} {sale.receiptNo || sale.saleNo}</span>
+                    <span className="rounded-md border border-border px-2 py-0.5 text-xs font-semibold">{sale.terminalCode || "—"}</span>
                     <SaleStatusBadge status={sale.status} />
                     <span className="text-xs text-muted-foreground">{formatReceiptDateTime(sale.createdAt)}</span>
                   </div>

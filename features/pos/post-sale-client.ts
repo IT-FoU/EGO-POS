@@ -20,6 +20,7 @@ export type FetchRecentSalesParams = {
   datePreset?: RecentSalesDatePreset;
   limit?: number;
   search?: string;
+  terminalId?: string;
 };
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -67,6 +68,9 @@ export async function fetchRecentSales(params: FetchRecentSalesParams | string =
   }
   if (normalized.customEnd?.trim()) {
     query.set("dateTo", normalized.customEnd.trim());
+  }
+  if (normalized.terminalId?.trim()) {
+    query.set("terminalId", normalized.terminalId.trim());
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
   const response = await fetch(`/api/pos/sales${suffix}`);

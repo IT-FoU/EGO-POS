@@ -34,6 +34,10 @@ import {
 } from "@/lib/datetime/business-timezone";
 import type { TenantContext } from "@/lib/db/write-context";
 import { resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
+import {
+  listCompanyActiveTerminals,
+  resolveTerminalAnalyticsFilter,
+} from "@/features/terminals/terminal-analytics";
 
 const db = prisma as any;
 
@@ -69,6 +73,7 @@ function buildSalesTableWhere(scope: BranchScope, query: SalesTableQuery, option
     };
   }
   if (query.cashierId) where.createdBy = query.cashierId;
+  if (query.terminalId) where.terminalId = query.terminalId;
   if (query.paymentMethod && !options?.ignorePaymentMethod) {
     where.payments = { some: { paymentMethod: query.paymentMethod } };
   }
@@ -146,12 +151,23 @@ async function loadCashierNames(client: any, userIds: string[]) {
   );
 }
 
+async function resolveSalesTableTerminal(scope: BranchScope, query: SalesTableQuery, client: any) {
+  if (!query.terminalId) return query;
+  const terminals = await listCompanyActiveTerminals(client, scope.companyId);
+  const resolved = resolveTerminalAnalyticsFilter(terminals, query.terminalId);
+  return {
+    ...query,
+    terminalId: resolved.mode === "all" ? undefined : resolved.terminalId,
+  };
+}
+
 async function loadSaleFacts(
   scope: BranchScope,
   query: SalesTableQuery,
   client: any,
 ): Promise<{ cashiers: Map<string, string>; sales: SaleReportFacts[] }> {
-  const where = buildSalesTableWhere(scope, query);
+  const scopedQuery = await resolveSalesTableTerminal(scope, query, client);
+  const where = buildSalesTableWhere(scope, scopedQuery);
   const count = await client.sale.count({ where });
   if (count > SALES_TABLE_SCAN_LIMIT) {
     throw new Error("SALES_TABLE_TOO_LARGE");
@@ -490,7 +506,7 @@ export async function loadPaymentMethodSalesTable(
 ): Promise<PaymentMethodTableResult> {
   const dbClient = salesTableClient(client);
   const scope = await resolveTenantScope(tenant, dbClient);
-  const clamped = clampSalesTableQuery(scope, query);
+  const clamped = await resolveSalesTableTerminal(scope, clampSalesTableQuery(scope, query), dbClient);
   const saleWhere = buildSalesTableWhere(scope, clamped, { ignorePaymentMethod: true });
   const count = await dbClient.sale.count({ where: saleWhere });
   if (count > SALES_TABLE_SCAN_LIMIT) {

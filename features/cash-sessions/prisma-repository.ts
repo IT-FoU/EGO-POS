@@ -27,6 +27,7 @@ import {
   createOpenAttendanceInTx,
 } from "@/features/attendance/prisma-repository";
 import { readPosDeviceId } from "@/features/terminals/device-cookie";
+import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { recordTerminalActivity, requireActiveBoundTerminal } from "@/features/terminals/terminal-service";
 import { PermissionDeniedError } from "@/lib/auth/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -525,6 +526,18 @@ export async function recordCashSessionMovement(
           sessionId: session.id,
           transactionType: type,
         },
+      });
+      await recordEssentialActivity(tx, {
+        action: type === "cash_in" ? "pos.cash.in" : "pos.cash.out",
+        amount: movementAmount,
+        branchId: session.branchId ? String(session.branchId) : tenant.branchId ?? null,
+        companyId: tenant.companyId,
+        entityId: String(session.id),
+        entityType: "cash_session",
+        fallbackTerminalId: session.terminalId ? String(session.terminalId) : null,
+        module: "pos",
+        summary: type === "cash_in" ? `Cash in ${movementAmount}` : `Cash out ${movementAmount}`,
+        userId: tenant.userId,
       });
 
       const refreshed = await tx.cashSession.findFirstOrThrow({
