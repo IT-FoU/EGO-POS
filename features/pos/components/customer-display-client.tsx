@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Gift, Maximize2, Minimize2, Package, QrCode, ReceiptText, Sparkles, Trophy } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { formatLak } from "@/features/pos/format";
@@ -236,243 +236,225 @@ function chromeClass(kind: string) {
   }
 }
 
+function GeometryRoom({ children, className, marker, tone = "surface" }: {
+  children: ReactNode;
+  className?: string;
+  marker: string;
+  tone?: "accent" | "soft" | "surface";
+}) {
+  const theme = useTheme();
+  const backgroundColor = tone === "accent" ? theme.primary : tone === "soft" ? theme.soft : theme.surface;
+  const color = tone === "accent" ? theme.totalText : theme.text;
+  return (
+    <section
+      className={cn("min-h-0 overflow-hidden rounded-2xl border p-3", className)}
+      data-cd-room={marker}
+      style={{ backgroundColor, borderColor: theme.border, color }}
+    >
+      {children}
+    </section>
+  );
+}
+
 function OceanBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
   const locale = useDisplayLocale();
-  if (mode === "thank_you") {
-    return (
-      <div className="grid h-full place-items-center p-5 text-center" data-cd-thankyou="ocean-blue">
-        <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-sm">
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <div className="mt-3 text-[clamp(2rem,6vw,4rem)] font-black">{tCd("thankYou", locale)}</div>
-          <div className="mx-auto mt-4 max-w-sm rounded-2xl px-4 py-3" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
-            <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
-            <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
-          </div>
-          <ReturningNote seconds={settings.autoReturnSeconds} />
-        </div>
-      </div>
-    );
-  }
-  if (mode === "idle") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="ocean-blue">
-        <header className="flex items-center gap-2 px-3 py-2" data-cd-header="compact" style={{ backgroundColor: theme.surface }}>
-          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
-          <div className="min-w-0 truncate text-[clamp(1rem,2vw,1.45rem)] font-black">{storeName}</div>
-        </header>
-        <div className="min-h-0 p-3">
-          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
-        </div>
-      </div>
-    );
-  }
-  if (mode === "payment") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment="ocean-blue">
-        <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.surface }}>
-          <div className="flex min-w-0 items-center gap-2">
-            <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
-            <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
-          </div>
-          <HeaderMeta displayState={displayState} />
-        </header>
-        <div className="min-h-0 overflow-hidden p-3">
-          <ItemsList displayState={displayState} />
-        </div>
-        <TotalsBlock displayState={displayState} settings={settings} />
-      </div>
-    );
-  }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.surface }}>
-        <div className="flex min-w-0 items-center gap-2">
-          <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
-          <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
+    <div className="grid h-full min-h-0 grid-rows-1 p-3" data-cd-geometry="full" data-cd-idle="ocean-blue" data-cd-payment={mode === "payment" ? "ocean-blue" : undefined} data-cd-thankyou="ocean-blue">
+      <GeometryRoom className="grid grid-rows-[auto_minmax(0,1fr)]" marker="full">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
+            <div className="truncate text-[clamp(1rem,2vw,1.45rem)] font-black">{storeName}</div>
+          </div>
+          {mode === "idle" || mode === "thank_you" ? null : <HeaderMeta displayState={displayState} />}
         </div>
-        <HeaderMeta displayState={displayState} />
-      </header>
-      <div className="min-h-0 overflow-hidden p-3">
-        <ItemsList displayState={displayState} />
-      </div>
-      <TotalsBlock displayState={displayState} settings={settings} />
+        {mode === "thank_you" ? (
+          <div className="grid min-h-0 place-items-center text-center">
+            <div>
+              <div className="text-[clamp(2rem,6vw,4rem)] font-black">{tCd("thankYou", locale)}</div>
+              <div className="mx-auto mt-4 max-w-sm rounded-2xl px-4 py-3" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
+                <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
+                <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
+              </div>
+              <ReturningNote seconds={settings.autoReturnSeconds} />
+            </div>
+          </div>
+        ) : mode === "idle" ? (
+          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
+        ) : (
+          <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2">
+            <ItemsList displayState={displayState} />
+            <TotalsBlock displayState={displayState} settings={settings} />
+          </div>
+        )}
+      </GeometryRoom>
     </div>
   );
 }
 
 function BoldGreenLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
   const locale = useDisplayLocale();
-  if (mode === "thank_you") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-thankyou="bold-green">
-        <div className="px-4 py-4 text-center text-[clamp(2rem,6vw,4rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-          {tCd("thankYou", locale)}
-        </div>
-        <div className="grid place-items-center bg-white p-4 text-center">
-          <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <ReturningNote seconds={settings.autoReturnSeconds} />
-        </div>
-        <div className="px-4 py-4 text-center" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
-          <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
-          <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
-        </div>
-      </div>
-    );
-  }
-  if (mode === "idle") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="bold-green">
-        <header className="flex items-center gap-2 px-3 py-2" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
-          <div className="min-w-0 truncate text-[clamp(1.05rem,2.2vw,1.5rem)] font-black">{storeName}</div>
-        </header>
-        <div className="min-h-0 p-3">
-          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment={mode === "payment" ? "bold-green" : undefined}>
-      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-        <div className="flex min-w-0 items-center gap-2">
+    <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] gap-3 p-3" data-cd-geometry="columns-2" data-cd-idle="bold-green" data-cd-payment={mode === "payment" ? "bold-green" : undefined} data-cd-thankyou="bold-green">
+      <GeometryRoom className="flex flex-col" marker="left">
+        <div className="mb-2 flex items-center gap-2">
           <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
-          <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
+          <div className="truncate text-[clamp(1rem,2vw,1.4rem)] font-black">{storeName}</div>
         </div>
-        <HeaderMeta displayState={displayState} light />
-      </header>
-      <div className="grid min-h-0 grid-cols-[1.15fr_0.85fr] gap-3 bg-white p-3">
-        <ItemsList displayState={displayState} />
-        <TotalsBlock displayState={displayState} settings={settings} />
-      </div>
+        <div className="min-h-0 flex-1">
+          {mode === "thank_you" ? (
+            <div className="grid h-full place-items-center text-center text-[clamp(2rem,6vw,4rem)] font-black">{tCd("thankYou", locale)}</div>
+          ) : mode === "idle" ? (
+            <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
+          ) : (
+            <ItemsList displayState={displayState} />
+          )}
+        </div>
+      </GeometryRoom>
+      <GeometryRoom className="flex flex-col" marker="right">
+        {mode === "thank_you" ? (
+          <div className="grid h-full place-items-center text-center">
+            <div>
+              <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
+              <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none" style={{ color: theme.primary }}>{formatLak(displayState.totalLak)} LAK</div>
+              <ReturningNote seconds={settings.autoReturnSeconds} />
+            </div>
+          </div>
+        ) : mode === "idle" ? (
+          <WelcomePanel fill message={promoCopy(settings, 1)} title={tCd("welcome", locale)} />
+        ) : (
+          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
+            <HeaderMeta displayState={displayState} />
+            <TotalsBlock displayState={displayState} settings={settings} />
+          </div>
+        )}
+      </GeometryRoom>
     </div>
   );
 }
 
 function SkyBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
   const locale = useDisplayLocale();
-  if (mode === "thank_you") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 p-3" data-cd-thankyou="sky-blue">
-        <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        <div className="grid min-h-0 place-items-center rounded-3xl bg-white p-6 text-center">
-          <div className="text-[clamp(2rem,6vw,3.6rem)] font-black">{tCd("thankYou", locale)}</div>
-          <div className="mt-3 text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none" style={{ color: theme.secondaryText }}>
-            {formatLak(displayState.totalLak)} LAK
-          </div>
-          <ReturningNote seconds={settings.autoReturnSeconds} />
-        </div>
-      </div>
-    );
-  }
-  if (mode === "idle") {
-    return (
-      <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)] gap-3 p-3" data-cd-idle="sky-blue">
-        <header className="col-span-2" data-cd-header="compact">
-          <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        </header>
-        <WelcomePanel fill message={welcomeCopy(settings)} title={tCd("welcome", locale)} />
-        <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={promoCopy(settings, 0)} />
-      </div>
-    );
-  }
   return (
-    <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)] gap-3 p-3" data-cd-payment={mode === "payment" ? "sky-blue" : undefined}>
-      <header className="col-span-2 flex items-center justify-between" data-cd-header="cart">
-        <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
-        <HeaderMeta displayState={displayState} />
-      </header>
-      <ItemsList displayState={displayState} />
-      <TotalsBlock displayState={displayState} settings={settings} />
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,0.78fr)_minmax(0,1.22fr)] gap-3 p-3" data-cd-geometry="top-split" data-cd-idle="sky-blue" data-cd-payment={mode === "payment" ? "sky-blue" : undefined} data-cd-thankyou="sky-blue">
+      <GeometryRoom className="flex flex-col" marker="top">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
+            <div className="truncate text-[clamp(1rem,2vw,1.4rem)] font-black">{storeName}</div>
+          </div>
+          {mode === "idle" || mode === "thank_you" ? null : <HeaderMeta displayState={displayState} light />}
+        </div>
+        <div className="min-h-0 flex-1">
+          {mode === "thank_you" ? (
+            <div className="grid h-full place-items-center text-center text-[clamp(2rem,5vw,3.6rem)] font-black">{tCd("thankYou", locale)}</div>
+          ) : mode === "idle" ? (
+            <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
+          ) : (
+            <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={promoCopy(settings, 0)} />
+          )}
+        </div>
+      </GeometryRoom>
+      <div className="grid min-h-0 grid-cols-2 gap-3" data-cd-room="bottom">
+        <GeometryRoom className="flex flex-col" marker="bottom-left">
+          {mode === "thank_you" ? <ReturningNote seconds={settings.autoReturnSeconds} /> : mode === "idle" ? <WelcomePanel fill message={promoCopy(settings, 1)} title={tCd("welcome", locale)} /> : <ItemsList displayState={displayState} />}
+        </GeometryRoom>
+        <GeometryRoom className="flex flex-col" marker="bottom-right" tone="soft">
+          {mode === "thank_you" ? (
+            <div className="grid h-full place-items-center text-center">
+              <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none" style={{ color: theme.secondaryText }}>{formatLak(displayState.totalLak)} LAK</div>
+            </div>
+          ) : mode === "idle" ? (
+            <WelcomePanel fill message={promoCopy(settings, 2)} title={storeName} />
+          ) : (
+            <TotalsBlock displayState={displayState} settings={settings} />
+          )}
+        </GeometryRoom>
+      </div>
     </div>
   );
 }
 
 function SunnyYellowLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
   const locale = useDisplayLocale();
-  if (mode === "thank_you") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-thankyou="sunny-yellow">
-        <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        <div className="grid place-items-center p-4 text-center">
-          <Sparkles className="size-10" style={{ color: theme.accent }} />
-          <div className="mt-2 text-[clamp(2rem,6vw,4rem)] font-black">{tCd("thankYou", locale)}</div>
-          <ReturningNote seconds={settings.autoReturnSeconds} />
-        </div>
-        <div className="px-4 py-3 text-center text-[clamp(2.1rem,6vw,4.2rem)] font-black" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
-          {formatLak(displayState.totalLak)} LAK
-        </div>
-      </div>
-    );
-  }
-  if (mode === "idle") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="sunny-yellow">
-        <header className="px-3 py-2" data-cd-header="compact">
-          <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        </header>
-        <div className="min-h-0 p-3">
-          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment={mode === "payment" ? "sunny-yellow" : undefined}>
-      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart">
-        <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
-        <HeaderMeta displayState={displayState} />
-      </header>
-      <div className="min-h-0 overflow-hidden px-3">
-        <ItemsList displayState={displayState} />
-      </div>
-      <TotalsBlock displayState={displayState} settings={settings} />
+    <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-3 p-3" data-cd-geometry="grid-2x2" data-cd-idle="sunny-yellow" data-cd-payment={mode === "payment" ? "sunny-yellow" : undefined} data-cd-thankyou="sunny-yellow">
+      <GeometryRoom className="flex flex-col" marker="top-left">
+        {mode === "thank_you" ? (
+          <div className="grid h-full place-items-center text-center">
+            <Sparkles className="size-10" style={{ color: theme.accent }} />
+            <div className="mt-2 text-[clamp(1.6rem,4vw,3rem)] font-black">{tCd("thankYou", locale)}</div>
+          </div>
+        ) : mode === "idle" ? (
+          <WelcomePanel fill message={promoCopy(settings, 0)} title={tCd("welcome", locale)} />
+        ) : (
+          <ItemsList displayState={displayState} range="first" />
+        )}
+      </GeometryRoom>
+      <GeometryRoom className="flex flex-col" marker="top-right" tone="soft">
+        <div className="mb-2 flex items-center gap-2">
+          <StoreMark logoUrl={logoUrl} size={32} storeName={storeName} />
+          <div className="truncate font-black">{storeName}</div>
+        </div>
+        <div className="min-h-0 flex-1">
+          {mode === "idle" ? <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} /> : mode === "thank_you" ? <ReturningNote seconds={settings.autoReturnSeconds} /> : <ItemsList displayState={displayState} range="rest" />}
+        </div>
+      </GeometryRoom>
+      <GeometryRoom className="flex flex-col gap-2" marker="bottom-left" tone="soft">
+        {mode === "idle" ? <WelcomePanel fill message={promoCopy(settings, 1)} title={storeName} /> : mode === "thank_you" ? <WelcomePanel fill message={storeName} title={tCd("thankYou", locale)} /> : (
+          <>
+            <HeaderMeta displayState={displayState} />
+            <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={promoCopy(settings, 0)} />
+          </>
+        )}
+      </GeometryRoom>
+      <GeometryRoom className="flex flex-col" marker="bottom-right" tone="accent">
+        {mode === "idle" ? <WelcomePanel fill message={promoCopy(settings, 2)} title={tCd("member", locale)} /> : mode === "thank_you" ? (
+          <div className="grid h-full place-items-center text-center text-[clamp(2.1rem,6vw,4.2rem)] font-black" style={{ color: theme.totalText }}>{formatLak(displayState.totalLak)} LAK</div>
+        ) : <TotalsBlock displayState={displayState} settings={settings} />}
+      </GeometryRoom>
     </div>
   );
 }
 
 function PremiumDarkLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
   const locale = useDisplayLocale();
-  if (mode === "thank_you") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-thankyou="premium-dark">
-        <div className="px-4 py-4 text-center text-[clamp(1.8rem,4vw,3rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-          {tCd("thankYou", locale)}
-        </div>
-        <div className="grid place-items-center bg-white p-6 text-center">
-          <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
-          <div className="mt-3 text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
-          <ReturningNote seconds={settings.autoReturnSeconds} />
-        </div>
-      </div>
-    );
-  }
-  if (mode === "idle") {
-    return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="premium-dark">
-        <header className="flex items-center gap-2 px-3 py-2" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
-          <div className="min-w-0 truncate text-[clamp(1.1rem,2.2vw,1.6rem)] font-black">{storeName}</div>
-        </header>
-        <div className="min-h-0 p-3">
-          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment={mode === "payment" ? "premium-dark" : undefined}>
-      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.accent, color: theme.totalText }}>
-        <div className="flex min-w-0 items-center gap-2">
-          <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
-          <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
+    <div className="grid h-full min-h-0 grid-cols-[0.9fr_1.1fr] grid-rows-2 gap-3 p-3" data-cd-geometry="left-stack-right" data-cd-idle="premium-dark" data-cd-payment={mode === "payment" ? "premium-dark" : undefined} data-cd-thankyou="premium-dark">
+      <GeometryRoom className="col-start-1 row-start-1 flex flex-col" marker="left-top" tone="accent">
+        <div className="mb-2 flex items-center gap-2">
+          <StoreMark logoUrl={logoUrl} size={32} storeName={storeName} />
+          <div className="truncate font-black">{storeName}</div>
         </div>
-        <HeaderMeta displayState={displayState} light />
-      </header>
-      <div className="min-h-0 overflow-hidden bg-white p-3">
-        <ItemsList displayState={displayState} />
-      </div>
-      <TotalsBlock displayState={displayState} settings={settings} />
+        <div className="min-h-0 flex-1">
+          {mode === "thank_you" ? <div className="text-[clamp(1.6rem,4vw,3rem)] font-black">{tCd("thankYou", locale)}</div> : mode === "idle" ? <WelcomePanel fill message={promoCopy(settings, 0)} title={tCd("welcome", locale)} /> : (
+            <div className="grid gap-2">
+              <HeaderMeta displayState={displayState} light />
+              <PromoPanel settings={settings} slideIndex={slideIndex} fallback={promoCopy(settings, 0)} />
+            </div>
+          )}
+        </div>
+      </GeometryRoom>
+      <GeometryRoom className="col-start-2 row-span-2 row-start-1 flex flex-col" marker="right">
+        {mode === "thank_you" ? (
+          <div className="grid h-full place-items-center text-center">
+            <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
+            <ReturningNote seconds={settings.autoReturnSeconds} />
+          </div>
+        ) : mode === "idle" ? (
+          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
+        ) : (
+          <ItemsList displayState={displayState} />
+        )}
+      </GeometryRoom>
+      <GeometryRoom className="col-start-1 row-start-2 flex flex-col" marker="left-bottom" tone="soft">
+        {mode === "idle" ? <WelcomePanel fill message={promoCopy(settings, 1)} title={storeName} /> : mode === "thank_you" ? (
+          <div className="grid h-full place-items-center text-center">
+            <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
+            <div className="text-[clamp(2.1rem,5vw,3.6rem)] font-black leading-none" style={{ color: theme.primary }}>{formatLak(displayState.totalLak)} LAK</div>
+          </div>
+        ) : <TotalsBlock displayState={displayState} settings={settings} />}
+      </GeometryRoom>
     </div>
   );
 }
@@ -798,18 +780,20 @@ function PromoPanel({ fallback, fill = false, large = false, settings, slideInde
   );
 }
 
-function ItemsList({ displayState }: { displayState: PosDisplayState }) {
+function ItemsList({ displayState, range = "all" }: { displayState: PosDisplayState; range?: "all" | "first" | "rest" }) {
   const theme = useTheme();
   const chrome = useChrome();
   const locale = useDisplayLocale();
+  const items = range === "first" ? displayState.items.slice(0, 1) : range === "rest" ? displayState.items.slice(1) : displayState.items;
   return (
-    <section className={cn("flex h-full min-h-0 flex-col p-2", chromeClass(chrome.items))} data-cd-chrome={chrome.items} style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
+    <section className={cn("flex h-full min-h-0 flex-col p-2", chromeClass(chrome.items))} data-cd-chrome={chrome.items} data-cd-items={range} style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
       <div className="mb-1 flex items-center gap-2 font-black">
         <ReceiptText className="size-5" style={{ color: theme.primary }} />
         {tCd("items", locale)}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {displayState.items.map((item) => (
+        {items.length === 0 ? <div className="py-3 text-sm font-semibold" style={{ color: theme.secondaryText }}>—</div> : null}
+        {items.map((item) => (
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b py-1.5" key={item.cartLineId ?? `${item.id}-${item.unitId ?? "default"}`} style={{ borderColor: theme.border }}>
             <div className="flex min-w-0 items-center gap-2">
               <CustomerDisplayProductImage item={item} label={localizedProductName(item, locale)} />

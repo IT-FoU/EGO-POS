@@ -148,6 +148,15 @@ check("localized chrome EN/LO", () => {
   assert(displayClient.includes("data-cd-payment-badge"), "payment badge missing");
 });
 
+check("templates 1-5 use owner room geometry", () => {
+  assert(displayClient.includes('data-cd-geometry="full"') && displayClient.includes('marker="full"') && displayClient.includes("grid-rows-1"), "t1 full room");
+  assert(displayClient.includes('data-cd-geometry="columns-2"') && displayClient.includes('grid-cols-[1.15fr_0.85fr]') && displayClient.includes('marker="left"') && displayClient.includes('marker="right"'), "t2 columns");
+  assert(displayClient.includes('data-cd-geometry="top-split"') && displayClient.includes("grid-rows-[minmax(0,0.78fr)_minmax(0,1.22fr)]") && displayClient.includes('marker="top"') && displayClient.includes('marker="bottom-left"') && displayClient.includes('marker="bottom-right"'), "t3 top split");
+  assert(displayClient.includes('data-cd-geometry="grid-2x2"') && displayClient.includes("grid-cols-2 grid-rows-2") && displayClient.includes('marker="top-left"') && displayClient.includes('marker="bottom-right"'), "t4 grid");
+  assert(displayClient.includes('data-cd-geometry="left-stack-right"') && displayClient.includes("grid-cols-[0.9fr_1.1fr] grid-rows-2") && displayClient.includes("row-span-2") && displayClient.includes('marker="left-top"') && displayClient.includes('marker="left-bottom"'), "t5 three rooms");
+  assert(displayClient.includes("function EmeraldDreamLayout"), "template 6 layout must stay");
+});
+
 check("thank-you and QR stay on existing channel", () => {
   assert(displayClient.includes("data-cd-thankyou=\"ocean-blue\""), "t1 thank you");
   assert(displayClient.includes("data-cd-thankyou=\"emerald-dream\""), "t6 thank you remains");
