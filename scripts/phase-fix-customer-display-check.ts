@@ -489,9 +489,9 @@ await check("ten templates keep distinct tokens and layouts", () => {
   const darkGreen = customerDisplayTemplateTokens("premium-dark-green");
   const red = customerDisplayTemplateTokens("minimal-premium-red");
   const purple = customerDisplayTemplateTokens("minimal-premium-purple");
-  assert(green.totalBackground === "#15803D" && green.totalText === "#FFFFFF", JSON.stringify(green));
-  assert(ocean.totalBackground === "#0C4A6E" && ocean.background === "#FFFFFF", JSON.stringify(ocean));
-  assert(dark.background === "#020617" && dark.primary === "#22D3EE", JSON.stringify(dark));
+  assert(green.totalBackground === "#FF5F00" && green.background === "#003A70", JSON.stringify(green));
+  assert(ocean.totalBackground === "#C6FF34" && ocean.background === "#13670B", JSON.stringify(ocean));
+  assert(dark.background === "#FFF4EC" && dark.primary === "#EB001B", JSON.stringify(dark));
   assert(darkGreen.totalBackground === "#4ADE80" && darkGreen.background !== dark.surface, JSON.stringify(darkGreen));
   assert(red.primary !== purple.primary && red.background !== purple.background, "red and purple must not be recolors");
   assert(displayClient.includes("clamp(2.1rem,6vw,4.2rem)"), "grand total must stay the strongest type size");
@@ -501,7 +501,8 @@ await check("ten templates keep distinct tokens and layouts", () => {
 await check("idle uses selected template instead of one generic shell", () => {
   assert(!displayClient.includes("function IdleState"), "generic IdleState shell must be removed");
   assert(displayClient.includes("mode={mode}"), "selected template must render idle, cart, and thank-you");
-  assert(displayClient.includes('showThankYou ? "thank_you"'), "thank-you must use the selected template");
+  assert(displayClient.includes("resolveCustomerDisplayMode(displayState)"), "thank-you must use the selected template");
+  assert(displayClient.includes('mode === "thank_you"'), "thank-you must use the selected template");
   const idleMarks = [
     'data-cd-idle="ocean-blue"',
     'data-cd-idle="bold-green"',
@@ -535,10 +536,9 @@ await check("customer logo is a bounded chip, not an intrinsic hero", () => {
 await check("core template structure does not require lg breakpoint", () => {
   assert(!displayClient.includes("lg:grid-cols"), "core split layouts must not hide behind lg");
   assert(!displayClient.includes("lg:row-span"), "core row spans must not hide behind lg");
-  assert(displayClient.includes("grid-cols-[1.15fr_0.85fr]"), "ocean split must exist without breakpoint");
-  assert(displayClient.includes("grid-cols-[0.9fr_1.1fr]"), "premium dark split must exist without breakpoint");
+  assert(displayClient.includes("grid-cols-[1.15fr_0.85fr]"), "two-column cart split must exist without breakpoint");
   assert(displayClient.includes("grid-cols-[1fr_0.7fr]"), "premium dark green split must exist without breakpoint");
-  assert(displayClient.includes("grid-cols-3"), "sky blue card row must exist without breakpoint");
+  assert(displayClient.includes("grid-cols-2"), "remaining templates must keep multi-column layout without breakpoint");
 });
 
 await check("popup open size uses screen when available and a safer fallback", () => {
@@ -688,15 +688,15 @@ await check("thank-you is per template and keeps QR hidden", () => {
   assert(posClient.includes("showQr: false") && posClient.includes("keepThankYou: true"), "sale complete must hide QR and keep thank-you");
 });
 
-await check("member shows real fields and guest stays minimal", () => {
-  assert(displayClient.includes('data-cd-guest="minimal"'), "guest must be a minimal indicator");
-  assert(displayClient.includes('data-cd-member="detail"'), "member detail block missing");
+await check("member shows name only and hides guest", () => {
+  assert(!displayClient.includes('data-cd-guest="minimal"'), "guest block must be removed");
+  assert(displayClient.includes('data-cd-member="name"'), "member name chip missing");
   assert(displayClient.includes('data-cd-member-field="name"'), "member name missing");
-  assert(displayClient.includes('data-cd-member-field="status"'), "membership status missing");
-  assert(displayClient.includes('data-cd-member-field="points"'), "points balance missing");
-  assert(displayClient.includes('data-cd-member-field="earned"'), "points earned missing");
+  assert(!displayClient.includes('data-cd-member-field="status"'), "membership status must not appear");
+  assert(!displayClient.includes('data-cd-member-field="points"'), "points balance must not appear");
+  assert(!displayClient.includes('data-cd-member-field="earned"'), "points earned must not appear");
+  assert(displayClient.includes("customerDisplayMemberName"), "shared member-name helper missing");
   assert(displayClient.includes("meaningfulAmount"), "zero financial rows must be filtered");
-  assert(!displayClient.includes("GuestOrMember displayState={displayState} compact"), "compact must not hide member fields");
 });
 
 await check("store copy and product names use locale-aware fallbacks", () => {
@@ -750,9 +750,9 @@ await check("contrast tokens and chrome variants stay distinct", () => {
   const coral = customerDisplayTemplateTokens("coral-minimal");
   const red = customerDisplayTemplateTokens("minimal-premium-red");
   const purple = customerDisplayTemplateTokens("minimal-premium-purple");
-  assert(ocean.secondaryText === "#082F49" && ocean.primary === "#075985", JSON.stringify(ocean));
-  assert(sky.secondaryText === "#0C4A6E" && sky.background !== "#FFFFFF", JSON.stringify(sky));
-  assert(sunny.secondaryText === "#422006" && sunny.totalBackground === "#EAB308", JSON.stringify(sunny));
+  assert(ocean.secondaryText === "#0B3D08" && ocean.primary === "#C6FF34", JSON.stringify(ocean));
+  assert(sky.secondaryText === "#003A70" && sky.background !== "#FFFFFF", JSON.stringify(sky));
+  assert(sunny.secondaryText === "#C6FF34" && sunny.totalBackground === "#C6FF34", JSON.stringify(sunny));
   assert(emerald.text === "#F0FDF4" && emerald.primary === "#059669", JSON.stringify(emerald));
   assert(coral.primary === "#E11D48" && coral.totalBackground === "#BE123C", JSON.stringify(coral));
   assert(red.primary === "#B91C1C" && purple.primary === "#5B21B6", "red/purple must stay deep, not pale");

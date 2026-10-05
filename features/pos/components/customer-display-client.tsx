@@ -1,10 +1,19 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Gift, Maximize2, Minimize2, Package, QrCode, ReceiptText, Sparkles, Store, Trophy } from "lucide-react";
+import { Gift, Maximize2, Minimize2, Package, QrCode, ReceiptText, Sparkles, Trophy } from "lucide-react";
 import { LogoContainer } from "@/components/brand/logo-container";
 import { formatLak } from "@/features/pos/format";
 import { resolveCustomerDisplayProductImage } from "@/features/pos/customer-display-product-image";
+import {
+  customerDisplayMemberName,
+  customerDisplayShouldShowDiscountRows,
+  customerDisplayShouldShowPromotionInfo,
+  customerDisplayShouldShowSubtotal,
+  resolveCustomerDisplayIdleSlide,
+  resolveCustomerDisplayMode,
+  type CustomerDisplayMode,
+} from "@/features/pos/customer-display-rules";
 import type { PosCartItem, PosDisplayState } from "@/features/pos/types";
 import {
   DEFAULT_CUSTOMER_DISPLAY_SETTINGS,
@@ -24,7 +33,9 @@ import { customerDisplayQrStyleTokens } from "@/features/pos/customer-display-qr
 import { maskAccountReference } from "@/features/pos/customer-display-qr";
 import {
   customerDisplayWelcomeMessage,
+  fillCustomerDisplayCopy,
   resolveCustomerDisplayStoreName,
+  tCd,
 } from "@/features/pos/customer-display-copy";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { LOCALE_CHANGE_EVENT } from "@/lib/i18n/locale";
@@ -39,12 +50,15 @@ const POS_DISPLAY_KEY = DemoStorageKeys.customerDisplayState;
 const ThemeContext = createContext<CustomerDisplayThemeTokens>(customerDisplayTemplateTokens("ocean-blue"));
 const ChromeContext = createContext<CustomerDisplayChrome>(customerDisplayTemplateChrome("ocean-blue"));
 const LocaleContext = createContext<SupportedLocale>("en");
+const ModeContext = createContext<CustomerDisplayMode>("idle");
 
 const emptyState: PosDisplayState = {
   appliedPromotions: [],
   customer: null,
   displayMode: "advertising",
   items: [],
+  loyaltyRedeemLak: 0,
+  manualDiscountLak: 0,
   membershipDiscountLak: 0,
   membershipPoints: 0,
   membershipStatus: "Guest",
@@ -68,6 +82,10 @@ function useChrome() {
 
 function useDisplayLocale() {
   return useContext(LocaleContext);
+}
+
+function useDisplayMode() {
+  return useContext(ModeContext);
 }
 
 export function CustomerDisplayClient() {
@@ -101,17 +119,16 @@ export function CustomerDisplayClient() {
   const template = parseCustomerDisplayTemplate(settings.template);
   const tokens = useMemo(() => customerDisplayTemplateTokens(template), [template]);
   const chrome = useMemo(() => customerDisplayTemplateChrome(template), [template]);
-  const showThankYou = displayState.displayMode === "thank_you";
-  const hasActiveSale = displayState.items.length > 0 && displayState.displayMode !== "advertising" && !showThankYou;
+  const mode = resolveCustomerDisplayMode(displayState);
   const showQr = Boolean(displayState.showQr && displayState.selectedQrBank);
   const storeName = resolveCustomerDisplayStoreName(displayState.storeName, settings.promotionMessages);
   const resolvedLogo = displayState.storeLogoUrl || "";
-  const mode: TemplateMode = showThankYou ? "thank_you" : hasActiveSale ? "cart" : "idle";
 
   return (
     <ThemeContext.Provider value={tokens}>
       <ChromeContext.Provider value={chrome}>
         <LocaleContext.Provider value={locale}>
+          <ModeContext.Provider value={mode}>
           <main
             className="fixed inset-0 h-[100dvh] w-screen overflow-hidden"
             data-cd-mode={mode}
@@ -133,6 +150,7 @@ export function CustomerDisplayClient() {
             ) : null}
             <FullscreenControl />
           </main>
+          </ModeContext.Provider>
         </LocaleContext.Provider>
       </ChromeContext.Provider>
     </ThemeContext.Provider>
@@ -152,12 +170,10 @@ function StoreMark({ logoUrl, size, storeName }: { logoUrl?: string | null; size
   );
 }
 
-type TemplateMode = "cart" | "idle" | "thank_you";
-
 function SelectedTemplate({ displayState, logoUrl, mode, settings, slideIndex, storeName, template }: {
   displayState: PosDisplayState;
   logoUrl: string;
-  mode: TemplateMode;
+  mode: CustomerDisplayMode;
   settings: CustomerDisplaySettings;
   slideIndex: number;
   storeName: string;
@@ -193,7 +209,7 @@ function SelectedTemplate({ displayState, logoUrl, mode, settings, slideIndex, s
 type LayoutProps = {
   displayState: PosDisplayState;
   logoUrl: string;
-  mode: TemplateMode;
+  mode: CustomerDisplayMode;
   settings: CustomerDisplaySettings;
   slideIndex: number;
   storeName: string;
@@ -221,67 +237,83 @@ function chromeClass(kind: string) {
 }
 
 function OceanBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  const locale = useDisplayLocale();
   if (mode === "thank_you") {
     return (
-      <div className="grid h-full place-items-center p-4 text-center" data-cd-thankyou="ocean-blue">
-        <div className="w-full max-w-xl">
+      <div className="grid h-full place-items-center p-5 text-center" data-cd-thankyou="ocean-blue">
+        <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-sm">
           <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <div className="mt-3 text-[clamp(2rem,6vw,4rem)] font-black">Thank You</div>
-          <div className="mx-auto mt-4 max-w-sm border px-4 py-3" style={{ borderColor: theme.border }}>
-            <div className="text-xs font-black uppercase" style={{ color: theme.secondaryText }}>Total</div>
-            <div className="text-[clamp(2rem,5vw,3.4rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
+          <div className="mt-3 text-[clamp(2rem,6vw,4rem)] font-black">{tCd("thankYou", locale)}</div>
+          <div className="mx-auto mt-4 max-w-sm rounded-2xl px-4 py-3" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
+            <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
+            <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
           </div>
-          <p className="mt-3 text-sm font-semibold" style={{ color: theme.secondaryText }}>Returning in {settings.autoReturnSeconds}s</p>
+          <ReturningNote seconds={settings.autoReturnSeconds} />
         </div>
       </div>
     );
   }
   if (mode === "idle") {
     return (
-      <div className="grid h-full min-h-0 grid-cols-[1.1fr_0.9fr] grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="ocean-blue">
-        <header className="col-span-2 flex items-center gap-2 px-2 py-1" data-cd-header="compact" style={{ backgroundColor: theme.surface, borderBottom: `3px solid ${theme.primary}` }}>
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="ocean-blue">
+        <header className="flex items-center gap-2 px-3 py-2" data-cd-header="compact" style={{ backgroundColor: theme.surface }}>
           <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
           <div className="min-w-0 truncate text-[clamp(1rem,2vw,1.45rem)] font-black">{storeName}</div>
         </header>
-        <WelcomePanel fill message={welcomeCopy(settings)} title="Welcome" />
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2 p-2">
-          <PromoPanel settings={settings} slideIndex={slideIndex} />
-          <ServiceNote message={promoCopy(settings, 1)} />
+        <div className="min-h-0 p-3">
+          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
         </div>
       </div>
     );
   }
+  if (mode === "payment") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment="ocean-blue">
+        <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.surface }}>
+          <div className="flex min-w-0 items-center gap-2">
+            <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
+            <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
+          </div>
+          <HeaderMeta displayState={displayState} />
+        </header>
+        <div className="min-h-0 overflow-hidden p-3">
+          <ItemsList displayState={displayState} />
+        </div>
+        <TotalsBlock displayState={displayState} settings={settings} />
+      </div>
+    );
+  }
   return (
-    <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)]">
-      <header className="col-span-2 flex items-center gap-2 px-2 py-1" data-cd-header="cart" style={{ borderBottom: `2px solid ${theme.border}` }}>
-        <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
-        <div className="min-w-0 truncate text-[clamp(0.95rem,1.8vw,1.3rem)] font-black">{storeName}</div>
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
+      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.surface }}>
+        <div className="flex min-w-0 items-center gap-2">
+          <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
+          <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
+        </div>
+        <HeaderMeta displayState={displayState} />
       </header>
-      <div className="min-h-0 overflow-hidden p-2">
+      <div className="min-h-0 overflow-hidden p-3">
         <ItemsList displayState={displayState} />
       </div>
-      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-2">
-        <GuestOrMember displayState={displayState} />
-        <PromoPanel settings={settings} slideIndex={slideIndex} />
-        <TotalsBlock displayState={displayState} />
-      </div>
+      <TotalsBlock displayState={displayState} settings={settings} />
     </div>
   );
 }
 
-function BoldGreenLayout({ displayState, logoUrl, mode, settings, storeName, theme }: LayoutProps) {
+function BoldGreenLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  const locale = useDisplayLocale();
   if (mode === "thank_you") {
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-thankyou="bold-green">
-        <div className="px-4 py-5 text-center text-[clamp(2rem,6vw,4rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-          Payment confirmed
+        <div className="px-4 py-4 text-center text-[clamp(2rem,6vw,4rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+          {tCd("thankYou", locale)}
         </div>
-        <div className="grid place-items-center p-4 text-center">
+        <div className="grid place-items-center bg-white p-4 text-center">
           <StoreMark logoUrl={logoUrl} size={48} storeName={storeName} />
-          <p className="mt-3 text-sm font-semibold">Returning in {settings.autoReturnSeconds}s</p>
+          <ReturningNote seconds={settings.autoReturnSeconds} />
         </div>
         <div className="px-4 py-4 text-center" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
-          <div className="text-xs font-black uppercase">Grand Total</div>
+          <div className="text-xs font-black uppercase">{tCd("grandTotal", locale)}</div>
           <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
         </div>
       </div>
@@ -289,89 +321,83 @@ function BoldGreenLayout({ displayState, logoUrl, mode, settings, storeName, the
   }
   if (mode === "idle") {
     return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-idle="bold-green">
-        <header className="flex items-center gap-2 px-2 py-1" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="bold-green">
+        <header className="flex items-center gap-2 px-3 py-2" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
           <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
-          <div className="min-w-0">
-            <div className="truncate text-[clamp(1.05rem,2.2vw,1.5rem)] font-black">{storeName}</div>
-            <div className="text-xs font-semibold">Welcome</div>
-          </div>
+          <div className="min-w-0 truncate text-[clamp(1.05rem,2.2vw,1.5rem)] font-black">{storeName}</div>
         </header>
-        <WelcomePanel fill message={welcomeCopy(settings)} title="Ready to serve" />
-        <div className="px-3 py-3 text-[clamp(1.1rem,2.2vw,1.6rem)] font-black" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
-          {promoCopy(settings, 0)}
+        <div className="min-h-0 p-3">
+          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
         </div>
       </div>
     );
   }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-      <header className="flex items-center justify-between px-2 py-1" data-cd-header="cart" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
-        <div className="flex items-center gap-2">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment={mode === "payment" ? "bold-green" : undefined}>
+      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+        <div className="flex min-w-0 items-center gap-2">
           <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
           <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
         </div>
-        <GuestOrMember displayState={displayState} light />
+        <HeaderMeta displayState={displayState} light />
       </header>
-      <div className="min-h-0 overflow-hidden p-2">
+      <div className="grid min-h-0 grid-cols-[1.15fr_0.85fr] gap-3 bg-white p-3">
         <ItemsList displayState={displayState} />
+        <TotalsBlock displayState={displayState} settings={settings} />
       </div>
-      <TotalsBlock displayState={displayState} />
     </div>
   );
 }
 
-function SkyBlueLayout({ displayState, logoUrl, mode, settings, storeName }: LayoutProps) {
+function SkyBlueLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  const locale = useDisplayLocale();
   if (mode === "thank_you") {
     return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 p-4" data-cd-thankyou="sky-blue">
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 p-3" data-cd-thankyou="sky-blue">
         <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        <div className="grid min-h-0 place-items-center">
-          <div className="grid w-full max-w-3xl grid-cols-3 gap-3">
-            <MetricBox label="Status" value="Thank you" />
-            <MetricBox label="Grand Total" value={`${formatLak(displayState.totalLak)} LAK`} />
-            <MetricBox label="Next" value={`${settings.autoReturnSeconds}s`} />
+        <div className="grid min-h-0 place-items-center rounded-3xl bg-white p-6 text-center">
+          <div className="text-[clamp(2rem,6vw,3.6rem)] font-black">{tCd("thankYou", locale)}</div>
+          <div className="mt-3 text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none" style={{ color: theme.secondaryText }}>
+            {formatLak(displayState.totalLak)} LAK
           </div>
+          <ReturningNote seconds={settings.autoReturnSeconds} />
         </div>
       </div>
     );
   }
   if (mode === "idle") {
     return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2 p-2" data-cd-idle="sky-blue">
-        <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        <div className="grid grid-cols-3 gap-2">
-          <MetricBox label="Welcome" value="Guest" />
-          <MetricBox label="Store" value={storeName} />
-          <MetricBox label="Today" value={promoCopy(settings, 0)} />
-        </div>
-        <WelcomePanel fill message={welcomeCopy(settings)} title="Hello" />
+      <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)] gap-3 p-3" data-cd-idle="sky-blue">
+        <header className="col-span-2" data-cd-header="compact">
+          <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        </header>
+        <WelcomePanel fill message={welcomeCopy(settings)} title={tCd("welcome", locale)} />
+        <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={promoCopy(settings, 0)} />
       </div>
     );
   }
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2 p-2">
-      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
-      <div className="grid grid-cols-3 gap-2">
-        <MetricBox label="Items" value={String(displayState.items.reduce((total, item) => total + item.quantity, 0))} />
-        <MetricBox label="Subtotal" value={`${formatLak(displayState.subtotalLak ?? 0)} LAK`} />
-        <GuestOrMember displayState={displayState} />
-      </div>
+    <div className="grid h-full min-h-0 grid-cols-[1.15fr_0.85fr] grid-rows-[auto_minmax(0,1fr)] gap-3 p-3" data-cd-payment={mode === "payment" ? "sky-blue" : undefined}>
+      <header className="col-span-2 flex items-center justify-between" data-cd-header="cart">
+        <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
+        <HeaderMeta displayState={displayState} />
+      </header>
       <ItemsList displayState={displayState} />
-      <TotalsBlock displayState={displayState} />
+      <TotalsBlock displayState={displayState} settings={settings} />
     </div>
   );
 }
 
 function SunnyYellowLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  const locale = useDisplayLocale();
   if (mode === "thank_you") {
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-thankyou="sunny-yellow">
         <BrandRow logoUrl={logoUrl} storeName={storeName} />
         <div className="grid place-items-center p-4 text-center">
-          <Sparkles className="size-10" style={{ color: theme.primary }} />
-          <div className="mt-2 text-[clamp(2rem,6vw,4rem)] font-black">See you again</div>
-          <p className="mt-2 text-lg font-semibold">{promoCopy(settings, 2)}</p>
+          <Sparkles className="size-10" style={{ color: theme.accent }} />
+          <div className="mt-2 text-[clamp(2rem,6vw,4rem)] font-black">{tCd("thankYou", locale)}</div>
+          <ReturningNote seconds={settings.autoReturnSeconds} />
         </div>
         <div className="px-4 py-3 text-center text-[clamp(2.1rem,6vw,4.2rem)] font-black" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
           {formatLak(displayState.totalLak)} LAK
@@ -381,67 +407,72 @@ function SunnyYellowLayout({ displayState, logoUrl, mode, settings, slideIndex, 
   }
   if (mode === "idle") {
     return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.42fr)_minmax(0,1fr)]" data-cd-idle="sunny-yellow">
-        <BrandRow logoUrl={logoUrl} storeName={storeName} />
-        <PromoPanel large settings={settings} slideIndex={slideIndex} />
-        <WelcomePanel fill message={welcomeCopy(settings)} title="Today's offers" />
-      </div>
-    );
-  }
-  return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.28fr)_minmax(0,1fr)_auto]">
-      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
-      <PromoPanel settings={settings} slideIndex={slideIndex} />
-      <div className="min-h-0 overflow-hidden p-2">
-        <ItemsList displayState={displayState} />
-      </div>
-      <TotalsBlock displayState={displayState} />
-    </div>
-  );
-}
-
-function PremiumDarkLayout({ displayState, logoUrl, mode, settings, storeName, theme }: LayoutProps) {
-  if (mode === "thank_you") {
-    return (
-      <div className="grid h-full min-h-0 grid-cols-[0.9fr_1.1fr] gap-3 p-3" data-cd-thankyou="premium-dark">
-        <section className="grid place-items-center border-2 p-4" style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
-          <div className="text-center">
-            <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
-            <div className="mt-3 text-[clamp(1.6rem,3vw,2.4rem)] font-black">Confirmed</div>
-          </div>
-        </section>
-        <section className="grid place-content-center p-4" style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}>
-          <div className="text-xs font-black uppercase tracking-[0.18em]">Grand Total</div>
-          <div className="mt-2 text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
-          <p className="mt-3 text-sm font-semibold">Returning in {settings.autoReturnSeconds}s</p>
-        </section>
-      </div>
-    );
-  }
-  if (mode === "idle") {
-    return (
-      <div className="grid h-full min-h-0 grid-cols-[0.85fr_1.15fr] gap-2 p-2" data-cd-idle="premium-dark">
-        <section className="grid min-h-0 place-items-center rounded-2xl border-2 p-3" style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
-          <div className="text-center">
-            <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
-            <div className="mt-3 text-[clamp(1.3rem,2.6vw,2rem)] font-black">{storeName}</div>
-          </div>
-        </section>
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2">
-          <WelcomePanel fill message={welcomeCopy(settings)} title="Good evening" />
-          <ServiceNote message={promoCopy(settings, 0)} />
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="sunny-yellow">
+        <header className="px-3 py-2" data-cd-header="compact">
+          <BrandRow logoUrl={logoUrl} storeName={storeName} />
+        </header>
+        <div className="min-h-0 p-3">
+          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
         </div>
       </div>
     );
   }
   return (
-    <div className="grid h-full min-h-0 grid-cols-[0.9fr_1.1fr] grid-rows-[auto_minmax(0,1fr)] gap-2 p-2">
-      <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
-      <div className="row-span-2 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
-        <TotalsBlock displayState={displayState} />
-        <GuestOrMember displayState={displayState} />
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment={mode === "payment" ? "sunny-yellow" : undefined}>
+      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart">
+        <BrandRow compact logoUrl={logoUrl} storeName={storeName} />
+        <HeaderMeta displayState={displayState} />
+      </header>
+      <div className="min-h-0 overflow-hidden px-3">
+        <ItemsList displayState={displayState} />
       </div>
-      <ItemsList displayState={displayState} />
+      <TotalsBlock displayState={displayState} settings={settings} />
+    </div>
+  );
+}
+
+function PremiumDarkLayout({ displayState, logoUrl, mode, settings, slideIndex, storeName, theme }: LayoutProps) {
+  const locale = useDisplayLocale();
+  if (mode === "thank_you") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-thankyou="premium-dark">
+        <div className="px-4 py-4 text-center text-[clamp(1.8rem,4vw,3rem)] font-black" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+          {tCd("thankYou", locale)}
+        </div>
+        <div className="grid place-items-center bg-white p-6 text-center">
+          <StoreMark logoUrl={logoUrl} size={52} storeName={storeName} />
+          <div className="mt-3 text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
+          <ReturningNote seconds={settings.autoReturnSeconds} />
+        </div>
+      </div>
+    );
+  }
+  if (mode === "idle") {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" data-cd-idle="premium-dark">
+        <header className="flex items-center gap-2 px-3 py-2" data-cd-header="compact" style={{ backgroundColor: theme.primary, color: theme.totalText }}>
+          <StoreMark logoUrl={logoUrl} size={40} storeName={storeName} />
+          <div className="min-w-0 truncate text-[clamp(1.1rem,2.2vw,1.6rem)] font-black">{storeName}</div>
+        </header>
+        <div className="min-h-0 p-3">
+          <PromoPanel fill settings={settings} slideIndex={slideIndex} fallback={welcomeCopy(settings)} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]" data-cd-payment={mode === "payment" ? "premium-dark" : undefined}>
+      <header className="flex items-center justify-between px-3 py-2" data-cd-header="cart" style={{ backgroundColor: theme.accent, color: theme.totalText }}>
+        <div className="flex min-w-0 items-center gap-2">
+          <StoreMark logoUrl={logoUrl} size={36} storeName={storeName} />
+          <div className="truncate text-[clamp(1rem,2vw,1.35rem)] font-black">{storeName}</div>
+        </div>
+        <HeaderMeta displayState={displayState} light />
+      </header>
+      <div className="min-h-0 overflow-hidden bg-white p-3">
+        <ItemsList displayState={displayState} />
+      </div>
+      <TotalsBlock displayState={displayState} settings={settings} />
     </div>
   );
 }
@@ -491,7 +522,7 @@ function EmeraldDreamLayout({ displayState, logoUrl, mode, settings, slideIndex,
         <PromoPanel settings={settings} slideIndex={slideIndex} />
       </div>
       <ItemsList displayState={displayState} />
-      <TotalsBlock displayState={displayState} />
+      <TotalsBlock displayState={displayState} settings={settings} />
     </div>
   );
 }
@@ -528,7 +559,7 @@ function CoralMinimalLayout({ displayState, logoUrl, mode, settings, storeName, 
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_1.4fr] gap-2 px-3 pb-3">
         <GuestOrMember displayState={displayState} />
-        <TotalsBlock displayState={displayState} />
+        <TotalsBlock displayState={displayState} settings={settings} />
       </div>
     </div>
   );
@@ -575,7 +606,7 @@ function PremiumDarkGreenLayout({ displayState, logoUrl, mode, settings, storeNa
         {savings > 0 ? <MetricBox label="Savings" value={`${formatLak(savings)} LAK`} /> : null}
       </div>
       <div className="col-span-2">
-        <TotalsBlock displayState={displayState} />
+        <TotalsBlock displayState={displayState} settings={settings} />
       </div>
     </div>
   );
@@ -631,7 +662,7 @@ function MinimalRedLayout({ displayState, logoUrl, mode, settings, storeName }: 
       </div>
       <div className="grid grid-cols-[0.7fr_1.3fr] gap-2 p-3">
         <GuestOrMember displayState={displayState} />
-        <TotalsBlock displayState={displayState} />
+        <TotalsBlock displayState={displayState} settings={settings} />
       </div>
     </div>
   );
@@ -684,7 +715,7 @@ function MinimalPurpleLayout({ displayState, logoUrl, mode, settings, slideIndex
         <ItemsList displayState={displayState} />
         <PromoPanel settings={settings} slideIndex={slideIndex} />
       </div>
-      <TotalsBlock displayState={displayState} />
+      <TotalsBlock displayState={displayState} settings={settings} />
     </div>
   );
 }
@@ -734,13 +765,35 @@ function ServiceNote({ message }: { message: string }) {
   );
 }
 
-function PromoPanel({ large = false, settings, slideIndex }: { large?: boolean; settings: CustomerDisplaySettings; slideIndex: number }) {
+function PromoPanel({ fallback, fill = false, large = false, settings, slideIndex }: {
+  fallback?: string;
+  fill?: boolean;
+  large?: boolean;
+  settings: CustomerDisplaySettings;
+  slideIndex: number;
+}) {
   const theme = useTheme();
   const chrome = useChrome();
-  const slide = getActiveSlide(settings, slideIndex);
+  const mode = useDisplayMode();
+  const locale = useDisplayLocale();
+  const allowMedia = mode === "idle";
+  const showPromoInfo = customerDisplayShouldShowPromotionInfo(settings);
+  const slide = allowMedia
+    ? resolveCustomerDisplayIdleSlide(settings, slideIndex, DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages)
+    : showPromoInfo
+      ? { message: fallback || promoCopy(settings, 0), type: "message" as const }
+      : null;
+  if (!slide) {
+    return null;
+  }
   return (
-    <section className={cn("min-h-0", chromeClass(chrome.panel), large && "h-full")} data-cd-chrome={chrome.panel} style={{ borderColor: theme.border, backgroundColor: theme.soft }}>
-      <SlideContent slide={slide} />
+    <section
+      className={cn("min-h-0", chromeClass(chrome.panel), (large || fill) && "h-full")}
+      data-cd-chrome={chrome.panel}
+      data-cd-idle-media={allowMedia ? slide.type : "hidden"}
+      style={{ borderColor: theme.border, backgroundColor: theme.soft }}
+    >
+      <SlideContent fallbackLabel={tCd("welcome", locale)} slide={slide} />
     </section>
   );
 }
@@ -753,7 +806,7 @@ function ItemsList({ displayState }: { displayState: PosDisplayState }) {
     <section className={cn("flex h-full min-h-0 flex-col p-2", chromeClass(chrome.items))} data-cd-chrome={chrome.items} style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
       <div className="mb-1 flex items-center gap-2 font-black">
         <ReceiptText className="size-5" style={{ color: theme.primary }} />
-        Items
+        {tCd("items", locale)}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {displayState.items.map((item) => (
@@ -762,10 +815,12 @@ function ItemsList({ displayState }: { displayState: PosDisplayState }) {
               <CustomerDisplayProductImage item={item} label={localizedProductName(item, locale)} />
               <div className="min-w-0">
                 <div className="truncate text-[clamp(1rem,1.8vw,1.35rem)] font-bold">{localizedProductName(item, locale)}</div>
-                <div className="text-xs font-semibold" style={{ color: theme.secondaryText }}>{formatLak(item.priceLak)} LAK</div>
+                <div className="text-xs font-semibold" style={{ color: theme.secondaryText }}>
+                  {tCd("unitPrice", locale)} {formatLak(item.priceLak)} LAK
+                </div>
               </div>
             </div>
-            <div className="text-[clamp(1.1rem,2vw,1.5rem)] font-black">x{item.quantity}</div>
+            <div className="text-[clamp(1.1rem,2vw,1.5rem)] font-black">{tCd("qty", locale)} {item.quantity}</div>
             <div className="text-right text-[clamp(1.1rem,2vw,1.5rem)] font-black">{formatLak(item.priceLak * item.quantity)}</div>
           </div>
         ))}
@@ -810,70 +865,107 @@ function meaningfulAmount(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) && value !== 0;
 }
 
-function TotalsBlock({ displayState }: { displayState: PosDisplayState }) {
+function TotalsBlock({ displayState, settings = DEFAULT_CUSTOMER_DISPLAY_SETTINGS }: {
+  displayState: PosDisplayState;
+  settings?: CustomerDisplaySettings;
+}) {
   const theme = useTheme();
   const chrome = useChrome();
+  const locale = useDisplayLocale();
   const member = Boolean(displayState.customer);
   const subtotal = displayState.subtotalLak ?? displayState.items.reduce((total, item) => total + item.priceLak * item.quantity, 0);
   const promotion = displayState.promotionDiscountLak ?? 0;
   const memberDiscount = displayState.membershipDiscountLak ?? 0;
-  const pointsEarned = displayState.pointsEarned ?? 0;
+  const manual = displayState.manualDiscountLak ?? 0;
+  const redeem = displayState.loyaltyRedeemLak ?? 0;
+  const showDiscount = customerDisplayShouldShowDiscountRows(settings);
+  const showPromoInfo = customerDisplayShouldShowPromotionInfo(settings);
+  const showSubtotal = customerDisplayShouldShowSubtotal(settings, displayState);
   return (
-    <section className={cn("p-2", chromeClass(chrome.totals))} data-cd-chrome={chrome.totals} style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
+    <section className={cn("p-2", chromeClass(chrome.totals))} data-cd-chrome={chrome.totals} data-cd-discount={showDiscount ? "on" : "off"} style={{ borderColor: theme.border, backgroundColor: theme.surface }}>
       <div className="grid gap-0.5 text-[clamp(0.85rem,1.4vw,1.05rem)] font-semibold" style={{ color: theme.secondaryText }}>
-        <div className="flex justify-between"><span>Subtotal</span><span>{formatLak(subtotal)} LAK</span></div>
-        {meaningfulAmount(promotion) ? <div className="flex justify-between" data-cd-total-row="promotion"><span>Promotion</span><span>-{formatLak(promotion)} LAK</span></div> : null}
-        {member && meaningfulAmount(memberDiscount) ? <div className="flex justify-between" data-cd-total-row="member"><span>Member</span><span>-{formatLak(memberDiscount)} LAK</span></div> : null}
-        {member && meaningfulAmount(pointsEarned) ? <div className="flex justify-between" data-cd-total-row="points"><span>Points</span><span>+{pointsEarned}</span></div> : null}
+        {showSubtotal ? <div className="flex justify-between" data-cd-total-row="subtotal"><span>{tCd("subtotal", locale)}</span><span>{formatLak(subtotal)} LAK</span></div> : null}
+        {showDiscount && showPromoInfo && meaningfulAmount(promotion) ? <div className="flex justify-between" data-cd-total-row="promotion"><span>{tCd("discount", locale)}</span><span>-{formatLak(promotion)} LAK</span></div> : null}
+        {showDiscount && member && meaningfulAmount(memberDiscount) ? <div className="flex justify-between" data-cd-total-row="member"><span>{tCd("discount", locale)}</span><span>-{formatLak(memberDiscount)} LAK</span></div> : null}
+        {showDiscount && meaningfulAmount(manual) ? <div className="flex justify-between" data-cd-total-row="manual"><span>{tCd("discount", locale)}</span><span>-{formatLak(manual)} LAK</span></div> : null}
+        {showDiscount && meaningfulAmount(redeem) ? <div className="flex justify-between" data-cd-total-row="redeem"><span>{tCd("discount", locale)}</span><span>-{formatLak(redeem)} LAK</span></div> : null}
+        {showPromoInfo ? <AppliedPromotionNote displayState={displayState} /> : null}
       </div>
       <div className={cn("mt-2 px-3 py-2", chrome.totals === "outlined" ? "border-2" : chrome.totals === "full-width" ? "" : "rounded-xl")} style={{ backgroundColor: theme.totalBackground, color: theme.totalText, borderColor: theme.border }}>
-        <div className="text-xs font-black uppercase tracking-wide">Grand Total</div>
+        <div className="text-xs font-black uppercase tracking-wide">{tCd("grandTotal", locale)}</div>
         <div className="text-[clamp(2.1rem,6vw,4.2rem)] font-black leading-none">{formatLak(displayState.totalLak)} LAK</div>
       </div>
     </section>
   );
 }
 
-function GuestOrMember({ displayState, light = false }: { displayState: PosDisplayState; light?: boolean }) {
-  const theme = useTheme();
-  const chrome = useChrome();
-  const member = displayState.customer;
-  if (!member) {
-    return (
-      <div
-        className="inline-flex h-fit items-center gap-1 px-2 py-1 text-xs font-black uppercase tracking-wide"
-        data-cd-guest="minimal"
-        style={{ color: light ? "inherit" : theme.secondaryText }}
-      >
-        <Store className="size-3.5" />
-        Guest
-      </div>
-    );
-  }
-  const pointsEarned = displayState.pointsEarned ?? 0;
-  const memberDiscount = displayState.membershipDiscountLak ?? 0;
-  const savings = memberDiscount + (displayState.promotionDiscountLak ?? 0);
-  const status = [member.membershipType, displayState.membershipStatus].filter((value, index, all) => value && all.indexOf(value) === index).join(" · ");
+function AppliedPromotionNote({ displayState }: { displayState: PosDisplayState }) {
+  const label = displayState.appliedPromotions.find((entry) => entry.trim())?.trim();
+  if (!label) return null;
   return (
-    <section
-      className={cn("p-2", chromeClass(chrome.member))}
-      data-cd-member="detail"
-      style={{ borderColor: theme.border, backgroundColor: light ? "transparent" : theme.soft, color: light ? "inherit" : theme.text }}
+    <div className="truncate text-xs" data-cd-promo-info="text">
+      {label}
+    </div>
+  );
+}
+
+function GuestOrMember({ displayState, light = false }: { displayState: PosDisplayState; light?: boolean }) {
+  return <MemberName displayState={displayState} light={light} />;
+}
+
+function HeaderMeta({ displayState, light = false }: { displayState: PosDisplayState; light?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <PaymentBadge />
+      <MemberName displayState={displayState} light={light} />
+    </div>
+  );
+}
+
+function PaymentBadge() {
+  const locale = useDisplayLocale();
+  const mode = useDisplayMode();
+  const theme = useTheme();
+  if (mode !== "payment") {
+    return null;
+  }
+  return (
+    <div
+      className="inline-flex h-fit items-center rounded-full px-2 py-1 text-sm font-black"
+      data-cd-payment-badge="on"
+      style={{ backgroundColor: theme.totalBackground, color: theme.totalText }}
     >
-      <div className="flex items-center gap-2 font-black">
-        <Trophy className="size-5" />
-        <span data-cd-member-field="name">{member.name}</span>
-      </div>
-      <div className="mt-1 grid grid-cols-2 gap-1 text-sm font-semibold">
-        {status ? <span data-cd-member-field="status">{status}</span> : null}
-        {meaningfulAmount(displayState.membershipPoints) || displayState.membershipPoints === 0 ? (
-          <span data-cd-member-field="points">Points {displayState.membershipPoints}</span>
-        ) : null}
-        {meaningfulAmount(pointsEarned) ? <span data-cd-member-field="earned">+{pointsEarned} now</span> : null}
-        {meaningfulAmount(memberDiscount) ? <span data-cd-member-field="discount">Member {formatLak(memberDiscount)}</span> : null}
-        {meaningfulAmount(savings) ? <span data-cd-member-field="savings">Save {formatLak(savings)}</span> : null}
-      </div>
-    </section>
+      {tCd("payment", locale)}
+    </div>
+  );
+}
+
+function MemberName({ displayState, light = false }: { displayState: PosDisplayState; light?: boolean }) {
+  const theme = useTheme();
+  const locale = useDisplayLocale();
+  const name = customerDisplayMemberName(displayState);
+  if (!name) {
+    return null;
+  }
+  return (
+    <div
+      className="inline-flex h-fit items-center gap-1 rounded-full px-2 py-1 text-sm font-black"
+      data-cd-member="name"
+      data-cd-member-field="name"
+      style={{ color: light ? "inherit" : theme.text, backgroundColor: light ? "transparent" : theme.soft }}
+    >
+      <Trophy className="size-4" />
+      {tCd("member", locale)}: {name}
+    </div>
+  );
+}
+
+function ReturningNote({ seconds }: { seconds: number }) {
+  const locale = useDisplayLocale();
+  return (
+    <p className="mt-3 text-sm font-semibold" data-cd-return="timer">
+      {fillCustomerDisplayCopy(tCd("returningIn", locale), { seconds })}
+    </p>
   );
 }
 
@@ -940,11 +1032,12 @@ function QrOverlay({ amountLak, bank, styleId }: {
   bank: NonNullable<PosDisplayState["selectedQrBank"]>;
   styleId: CustomerDisplaySettings["qrDisplayStyle"];
 }) {
+  const locale = useDisplayLocale();
   const tokens = customerDisplayQrStyleTokens(styleId);
   return (
     <div className="absolute inset-0 z-20 grid place-items-center p-3" style={{ backgroundColor: tokens.background, color: tokens.text }}>
       <div className="grid w-full max-w-xl gap-3 rounded-3xl border-4 p-4 text-center" style={{ borderColor: tokens.border, backgroundColor: tokens.panel }}>
-        <div className="text-sm font-black uppercase" style={{ color: tokens.primary }}>Scan to Pay</div>
+        <div className="text-sm font-black uppercase" style={{ color: tokens.primary }}>{tCd("scanToPay", locale)}</div>
         <div className="text-[clamp(1.4rem,3vw,2rem)] font-black">{bank.displayLabel || bank.bankName}</div>
         {bank.qrImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -965,7 +1058,7 @@ function QrOverlay({ amountLak, bank, styleId }: {
 
 type CustomerDisplaySlide = CustomerDisplayMedia | { message: string; type: "message" };
 
-function SlideContent({ slide }: { slide: CustomerDisplaySlide }) {
+function SlideContent({ fallbackLabel, slide }: { fallbackLabel?: string; slide: CustomerDisplaySlide }) {
   const theme = useTheme();
   if (slide.type === "video") {
     return <video autoPlay className="h-full min-h-0 w-full object-cover" loop muted playsInline src={slide.url} />;
@@ -974,9 +1067,11 @@ function SlideContent({ slide }: { slide: CustomerDisplaySlide }) {
     return <img alt={slide.name} className="h-full min-h-0 w-full object-cover" src={slide.url} />;
   }
   return (
-    <div className="flex h-full min-h-0 flex-col justify-start p-3">
+    <div className="flex h-full min-h-0 flex-col justify-start p-3" data-cd-welcome="start">
       <Gift className="size-7" style={{ color: theme.primary }} />
-      <div className="mt-2 text-[clamp(1.1rem,2.2vw,1.7rem)] font-black leading-tight">{slide.type === "message" ? slide.message : ""}</div>
+      <div className="mt-2 text-[clamp(1.1rem,2.2vw,1.7rem)] font-black leading-tight">
+        {slide.type === "message" ? slide.message || fallbackLabel : fallbackLabel}
+      </div>
     </div>
   );
 }

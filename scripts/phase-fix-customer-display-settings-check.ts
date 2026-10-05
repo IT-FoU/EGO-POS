@@ -37,6 +37,8 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const root = process.cwd();
 const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const settingsQr = readFileSync(join(root, "features/settings/components/qr-payment-bank-management-section.tsx"), "utf8");
+const settingsSurface = `${settingsForm}\n${settingsQr}`;
 const actions = readFileSync(join(root, "features/qr-payments/actions.ts"), "utf8");
 const qrToggle = readFileSync(join(root, "components/layout/customer-display-qr-toggle.tsx"), "utf8");
 const repo = readFileSync(join(root, "features/qr-payments/prisma-repository.ts"), "utf8");
@@ -71,9 +73,9 @@ check("reset this page restores the visible customer display section", () => {
 });
 
 check("add bank and add QR account keep existing actions", () => {
-  assert(settingsForm.includes("saveQrPaymentBankAction") && settingsForm.includes("Add Bank"), "add bank missing");
-  assert(settingsForm.includes("saveQrPaymentAccountAction") && settingsForm.includes("Add QR Account"), "add QR missing");
-  assert(settingsForm.includes("applyQrLists") && settingsForm.includes("publishCustomerDisplayQrCatalog"), "list must update immediately");
+  assert(settingsSurface.includes("saveQrPaymentBankAction") && settingsSurface.includes("Add Bank"), "add bank missing");
+  assert(settingsSurface.includes("saveQrPaymentAccountAction") && settingsSurface.includes("Add QR Account"), "add QR missing");
+  assert(settingsSurface.includes("applyQrLists") && settingsSurface.includes("publishCustomerDisplayQrCatalog"), "list must update immediately");
   assert(actions.includes("saveQrPaymentBankAction") && actions.includes("saveQrPaymentAccountAction"), "server actions missing");
   assert(repo.includes("auditPayloadWithoutImages"), "do not store raw images in audit payload");
 });
@@ -82,8 +84,8 @@ check("QR image workflow and delete stay account-scoped", () => {
   const selected = selectStagedImage(emptyStagedImage(), "data:image/png;base64,qr");
   assert(isStagedImageDirty(selected), "QR choose is preview only");
   assert(confirmStagedImage(selected).saved?.includes("data:image/png"), "confirm QR keeps the staged image");
-  assert(settingsForm.includes("ui.confirm.qr") && settingsForm.includes("ui.replace.qr") && settingsForm.includes("ui.remove.qr"), "QR image actions missing");
-  assert(settingsForm.includes("deleteQrPaymentAccountAction") && settingsForm.includes("accountToDelete"), "delete QR account missing");
+  assert(settingsSurface.includes("ui.confirm.qr") && settingsSurface.includes("ui.replace.qr") && settingsSurface.includes("ui.remove.qr"), "QR image actions missing");
+  assert(settingsSurface.includes("deleteQrPaymentAccountAction") && settingsSurface.includes("accountToDelete"), "delete QR account missing");
   assert(repo.includes("Cannot delete a bank that still has QR accounts"), "bank delete must stay safe");
   const catalog = buildCustomerDisplayQrCatalog(
     [

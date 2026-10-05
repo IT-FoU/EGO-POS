@@ -223,8 +223,10 @@ export type PosPromotion = {
 export type PosDisplayState = {
   appliedPromotions: string[];
   customer?: PosCustomer | null;
-  displayMode?: "advertising" | "checkout" | "thank_you";
+  displayMode?: "advertising" | "checkout" | "payment" | "thank_you";
   items: PosCartItem[];
+  loyaltyRedeemLak?: number;
+  manualDiscountLak?: number;
   membershipDiscountLak?: number;
   membershipPoints: number;
   membershipStatus: string;

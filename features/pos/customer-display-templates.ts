@@ -34,11 +34,11 @@ export const CUSTOMER_DISPLAY_TEMPLATE_OPTIONS: Array<{
   name: string;
   sections: string;
 }> = [
-  { id: "ocean-blue", name: "Ocean Blue", labelKey: "ui.ocean.blue", sections: "4", description: "Clean left/right checkout with a separate total and service message." },
-  { id: "bold-green", name: "Bold Green", labelKey: "ui.bold.green", sections: "3-4", description: "High-contrast retail blocks with a dominant total band." },
-  { id: "sky-blue", name: "Sky Blue", labelKey: "ui.sky.blue", sections: "4-5", description: "Stacked summaries with side metric boxes." },
-  { id: "sunny-yellow", name: "Sunny Yellow", labelKey: "ui.sunny.yellow", sections: "3-4", description: "Promo banner plus items and a strong total strip." },
-  { id: "premium-dark", name: "Premium Dark", labelKey: "ui.premium.dark", sections: "3", description: "Asymmetric dark cards with cyan/teal accents." },
+  { id: "ocean-blue", name: "Green Lime", labelKey: "ui.ocean.blue", sections: "1", description: "Deep green retail panel with lime totals and a strong product list." },
+  { id: "bold-green", name: "Orange Navy", labelKey: "ui.bold.green", sections: "3", description: "Navy foundation, orange accent, top status banner and bottom split." },
+  { id: "sky-blue", name: "Blue Yellow", labelKey: "ui.sky.blue", sections: "2", description: "Friendly two-column Mini Mart layout with yellow totals." },
+  { id: "sunny-yellow", name: "Violet Lime", labelKey: "ui.sunny.yellow", sections: "3-4", description: "Black, violet, and lime premium contrast with a clear payable total." },
+  { id: "premium-dark", name: "Red Orange", labelKey: "ui.premium.dark", sections: "3", description: "Bright red/orange retail banner with a clean transaction area." },
   { id: "emerald-dream", name: "Emerald Dream", labelKey: "ui.emerald.dream", sections: "4-5", description: "Card grid with stronger member emphasis." },
   { id: "coral-minimal", name: "Coral Minimal", labelKey: "ui.coral.minimal", sections: "3-4", description: "Light stacked composition with warm coral accents." },
   { id: "premium-dark-green", name: "Premium Dark Green", labelKey: "ui.premium.dark.green", sections: "4-5", description: "Dark layout with a bright green grand-total focus." },
@@ -65,20 +65,20 @@ export type CustomerDisplayThemeTokens = {
 export type CustomerDisplayChrome = {
   items: "flat" | "outlined" | "square" | "thin";
   member: "card" | "flat" | "outlined" | "square";
-  panel: "banner" | "card" | "flat" | "rail" | "thin";
+  panel: "banner" | "card" | "flat" | "rail" | "square" | "thin";
   totals: "banner" | "card" | "full-width" | "outlined";
 };
 
 export function customerDisplayTemplateChrome(template: CustomerDisplayTemplate): CustomerDisplayChrome {
   switch (template) {
     case "bold-green":
-      return { items: "flat", member: "flat", panel: "banner", totals: "full-width" };
+      return { items: "square", member: "flat", panel: "banner", totals: "full-width" };
     case "sky-blue":
-      return { items: "thin", member: "card", panel: "card", totals: "card" };
+      return { items: "thin", member: "flat", panel: "card", totals: "card" };
     case "sunny-yellow":
-      return { items: "flat", member: "square", panel: "banner", totals: "banner" };
+      return { items: "square", member: "flat", panel: "square", totals: "banner" };
     case "premium-dark":
-      return { items: "square", member: "card", panel: "rail", totals: "outlined" };
+      return { items: "square", member: "flat", panel: "banner", totals: "full-width" };
     case "emerald-dream":
       return { items: "thin", member: "card", panel: "rail", totals: "card" };
     case "coral-minimal":
@@ -116,67 +116,67 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
   switch (template) {
     case "bold-green":
       return {
-        accent: "#166534",
-        background: "#F0FDF4",
-        badgeBackground: "#166534",
+        accent: "#FF5F00",
+        background: "#003A70",
+        badgeBackground: "#FF5F00",
         badgeText: WHITE,
-        border: "#15803D",
-        muted: "#14532D",
-        primary: "#15803D",
-        secondaryText: "#14532D",
-        soft: "#BBF7D0",
+        border: "#FF5F00",
+        muted: "#D6E4F0",
+        primary: "#FF5F00",
+        secondaryText: "#7EA6C9",
+        soft: "#0A4A80",
         surface: WHITE,
         text: DARK_TEXT,
-        totalBackground: "#15803D",
+        totalBackground: "#FF5F00",
         totalText: WHITE,
       };
     case "sky-blue":
       return {
-        accent: "#075985",
-        background: "#E0F2FE",
-        badgeBackground: "#0369A1",
-        badgeText: WHITE,
-        border: "#0369A1",
-        muted: "#0C4A6E",
-        primary: "#0369A1",
-        secondaryText: "#0C4A6E",
-        soft: "#BAE6FD",
+        accent: "#FFCB05",
+        background: "#003A70",
+        badgeBackground: "#FFCB05",
+        badgeText: "#003A70",
+        border: "#3D7DCA",
+        muted: "#D6E6F7",
+        primary: "#3D7DCA",
+        secondaryText: "#003A70",
+        soft: "#E8F1FB",
         surface: WHITE,
         text: DARK_TEXT,
-        totalBackground: "#0369A1",
-        totalText: WHITE,
+        totalBackground: "#FFCB05",
+        totalText: "#003A70",
       };
     case "sunny-yellow":
       return {
-        accent: "#854D0E",
-        background: "#FEF9C3",
-        badgeBackground: "#FACC15",
-        badgeText: DARK_TEXT,
-        border: "#A16207",
-        muted: "#422006",
-        primary: "#CA8A04",
-        secondaryText: "#422006",
-        soft: "#FDE047",
-        surface: WHITE,
-        text: DARK_TEXT,
-        totalBackground: "#EAB308",
-        totalText: DARK_TEXT,
+        accent: "#C6FF34",
+        background: "#000000",
+        badgeBackground: "#C6FF34",
+        badgeText: "#000000",
+        border: "#7F3AED",
+        muted: "#E9D8FD",
+        primary: "#7F3AED",
+        secondaryText: "#C6FF34",
+        soft: "#1A1028",
+        surface: "#7F3AED",
+        text: WHITE,
+        totalBackground: "#C6FF34",
+        totalText: "#000000",
       };
     case "premium-dark":
       return {
-        accent: "#22D3EE",
-        background: "#020617",
-        badgeBackground: "#164E63",
-        badgeText: "#ECFEFF",
-        border: "#22D3EE",
-        muted: "#F8FAFC",
-        primary: "#22D3EE",
-        secondaryText: "#67E8F9",
-        soft: "#083344",
-        surface: "#0B1224",
-        text: "#F8FAFC",
-        totalBackground: "#22D3EE",
-        totalText: "#082F49",
+        accent: "#FF5F00",
+        background: "#FFF4EC",
+        badgeBackground: "#EB001B",
+        badgeText: WHITE,
+        border: "#FF5F00",
+        muted: "#7A1D12",
+        primary: "#EB001B",
+        secondaryText: "#9A3412",
+        soft: "#FFE4CC",
+        surface: WHITE,
+        text: DARK_TEXT,
+        totalBackground: "#EB001B",
+        totalText: WHITE,
       };
     case "emerald-dream":
       return {
@@ -261,19 +261,19 @@ export function customerDisplayTemplateTokens(template: CustomerDisplayTemplate)
     case "ocean-blue":
     default:
       return {
-        accent: "#082F49",
-        background: WHITE,
-        badgeBackground: "#075985",
-        badgeText: WHITE,
-        border: "#0C4A6E",
-        muted: "#0F172A",
-        primary: "#075985",
-        secondaryText: "#082F49",
-        soft: "#E0F2FE",
-        surface: "#F8FAFC",
+        accent: "#C6FF34",
+        background: "#13670B",
+        badgeBackground: "#C6FF34",
+        badgeText: "#111111",
+        border: "#0E4F08",
+        muted: "#D7F5C8",
+        primary: "#C6FF34",
+        secondaryText: "#0B3D08",
+        soft: "#E8F8D8",
+        surface: WHITE,
         text: DARK_TEXT,
-        totalBackground: "#0C4A6E",
-        totalText: WHITE,
+        totalBackground: "#C6FF34",
+        totalText: "#111111",
       };
   }
 }

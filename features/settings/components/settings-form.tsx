@@ -181,6 +181,9 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
     function updateDisplayQrStyle(qrDisplayStyle: CustomerDisplayQrStyle) {
         persistCustomerDisplaySettings({ ...displaySettings, qrDisplayStyle });
     }
+    function updateDisplayVisibility(key: "showDiscountDetails" | "showPromotionInformation", value: boolean) {
+        persistCustomerDisplaySettings({ ...displaySettings, [key]: value });
+    }
     function resetAppearancePage() {
         setSettingsConfirm("resetThisPage");
     }
@@ -782,6 +785,20 @@ export function SettingsForm({ actorIsOwner = false, actorUserId, canEdit = true
                   </div>
                 </button>))}
             </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Toggle
+              checked={displaySettings.showDiscountDetails !== false}
+              label={tSettings("showDiscountDetails", locale)}
+              onChange={(value) => updateDisplayVisibility("showDiscountDetails", value)}
+            />
+            <Toggle
+              checked={displaySettings.showPromotionInformation !== false}
+              label={tSettings("showPromotionInformation", locale)}
+              onChange={(value) => updateDisplayVisibility("showPromotionInformation", value)}
+            />
+            <p className="text-xs leading-5 text-muted-foreground md:col-span-2">{tSettings("showDiscountDetailsHelp", locale)}</p>
+            <p className="text-xs leading-5 text-muted-foreground md:col-span-2">{tSettings("showPromotionInformationHelp", locale)}</p>
           </div>
           <div>
             <div className="text-sm font-semibold">{tSettings("qr", locale)}</div>

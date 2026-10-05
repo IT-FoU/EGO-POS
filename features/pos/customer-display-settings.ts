@@ -29,6 +29,8 @@ export type CustomerDisplaySettings = {
   media: CustomerDisplayMedia[];
   promotionMessages: string[];
   qrDisplayStyle: CustomerDisplayQrStyle;
+  showDiscountDetails: boolean;
+  showPromotionInformation: boolean;
   template: CustomerDisplayTemplate;
 };
 
@@ -44,6 +46,8 @@ export const DEFAULT_CUSTOMER_DISPLAY_SETTINGS: CustomerDisplaySettings = {
     "Thank you for shopping with us",
   ],
   qrDisplayStyle: DEFAULT_CUSTOMER_DISPLAY_QR_STYLE,
+  showDiscountDetails: true,
+  showPromotionInformation: true,
   template: DEFAULT_CUSTOMER_DISPLAY_TEMPLATE,
 };
 
@@ -73,6 +77,8 @@ export function normalizeCustomerDisplaySettings(
       normalizeCustomerDisplayPromotionMessages(source.promotionMessages)
       ?? DEFAULT_CUSTOMER_DISPLAY_SETTINGS.promotionMessages,
     qrDisplayStyle: parseCustomerDisplayQrStyle(source.qrDisplayStyle),
+    showDiscountDetails: source.showDiscountDetails !== false,
+    showPromotionInformation: source.showPromotionInformation !== false,
     template: parseCustomerDisplayTemplate(source.template ?? source.theme),
   };
 }

@@ -343,6 +343,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [pendingApprovals, setPendingApprovals] = useState<PosPendingApprovalRequest[]>([]);
     const [auditEntries, setAuditEntries] = useState<PosAuditEntry[]>([]);
     const [customerDisplayMode, setCustomerDisplayMode] = useState<PosDisplayState["displayMode"]>("advertising");
+    const [customerPaymentOpen, setCustomerPaymentOpen] = useState(false);
     const [customerQrVisible, setCustomerQrVisible] = useState(false);
     const [thankYouSnapshot, setThankYouSnapshot] = useState<PosDisplayState | null>(null);
     const [availableQrBanks, setAvailableQrBanks] = useState(qrBanks);
@@ -828,8 +829,10 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         const state: PosDisplayState = {
             appliedPromotions,
             customer: selectedCustomer,
-            displayMode: cartItems.length > 0 ? "checkout" : "advertising",
+            displayMode: cartItems.length > 0 ? (customerPaymentOpen ? "payment" : "checkout") : "advertising",
             items: cartItems,
+            loyaltyRedeemLak: loyaltyRedeemDiscount,
+            manualDiscountLak: manualDiscountTotal,
             membershipDiscountLak: membershipSavings,
             membershipPoints: selectedCustomer?.pointsBalance ?? 0,
             membershipStatus: selectedCustomer
@@ -845,7 +848,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             totalLak: totalAmount,
         };
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
-    }, [appliedPromotions, cartItems, customerDisplayMode, customerQrVisible, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.businessLogoUrl, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
+    }, [appliedPromotions, cartItems, customerDisplayMode, customerPaymentOpen, customerQrVisible, loyaltyRedeemDiscount, manualDiscountTotal, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.businessLogoUrl, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
     function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
         const saleUnit = selectedUnit ?? resolvePosSaleUnits(product)[0];
         const unitProduct = saleUnit ? productWithSaleUnit(product, saleUnit) : product;
@@ -863,6 +866,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         cartItemsRef.current = planned.result.cart;
         setCartItems(planned.result.cart);
         setThankYouSnapshot(null);
+        setCustomerPaymentOpen(false);
         setCustomerDisplayMode("checkout");
         setUnitSelectionProduct(null);
         setMessage(stockWarning ? `${stockWarningLabel(stockWarning.tone)}: ${localizedProductName(product)}` : fillPosCopy(t("ui.added.to.cart"), { name: `${localizedProductName(product)} ${saleUnit?.unitName ?? ""}`.trim() }));
@@ -1671,6 +1675,8 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             customer: selectedCustomer,
             displayMode: "thank_you",
             items: cartItems,
+            loyaltyRedeemLak: loyaltyRedeemDiscount,
+            manualDiscountLak: manualDiscountTotal,
             membershipDiscountLak: membershipSavings,
             membershipPoints: selectedCustomer?.pointsBalance ?? 0,
             membershipStatus: selectedCustomer
@@ -1698,6 +1704,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setCardAmount(0);
         setPaymentMode("cash");
         hideCustomerQrOverlay();
+        setCustomerPaymentOpen(false);
         if (!options?.keepThankYou) {
             setThankYouSnapshot(null);
             setCustomerDisplayMode("advertising");
@@ -1874,6 +1881,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             return;
         }
         setPaymentMode(nextMode);
+        setCustomerPaymentOpen(true);
         if (nextMode !== "qr" && nextMode !== "transfer" && nextMode !== "mixed") {
             hideCustomerQrOverlay();
         }
@@ -1895,6 +1903,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setQrAmount(next.qrAmount);
         setTransferAmount(next.transferAmount);
         setCardAmount(next.cardAmount);
+        setCustomerPaymentOpen(true);
     }
     function openMixedPayment() {
         if (!enforcePosAction("split_payment")) {
