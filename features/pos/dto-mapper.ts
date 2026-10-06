@@ -78,6 +78,11 @@ export function mapPrismaPosProduct(product: Row, warehouseId?: string): PosProd
 
   return {
     barcode: product.barcode ?? "",
+    createdAt: product.createdAt instanceof Date
+      ? product.createdAt.toISOString()
+      : typeof product.createdAt === "string"
+        ? product.createdAt
+        : undefined,
     categoryId: product.categoryId ?? product.category?.id ?? undefined,
     categoryName: product.category?.nameEn ?? product.category?.nameLo ?? "",
     id: product.id,

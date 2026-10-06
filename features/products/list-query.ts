@@ -1,5 +1,11 @@
 import type { Product, ProductStatus } from "@/features/products/types";
 import { mapPrismaProduct } from "@/features/products/dto-mapper";
+import {
+  parseProductSortMode,
+  productListOrderBy,
+  type ProductSortLocale,
+  type ProductSortMode,
+} from "@/features/products/product-sort";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
 import type { TenantContext } from "@/lib/db/write-context";
 
@@ -19,9 +25,11 @@ export type ProductListQuery = {
   brandId?: string;
   categoryId?: string;
   insight?: ProductInsightFilter;
+  nameLocale?: ProductSortLocale;
   page?: number;
   pageSize?: number;
   search?: string;
+  sort?: ProductSortMode;
   status?: ProductStatus | "all";
   supplierId?: string;
 };
@@ -224,7 +232,7 @@ export async function getPrismaProductListPage(
       ? Promise.resolve([])
       : client.product.findMany({
           include: productListInclude,
-          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          orderBy: productListOrderBy(parseProductSortMode(query.sort), query.nameLocale === "lo" ? "lo" : "en"),
           skip,
           take: query.pageSize,
           where: listWhere,

@@ -64,6 +64,7 @@ export type Product = {
   sellingPriceLak: number;
   minStock: number;
   status: ProductStatus;
+  createdAt?: string;
   units: ProductUnit[];
   priceHistory?: Array<{
     changeType: string;

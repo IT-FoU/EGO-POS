@@ -22,6 +22,8 @@ import { StatusBadge } from "@/features/products/components/status-badge";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { formatLak } from "@/features/products/format";
 import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
+import { readProductListPageSize, readProductListSort, writeProductListPageSize, writeProductListSort } from "@/features/products/list-preferences";
+import { DEFAULT_PRODUCT_SORT_MODE, PRODUCT_SORT_MODES, sortProductRecords, type ProductSortMode } from "@/features/products/product-sort";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import type { Supplier } from "@/features/suppliers/types";
 import { cn } from "@/lib/utils";
@@ -95,6 +97,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             ? ((initialListPage?.pageSize ?? 100) as (typeof pageSizeOptions)[number])
             : 100,
     );
+    const [sortMode, setSortMode] = useState<ProductSortMode>(DEFAULT_PRODUCT_SORT_MODE);
     const [page, setPage] = useState(initialListPage?.page ?? 1);
     const [activeModal, setActiveModal] = useState<ProductsModal>(null);
     const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -116,7 +119,39 @@ export function ProductListClient({ access, products: initialProducts, brands: i
     useEffect(() => {
         setSuppliers(initialSuppliers);
     }, [initialSuppliers]);
+    const actionMenuRef = useRef<HTMLDivElement>(null);
+    const actionMenuButtonRef = useRef<HTMLButtonElement>(null);
     const skipServerFetch = useRef(true);
+    useEffect(() => {
+        const storedPageSize = readProductListPageSize();
+        const storedSort = readProductListSort();
+        setPageSize(storedPageSize);
+        setSortMode(storedSort);
+    }, []);
+    useEffect(() => {
+        if (!actionMenuOpen) return;
+        const firstItem = actionMenuRef.current?.querySelector<HTMLElement>("[role='menuitem']");
+        firstItem?.focus();
+        function onPointerDown(event: PointerEvent) {
+            const target = event.target;
+            if (!(target instanceof Node) || actionMenuRef.current?.contains(target)) return;
+            setActionMenuOpen(false);
+        }
+        function onKeyDown(event: KeyboardEvent) {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            setActionMenuOpen(false);
+            actionMenuButtonRef.current?.focus();
+        }
+        document.addEventListener("pointerdown", onPointerDown);
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown);
+            document.removeEventListener("keydown", onKeyDown);
+        };
+    }, [actionMenuOpen]);
+    const nameLocale = locale === "lo" ? "lo" : "en";
+    const sortLocale = sortMode === "name_asc" || sortMode === "name_desc" ? nameLocale : "en";
     useEffect(() => {
         if (!initialListPage) return;
         if (skipServerFetch.current) {
@@ -129,9 +164,11 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                     brandId,
                     categoryId,
                     insight: insightFilter,
+                    nameLocale: sortLocale,
                     page,
                     pageSize,
                     search: query,
+                    sort: sortMode,
                     status,
                     supplierId,
                 });
@@ -142,7 +179,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             });
         }, 250);
         return () => window.clearTimeout(handle);
-    }, [brandId, categoryId, initialListPage, insightFilter, page, pageSize, query, status, supplierId]);
+    }, [brandId, categoryId, initialListPage, insightFilter, page, pageSize, query, sortLocale, sortMode, status, supplierId]);
     const productInsights = useMemo(() => listPage?.summary ?? getProductInsights(products), [listPage, products]);
     const insightProducts = useMemo(() => getInsightProducts(products), [products]);
     const productShellStats = useMemo(() => {
@@ -195,7 +232,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             return matchesQuery && matchesCategory && matchesBrand && matchesSupplier && matchesStatus && matchesInsight;
         });
     }, [brandId, categoryId, insightFilter, products, query, status, supplierId]);
-    const filteredProducts = listPage ? products : clientFilteredProducts;
+    const filteredProducts = listPage ? products : sortProductRecords(clientFilteredProducts, sortMode, nameLocale);
     const totalCount = listPage?.totalCount ?? filteredProducts.length;
     const totalPages = listPage?.totalPages ?? Math.max(1, Math.ceil(filteredProducts.length / pageSize));
     const safePage = Math.min(page, totalPages);
@@ -266,8 +303,17 @@ export function ProductListClient({ access, products: initialProducts, brands: i
         });
     }
     function updatePageSize(nextPageSize: number) {
-        setPageSize(nextPageSize as (typeof pageSizeOptions)[number]);
+        const size = pageSizeOptions.includes(nextPageSize as (typeof pageSizeOptions)[number])
+            ? (nextPageSize as (typeof pageSizeOptions)[number])
+            : 100;
+        setPageSize(size);
         setPage(1);
+        writeProductListPageSize(size);
+    }
+    function updateSortMode(nextSort: ProductSortMode) {
+        setSortMode(nextSort);
+        setPage(1);
+        writeProductListSort(nextSort);
     }
     function openImagePreview(product: Product) {
         setPreviewProduct(product);
@@ -324,6 +370,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             </select>
           </div>
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={insightFilter} onChange={(event) => applyInsightFilter(event.target.value as InsightFilter)} aria-label={t("insightFilter")}>
               <option value="all">{t("allProductHealth")}</option>
               <option value="out_of_stock">{t("outOfStock")}</option>
@@ -333,6 +380,14 @@ export function ProductListClient({ access, products: initialProducts, brands: i
               <option value="missing_barcode">{t("missingBarcode")}</option>
               <option value="no_image">{t("noImage")}</option>
             </select>
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" data-testid="products-sort" value={sortMode} onChange={(event) => updateSortMode(event.target.value as ProductSortMode)} aria-label={t("sortBy")}>
+              {PRODUCT_SORT_MODES.map((mode) => (
+                <option value={mode} key={mode}>
+                  {mode === "name_asc" ? t("sortNameAsc") : mode === "name_desc" ? t("sortNameDesc") : mode === "newest" ? t("sortNewest") : t("sortOldest")}
+                </option>
+              ))}
+            </select>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             {productAccess.archive ? <button className="inline-flex h-11 items-center gap-2 rounded-md border border-danger/40 px-3 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={selectedProductIds.length === 0 || isPending} onClick={bulkDeleteSelectedProducts}>
@@ -347,12 +402,12 @@ export function ProductListClient({ access, products: initialProducts, brands: i
               <Plus aria-hidden="true" className="size-4"/>
               {t("createProduct")}
             </Link> : null}
-            <div className="relative">
-              <button className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => setActionMenuOpen((current) => !current)}>
+            <div className="relative" ref={actionMenuRef}>
+              <button ref={actionMenuButtonRef} className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold transition hover:border-primary" type="button" aria-controls="products-more-actions" aria-expanded={actionMenuOpen} aria-haspopup="menu" data-testid="products-more-actions" onClick={() => setActionMenuOpen((current) => !current)}>
                 <MoreHorizontal aria-hidden="true" className="size-4"/>
                 {t("moreActions")}
               </button>
-              {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl">
+              {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl" id="products-more-actions" role="menu">
                   <ActionMenuButton icon={Upload} label={t("importProducts")} onClick={() => openOperationDrawer("tool_import")}/>
                   <ActionMenuButton icon={Download} label={t("exportProducts")} onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} onClick={() => openOperationDrawer("tool_audit")}/>
@@ -445,7 +500,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
         <div className="flex flex-col gap-3 border-t border-border bg-background px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">{t("rowsPerPage")}</span>
-            <select className="h-9 rounded-md border border-border bg-card px-2" value={pageSize} onChange={(event) => updatePageSize(Number(event.target.value))}>
+            <select className="h-9 rounded-md border border-border bg-card px-2" data-testid="products-rows-per-page" value={pageSize} onChange={(event) => updatePageSize(Number(event.target.value))}>
               {pageSizeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </div>
@@ -466,7 +521,7 @@ function ActionMenuButton({ icon: Icon, label, onClick }: {
     label: string;
     onClick: () => void;
 }) {
-    return (<button className="flex h-10 items-center gap-2 rounded-md px-3 text-left text-sm font-semibold transition hover:bg-background" type="button" onClick={onClick}>
+    return (<button className="flex h-10 items-center gap-2 rounded-md px-3 text-left text-sm font-semibold transition hover:bg-background" type="button" role="menuitem" onClick={onClick}>
       <Icon className="size-4 text-primary" aria-hidden="true"/>
       {label}
     </button>);
@@ -479,10 +534,7 @@ function ProductsVisualShell({ onOpenDrawer, stats }: {
     const topics = [
         { description: t("productListHint"), drawerKey: "product_list" as ProductShellDrawerKey, icon: Boxes, label: t("productList") },
         { description: t("categoriesHint"), drawerKey: "categories" as ProductShellDrawerKey, icon: Tags, label: t("categories") },
-        { description: t("barcodeSkuReadyHint"), drawerKey: "barcode_sku" as ProductShellDrawerKey, icon: Search, label: t("barcodeSku") },
-        { description: t("imageCoverageHint"), drawerKey: "images" as ProductShellDrawerKey, icon: ImageIcon, label: t("productImages") },
         { description: t("labelsHint"), drawerKey: "labels" as ProductShellDrawerKey, icon: Printer, label: t("labels") },
-        { description: t("productHealthHint"), drawerKey: "product_health" as ProductShellDrawerKey, icon: AlertCircle, label: t("productHealth") },
     ];
 
     return (
@@ -508,7 +560,7 @@ function ProductsVisualShell({ onOpenDrawer, stats }: {
           <ProductShellMetric icon={AlertCircle} label={t("productHealth")} value={stats.healthIssueCount} onClick={() => onOpenDrawer("product_health")}/>
         </div>
 
-        <div className="mt-4 grid gap-2">
+        <div className="mt-4 grid gap-2" data-testid="products-workspace-topics">
           {topics.map((topic) => (
             <ProductShellTopic description={topic.description} icon={topic.icon} key={topic.label} label={topic.label} onClick={() => onOpenDrawer(topic.drawerKey)}/>
           ))}

@@ -70,6 +70,7 @@ export function mapPrismaProduct(product: PrismaProduct): Product {
     })),
     sellingPriceLak: toNumber(product.sellingPriceLak),
     sku: product.sku ?? "",
+    createdAt: product.createdAt?.toISOString?.() ?? (typeof product.createdAt === "string" ? product.createdAt : ""),
     status: (product.status ?? "active") as ProductStatus,
     stockDisplayMode: product.stockDisplayMode ?? "base_unit_only",
     supplierId: product.supplierId ?? undefined,

@@ -6,6 +6,8 @@ import { ClipboardCheck, PackagePlus, ReceiptText, SlidersHorizontal, Truck, } f
 import type { InventoryItem, StockMovement, Warehouse } from "@/features/inventory/types";
 import type { InventoryListPage } from "@/features/inventory/list-query";
 import { loadInventoryListAction } from "@/features/inventory/actions";
+import { readInventoryStockSort, writeInventoryStockSort } from "@/features/products/list-preferences";
+import { DEFAULT_PRODUCT_SORT_MODE, sortProductRecords, type ProductSortMode } from "@/features/products/product-sort";
 import { InventoryDashboardCards, InventoryInsightPanel, type InventoryDashboardPanel, type InventoryStockFilter, } from "@/features/inventory/components/inventory-dashboard-cards";
 import { InventoryAlertLists } from "@/features/inventory/components/inventory-alert-lists";
 import { StockMovementHistory } from "@/features/inventory/components/stock-movement-history";
@@ -39,12 +41,18 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
     const [stockFilter, setStockFilter] = useState<InventoryStockFilter>("all");
     const [page, setPage] = useState(initialListPage?.page ?? 1);
     const [pageSize, setPageSize] = useState(initialListPage?.pageSize ?? 100);
+    const [sortMode, setSortMode] = useState<ProductSortMode>(DEFAULT_PRODUCT_SORT_MODE);
     const [items, setItems] = useState(initialItems);
     const [movements, setMovements] = useState(initialMovements);
     const [listPage, setListPage] = useState(initialListPage);
     const [, startTransition] = useTransition();
     const skipFetch = useRef(true);
+    const nameLocale = locale === "lo" ? "lo" : "en";
+    const sortLocale = sortMode === "name_asc" || sortMode === "name_desc" ? nameLocale : "en";
 
+    useEffect(() => {
+        setSortMode(readInventoryStockSort());
+    }, []);
     useEffect(() => {
         setItems(initialItems);
         setMovements(initialMovements);
@@ -58,8 +66,10 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
         }
         startTransition(async () => {
             const result = await loadInventoryListAction({
+                nameLocale: sortLocale,
                 page,
                 pageSize,
+                sort: sortMode,
                 stockFilter,
                 warehouseId: selectedWarehouseId,
             });
@@ -69,7 +79,7 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
             setItems(next.items);
             setMovements(next.movements);
         });
-    }, [initialListPage, page, pageSize, selectedWarehouseId, stockFilter]);
+    }, [initialListPage, page, pageSize, selectedWarehouseId, sortLocale, sortMode, stockFilter]);
     const filteredItems = listPage ? items : (selectedWarehouseId === "all"
         ? items
         : items.filter((item) => item.warehouseId === selectedWarehouseId));
@@ -108,6 +118,23 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
         }
         return filteredItems;
     }, [filteredItems, listPage, stockFilter]);
+    const sortedItems = useMemo(() => {
+        if (listPage) return visibleItems;
+        return sortProductRecords(
+            visibleItems.map((item) => ({
+                ...item,
+                nameEn: item.productNameEn,
+                nameLo: item.productNameLo,
+            })),
+            sortMode,
+            nameLocale,
+        );
+    }, [listPage, nameLocale, sortMode, visibleItems]);
+    function updateSortMode(nextSort: ProductSortMode) {
+        setSortMode(nextSort);
+        setPage(1);
+        writeInventoryStockSort(nextSort);
+    }
     return (<div className="flex flex-col gap-6">
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
@@ -195,7 +222,7 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
           {t("needsStockCount")}
         </button>
       </div>
-      <StockOverviewTable items={visibleItems} locale={locale}/>
+      <StockOverviewTable items={sortedItems} locale={locale} sortMode={sortMode} onSortModeChange={updateSortMode}/>
       {listPage ? (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
           <span className="text-muted-foreground">

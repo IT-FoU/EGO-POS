@@ -1,3 +1,4 @@
+import { parseProductSortMode, type ProductSortLocale, type ProductSortMode } from "@/features/products/product-sort";
 import { REPORT_SALE_STATUSES } from "@/features/pos/post-sale-shared";
 import {
   mapPrismaInventoryBalance,
@@ -14,9 +15,11 @@ export const INVENTORY_LIST_PAGE_SIZES = [25, 50, 100, 200] as const;
 export type InventoryStockFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "fast_moving" | "recount_needed";
 
 export type InventoryListQuery = {
+  nameLocale?: ProductSortLocale;
   page?: number;
   pageSize?: number;
   search?: string;
+  sort?: ProductSortMode;
   stockFilter?: InventoryStockFilter;
   warehouseId?: string;
 };
@@ -198,10 +201,12 @@ type InventoryListSummaryRow = {
 type InventoryIdRow = { id: string };
 
 type InventorySqlInput = {
+  nameLocale: ProductSortLocale;
   now: Date;
   pageSize: number;
   search: string;
   skip: number;
+  sortMode: ProductSortMode;
   stockFilter: InventoryStockFilter;
   thirtyDaysAgo: Date;
   warehouseIds: string[];
@@ -333,6 +338,14 @@ async function loadInventoryPageIds(
     scoped AS (
       SELECT
         b.id,
+        lower(
+          CASE
+            WHEN ${input.nameLocale} = 'lo'
+              THEN COALESCE(NULLIF(btrim(p.name_lo), ''), NULLIF(btrim(COALESCE(p.name_en, '')), ''), '')
+            ELSE COALESCE(NULLIF(btrim(COALESCE(p.name_en, '')), ''), NULLIF(btrim(p.name_lo), ''), '')
+          END
+        ) AS sort_name,
+        p.created_at AS product_created_at,
         b.quantity,
         b.recount_needed,
         b.updated_at,
@@ -382,7 +395,12 @@ async function loadInventoryPageIds(
       OR (${input.stockFilter} = 'dead_stock' AND days_without_sale >= 30)
       OR (${input.stockFilter} = 'fast_moving' AND (sold_30 > 0 OR days_without_sale <= 7))
       OR (${input.stockFilter} = 'recount_needed' AND recount_needed = true)
-    ORDER BY updated_at DESC, id DESC
+    ORDER BY
+      CASE WHEN ${input.sortMode} = 'name_asc' THEN sort_name END ASC,
+      CASE WHEN ${input.sortMode} = 'name_desc' THEN sort_name END DESC,
+      CASE WHEN ${input.sortMode} = 'newest' THEN product_created_at END DESC,
+      CASE WHEN ${input.sortMode} = 'oldest' THEN product_created_at END ASC,
+      id ASC
     OFFSET ${input.skip}
     LIMIT ${input.pageSize}
   `;
@@ -504,10 +522,12 @@ export async function getPrismaInventoryListPage(
   };
 
   const sqlInput: InventorySqlInput = {
+    nameLocale: input.nameLocale === "lo" ? "lo" : "en",
     now,
     pageSize,
     search,
     skip,
+    sortMode: parseProductSortMode(input.sort),
     stockFilter,
     thirtyDaysAgo,
     warehouseIds,

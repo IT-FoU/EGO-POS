@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import type { InventoryItem } from "@/features/inventory/types";
+import { PRODUCT_SORT_MODES, type ProductSortMode } from "@/features/products/product-sort";
 import { formatQuantity } from "@/features/inventory/format";
 import { InventoryImage } from "@/features/inventory/components/inventory-image";
 import { ExpiryBadge, RecountNeededBadge, StockAlert } from "@/features/inventory/components/inventory-status";
@@ -45,18 +46,37 @@ function itemCategoryName(item: InventoryItem, locale: SupportedLocale) {
     return item.category;
 }
 
-export function StockOverviewTable({ items, locale: localeProp }: {
+export function StockOverviewTable({ items, locale: localeProp, onSortModeChange, sortMode }: {
     items: InventoryItem[];
     locale?: SupportedLocale;
+    onSortModeChange?: (mode: ProductSortMode) => void;
+    sortMode?: ProductSortMode;
 }) {
     const locale = useAppLocale(localeProp);
     const t = (key: string) => tInventory(key, locale);
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     return (<section className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border p-5">
-        <h2 className="text-lg font-semibold">{t("stockOverview")}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t("stockOverviewHint")}</p>
+      <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">{t("stockOverview")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("stockOverviewHint")}</p>
+        </div>
+        {sortMode && onSortModeChange ? (
+          <select
+            aria-label={t("sortBy")}
+            className="h-11 shrink-0 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary"
+            data-testid="inventory-stock-sort"
+            value={sortMode}
+            onChange={(event) => onSortModeChange(event.target.value as ProductSortMode)}
+          >
+            {PRODUCT_SORT_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode === "name_asc" ? t("sortNameAsc") : mode === "name_desc" ? t("sortNameDesc") : mode === "newest" ? t("sortNewest") : t("sortOldest")}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1180px] text-left text-sm">

@@ -17,6 +17,7 @@ export type PosProductUnit = {
 
 export type PosProduct = {
   id: string;
+  createdAt?: string;
   barcode: string;
   sku: string;
   productCode?: string;

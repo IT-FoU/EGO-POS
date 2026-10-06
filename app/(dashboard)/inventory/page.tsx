@@ -12,7 +12,12 @@ export default async function InventoryPage() {
   const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
   const session = await requireSession();
   const keys = await getUserPermissionKeys(tenantFromSession(session));
-  const listPage = await getInventoryListPage({ page: 1, pageSize: 100 });
+  const listPage = await getInventoryListPage({
+    nameLocale: locale === "lo" ? "lo" : "en",
+    page: 1,
+    pageSize: 100,
+    sort: "newest",
+  });
   const actions = {
     adjustment: allowsFine(keys, "inventory.adjust"),
     count: allowsFine(keys, "inventory.count"),

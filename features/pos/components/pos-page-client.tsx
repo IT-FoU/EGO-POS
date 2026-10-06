@@ -60,6 +60,8 @@ import {
   writePosUnitDisplayMode,
   type PosUnitDisplayMode,
 } from "@/features/pos/pos-unit-display-settings";
+import { readPosProductSort, writePosProductSort } from "@/features/products/list-preferences";
+import { DEFAULT_PRODUCT_SORT_MODE, PRODUCT_SORT_MODES, sortProductRecords, type ProductSortMode } from "@/features/products/product-sort";
 import { applyLoadedPromotions } from "@/features/promotions/promotion-checkout";
 import { cn } from "@/lib/utils";
 import {
@@ -250,7 +252,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     warehouseId: string;
 }) {
     const router = useRouter();
-    useAppLocale();
+    const locale = useAppLocale();
     const [isPending, startTransition] = useTransition();
     const checkoutInFlightRef = useRef(false);
     const postSaleInFlightRef = useRef(false);
@@ -259,6 +261,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [productGridVisible, setProductGridVisible] = useState(true);
     const [unitDisplayMode, setUnitDisplayMode] = useState<PosUnitDisplayMode>(DEFAULT_POS_UNIT_DISPLAY_MODE);
+    const [productSortMode, setProductSortMode] = useState<ProductSortMode>(DEFAULT_PRODUCT_SORT_MODE);
     const [favoritesOpen, setFavoritesOpen] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const [unitDisplayOpen, setUnitDisplayOpen] = useState(false);
@@ -557,6 +560,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
             setProductGridVisible(true);
         }
         setUnitDisplayMode(readPosUnitDisplayMode());
+        setProductSortMode(readPosProductSort());
     }, []);
     const categories = useMemo(() => ["All", ...Array.from(new Set(visibleProducts.map((product) => product.categoryName)))], [visibleProducts]);
     const favoriteProducts = useMemo(() => {
@@ -573,10 +577,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     }, [cartItems]);
     const filteredProducts = useMemo(
         () => projectPosCatalogueCards(
-            filterPosCatalogue(visibleProducts, productQuery, selectedCategory),
+            sortProductRecords(
+                filterPosCatalogue(visibleProducts, productQuery, selectedCategory),
+                productSortMode,
+                locale === "lo" ? "lo" : "en",
+            ),
             unitDisplayMode,
         ),
-        [productQuery, selectedCategory, unitDisplayMode, visibleProducts],
+        [locale, productQuery, productSortMode, selectedCategory, unitDisplayMode, visibleProducts],
     );
     const selectedQrBank = availableQrBanks.find((bank) => bank.id === selectedQrBankId) ?? null;
     const activeCustomer = isMembershipActive(selectedCustomer) ? selectedCustomer : null;
@@ -2337,6 +2345,39 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
       ) : null}
 
       {moreMenuOpen ? (<PosModal title={t("ui.more")} onClose={() => setMoreMenuOpen(false)}>
+        <div className="mb-3 rounded-xl border border-border bg-background p-3" data-testid="pos-product-sort">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("ui.sort.by")}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {PRODUCT_SORT_MODES.map((mode) => {
+              const label = mode === "name_asc"
+                ? t("ui.sort.name.asc")
+                : mode === "name_desc"
+                  ? t("ui.sort.name.desc")
+                  : mode === "newest"
+                    ? t("ui.sort.newest")
+                    : t("ui.sort.oldest");
+              const selected = productSortMode === mode;
+              return (
+                <button
+                  aria-pressed={selected}
+                  className={cn(
+                    "h-11 rounded-lg border px-3 text-sm font-bold transition hover:border-primary",
+                    selected ? "border-primary bg-primary/10 text-primary" : "border-border bg-card",
+                  )}
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    setProductSortMode(mode);
+                    writePosProductSort(mode);
+                    setMoreMenuOpen(false);
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <MoreMenuButton label={t("ui.recent.sales")} onClick={() => {
             if (enforcePosAction("view_recent_sales")) {

@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { allowsFine, FINE } from "@/features/access-control/fine-permissions";
 import { getUserPermissionKeys } from "@/features/access-control/prisma-repository";
 import { ProductListClient } from "@/features/products/components/product-list-client";
@@ -6,8 +7,11 @@ import { getBrands, getCategories, getProductListPage } from "@/features/product
 import { getSuppliers } from "@/features/suppliers/supplier-service";
 import { requireSession } from "@/lib/auth/session";
 import { tenantFromSession } from "@/lib/db/write-context";
+import { getServerLocale, LOCALE_COOKIE_NAME } from "@/lib/i18n/locale";
 
 export default async function ProductsPage() {
+  const cookieStore = await cookies();
+  const locale = getServerLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
   const session = await requireSession();
   const keys = await getUserPermissionKeys(tenantFromSession(session));
   const access = {
@@ -19,7 +23,7 @@ export default async function ProductsPage() {
   const [brands, categories, listPage, suppliers] = await Promise.all([
     getBrands(),
     getCategories(),
-    getProductListPage({ page: 1, pageSize: 100, status: "active" }),
+    getProductListPage({ nameLocale: locale === "lo" ? "lo" : "en", page: 1, pageSize: 100, sort: "newest", status: "active" }),
     getSuppliers(),
   ]);
   return (
