@@ -183,6 +183,7 @@ export type ProductInitialStockInput = {
   lotNumber?: string;
   note?: string;
   quantity?: number;
+  receiveDate?: string;
   supplierName?: string;
   unitCostLak?: number;
   unitName?: string;
@@ -728,6 +729,7 @@ export async function writePrismaProductCreate(tx: any, input: ProductWriteInput
         note: optionalString(input.initialStock?.note) ?? "Opening stock from product create",
         productId: createdProduct.id,
         quantity: openingQuantity,
+        receiveDate: optionalString(input.initialStock?.receiveDate) ?? null,
         supplierName: optionalString(input.initialStock?.supplierName) ?? null,
         unitCostLak: input.initialStock?.unitCostLak,
         unitId: unitId || null,

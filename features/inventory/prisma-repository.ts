@@ -9,6 +9,7 @@ import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, withTenantTransaction } from "@/lib/db/write-context";
 import { assertWarehouseInScope, branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
 import { inventoryLotLockKey } from "@/features/inventory/lot-reconciliation";
+import { businessReceiveInstant } from "@/features/inventory/receive-date";
 import {
   applyAtomicStockDelta,
   lockInventoryMutationKey,
@@ -258,6 +259,7 @@ export async function writeStockIn(tx: any, input: StockInInput, tenant: TenantC
 
   const lotNumber = optionalString(data.lotNumber);
   const expiryDate = data.expiryDate ? new Date(data.expiryDate) : undefined;
+  const businessReceivedAt = businessReceiveInstant(data.receiveDate);
 
   if (lotNumber || expiryDate) {
     const existingLot = await tx.inventoryLot.findFirst({
@@ -274,7 +276,7 @@ export async function writeStockIn(tx: any, input: StockInInput, tenant: TenantC
       await tx.inventoryLot.update({
         data: {
           quantity: numberValue(existingLot.quantity) + baseQuantity,
-          receivedAt: new Date(),
+          receivedAt: businessReceivedAt ?? new Date(),
         },
         where: { id: existingLot.id },
       });
@@ -286,7 +288,7 @@ export async function writeStockIn(tx: any, input: StockInInput, tenant: TenantC
           lotNumber,
           productId: data.productId,
           quantity: baseQuantity,
-          receivedAt: new Date(),
+          receivedAt: businessReceivedAt ?? new Date(),
           warehouseId: data.warehouseId,
         },
       });
@@ -334,6 +336,7 @@ export async function writeStockIn(tx: any, input: StockInInput, tenant: TenantC
       note,
       productId: data.productId,
       quantity: baseQuantity,
+      receivedAt: businessReceivedAt,
       referenceId: stockInNo,
       referenceType: isQuickStockIn ? "quick_stock_in" : "stock_in",
       unitId: optionalString(data.unitId ?? unit?.id),

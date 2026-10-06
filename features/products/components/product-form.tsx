@@ -866,6 +866,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                 lotNumber: initialStockPreview.lotNumber.trim() || undefined,
                 note: initialStockPreview.note.trim() || undefined,
                 quantity: openingQuantity,
+                receiveDate: initialStockPreview.receiveDate || undefined,
                 supplierName: initialStockPreview.supplier.trim() || undefined,
                 unitCostLak: initialStockPreview.costLak || costPriceLak,
                 unitName: receiveUnit?.unitName.trim() || undefined,

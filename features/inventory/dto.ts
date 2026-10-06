@@ -1,3 +1,4 @@
+import { businessReceiveInstant } from "@/features/inventory/receive-date";
 import {
   asDtoObject,
   cleanUndefined,
@@ -16,6 +17,7 @@ const stockInFields = [
   "photos",
   "productId",
   "quantity",
+  "receiveDate",
   "stockInNo",
   "supplierId",
   "supplierName",
@@ -36,6 +38,7 @@ export type StockInInput = {
   photos?: string[];
   productId: string;
   quantity: number;
+  receiveDate?: string | null;
   stockInNo?: string | null;
   supplierId?: string | null;
   supplierName?: string | null;
@@ -65,6 +68,8 @@ export type StockCountInput = {
 export function parseStockInInput(input: unknown): StockInInput {
   const dto = asDtoObject(input, "Stock-in payload");
   rejectUnknownFields(dto, [...stockInFields], "Stock-in payload");
+  const receiveDate = parseString(dto, "receiveDate", { nullable: true });
+  if (receiveDate) businessReceiveInstant(receiveDate);
 
   return cleanUndefined({
     expiryDate: parseDateString(dto, "expiryDate", { nullable: true }),
@@ -75,6 +80,7 @@ export function parseStockInInput(input: unknown): StockInInput {
     photos: Array.isArray(dto.photos) ? dto.photos.map(String).slice(0, 10) : [],
     productId: parseString(dto, "productId", { required: true })!,
     quantity: parseNumber(dto, "quantity", { min: 0.000001, required: true })!,
+    receiveDate,
     stockInNo: parseString(dto, "stockInNo", { max: 80, nullable: true }),
     supplierId: parseString(dto, "supplierId", { nullable: true }),
     supplierName: parseString(dto, "supplierName", { max: 200, nullable: true }),

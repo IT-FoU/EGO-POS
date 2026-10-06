@@ -8,6 +8,7 @@ import {
   stockInAction,
 } from "@/features/inventory/actions";
 import { StockMovementHistory } from "@/features/inventory/components/stock-movement-history";
+import { INVALID_RECEIVE_DATE } from "@/features/inventory/receive-date";
 import {
   STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE,
   STOCK_RESERVED_FLOOR_MESSAGE,
@@ -73,6 +74,7 @@ export function ProductStockLotPanel({
   const [quantity, setQuantity] = useState(0);
   const [lotNumber, setLotNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
+  const [receiveDate, setReceiveDate] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [costLak, setCostLak] = useState(Number(selectedUnit?.costPriceLak ?? 0));
   const [note, setNote] = useState("");
@@ -97,6 +99,7 @@ export function ProductStockLotPanel({
     setQuantity(0);
     setLotNumber("");
     setExpiryDate("");
+    setReceiveDate("");
     setSupplierName("");
     setCostLak(Number(selectedUnit?.costPriceLak ?? 0));
     setNote("");
@@ -113,6 +116,7 @@ export function ProductStockLotPanel({
   function localizeError(errorMessage: string) {
     if (errorMessage === STOCK_COUNT_LOT_UNSUPPORTED_MESSAGE) return ti("stockCountLotUnsupported");
     if (errorMessage === STOCK_RESERVED_FLOOR_MESSAGE) return ti("stockReservedFloor");
+    if (errorMessage === INVALID_RECEIVE_DATE) return t("invalidReceiveDate");
     return localizeInventoryError(errorMessage, locale);
   }
 
@@ -148,6 +152,7 @@ export function ProductStockLotPanel({
         note: note.trim() || "Receive additional stock from product edit",
         productId,
         quantity: receivedQuantity,
+        receiveDate: receiveDate || null,
         supplierName: supplierName.trim() || null,
         unitCostLak: Math.max(Number(costLak) || 0, 0),
         unitId: selectedUnit.id,
@@ -161,6 +166,7 @@ export function ProductStockLotPanel({
       setMessageKind("success");
       setMessage(t("addStockSaved"));
       setQuantity(0);
+      setReceiveDate("");
       setDialog(null);
       await refreshSnapshot();
     });
@@ -271,6 +277,9 @@ export function ProductStockLotPanel({
               </Field>
               <Field label={t("expiryDate")}>
                 <input className="field-input" type="date" value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)} />
+              </Field>
+              <Field label={t("receiveDate")}>
+                <input className="field-input" type="date" value={receiveDate} onChange={(event) => setReceiveDate(event.target.value)} />
               </Field>
               <Field label={t("supplier")}>
                 <input className="field-input" value={supplierName} onChange={(event) => setSupplierName(event.target.value)} />

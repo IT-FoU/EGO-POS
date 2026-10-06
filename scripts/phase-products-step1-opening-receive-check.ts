@@ -42,7 +42,7 @@ check("cost label is per receive unit and total is quantity times that cost", fo
 check("stock-in adds converted base quantity", inventory.includes("quantityDelta: baseQuantity") && inventory.includes("const baseQuantity = quantity * conversionQty"));
 check("zero quantity is rejected by stock-in", inventory.includes('throw new Error("Stock-in quantity must be greater than zero.")') && panel.includes('t("zeroReceiveNoChange")'));
 check("receive uses inventory stock-in permission", inventoryActions.includes("WRITE_PERMISSIONS.inventoryStockIn") && inventoryActions.includes("STORE_ACTIONS.INVENTORY_STOCK_IN") && editPage.includes("STORE_ACTIONS.INVENTORY_STOCK_IN"));
-check("receive date is not a stock-in field", !inventoryDto.includes('"receiveDate"'));
+check("receive date is a stock-in field and does not replace createdAt", inventoryDto.includes('"receiveDate"') && inventory.includes("receivedAt: businessReceivedAt") && !inventory.includes("createdAt: businessReceivedAt") && form.includes("receiveDate: initialStockPreview.receiveDate") && panel.includes('t("receiveDate")'));
 check("piece pack and box examples", receivedBase(0, 10, 1) === 10 && receivedBase(0, 2, 24) === 48 && receivedBase(5, 10, 1) === 15 && receivedBase(5, 2, 6) === 17 && receivedBase(5, 2, 24) === 53 && totalReceivedCost(3, 120000) === 360000 && totalReceivedCost(10, 5000) === 50000);
 check("copy parity and Lao labels", productsCopyKeyParity() && tProducts("receiveAdditionalStock", "lo") !== tProducts("receiveAdditionalStock", "en") && tProducts("stockAfterReceiving", "lo") !== "stockAfterReceiving");
 
