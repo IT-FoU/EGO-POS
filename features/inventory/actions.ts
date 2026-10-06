@@ -84,6 +84,7 @@ export async function quickStockFixAction(input: {
           warehouseId: input.warehouseId,
         },
         await tenant(WRITE_PERMISSIONS.inventoryAdjust, STORE_ACTIONS.INVENTORY_ADJUST),
+        { markRecountNeeded: true },
       ),
     );
   } catch (error) {
@@ -94,7 +95,7 @@ export async function quickStockFixAction(input: {
 export async function stockCountAction(input: Parameters<typeof createStockCount>[0]) {
   try {
     return writeSuccess(
-      await createStockCount(input, await tenant(WRITE_PERMISSIONS.inventoryCount, STORE_ACTIONS.INVENTORY_COUNT)),
+      await createStockCount(input, await tenant(WRITE_PERMISSIONS.inventoryCount, STORE_ACTIONS.INVENTORY_COUNT), { clearRecountNeeded: true }),
     );
   } catch (error) {
     return writeFailure(error);

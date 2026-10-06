@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Barcode, ClipboardCheck, PackagePlus, Save, SlidersHorizontal } from "lucide-react";
 import type { InventoryItem, Warehouse } from "@/features/inventory/types";
+import { RecountNeededBadge } from "@/features/inventory/components/inventory-status";
 import { WarehouseSelector } from "@/features/inventory/components/warehouse-selector";
 import { stockAdjustmentAction, stockCountAction, stockInAction } from "@/features/inventory/actions";
 import {
@@ -62,7 +63,7 @@ export function InventoryActionForm({ items, mode, warehouses, locale: localePro
             icon: ClipboardCheck,
             quantityLabel: t("countedQuantity"),
             noteLabel: t("countNote"),
-            saved: t("countSaved"),
+            saved: t("stockCountCompleted"),
             failedEnglish: "Stock Count failed.",
         },
     };
@@ -240,6 +241,12 @@ export function InventoryActionForm({ items, mode, warehouses, locale: localePro
                 : t("selectProductAndUnit")}
                 </dd>
               </div>) : null}
+            {selectedItem?.recountNeeded ? (
+              <div>
+                <dt className="text-muted-foreground">{t("recountStatus")}</dt>
+                <dd className="mt-1"><RecountNeededBadge locale={locale}/></dd>
+              </div>
+            ) : null}
             <div>
               <dt className="text-muted-foreground">{t("databaseStatus")}</dt>
               <dd className="mt-1 font-semibold text-success">{t("realDatabase")}</dd>

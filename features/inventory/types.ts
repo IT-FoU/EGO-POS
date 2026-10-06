@@ -38,6 +38,7 @@ export type InventoryItem = {
     unitName: string;
   }>;
   minStock: number;
+  recountNeeded?: boolean;
   expiryDate?: string;
   lastMovementAt: string;
   daysWithoutSale: number;

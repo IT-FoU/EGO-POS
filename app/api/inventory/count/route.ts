@@ -5,7 +5,7 @@ import { WRITE_PERMISSIONS } from "@/lib/auth/permissions";
 
 export async function POST(request: Request) {
   return runWrite(
-    (tenant, body) => createStockCount(body, tenant),
+    (tenant, body) => createStockCount(body, tenant, { clearRecountNeeded: true }),
     request,
     WRITE_PERMISSIONS.inventoryCount,
     { allowManagerPinApproval: true, route: "/api/inventory/count", storeAction: STORE_ACTIONS.INVENTORY_COUNT, targetType: "inventory" },

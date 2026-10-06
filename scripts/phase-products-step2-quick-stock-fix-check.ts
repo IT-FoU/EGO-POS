@@ -121,7 +121,7 @@ check("POS continues the original add once", page.includes("afterQuickFix: true"
 check("in-flight guard blocks a second adjustment", page.includes("quickFixInFlightRef.current"));
 check("cancel does not call the action", page.includes("setQuickFix(null)") && !page.includes("onCancel={() => { void confirmQuickStockFix"));
 
-check("no recount column was added", !/recount|needs_count|count_required|pending_recount/i.test(schema));
+check("recount flag lives on the inventory balance", /model InventoryBalance[\s\S]*recountNeeded\s+Boolean\s+@default\(false\)\s+@map\("recount_needed"\)/.test(schema));
 check("POS copy parity", posCopyKeyParity());
 for (const key of [
   "ui.quick.stock.out",

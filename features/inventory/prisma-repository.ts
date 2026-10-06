@@ -514,7 +514,7 @@ async function logStockAdjustment(
   });
 }
 
-export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext) {
+export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext, options?: { markRecountNeeded?: boolean }) {
   const raw = { ...(input as StockAdjustmentInput & Record<string, unknown>) };
   const pin = raw[STORE_MANAGER_APPROVAL_BODY_KEY] as { approvedByRole?: string } | undefined;
   delete raw[STORE_MANAGER_APPROVAL_BODY_KEY];
@@ -589,12 +589,24 @@ export async function createStockAdjustment(input: StockAdjustmentInput, tenant:
         reason: data.reason,
       });
 
+      if (options?.markRecountNeeded) {
+        await tx.inventoryBalance.update({
+          data: { recountNeeded: true },
+          where: {
+            warehouseId_productId: {
+              productId: data.productId,
+              warehouseId: data.warehouseId,
+            },
+          },
+        });
+      }
+
       return balance;
     },
   });
 }
 
-export async function createStockCount(input: StockCountInput, tenant: TenantContext, options?: { logAdjustment?: boolean }) {
+export async function createStockCount(input: StockCountInput, tenant: TenantContext, options?: { clearRecountNeeded?: boolean; logAdjustment?: boolean }) {
   const data = parseStockCountInput(input);
   return withTenantTransaction({
     action: "count",
@@ -628,6 +640,17 @@ export async function createStockCount(input: StockCountInput, tenant: TenantCon
         productId: data.productId,
         warehouseId: data.warehouseId,
       });
+      if (options?.clearRecountNeeded) {
+        await tx.inventoryBalance.update({
+          data: { recountNeeded: false },
+          where: {
+            warehouseId_productId: {
+              productId: data.productId,
+              warehouseId: data.warehouseId,
+            },
+          },
+        });
+      }
       const quantity = balance.afterQty - balance.beforeQty;
       if (quantity === 0) {
         return balance;

@@ -7,7 +7,7 @@ import { fillInventoryCopy, tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
 
 export type InventoryDashboardPanel = "fast_moving" | "stock_alerts" | null;
-export type InventoryStockFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "fast_moving";
+export type InventoryStockFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "fast_moving" | "recount_needed";
 function formatLak(value: number) {
     return `${Math.round(value).toLocaleString("en-US")} LAK`;
 }

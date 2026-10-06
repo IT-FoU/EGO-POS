@@ -103,6 +103,9 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
         if (stockFilter === "fast_moving") {
             return filteredItems.filter((item) => (item.unitsSold30Days ?? 0) > 0 || item.daysWithoutSale <= 7);
         }
+        if (stockFilter === "recount_needed") {
+            return filteredItems.filter((item) => item.recountNeeded);
+        }
         return filteredItems;
     }, [filteredItems, listPage, stockFilter]);
     return (<div className="flex flex-col gap-6">
@@ -183,6 +186,15 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
           </button>
         </div>) : null}
 
+      <div className="flex justify-end">
+        <button
+          className="inline-flex h-9 items-center rounded-md border border-warning/50 bg-warning/10 px-3 text-xs font-semibold text-warning"
+          type="button"
+          onClick={() => { setStockFilter("recount_needed"); setPage(1); }}
+        >
+          {t("needsStockCount")}
+        </button>
+      </div>
       <StockOverviewTable items={visibleItems} locale={locale}/>
       {listPage ? (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">

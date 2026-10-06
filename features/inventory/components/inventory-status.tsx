@@ -27,6 +27,17 @@ export function StockAlert({
   );
 }
 
+export function RecountNeededBadge({ locale }: { locale?: SupportedLocale }) {
+  return (
+    <span
+      className="inline-flex h-7 items-center rounded-md border border-warning/50 bg-warning/10 px-2.5 text-xs font-semibold text-warning"
+      title={tInventory("recountStatus", locale)}
+    >
+      {tInventory("recountNeeded", locale)}
+    </span>
+  );
+}
+
 export function ExpiryBadge({ expiryDate, locale }: { expiryDate?: string; locale?: SupportedLocale }) {
   const days = getDaysUntil(expiryDate);
   const t = (key: string) => tInventory(key, locale);

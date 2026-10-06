@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import type { InventoryItem } from "@/features/inventory/types";
 import { formatQuantity } from "@/features/inventory/format";
 import { InventoryImage } from "@/features/inventory/components/inventory-image";
-import { ExpiryBadge, StockAlert } from "@/features/inventory/components/inventory-status";
+import { ExpiryBadge, RecountNeededBadge, StockAlert } from "@/features/inventory/components/inventory-status";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { tInventory } from "@/lib/i18n/inventory-copy";
 import type { SupportedLocale } from "@/lib/constants";
@@ -111,7 +111,10 @@ export function StockOverviewTable({ items, locale: localeProp }: {
                       <ExpiryBadge expiryDate={item.expiryDate} locale={locale}/>
                     </td>
                     <td className="px-4 py-4">
-                      <StockAlert quantity={item.quantity} minStock={item.minStock} locale={locale}/>
+                      <div className="flex flex-col items-start gap-1">
+                        <StockAlert quantity={item.quantity} minStock={item.minStock} locale={locale}/>
+                        {item.recountNeeded ? <RecountNeededBadge locale={locale}/> : null}
+                      </div>
                     </td>
                   </tr>
                   {expanded ? (<tr className="border-b border-border bg-background/60">

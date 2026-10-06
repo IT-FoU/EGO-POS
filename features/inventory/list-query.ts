@@ -11,7 +11,7 @@ import type { TenantContext } from "@/lib/db/write-context";
 export const DEFAULT_INVENTORY_PAGE_SIZE = 100;
 export const INVENTORY_LIST_PAGE_SIZES = [25, 50, 100, 200] as const;
 
-export type InventoryStockFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "fast_moving";
+export type InventoryStockFilter = "all" | "out_of_stock" | "low_stock" | "near_expiry" | "dead_stock" | "fast_moving" | "recount_needed";
 
 export type InventoryListQuery = {
   page?: number;
@@ -137,6 +137,7 @@ export function matchesInventoryStockFilter(item: InventoryItem, filter: Invento
   }
   if (filter === "dead_stock") return item.daysWithoutSale >= 30;
   if (filter === "fast_moving") return (item.unitsSold30Days ?? 0) > 0 || item.daysWithoutSale <= 7;
+  if (filter === "recount_needed") return Boolean(item.recountNeeded);
   return true;
 }
 
@@ -238,6 +239,7 @@ async function loadInventoryListSummary(
       SELECT
         b.id,
         b.quantity,
+        b.recount_needed,
         p.min_stock,
         p.cost_price_lak,
         lot.expiry_date,
@@ -295,6 +297,7 @@ async function loadInventoryListSummary(
       )
       OR (${input.stockFilter} = 'dead_stock' AND days_without_sale >= 30)
       OR (${input.stockFilter} = 'fast_moving' AND (sold_30 > 0 OR days_without_sale <= 7))
+      OR (${input.stockFilter} = 'recount_needed' AND recount_needed = true)
   `;
   return rows[0];
 }
@@ -331,6 +334,7 @@ async function loadInventoryPageIds(
       SELECT
         b.id,
         b.quantity,
+        b.recount_needed,
         b.updated_at,
         p.min_stock,
         lot.expiry_date,
@@ -377,6 +381,7 @@ async function loadInventoryPageIds(
       )
       OR (${input.stockFilter} = 'dead_stock' AND days_without_sale >= 30)
       OR (${input.stockFilter} = 'fast_moving' AND (sold_30 > 0 OR days_without_sale <= 7))
+      OR (${input.stockFilter} = 'recount_needed' AND recount_needed = true)
     ORDER BY updated_at DESC, id DESC
     OFFSET ${input.skip}
     LIMIT ${input.pageSize}
