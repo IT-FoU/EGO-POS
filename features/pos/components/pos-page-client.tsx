@@ -865,7 +865,7 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
     }, [appliedPromotions, cartItems, customerDisplayMode, customerPaymentOpen, customerQrVisible, loyaltyRedeemDiscount, manualDiscountTotal, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.businessLogoUrl, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
     function showQuickStockFix(product: PosProduct, saleUnit: PosProductUnit, request: QuickStockFixRequest, requestedBaseQty: number) {
-        if (!canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.INVENTORY_ADJUST)) {
+        if (!posPermissionPolicy.canQuickStockFix) {
             setMessage(product.stockQty <= 0
                 ? `${t("ui.quick.stock.out")}: ${localizedProductName(product)}`
                 : fillPosCopy(t("ui.stock.insufficient"), { name: localizedProductName(product), available: product.stockQty, requested: requestedBaseQty }));

@@ -493,7 +493,7 @@ export async function getPrismaProductStockSnapshot(
 async function logStockAdjustment(
   tx: any,
   tenant: TenantContext,
-  input: { afterQty: number; beforeQty: number; productId: string; quantity: number; reason?: string | null },
+  input: { afterQty: number; beforeQty: number; productId: string; quantity: number; reason?: string | null; source?: "pos_quick_stock_fix" },
 ) {
   const product = await tx.product.findFirst({
     select: { nameEn: true, nameLo: true },
@@ -507,23 +507,28 @@ async function logStockAdjustment(
     companyId: tenant.companyId,
     entityId: input.productId,
     entityType: "product",
-    metadata: input.reason ? { reason: String(input.reason).slice(0, 80) } : undefined,
+    metadata: {
+      ...(input.reason ? { reason: String(input.reason).slice(0, 80) } : {}),
+      ...(input.source ? { source: input.source } : {}),
+    },
     module: "inventory",
     summary: String(product?.nameLo || product?.nameEn || "Product"),
     userId: tenant.userId,
   });
 }
 
-export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext, options?: { markRecountNeeded?: boolean }) {
+export async function createStockAdjustment(input: StockAdjustmentInput, tenant: TenantContext, options?: { markRecountNeeded?: boolean; source?: "pos_quick_stock_fix" }) {
   const raw = { ...(input as StockAdjustmentInput & Record<string, unknown>) };
   const pin = raw[STORE_MANAGER_APPROVAL_BODY_KEY] as { approvedByRole?: string } | undefined;
   delete raw[STORE_MANAGER_APPROVAL_BODY_KEY];
   const data = parseStockAdjustmentInput(raw);
-  await assertConfiguredApprovalSatisfied({
-    pinApproverRole: pin?.approvedByRole ?? null,
-    ruleKey: "stock_adjustment",
-    tenant,
-  });
+  if (options?.source !== "pos_quick_stock_fix") {
+    await assertConfiguredApprovalSatisfied({
+      pinApproverRole: pin?.approvedByRole ?? null,
+      ruleKey: "stock_adjustment",
+      tenant,
+    });
+  }
   return withTenantTransaction({
     action: "adjustment",
     module: "inventory",
@@ -587,6 +592,7 @@ export async function createStockAdjustment(input: StockAdjustmentInput, tenant:
         productId: data.productId,
         quantity,
         reason: data.reason,
+        source: options?.source,
       });
 
       if (options?.markRecountNeeded) {

@@ -1,4 +1,14 @@
+import { permissionKeysForCheck } from "@/features/access-control/permission-catalog";
 import type { PosCartItem, PosProduct, PosProductUnit } from "@/features/pos/types";
+
+export const POS_QUICK_STOCK_FIX_PERMISSION = "pos.quick_stock_fix";
+
+export function canUseQuickStockFix(keys: readonly string[] | null | undefined) {
+  const granted = keys ?? [];
+  if (granted.includes("*")) return true;
+  const has = (permission: string) => permissionKeysForCheck(permission).some((key) => granted.includes(key));
+  return has(POS_QUICK_STOCK_FIX_PERMISSION) || has("inventory.adjust");
+}
 
 /** Existing free-text adjustment reason. Not a second reason-code system. */
 export const QUICK_STOCK_FIX_REASON = "Physical stock found / Temporary correction";

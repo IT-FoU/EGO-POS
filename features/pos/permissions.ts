@@ -37,6 +37,7 @@ export type PosPermissionPolicy = {
   displayName: string;
   branchName: string;
   assignedTerminal: string;
+  canQuickStockFix: boolean;
   maxDiscountPercent: number;
   permissions: Record<PosPermissionAction, boolean>;
   approvalRules: Partial<Record<PosPermissionAction, "manager" | "owner" | "owner_above_threshold">>;
@@ -162,6 +163,7 @@ export function createPosPermissionPolicy(input: {
           },
     assignedTerminal: input.assignedTerminal ?? "POS-01",
     branchName: input.branchName ?? "Main Branch",
+    canQuickStockFix: role === "Owner" || role === "Manager",
     displayName: input.displayName ?? input.username ?? role,
     maxDiscountPercent: role === "Owner" ? 100 : role === "Manager" ? 10 : 0,
     permissions: Object.fromEntries(allPosActions.map((action) => [action, permissionSet.has(action)])) as Record<

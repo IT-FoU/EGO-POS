@@ -19,6 +19,7 @@ export const WRITE_PERMISSIONS = {
   membershipLevelChange: "membership.level.change",
   membershipPointsAdjust: "membership.points.adjust",
   posSell: "pos.sell",
+  posQuickStockFix: "pos.quick_stock_fix",
   posCashSessionManage: "pos.cash_session.manage",
   productsCreate: "products.create",
   productsDelete: "products.delete",

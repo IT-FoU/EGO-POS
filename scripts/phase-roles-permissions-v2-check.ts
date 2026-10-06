@@ -59,6 +59,8 @@ check(
   cashierKeys.every((key) => cashierSaved.includes(key)) &&
     cashierSavedExtras.length === cashierSaveExtras.size &&
     cashierSavedExtras.every((key) => cashierSaveExtras.has(key)) &&
+    !cashierSaved.includes("pos.quick_stock_fix") &&
+    !cashierSaved.includes("inventory.adjust") &&
     !cashierSaved.some((key) => key.startsWith("settings.") || key === "roles.manage" || key === "pos.refund" || key === "pos.void" || key === "pos.price_override" || key === "dashboard.profit.view" || key === "dashboard.cost.view" || key.endsWith(".delete")) &&
     cashierDraft.dashboard?.enabled === false &&
     cashierDashboard["dashboard.sales"] === true &&
@@ -76,6 +78,7 @@ check("manager default excludes settings, delete, and role admin", !managerKeys.
 check("manager save keeps current keys and does not add role admin", managerKeys.every((key) => managerSaved.includes(key)) && !managerSaved.includes("roles.manage") && !managerSaved.some((key) => key.startsWith("settings.")));
 check("module off keeps the choice but omits its keys", Boolean(managerOff.products?.advanced["products.view"]) && !permissionKeysForDraft(managerOff, managerKeys).some((key) => key.startsWith("products.")));
 check("enabled fine-grained refund is saved", permissionKeysForDraft({ ...cashierDraft, pos: { ...cashierDraft.pos, advanced: { ...cashierDraft.pos.advanced, "pos.refund": true, "pos.priceOverride": true } } }, cashierKeys).includes("pos.refund") && permissionKeysForDraft({ ...cashierDraft, pos: { ...cashierDraft.pos, advanced: { ...cashierDraft.pos.advanced, "pos.refund": true, "pos.priceOverride": true } } }, cashierKeys).includes("pos.price_override"));
+check("owner can enable POS Quick Stock Fix without inventory.adjust", permissionKeysForDraft({ ...cashierDraft, pos: { ...cashierDraft.pos, advanced: { ...cashierDraft.pos.advanced, "pos.quickStockFix": true } } }, cashierKeys).includes("pos.quick_stock_fix") && !permissionKeysForDraft({ ...cashierDraft, pos: { ...cashierDraft.pos, advanced: { ...cashierDraft.pos.advanced, "pos.quickStockFix": true } } }, cashierKeys).includes("inventory.adjust"));
 check("preview separates configured reports from deferred cost", !cashierPreview.reports.find((item) => item.id === "reports.cost")?.enabled && cashierPreview.reports.find((item) => item.id === "reports.cost")?.deferred === false && cashierPreview.sensitive.filter((item) => item.id === "reports.cost" || item.id === "reports.profit").every((item) => !item.enabled));
 check("owner role save stays protected", repo.includes("isProtectedOwnerRole") && repo.includes("Owner permissions cannot be changed."));
 check("role admin still uses roles.manage only", PERMISSION_ALIAS_GROUPS["roles.manage"].join() === "roles.manage" && catalog.includes('"roles.manage": ["roles.manage"]'));

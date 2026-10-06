@@ -9,6 +9,7 @@ import {
 export type RolePermissionDef = {
   deferred?: boolean;
   groupKey?: string;
+  helpKey?: string;
   id: string;
   labelKey: string;
   readKeys: readonly string[];
@@ -57,6 +58,7 @@ export const ROLE_PERMISSION_MODULES: readonly RoleModuleDef[] = [
     perm("pos.cashOut", "permCashOut", [FINE.posCashOut], [FINE.posCashOut], { sensitive: true }),
     perm("pos.openShift", "permOpenShift", [FINE.posShiftOpen], [FINE.posShiftOpen, "pos.cash_session.manage"]),
     perm("pos.closeShift", "permCloseShift", [FINE.posShiftClose], [FINE.posShiftClose, "pos.cash_session.manage"]),
+    perm("pos.quickStockFix", "permQuickStockFix", ["pos.quick_stock_fix"], ["pos.quick_stock_fix"], { helpKey: "permQuickStockFixHelp" }),
   ]),
   module("products", "moduleProducts", [
     perm("products.view", "permissionView", ["products.view"]),
@@ -375,7 +377,7 @@ function perm(
   labelKey: string,
   writeKeys: readonly string[],
   readKeys: readonly string[] = writeKeys,
-  flags: { groupKey?: string; report?: boolean; sensitive?: boolean } = {},
+  flags: { groupKey?: string; helpKey?: string; report?: boolean; sensitive?: boolean } = {},
 ): RolePermissionDef {
   return { id, labelKey, readKeys, writeKeys, ...flags };
 }

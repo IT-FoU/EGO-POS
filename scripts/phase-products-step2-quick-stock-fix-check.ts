@@ -109,7 +109,7 @@ check("owner can adjust stock", hasStorePermission("owner", STORE_ACTIONS.INVENT
 check("manager can adjust stock", hasStorePermission("manager", STORE_ACTIONS.INVENTORY_ADJUST) === true);
 
 const quickAction = actions.slice(actions.indexOf("export async function quickStockFixAction"), actions.indexOf("export async function stockCountAction"));
-check("quick fix uses stock adjustment permission", quickAction.includes("WRITE_PERMISSIONS.inventoryAdjust") && quickAction.includes("STORE_ACTIONS.INVENTORY_ADJUST"));
+check("quick fix uses POS-scoped or inventory.adjust authorization", quickAction.includes("assertQuickStockFixPermission") && !quickAction.includes("STORE_ACTIONS.INVENTORY_ADJUST") && quickAction.includes('source: "pos_quick_stock_fix"'));
 check("quick fix calls createStockAdjustment", quickAction.includes("createStockAdjustment(") && !quickAction.includes("createStockIn("));
 check("quick fix forces the predefined reason", quickAction.includes("reason: QUICK_STOCK_FIX_REASON"));
 check("adjustment movement is not stock in", repo.includes('movementType: "adjustment"') && repo.includes('referenceType: "stock_adjustment"'));
@@ -120,6 +120,16 @@ check("POS opens quick fix from the add path", page.includes("buildQuickStockFix
 check("POS continues the original add once", page.includes("afterQuickFix: true") && page.includes("addToCart(updatedProduct, pending.saleUnit"));
 check("in-flight guard blocks a second adjustment", page.includes("quickFixInFlightRef.current"));
 check("cancel does not call the action", page.includes("setQuickFix(null)") && !page.includes("onCancel={() => { void confirmQuickStockFix"));
+
+const posRepository = read("features/pos/prisma-repository.ts");
+check("no separate Show in POS field", !schema.includes("showInPos") && !schema.includes("show_in_pos") && !page.includes("showInPos"));
+check("POS catalogue is active products only", posRepository.includes("isActive: true") && !posRepository.includes("stockQty: { gt:"));
+check("archive clears POS sellability", read("features/products/prisma-repository.ts").includes('data: { isActive: false, status: "deleted" }'));
+check("authorized actor opens Quick Stock Fix", page.includes("canQuickStockFix") && page.includes("setQuickFix({ product, request, saleUnit })"));
+check("unauthorized actor gets the stock message and no adjustment", page.includes("ui.quick.stock.out") && page.indexOf("if (!posPermissionPolicy.canQuickStockFix)") < page.indexOf("setQuickFix({ product, request, saleUnit })"));
+check("generic adjustment still requires inventory.adjust", actions.includes("WRITE_PERMISSIONS.inventoryAdjust") && actions.includes("STORE_ACTIONS.INVENTORY_ADJUST") && actions.includes("stockAdjustmentAction"));
+check("cashier cannot inventory.adjust", !hasStorePermission("cashier", STORE_ACTIONS.INVENTORY_ADJUST));
+check("owner can inventory.adjust", hasStorePermission("owner", STORE_ACTIONS.INVENTORY_ADJUST));
 
 check("recount flag lives on the inventory balance", /model InventoryBalance[\s\S]*recountNeeded\s+Boolean\s+@default\(false\)\s+@map\("recount_needed"\)/.test(schema));
 check("POS copy parity", posCopyKeyParity());

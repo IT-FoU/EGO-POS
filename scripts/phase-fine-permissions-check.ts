@@ -21,7 +21,7 @@ const todayOff = {
 };
 const todaySaved = permissionKeysForDraft(todayOff, []);
 
-check("cashier keeps sell and safe POS actions", cashier.pos.advanced["pos.sell"] && cashier.pos.advanced["pos.hold"] && cashier.pos.advanced["pos.reprint"] && !cashier.pos.advanced["pos.refund"] && !cashier.pos.advanced["pos.discount"]);
+check("cashier keeps sell and safe POS actions", cashier.pos.advanced["pos.sell"] && cashier.pos.advanced["pos.hold"] && cashier.pos.advanced["pos.reprint"] && !cashier.pos.advanced["pos.refund"] && !cashier.pos.advanced["pos.discount"] && !cashier.pos.advanced["pos.quickStockFix"]);
 check("cashier save writes hold and reprint", cashierSaved.includes(FINE.posHold) && cashierSaved.includes(FINE.posReprint) && !cashierSaved.includes(FINE.posRefund));
 check("manager report toggles persist", permissionKeysForDraft(manager, []).includes(FINE.reportsProfit) && permissionKeysForDraft(manager, []).includes(FINE.reportsHistorical));
 check("reports profit off is omitted", !reportsSaved.includes(FINE.reportsProfit) && !reportsSaved.includes(FINE.reportsCost) && !reportsSaved.includes(FINE.reportsMargin));

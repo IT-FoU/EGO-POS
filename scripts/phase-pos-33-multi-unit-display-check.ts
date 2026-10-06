@@ -219,6 +219,26 @@ check("client wiring + More menu Unit Display control", () => {
   assert(!client.includes("toggleUnitDisplayMode"), "header toggle removed");
 });
 
+check("STEP 4B product status is the POS visibility rule", () => {
+  const schema = readFileSync(join(root, "prisma/schema.prisma"), "utf8");
+  const posRepository = readFileSync(join(root, "features/pos/prisma-repository.ts"), "utf8");
+  const productRepository = readFileSync(join(root, "features/products/prisma-repository.ts"), "utf8");
+  const zeroStock = product("Zero", [
+    unit({ id: "z-piece", unitName: "Piece", isBaseUnit: true, isDefaultSaleUnit: true, sellingPriceLak: 1000, barcode: "Z1" }),
+    unit({ id: "z-pack", unitName: "Pack", sellingPriceLak: 6000, barcode: "Z6", conversionQty: 6 }),
+    unit({ id: "z-box", unitName: "Box", status: "inactive", sellingPriceLak: 24000, barcode: "Z24", conversionQty: 24 }),
+  ], 0);
+  const cards = expandPosSellableUnitCards([zeroStock]);
+  assert(cards.some((card) => card.unitId === "z-piece"), "enabled piece stays offered at zero stock");
+  assert(cards.some((card) => card.unitId === "z-pack"), "enabled pack stays offered at zero stock");
+  assert(!cards.some((card) => card.unitId === "z-box"), "disabled box is not offered");
+  assert(cards.every((card) => card.stockQty === 0 && card.id === zeroStock.id), "zero stock does not hide the active product");
+  assert(!schema.includes("showInPos") && !schema.includes("show_in_pos"), "no separate Show in POS field");
+  assert(posRepository.includes("isActive: true"), "POS catalogue loads active products");
+  assert(!posRepository.includes("stockQty: { gt:"), "zero stock is not a catalogue filter");
+  assert(productRepository.includes('data: { isActive: false, status: "deleted" }'), "archive removes the product from POS");
+});
+
 check("return/refund UI shows sold unit name", () => {
   const returnModal = readFileSync(join(root, "features/pos/components/return-exchange-void-modal.tsx"), "utf8");
   assert(returnModal.includes('item.unitName ? ` — ${item.unitName}` : ""'), "return line unit label");

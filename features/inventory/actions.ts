@@ -19,6 +19,7 @@ import type { InventoryListQuery } from "@/features/inventory/list-query";
 import { requireSession } from "@/lib/auth/session";
 import { requireStoreActionPermission } from "@/lib/auth/store-permission-guard";
 import { parseQuickStockFixQuantity, quickStockFixNote, QUICK_STOCK_FIX_REASON } from "@/features/pos/quick-stock-fix";
+import { assertQuickStockFixPermission } from "@/lib/auth/quick-stock-fix-permission";
 import { tenantFromSession, writeFailure, writeSuccess } from "@/lib/db/write-context";
 
 async function tenant(permission: WritePermissionKey, storeAction: StoreAction) {
@@ -70,6 +71,9 @@ export async function quickStockFixAction(input: {
 }) {
   try {
     const quantity = parseQuickStockFixQuantity(input.quantity);
+    const session = await requireSession();
+    const nextTenant = tenantFromSession(session);
+    await assertQuickStockFixPermission(nextTenant);
     return writeSuccess(
       await createStockAdjustment(
         {
@@ -83,8 +87,8 @@ export async function quickStockFixAction(input: {
           reason: QUICK_STOCK_FIX_REASON,
           warehouseId: input.warehouseId,
         },
-        await tenant(WRITE_PERMISSIONS.inventoryAdjust, STORE_ACTIONS.INVENTORY_ADJUST),
-        { markRecountNeeded: true },
+        nextTenant,
+        { markRecountNeeded: true, source: "pos_quick_stock_fix" },
       ),
     );
   } catch (error) {

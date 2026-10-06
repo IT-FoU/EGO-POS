@@ -37,6 +37,7 @@ const POS_PERMISSION_KEYS = new Set([
   "pos.delete",
   "pos.edit",
   "pos.print",
+  "pos.quick_stock_fix",
   "pos.sell",
   "pos.view",
 ]);

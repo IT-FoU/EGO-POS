@@ -207,6 +207,7 @@ export function RolePermissionsPanel({
                             <span>
                               {tSettings(item.labelKey, locale)}
                               {item.deferred ? <span className="ml-2 text-xs text-muted-foreground">{tSettings("notEnforcedYet", locale)}</span> : null}
+                              {item.helpKey ? <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{tSettings(item.helpKey, locale)}</span> : null}
                             </span>
                             <input
                               aria-label={tSettings(item.labelKey, locale)}
@@ -378,6 +379,6 @@ function permissionLabel(id: string, locale: SupportedLocale) {
 function moduleMatches(id: string, labelKey: string, locale: SupportedLocale, needle: string, draft: RolePermissionDraft) {
   if (!needle) return true;
   const entry = ROLE_PERMISSION_MODULES.find((item) => item.id === id);
-  const haystack = [tSettings(labelKey, locale), ...(entry?.permissions.map((item) => tSettings(item.labelKey, locale)) ?? [])].join(" ").toLowerCase();
+  const haystack = [tSettings(labelKey, locale), ...(entry?.permissions.flatMap((item) => [tSettings(item.labelKey, locale), ...(item.helpKey ? [tSettings(item.helpKey, locale)] : [])]) ?? [])].join(" ").toLowerCase();
   return haystack.includes(needle) || Object.keys(draft[id]?.advanced ?? {}).some((key) => key.includes(needle));
 }

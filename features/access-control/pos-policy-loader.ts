@@ -4,6 +4,7 @@ import {
   APPROVAL_RULE_KEYS,
   type ApprovalRuleKey,
 } from "@/features/access-control/permission-catalog";
+import { canUseQuickStockFix } from "@/features/pos/quick-stock-fix";
 import type { PosPermissionAction, PosPermissionPolicy, PosRole } from "@/features/pos/permissions";
 import { normalizePosRole } from "@/features/pos/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
@@ -96,6 +97,7 @@ export async function createPosPermissionPolicyFromDatabase(input: {
     approvalRules,
     assignedTerminal: input.assignedTerminal ?? "POS-01",
     branchName: input.branchName ?? "Main Branch",
+    canQuickStockFix: canUseQuickStockFix([...permissionKeys]),
     displayName: input.displayName ?? input.username ?? role,
     // Cashier max is 0 as an independent role limit, whether or not the Discount
     // approval rule is enabled. Owner is unlimited. A Manager is capped at the
