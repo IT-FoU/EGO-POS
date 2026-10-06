@@ -60,9 +60,14 @@ export function InventoryPageClient({ actions, items: initialItems, movements: i
     }, [initialItems, initialListPage, initialMovements]);
     useEffect(() => {
         if (!initialListPage) return;
+        const matchesServerList = sortMode === DEFAULT_PRODUCT_SORT_MODE
+            && page === (initialListPage.page || 1)
+            && pageSize === (initialListPage.pageSize || 100)
+            && stockFilter === "all"
+            && selectedWarehouseId === "all";
         if (skipFetch.current) {
             skipFetch.current = false;
-            return;
+            if (matchesServerList) return;
         }
         startTransition(async () => {
             const result = await loadInventoryListAction({

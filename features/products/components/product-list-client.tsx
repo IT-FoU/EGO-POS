@@ -154,9 +154,18 @@ export function ProductListClient({ access, products: initialProducts, brands: i
     const sortLocale = sortMode === "name_asc" || sortMode === "name_desc" ? nameLocale : "en";
     useEffect(() => {
         if (!initialListPage) return;
+        const matchesServerList = sortMode === DEFAULT_PRODUCT_SORT_MODE
+            && page === (initialListPage.page || 1)
+            && pageSize === (initialListPage.pageSize || 100)
+            && status === "active"
+            && query.trim() === ""
+            && categoryId === "all"
+            && brandId === "all"
+            && supplierId === "all"
+            && insightFilter === "all";
         if (skipServerFetch.current) {
             skipServerFetch.current = false;
-            return;
+            if (matchesServerList) return;
         }
         const handle = window.setTimeout(() => {
             startTransition(async () => {
