@@ -3,6 +3,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 import { parseReceiptLayoutPrefs, receiptLayoutFromFormFields, withReceiptLayoutPrefs } from "../features/settings/receipt-layout";
 import { resolveReceiptQrImage, visibleReceiptQrImage } from "../features/pos/receipt-qr";
 
@@ -24,7 +25,7 @@ function read(path: string) {
   return readFileSync(join(root, path), "utf8");
 }
 
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi(root);
 const preview = read("features/settings/components/receipt-settings-preview.tsx");
 const pos = read("features/pos/components/pos-page-client.tsx");
 const copy = read("lib/i18n/settings-copy.ts");

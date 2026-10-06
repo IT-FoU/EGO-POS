@@ -36,25 +36,6 @@ type Row = {
 };
 type Group = { id: string; title: Localized; rows: Row[] };
 
-const SETTINGS_PREFETCH_ORDER = [
-  "/settings/company-profile",
-  "/settings/business-logo",
-  "/settings/branch-information",
-  "/settings/tax",
-  "/settings/cash-shift",
-  "/settings/pos-terminals",
-  "/settings/customer-display",
-  "/settings/loyalty",
-  "/settings/help",
-  "/settings/approval-rules",
-  "/settings/day-off",
-  "/settings/ot",
-  "/settings/receipt",
-  "/settings/qr-payments",
-  "/settings/staff",
-  "/settings/roles",
-];
-
 const text = (en: string, lo: string): Localized => ({ en, lo });
 const localized = (value: Localized, locale: SupportedLocale) => value[locale];
 
@@ -140,28 +121,9 @@ export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: 
   const locale = useAppLocale(initialLocale);
   const [query, setQuery] = useState("");
   const [printMode, setPrintMode] = useState<ReceiptPrintMode>("ask_every_time");
-  const [prefetchedHrefs, setPrefetchedHrefs] = useState<ReadonlySet<string>>(() => new Set());
+  const [intentHref, setIntentHref] = useState<string | null>(null);
   const allowed = useMemo(() => new Set(allowedHrefs), [allowedHrefs]);
   useEffect(() => setPrintMode(readReceiptPrintModePreference()), []);
-  useEffect(() => {
-    const hrefs = SETTINGS_PREFETCH_ORDER.filter((href) => allowed.has(href));
-    let index = 0;
-    const timer = window.setInterval(() => {
-      const href = hrefs[index];
-      if (!href) {
-        window.clearInterval(timer);
-        return;
-      }
-      index += 1;
-      setPrefetchedHrefs((current) => {
-        if (current.has(href)) return current;
-        const next = new Set(current);
-        next.add(href);
-        return next;
-      });
-    }, 900);
-    return () => window.clearInterval(timer);
-  }, [allowed]);
   const needle = query.trim().toLocaleLowerCase();
   const filtered = useMemo(() => groups.map((group) => ({
     ...group,
@@ -192,7 +154,7 @@ export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: 
             {group.rows.map((row) => {
               const Icon = row.icon;
               return (
-                <Link className="settings-motion-row group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)} prefetch={prefetchedHrefs.has(row.href)}>
+                <Link className="settings-motion-row group flex min-w-0 cursor-pointer items-center gap-3 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:gap-4 sm:px-5" data-settings-row={row.href} href={row.href} key={row.href} onClick={() => captureSettingsIndexScroll(row.href)} onFocus={() => setIntentHref(row.href)} onMouseEnter={() => setIntentHref(row.href)} onTouchStart={() => setIntentHref(row.href)} prefetch={intentHref === row.href}>
                   <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-5" aria-hidden="true" /></span>
                   <span className="grid min-w-0 flex-1 gap-1">
                     <span className="flex min-w-0 flex-wrap items-center gap-2">
@@ -214,7 +176,7 @@ export function SettingsLanding({ allowedHrefs, facts, locale: initialLocale }: 
           <h2 className="border-b border-border px-5 py-4 text-lg font-semibold">{locale === "lo" ? "ຜົນຄົ້ນຫາອື່ນ" : "Other results"}</h2>
           <div className="divide-y divide-border">
             {extraResults.map((item) => (
-              <Link className="settings-motion-row flex cursor-pointer items-center gap-3 px-5 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" href={item.href} key={item.href}>
+              <Link className="settings-motion-row flex cursor-pointer items-center gap-3 px-5 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" href={item.href} key={item.href} onFocus={() => setIntentHref(item.href)} onMouseEnter={() => setIntentHref(item.href)} onTouchStart={() => setIntentHref(item.href)} prefetch={intentHref === item.href}>
                 <span className="min-w-0 flex-1"><span className="font-semibold">{localized(item.title, locale)}</span><span className="mt-1 block text-sm text-muted-foreground">{localized(item.description, locale)}</span></span>
                 <ChevronRight className="settings-motion-chevron size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
               </Link>

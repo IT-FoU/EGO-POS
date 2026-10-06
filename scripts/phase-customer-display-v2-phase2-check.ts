@@ -19,6 +19,7 @@ import {
   resolveCustomerDisplayMode,
 } from "../features/pos/customer-display-rules";
 import { fillCustomerDisplayCopy, tCd } from "../features/pos/customer-display-copy";
+import { readSettingsUi } from "./settings-ui-sources";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -27,7 +28,7 @@ function assert(condition: unknown, message: string): asserts condition {
 const root = process.cwd();
 const displayClient = readFileSync(join(root, "features/pos/components/customer-display-client.tsx"), "utf8");
 const posClient = readFileSync(join(root, "features/pos/components/pos-page-client.tsx"), "utf8");
-const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const settingsForm = readSettingsUi(root);
 const qrToggle = readFileSync(join(root, "components/layout/customer-display-qr-toggle.tsx"), "utf8");
 const windowHelper = readFileSync(join(root, "features/pos/customer-display-window.ts"), "utf8");
 const imageHelper = readFileSync(join(root, "features/pos/customer-display-product-image.ts"), "utf8");

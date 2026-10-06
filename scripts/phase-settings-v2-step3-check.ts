@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 
 const root = process.cwd();
 let passed = 0;
@@ -22,7 +23,7 @@ const check = (label: string, ok: boolean) => {
 const landingPage = read("app/(dashboard)/settings/page.tsx");
 const landing = read("features/settings/components/settings-landing.tsx");
 const detailPage = read("app/(dashboard)/settings/[section]/page.tsx");
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi();
 const staff = read("features/settings/components/staff-control-section.tsx");
 const shell = read("components/layout/dashboard-shell.tsx");
 const permissions = read("features/permissions/store-ui-permissions.ts");

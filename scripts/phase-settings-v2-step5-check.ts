@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 
 const root = process.cwd();
 const read = (relative: string) => readFileSync(join(root, relative), "utf8");
@@ -19,7 +20,7 @@ const roleModel = read("features/access-control/role-permission-v2.ts");
 const dayOff = read("features/day-off/components/day-off-settings-panel.tsx");
 const ot = read("features/ot/components/ot-settings-panel.tsx");
 const picker = read("features/settings/components/employee-picker.tsx");
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi();
 const loyaltyPanel = read("features/settings/components/loyalty-rules-panel.tsx");
 const page = read("app/(dashboard)/settings/[section]/page.tsx");
 const copy = read("lib/i18n/settings-copy.ts");

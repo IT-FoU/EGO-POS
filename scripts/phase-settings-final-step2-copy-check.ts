@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { settingsCopyKeyParity, tSettings } from "../lib/i18n/settings-copy";
+import { readSettingsUi } from "./settings-ui-sources";
 
 const root = process.cwd();
 let passed = 0;
@@ -21,7 +22,7 @@ const check = (label: string, ok: boolean) => {
 };
 
 const landing = read("features/settings/components/settings-landing.tsx");
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi(root);
 const loyaltyPanel = read("features/settings/components/loyalty-rules-panel.tsx");
 const printMode = read("features/settings/receipt-print-mode.ts");
 const repo = read("features/settings/prisma-repository.ts");

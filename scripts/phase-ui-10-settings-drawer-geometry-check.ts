@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 
 function read(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), "utf8");
@@ -20,7 +21,7 @@ function count(source: string, needle: string): number {
 }
 
 const activity = read("features/store-activity/components/store-activity-logs-client.tsx");
-const settingsForm = read("features/settings/components/settings-form.tsx");
+const settingsForm = readSettingsUi();
 const settingsQr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const staff = read("features/settings/components/staff-control-section.tsx");
 const settingsDetail = read("app/(dashboard)/settings/[section]/page.tsx");

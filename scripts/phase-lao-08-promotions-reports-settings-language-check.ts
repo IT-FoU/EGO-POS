@@ -26,6 +26,7 @@ import {
   settingsCopyKeyParity,
   tSettings,
 } from "../lib/i18n/settings-copy";
+import { readSettingsUi } from "./settings-ui-sources";
 
 function read(relativePath: string): string {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
@@ -63,7 +64,7 @@ const reportsCustomers = read("app/(dashboard)/reports/customers/page.tsx");
 const reportsService = read("features/reports/report-service.ts");
 const reportsHub = read("features/reports/build-analytics-hub.ts");
 const reportsCatalog = read("features/reports/report-catalog.ts");
-const settingsForm = read("features/settings/components/settings-form.tsx");
+const settingsForm = readSettingsUi();
 const settingsStaff = read("features/settings/components/staff-control-section.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
 const settingsActions = read("features/settings/actions.ts");

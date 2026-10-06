@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 
 const root = process.cwd();
 let passed = 0;
@@ -21,7 +22,7 @@ const check = (label: string, ok: boolean) => {
 
 const landing = read("features/settings/components/settings-landing.tsx");
 const detailPage = read("app/(dashboard)/settings/[section]/page.tsx");
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi(root);
 const actions = read("features/settings/actions.ts");
 const branchRepo = read("features/settings/branch-information.ts");
 const branchPanel = read("features/settings/components/branch-information-panel.tsx");
@@ -53,7 +54,7 @@ check("29. About values safe", helpPanel.includes("versionUnavailable") && helpP
 check("30. Copy System Information", helpPanel.includes("copySystemInformation") && helpPanel.includes("buildCopyText"));
 check("31. tickets are available from Help", !helpPanel.includes("submitTicket") && !landing.includes("Contact Support") && !landing.includes("Report a Problem") && landing.includes("can submit a support ticket when your role allows it") && !landing.includes("not available yet"));
 check("32. no attachment UI", !helpPanel.includes("attachment") && !helpPanel.includes("type=\"file\""));
-check("33. support explanation matches tickets", landing.includes("can submit a support ticket when your role allows it") && settingsCopy.includes("supportTicketsDeferred") && !settingsCopy.includes("Support ticket submission is not available yet"));
+check("33. support explanation matches tickets", landing.includes("can submit a support ticket when your role allows it") && !settingsCopy.includes("supportTicketsDeferred") && !settingsCopy.includes("Support ticket submission is not available yet"));
 
 check("34. branch search", landing.includes("keywords: \"branch information"));
 check("35-37. help/support/about search", landing.includes("keywords: \"help support about version"));

@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 import {
   DEFAULT_RECEIPT_LAYOUT,
   RECEIPT_LAYOUT_JSON_KEY,
@@ -35,7 +36,7 @@ function read(path: string) {
 }
 
 const preview = read("features/settings/components/receipt-settings-preview.tsx");
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi(root);
 const copy = read("lib/i18n/settings-copy.ts");
 const repo = read("features/settings/prisma-repository.ts");
 const layout = read("features/settings/receipt-layout.ts");
@@ -73,7 +74,7 @@ check(
 check("18. POS receipt respects visibility", pos.includes("receiptShowCompanyName") && pos.includes("receiptShowBranchName") && pos.includes("data-receipt-paper"));
 check("19. POS paper white", pos.includes('bg-white') && pos.includes("data-receipt-paper-size"));
 check("20. POS company name not hardcoded Business only", posRepo.includes("companyRow") && posRepo.includes("companyName") && !/companyName:\s*"Business"/.test(posRepo));
-const receiptSection = form.slice(form.indexOf('{section === "receipt" ?'), form.indexOf('{section === "qr-payments"'));
+const receiptSection = readFileSync(join(root, "features/settings/components/receipt-settings-section.tsx"), "utf8");
 check(
   "21. no duplicate company/branch editors in receipt section",
   receiptSection.includes("receiptVisibilityHelp") &&

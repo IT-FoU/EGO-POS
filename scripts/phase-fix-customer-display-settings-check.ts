@@ -14,6 +14,7 @@ import {
   customerDisplayQrBanks,
 } from "../features/pos/customer-display-qr";
 import { resetAllCustomerDisplaySettings } from "../features/pos/customer-display-settings";
+import { readSettingsUi } from "./settings-ui-sources";
 
 const results: Array<{ detail?: string; name: string; status: "FAIL" | "PASS" }> = [];
 
@@ -36,7 +37,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const root = process.cwd();
-const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const settingsForm = readSettingsUi(root);
 const settingsQr = readFileSync(join(root, "features/settings/components/qr-payment-bank-management-section.tsx"), "utf8");
 const settingsSurface = `${settingsForm}\n${settingsQr}`;
 const actions = readFileSync(join(root, "features/qr-payments/actions.ts"), "utf8");

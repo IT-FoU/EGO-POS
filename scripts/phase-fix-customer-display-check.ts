@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 import { t } from "../lib/i18n/ui";
 import { formatLak } from "../features/pos/format";
 import { isSupportedCompanyLogoUrl, storeInitials } from "../features/brand/company-logo";
@@ -125,7 +126,7 @@ const qrToggle = readFileSync(join(root, "components/layout/customer-display-qr-
 const helper = readFileSync(join(root, "features/pos/customer-display-window.ts"), "utf8");
 const posClient = readFileSync(join(root, "features/pos/components/pos-page-client.tsx"), "utf8");
 const displayClient = readFileSync(join(root, "features/pos/components/customer-display-client.tsx"), "utf8");
-const settingsForm = readFileSync(join(root, "features/settings/components/settings-form.tsx"), "utf8");
+const settingsForm = readSettingsUi(root);
 const qrPaymentsSection = readFileSync(join(root, "features/settings/components/qr-payment-bank-management-section.tsx"), "utf8");
 const logoContainer = readFileSync(join(root, "components/brand/logo-container.tsx"), "utf8");
 const dashboardShell = readFileSync(join(root, "components/layout/dashboard-shell.tsx"), "utf8");

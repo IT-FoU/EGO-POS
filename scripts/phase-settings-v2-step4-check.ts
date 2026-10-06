@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readSettingsUi } from "./settings-ui-sources";
 
 const root = process.cwd();
 let passed = 0;
@@ -19,7 +20,7 @@ const check = (label: string, ok: boolean) => {
   }
 };
 
-const form = read("features/settings/components/settings-form.tsx");
+const form = readSettingsUi();
 const landing = read("features/settings/components/settings-landing.tsx");
 const qr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const copy = read("lib/i18n/settings-copy.ts");
