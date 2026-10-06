@@ -18,6 +18,7 @@ import {
 import type { InventoryListQuery } from "@/features/inventory/list-query";
 import { requireSession } from "@/lib/auth/session";
 import { requireStoreActionPermission } from "@/lib/auth/store-permission-guard";
+import { parseQuickStockFixQuantity, quickStockFixNote, QUICK_STOCK_FIX_REASON } from "@/features/pos/quick-stock-fix";
 import { tenantFromSession, writeFailure, writeSuccess } from "@/lib/db/write-context";
 
 async function tenant(permission: WritePermissionKey, storeAction: StoreAction) {
@@ -53,6 +54,37 @@ export async function stockAdjustmentAction(input: Parameters<typeof createStock
   try {
     return writeSuccess(
       await createStockAdjustment(input, await tenant(WRITE_PERMISSIONS.inventoryAdjust, STORE_ACTIONS.INVENTORY_ADJUST)),
+    );
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function quickStockFixAction(input: {
+  conversionQty?: number;
+  productId: string;
+  quantity: number;
+  saleUnitName?: string | null;
+  terminalCode?: string | null;
+  warehouseId: string;
+}) {
+  try {
+    const quantity = parseQuickStockFixQuantity(input.quantity);
+    return writeSuccess(
+      await createStockAdjustment(
+        {
+          note: quickStockFixNote({
+            conversionQty: Number(input.conversionQty) > 0 ? Number(input.conversionQty) : 1,
+            saleUnitName: input.saleUnitName?.trim() || "Piece",
+            terminalCode: input.terminalCode,
+          }),
+          productId: input.productId,
+          quantity,
+          reason: QUICK_STOCK_FIX_REASON,
+          warehouseId: input.warehouseId,
+        },
+        await tenant(WRITE_PERMISSIONS.inventoryAdjust, STORE_ACTIONS.INVENTORY_ADJUST),
+      ),
     );
   } catch (error) {
     return writeFailure(error);

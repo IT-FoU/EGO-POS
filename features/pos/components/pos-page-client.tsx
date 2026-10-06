@@ -68,6 +68,13 @@ import {
   resolveFavoriteQtyAdjustTarget,
 } from "@/features/pos/favorites-client";
 import { completeSaleAction, loadPosCatalogueAction } from "@/features/pos/actions";
+import { quickStockFixAction } from "@/features/inventory/actions";
+import { QuickStockFixDialog } from "@/features/pos/components/quick-stock-fix-dialog";
+import {
+  buildQuickStockFixRequest,
+  cartBaseQtyForProduct,
+  type QuickStockFixRequest,
+} from "@/features/pos/quick-stock-fix";
 import { PosTerminalChip } from "@/features/terminals/components/pos-terminal-chip";
 import type { PosCurrentTerminal } from "@/features/terminals/terminal-types";
 import {
@@ -349,6 +356,14 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
     const [availableQrBanks, setAvailableQrBanks] = useState(qrBanks);
     const [selectedQrBankId, setSelectedQrBankId] = useState(qrBanks[0]?.id ?? "");
     const [visibleProducts, setVisibleProducts] = useState<PosProduct[]>(products);
+    const visibleProductsRef = useRef(visibleProducts);
+    visibleProductsRef.current = visibleProducts;
+    const [quickFix, setQuickFix] = useState<{ product: PosProduct; request: QuickStockFixRequest; saleUnit: PosProductUnit } | null>(null);
+    const quickFixRef = useRef(quickFix);
+    quickFixRef.current = quickFix;
+    const quickFixInFlightRef = useRef(false);
+    const [quickFixBusy, setQuickFixBusy] = useState(false);
+    const [quickFixError, setQuickFixError] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(HYDRATION_SAFE_TIME);
     const [businessDate, setBusinessDate] = useState(HYDRATION_SAFE_BUSINESS_DATE);
     const [stockReferenceDate, setStockReferenceDate] = useState(HYDRATION_SAFE_REFERENCE_DATE);
@@ -849,8 +864,42 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         };
         writeJsonToStorage(DemoStorageKeys.customerDisplayState, state);
     }, [appliedPromotions, cartItems, customerDisplayMode, customerPaymentOpen, customerQrVisible, loyaltyRedeemDiscount, manualDiscountTotal, membershipSavings, pointsEarned, promotionDiscountTotal, receiptSettings.businessLogoUrl, receiptSettings.companyName, selectedCustomer, selectedQrBank, subtotal, thankYouSnapshot, totalAmount]);
-    function addToCart(product: PosProduct, selectedUnit?: PosProductUnit) {
+    function showQuickStockFix(product: PosProduct, saleUnit: PosProductUnit, request: QuickStockFixRequest, requestedBaseQty: number) {
+        if (!canUseStoreAction(posPermissionPolicy.role, STORE_ACTIONS.INVENTORY_ADJUST)) {
+            setMessage(product.stockQty <= 0
+                ? `${t("ui.quick.stock.out")}: ${localizedProductName(product)}`
+                : fillPosCopy(t("ui.stock.insufficient"), { name: localizedProductName(product), available: product.stockQty, requested: requestedBaseQty }));
+            setUnitSelectionProduct(null);
+            return;
+        }
+        if (quickFixRef.current || quickFixInFlightRef.current) {
+            setUnitSelectionProduct(null);
+            return;
+        }
+        setQuickFixError(null);
+        setQuickFix({ product, request, saleUnit });
+        setUnitSelectionProduct(null);
+    }
+    function addToCart(product: PosProduct, selectedUnit?: PosProductUnit, options?: { afterQuickFix?: boolean }) {
         const saleUnit = selectedUnit ?? resolvePosSaleUnits(product)[0];
+        const blocked = saleUnit
+            ? buildQuickStockFixRequest({
+                availableBase: product.stockQty,
+                cart: cartItemsRef.current,
+                product,
+                productName: localizedProductName(product),
+                saleUnit,
+            })
+            : null;
+        if (blocked) {
+            if (options?.afterQuickFix) {
+                setMessage(t("ui.quick.stock.not.added"));
+                setUnitSelectionProduct(null);
+                return;
+            }
+            showQuickStockFix(product, saleUnit, blocked, blocked.requiredBase);
+            return;
+        }
         const unitProduct = saleUnit ? productWithSaleUnit(product, saleUnit) : product;
         const pricedProduct = applyCustomerPricing(unitProduct, activeCustomer);
         const stockWarning = getStockWarning(unitProduct, stockReferenceDate);
@@ -1008,7 +1057,76 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
         setMessage(t("ui.member.cleared"));
     }
     function updateQuantity(productId: string, quantity: number, unitId?: string) {
-        setCartItems((current) => updatePosCartQuantity(current, productId, quantity, unitId));
+        const line = cartItemsRef.current.find((item) => item.id === productId && item.unitId === unitId);
+        if (line && quantity > line.quantity) {
+            const product = visibleProductsRef.current.find((item) => item.id === productId);
+            const saleUnit = product
+                ? resolvePosSaleUnits(product).find((unit) => unit.id === unitId) ?? resolvePosSaleUnits(product)[0]
+                : undefined;
+            if (product && saleUnit) {
+                const conversion = saleUnit.conversionQty > 0 ? saleUnit.conversionQty : 1;
+                const lineBase = line.quantity * (line.conversionQty && line.conversionQty > 0 ? line.conversionQty : conversion);
+                const otherBase = cartBaseQtyForProduct(cartItemsRef.current, productId) - lineBase;
+                const requiredBase = otherBase + quantity * conversion;
+                const shortBase = Math.max(0, requiredBase - Math.max(0, Number(product.stockQty) || 0));
+                if (shortBase > 0) {
+                    showQuickStockFix(product, saleUnit, {
+                        availableBase: Math.max(0, Number(product.stockQty) || 0),
+                        baseUnitName: product.units?.find((unit) => unit.isBaseUnit)?.unitName || "Piece",
+                        conversionQty: conversion,
+                        productId: product.id,
+                        productName: localizedProductName(product),
+                        requiredBase,
+                        saleUnitName: saleUnit.unitName,
+                        shortBase,
+                    }, requiredBase);
+                    return;
+                }
+            }
+        }
+        const next = updatePosCartQuantity(cartItemsRef.current, productId, quantity, unitId);
+        cartItemsRef.current = next;
+        setCartItems(next);
+    }
+    async function confirmQuickStockFix(baseQty: number) {
+        const pending = quickFixRef.current;
+        if (!pending || quickFixInFlightRef.current) return;
+        quickFixInFlightRef.current = true;
+        setQuickFixBusy(true);
+        setQuickFixError(null);
+        try {
+            const result = await quickStockFixAction({
+                conversionQty: pending.request.conversionQty,
+                productId: pending.product.id,
+                quantity: baseQty,
+                saleUnitName: pending.request.saleUnitName,
+                terminalCode: currentTerminal?.terminalCode ?? null,
+                warehouseId,
+            });
+            if (!result.ok) {
+                const denied = /permission denied/i.test(result.error ?? "");
+                setQuickFixError(denied ? t("ui.quick.stock.permission") : (result.error || t("ui.quick.stock.failed")));
+                return;
+            }
+            const addedBase = baseQty;
+            const nextProducts = visibleProductsRef.current.map((item) => item.id === pending.product.id
+                ? { ...item, stockQty: Number(item.stockQty) + addedBase }
+                : item);
+            visibleProductsRef.current = nextProducts;
+            setVisibleProducts(nextProducts);
+            const nextCart = cartItemsRef.current.map((item) => item.id === pending.product.id
+                ? { ...item, stockQty: Number(item.stockQty) + addedBase }
+                : item);
+            cartItemsRef.current = nextCart;
+            setCartItems(nextCart);
+            const updatedProduct = { ...pending.product, stockQty: Number(pending.product.stockQty) + addedBase };
+            quickFixRef.current = null;
+            setQuickFix(null);
+            addToCart(updatedProduct, pending.saleUnit, { afterQuickFix: true });
+        } finally {
+            quickFixInFlightRef.current = false;
+            setQuickFixBusy(false);
+        }
     }
     function removeItem(productId: string, unitId?: string) {
         if (!enforcePosAction("delete_item_from_bill")) {
@@ -2442,6 +2560,23 @@ export function PosPageClient({ branchName, branchId, cashierName, cashSession, 
           onUpdateOpeningCashCount={updateOpeningCashCount}
         />
       </PosModal>) : null}
+
+      {quickFix ? (
+        <QuickStockFixDialog
+          busy={quickFixBusy}
+          error={quickFixError}
+          request={quickFix.request}
+          onCancel={() => {
+            if (quickFixInFlightRef.current) return;
+            quickFixRef.current = null;
+            setQuickFix(null);
+            setQuickFixError(null);
+          }}
+          onConfirm={(baseQty) => {
+            void confirmQuickStockFix(baseQty);
+          }}
+        />
+      ) : null}
 
       {unitSelectionProduct ? (<UnitSelectorModal overlayClassName={favoritesOpen ? "z-[70]" : undefined} product={unitSelectionProduct} onClose={() => {
         setUnitSelectionProduct(null);
