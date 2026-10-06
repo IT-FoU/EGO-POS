@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import type { Product, ProductStatus } from "@/features/products/types";
 import { mapPrismaProduct } from "@/features/products/dto-mapper";
 import {
@@ -196,48 +195,65 @@ async function loadLowStockIds(scope: BranchScope, client: any) {
   return rows.map((row: { id: string }) => row.id);
 }
 
-/** Same enabled-unit rule as features/products/unit-coverage.ts. Column names are fixed literals. */
-function unitCoverageGap(kind: "barcode" | "image") {
-  const unitColumn = Prisma.raw(kind === "image" ? "pu.image_url" : "pu.barcode");
-  const productColumn = Prisma.raw(kind === "image" ? "p.image_url" : "p.barcode");
-  return Prisma.sql`
-    (
-      EXISTS (
-        SELECT 1
-        FROM product_units pu
-        WHERE pu.product_id = p.id
-          AND pu.status = 'active'
-          AND pu.allow_manual_unit_select = true
-          AND btrim(COALESCE(${unitColumn}, '')) = ''
-      )
-      OR (
-        NOT EXISTS (
-          SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id
-        )
-        AND btrim(COALESCE(${productColumn}, '')) = ''
-      )
-    )
-  `;
-}
-
+/** Enabled-unit gaps. Keep in step with features/products/unit-coverage.ts. */
 async function loadCoverageGapIds(scope: BranchScope, client: any, kind: "barcode" | "image") {
-  const gap = unitCoverageGap(kind);
-  const rows = await client.$queryRaw<Array<{ id: string }>>`
-    SELECT p.id
-    FROM products p
-    WHERE p.company_id = ${scope.companyId}
-      AND p.status <> 'deleted'
-      AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
-      AND (
-        ${scope.isOwner}
-        OR EXISTS (
-          SELECT 1 FROM inventory_balances scoped
-          WHERE scoped.product_id = p.id AND scoped.warehouse_id = ANY(${scope.warehouseIds})
+  const rows = kind === "image"
+    ? await client.$queryRaw<Array<{ id: string }>>`
+      SELECT p.id
+      FROM products p
+      WHERE p.company_id = ${scope.companyId}
+        AND p.status <> 'deleted'
+        AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
+        AND (
+          ${scope.isOwner}
+          OR EXISTS (
+            SELECT 1 FROM inventory_balances scoped
+            WHERE scoped.product_id = p.id AND scoped.warehouse_id = ANY(${scope.warehouseIds})
+          )
+          OR NOT EXISTS (SELECT 1 FROM inventory_balances empty WHERE empty.product_id = p.id)
         )
-        OR NOT EXISTS (SELECT 1 FROM inventory_balances empty WHERE empty.product_id = p.id)
-      )
-      AND ${gap}
-  `;
+        AND (
+          EXISTS (
+            SELECT 1 FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND pu.status = 'active'
+              AND pu.allow_manual_unit_select = true
+              AND btrim(COALESCE(pu.image_url, '')) = ''
+          )
+          OR (
+            NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id)
+            AND btrim(COALESCE(p.image_url, '')) = ''
+          )
+        )
+    `
+    : await client.$queryRaw<Array<{ id: string }>>`
+      SELECT p.id
+      FROM products p
+      WHERE p.company_id = ${scope.companyId}
+        AND p.status <> 'deleted'
+        AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
+        AND (
+          ${scope.isOwner}
+          OR EXISTS (
+            SELECT 1 FROM inventory_balances scoped
+            WHERE scoped.product_id = p.id AND scoped.warehouse_id = ANY(${scope.warehouseIds})
+          )
+          OR NOT EXISTS (SELECT 1 FROM inventory_balances empty WHERE empty.product_id = p.id)
+        )
+        AND (
+          EXISTS (
+            SELECT 1 FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND pu.status = 'active'
+              AND pu.allow_manual_unit_select = true
+              AND btrim(COALESCE(pu.barcode, '')) = ''
+          )
+          OR (
+            NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id)
+            AND btrim(COALESCE(p.barcode, '')) = ''
+          )
+        )
+    `;
   return rows.map((row: { id: string }) => row.id);
 }
 
@@ -311,8 +327,36 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
           AND lot.expiry_date <= ${in30Days}
       )::int AS near_expiry,
       COUNT(*) FILTER (WHERE p.updated_at <= ${deadBefore})::int AS dead_stock,
-      COUNT(*) FILTER (WHERE ${unitCoverageGap("barcode")})::int AS missing_barcode,
-      COUNT(*) FILTER (WHERE ${unitCoverageGap("image")})::int AS missing_images
+      COUNT(*) FILTER (
+        WHERE (
+          EXISTS (
+            SELECT 1 FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND pu.status = 'active'
+              AND pu.allow_manual_unit_select = true
+              AND btrim(COALESCE(pu.barcode, '')) = ''
+          )
+          OR (
+            NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id)
+            AND btrim(COALESCE(p.barcode, '')) = ''
+          )
+        )
+      )::int AS missing_barcode,
+      COUNT(*) FILTER (
+        WHERE (
+          EXISTS (
+            SELECT 1 FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND pu.status = 'active'
+              AND pu.allow_manual_unit_select = true
+              AND btrim(COALESCE(pu.image_url, '')) = ''
+          )
+          OR (
+            NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id)
+            AND btrim(COALESCE(p.image_url, '')) = ''
+          )
+        )
+      )::int AS missing_images
     FROM products p
     LEFT JOIN (
       SELECT product_id, SUM(quantity) AS qty

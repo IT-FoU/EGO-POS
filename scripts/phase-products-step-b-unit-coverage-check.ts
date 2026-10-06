@@ -145,8 +145,10 @@ const listClient = readFileSync(resolve(process.cwd(), "features/products/compon
 check(
   "19. List filter and KPI share the enabled-unit SQL",
   listQuery.includes("allow_manual_unit_select = true")
-    && listQuery.includes("unitCoverageGap(\"image\")")
-    && listQuery.includes("unitCoverageGap(\"barcode\")")
+    && listQuery.includes("btrim(COALESCE(pu.image_url, '')) = ''")
+    && listQuery.includes("btrim(COALESCE(pu.barcode, '')) = ''")
+    && listQuery.includes("btrim(COALESCE(p.image_url, '')) = ''")
+    && listQuery.includes("btrim(COALESCE(p.barcode, '')) = ''")
     && listQuery.includes("loadCoverageGapIds")
     && !listQuery.includes("none: { barcode")
     && !listQuery.includes("none: { imageUrl"),
