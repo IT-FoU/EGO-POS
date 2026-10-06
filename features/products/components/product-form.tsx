@@ -28,7 +28,7 @@ import { ProductSmallModal } from "@/features/products/components/product-small-
 import { ProductStockLotPanel } from "@/features/products/components/product-stock-lot-panel";
 import { ThemedSelect } from "@/features/products/components/themed-select";
 import { BraveImageSearchBrowser } from "@/features/products/components/brave-image-search-browser";
-import { applyAutomaticSellingPrices, applyRoundingToAllUnits, applyUnitPricingPatch } from "@/features/products/unit-pricing";
+import { applyAutomaticSellingPrices, applyUnitPricingPatch } from "@/features/products/unit-pricing";
 import { applyHierarchyConversions, hierarchyRelationText, hydrateHierarchyQty, isActiveUnitQtyInvalid, isUnitEnabled, parseIntegerQty, parsePositiveIntQty } from "@/features/products/unit-hierarchy";
 import { onQtyInputBlur, onQtyInputChange } from "@/features/products/unit-qty-input";
 import {
@@ -169,6 +169,16 @@ const emptyUnit: ProductUnit = {
     sortOrder: 0,
     status: "active",
 };
+function hasDuplicateUnitName(units: ProductUnit[]) {
+    const seen = new Set<string>();
+    for (const unit of units) {
+        const name = unit.unitName.trim().toLocaleLowerCase("en-US");
+        if (!name) continue;
+        if (seen.has(name)) return true;
+        seen.add(name);
+    }
+    return false;
+}
 function createDefaultSharedUnits(defaults: UnitPricingDefaultsMap | undefined, inventoryHandoffBarcode: string): ProductUnit[] {
     return [
         applyDefaultsToNewUnit({
@@ -249,7 +259,6 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
         }
         return initialImages.filter((image) => image.url || image.storagePath);
     });
-    const [customUnitName, setCustomUnitName] = useState("");
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [statusConfirm, setStatusConfirm] = useState<ProductStatusConfirm>(null);
     const [localCategories, setLocalCategories] = useState<Category[]>(categories);
@@ -486,9 +495,6 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             }),
         }));
     }
-    function applyRoundingToAll(roundingLak: number) {
-        setUnits((current) => applyRoundingToAllUnits(current, roundingLak));
-    }
     async function checkDuplicateUnitBarcode(unitId: string, value: string) {
         const normalized = value.trim();
         if (!isCreate || normalized.length < 4) {
@@ -522,7 +528,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             }
         }
     }
-    function addUnit() {
+    function addCustomUnit() {
         addNamedUnit("");
     }
     function addNamedUnit(unitName: string) {
@@ -543,13 +549,6 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             setUnitImageOrigins((currentOrigins) => ({ ...currentOrigins, [assigned.unit.id]: assigned.origin }));
             return [...current, assigned.unit];
         });
-    }
-    function addCustomUnit() {
-        const nextName = customUnitName.trim();
-        if (!nextName)
-            return;
-        addNamedUnit(nextName);
-        setCustomUnitName("");
     }
     function changeUnitImage(unitId: string, nextImageUrl: string | undefined) {
         updateUnit(unitId, { imageUrl: nextImageUrl });
@@ -800,6 +799,10 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             .map((tag) => tag.trim())
             .filter(Boolean);
         const visibleUnits = units.filter((unit) => unit.unitName.trim().length > 0);
+        if (hasDuplicateUnitName(visibleUnits)) {
+            showSaveFailureNearButton([t("duplicateUnitName")], "error");
+            return;
+        }
         if (conversionInvalid || visibleUnits.some(isActiveUnitQtyInvalid)) {
             showSaveFailureNearButton([t("qtyInBaseMustBePositive")], "error");
             focusFirstInvalidQtyField();
@@ -1448,19 +1451,12 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                         {displayProductUnitName(unitName)}
                       </button>))}
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder={t("customUnitPlaceholder")}/>
-                    <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addCustomUnit}>
-                      <Plus aria-hidden="true"/>
-                      {t("customPlus")}
-                    </button>
-                    <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addUnit}>
-                      <Plus aria-hidden="true"/>
-                      {t("addBlankUnit")}
-                    </button>
-                  </div>
+                  <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addCustomUnit}>
+                    <Plus aria-hidden="true"/>
+                    {t("addCustomUnit")}
+                  </button>
                 </div>
-                <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
+                <ProductUnitsTable barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
                     setAliasInput("");
                     setAliasDrawerUnitId(unitId);
                 }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
@@ -1601,20 +1597,13 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
                     {displayProductUnitName(unitName)}
                   </button>))}
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input className="field-input sm:max-w-xs" value={customUnitName} onChange={(event) => setCustomUnitName(event.target.value)} placeholder={t("customUnitPlaceholder")}/>
-                <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addCustomUnit}>
-                  <Plus aria-hidden="true"/>
-                  {t("customPlus")}
-                </button>
-                <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addUnit}>
-                  <Plus aria-hidden="true"/>
-                  {t("addBlankUnit")}
-                </button>
-              </div>
+              <button className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={addCustomUnit}>
+                <Plus aria-hidden="true"/>
+                {t("addCustomUnit")}
+              </button>
             </div>
             <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">{t("conversionWarning")}</p>
-            <ProductUnitsTable applyRoundingToAll={applyRoundingToAll} barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
+            <ProductUnitsTable barcodeAliases={barcodeAliases} onConversionInvalidChange={setConversionInvalid} onOpenAlias={(unitId) => {
                 setAliasInput("");
                 setAliasDrawerUnitId(unitId);
             }} onCheckBarcode={checkDuplicateUnitBarcode} onUnitImageChange={changeUnitImage} productImages={productImages} selectedImageId={selectedImageId} unitImageOrigins={unitImageOrigins} units={units} updateUnit={updateUnit} removeUnit={removeUnit}/>
@@ -2019,8 +2008,7 @@ function PreviewField({ label, value }: { label: string; value: string }) {
     </div>);
 }
 
-function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode, onConversionInvalidChange: _onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, selectedImageId, unitImageOrigins, units, updateUnit, }: {
-    applyRoundingToAll: (roundingLak: number) => void;
+function ProductUnitsTable({ barcodeAliases, onCheckBarcode, onConversionInvalidChange: _onConversionInvalidChange, onOpenAlias, onUnitImageChange, productImages, removeUnit, selectedImageId, unitImageOrigins, units, updateUnit, }: {
     barcodeAliases: BarcodeAliasState;
     onCheckBarcode?: (unitId: string, barcode: string) => void;
     onConversionInvalidChange?: (invalid: boolean) => void;
@@ -2033,20 +2021,9 @@ function ProductUnitsTable({ applyRoundingToAll, barcodeAliases, onCheckBarcode,
     units: ProductUnit[];
     updateUnit: (unitId: string, patch: Partial<ProductUnit>) => void;
 }) {
-    const [roundingForAll, setRoundingForAll] = useState(0);
     const mainImage = productImages.find((image) => image.id === selectedImageId);
     return (<>
     <p className="mt-4 text-xs text-muted-foreground">{t("tableScrollHint")}</p>
-    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-      <select className="field-input h-10 sm:max-w-56" value={roundingForAll} onChange={(event) => setRoundingForAll(Number(event.target.value))}>
-        <option value={0}>{t("noRounding")}</option>
-        <option value={500}>{t("roundUp500")}</option>
-        <option value={1000}>{t("roundUp1000")}</option>
-      </select>
-      <button className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary" type="button" onClick={() => applyRoundingToAll(roundingForAll)}>
-        {t("applyRoundingToAllUnits")}
-      </button>
-    </div>
     <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
       <table className="w-full min-w-[1840px] text-left text-sm">
         <thead className="border-b border-border text-xs uppercase text-muted-foreground">

@@ -119,13 +119,6 @@ export function applyUnitPricingPatch<T extends SharedStockUnit>(input: {
   });
 }
 
-export function applyRoundingToAllUnits<T extends SharedStockUnit>(units: T[], roundingLak: number): T[] {
-  const rounding = UNIT_ROUNDING_INCREMENTS.includes(toLakInteger(roundingLak) as (typeof UNIT_ROUNDING_INCREMENTS)[number])
-    ? toLakInteger(roundingLak)
-    : 0;
-  return applyAutomaticSellingPrices(units.map((unit) => ({ ...unit, roundingLak: rounding })));
-}
-
 export function assertSafePricingValue(value: unknown, label: string) {
   if (value === undefined || value === null || value === "") return;
   const parsed = Number(value);

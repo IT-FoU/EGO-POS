@@ -9,7 +9,6 @@ import {
   writePrismaProductCreate,
 } from "../features/products/prisma-repository";
 import {
-  applyRoundingToAllUnits,
   applyUnitPricingPatch,
   deriveSharedUnitCost,
   sellingPriceFromCost,
@@ -180,23 +179,30 @@ check("H. Manual mode does not overwrite selling price", () => {
   assert(next[0].sellingPriceLak === 19999, "manual selling mutated");
 });
 
-check("Apply rounding to all units", () => {
-  const next = applyRoundingToAllUnits(
-    [
-      { ...piece, pricingMode: "cost_plus_percent", costPriceLak: 12100 },
-      { ...pack, pricingMode: "cost_plus_percent", costPriceLak: 12100 },
+check("Per-unit rounding stays on the edited unit", () => {
+  const next = applyUnitPricingPatch({
+    editedUnitId: "pack",
+    patch: { roundingLak: 1000 },
+    shareStock: true,
+    units: [
+      { ...piece, roundingLak: 0, sellingPriceLak: 14000 },
+      { ...pack, roundingLak: 0, sellingPriceLak: 34000 },
+      { ...box, roundingLak: 5000, sellingPriceLak: 288000 },
     ],
-    1000,
-  );
-  assert(next.every((unit) => unit.roundingLak === 1000), "rounding not applied to all");
-  assert(next.every((unit) => unit.sellingPriceLak === 13000), "prices not recalculated");
+  });
+  assert(next[0].roundingLak === 0, "piece rounding changed");
+  assert(next[1].roundingLak === 1000, "pack rounding missing");
+  assert(next[2].roundingLak === 5000, "box rounding changed");
+  assert(next[0].sellingPriceLak === 14000, "piece price changed");
+  assert(next[2].sellingPriceLak === 288000, "box price changed");
 });
 
 const root = process.cwd();
 const productForm = readFileSync(join(root, "features/products/components/product-form.tsx"), "utf8");
 check("I. Cost + Percent selling price is read-only in the form", () => {
   assert(productForm.includes('disabled={(unit.pricingMode ?? "manual") !== "manual"}'), "selling price is not locked");
-  assert(productForm.includes("applyRoundingToAllUnits"), "missing apply-to-all control");
+  assert(!productForm.includes("applyRoundingToAll"), "global apply-to-all control remains");
+  assert(productForm.includes("unit.roundingLak"), "per-unit rounding missing");
   assert(productForm.includes("applyUnitPricingPatch"), "form does not use shared-stock pricing patch");
 });
 
