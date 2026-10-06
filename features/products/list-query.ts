@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { Product, ProductStatus } from "@/features/products/types";
 import { mapPrismaProduct } from "@/features/products/dto-mapper";
 import {
@@ -73,6 +74,7 @@ export const productListInclude = {
   units: {
     orderBy: { sortOrder: "asc" as const },
     select: {
+      allowManualUnitSelect: true,
       barcode: true,
       conversionQty: true,
       costPriceLak: true,
@@ -124,23 +126,9 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
       ? { balances: { none: { quantity: { gt: 0 } } } }
       : insight === "near_expiry"
           ? { inventoryLots: { some: { expiryDate: { gt: now, lte: in30Days } } } }
-          : insight === "dead_stock"
+            : insight === "dead_stock"
             ? { updatedAt: { lte: deadBefore } }
-            : insight === "missing_barcode"
-              ? {
-                  AND: [
-                    { OR: [{ barcode: null }, { barcode: "" }] },
-                    { units: { none: { barcode: { not: "" } } } },
-                  ],
-                }
-              : insight === "no_image"
-                ? {
-                    AND: [
-                      { OR: [{ imageUrl: null }, { imageUrl: "" }] },
-                      { units: { none: { imageUrl: { not: "" } } } },
-                    ],
-                  }
-                : {};
+            : {};
 
   const searchWhere = search
     ? {
@@ -208,6 +196,51 @@ async function loadLowStockIds(scope: BranchScope, client: any) {
   return rows.map((row: { id: string }) => row.id);
 }
 
+/** Same enabled-unit rule as features/products/unit-coverage.ts. Column names are fixed literals. */
+function unitCoverageGap(kind: "barcode" | "image") {
+  const unitColumn = Prisma.raw(kind === "image" ? "pu.image_url" : "pu.barcode");
+  const productColumn = Prisma.raw(kind === "image" ? "p.image_url" : "p.barcode");
+  return Prisma.sql`
+    (
+      EXISTS (
+        SELECT 1
+        FROM product_units pu
+        WHERE pu.product_id = p.id
+          AND pu.status = 'active'
+          AND pu.allow_manual_unit_select = true
+          AND btrim(COALESCE(${unitColumn}, '')) = ''
+      )
+      OR (
+        NOT EXISTS (
+          SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id
+        )
+        AND btrim(COALESCE(${productColumn}, '')) = ''
+      )
+    )
+  `;
+}
+
+async function loadCoverageGapIds(scope: BranchScope, client: any, kind: "barcode" | "image") {
+  const gap = unitCoverageGap(kind);
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT p.id
+    FROM products p
+    WHERE p.company_id = ${scope.companyId}
+      AND p.status <> 'deleted'
+      AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
+      AND (
+        ${scope.isOwner}
+        OR EXISTS (
+          SELECT 1 FROM inventory_balances scoped
+          WHERE scoped.product_id = p.id AND scoped.warehouse_id = ANY(${scope.warehouseIds})
+        )
+        OR NOT EXISTS (SELECT 1 FROM inventory_balances empty WHERE empty.product_id = p.id)
+      )
+      AND ${gap}
+  `;
+  return rows.map((row: { id: string }) => row.id);
+}
+
 export async function getPrismaProductListPage(
   tenant: TenantContext,
   input: ProductListQuery = {},
@@ -216,11 +249,14 @@ export async function getPrismaProductListPage(
   const query = normalizeProductListQuery(input);
   const scope = await resolveTenantScope(tenant, client);
   const insight = query.insight ?? "all";
-  const where = buildProductListWhere(scope, { ...query, insight: insight === "low_stock" ? "all" : insight });
+  const whereInsight = insight === "low_stock" || insight === "no_image" || insight === "missing_barcode" ? "all" : insight;
+  const where = buildProductListWhere(scope, { ...query, insight: whereInsight });
 
   let insightIds: string[] | null = null;
   if (insight === "low_stock") {
     insightIds = await loadLowStockIds(scope, client);
+  } else if (insight === "no_image" || insight === "missing_barcode") {
+    insightIds = await loadCoverageGapIds(scope, client, insight === "no_image" ? "image" : "barcode");
   }
 
   const listWhere = insightIds ? { AND: [where, { id: { in: insightIds } }] } : where;
@@ -275,20 +311,8 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
           AND lot.expiry_date <= ${in30Days}
       )::int AS near_expiry,
       COUNT(*) FILTER (WHERE p.updated_at <= ${deadBefore})::int AS dead_stock,
-      COUNT(*) FILTER (
-        WHERE COALESCE(p.barcode, '') = ''
-          AND NOT EXISTS (
-            SELECT 1 FROM product_units pu
-            WHERE pu.product_id = p.id AND COALESCE(pu.barcode, '') <> ''
-          )
-      )::int AS missing_barcode,
-      COUNT(*) FILTER (
-        WHERE COALESCE(p.image_url, '') = ''
-          AND NOT EXISTS (
-            SELECT 1 FROM product_units pu
-            WHERE pu.product_id = p.id AND COALESCE(pu.image_url, '') <> ''
-          )
-      )::int AS missing_images
+      COUNT(*) FILTER (WHERE ${unitCoverageGap("barcode")})::int AS missing_barcode,
+      COUNT(*) FILTER (WHERE ${unitCoverageGap("image")})::int AS missing_images
     FROM products p
     LEFT JOIN (
       SELECT product_id, SUM(quantity) AS qty

@@ -1,13 +1,15 @@
 "use client";
 
 import {
+  displayProductUnitName,
   fillProductsCopy,
   localizeProductError,
   productStatusLabel,
   tProducts,
 } from "@/lib/i18n/products-copy";
 import { localizedProductName } from "@/features/pos/product-display-name";
-import { preferredProductDisplayUrl, preferredProductThumbUrl, productHasImageRef } from "@/lib/storage/product-image-ref";
+import { hasAssignedUnitBarcode, missingBarcodeUnits, missingImageUnits, productMissingBarcode, productMissingImage, sellableCoverageUnits } from "@/features/products/unit-coverage";
+import { preferredProductDisplayUrl, preferredProductThumbUrl } from "@/lib/storage/product-image-ref";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
@@ -343,7 +345,11 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                 applyInsightFilter(card.filter);
             }} onViewAll={() => setShellDrawer(card.drawerKey)}/>))}
       </section>
-      <ProductsVisualShell stats={productShellStats} onOpenDrawer={setShellDrawer}/>
+      <ProductsVisualShell stats={productShellStats} onOpenDrawer={(drawerKey) => {
+        if (drawerKey === "missing_images") applyInsightFilter("no_image");
+        if (drawerKey === "missing_barcode") applyInsightFilter("missing_barcode");
+        setShellDrawer(drawerKey);
+      }}/>
       {expandedInsight ? (<InsightPanel emptyText={summaryCards.find((card) => card.filter === expandedInsight)?.emptyText ?? t("noProductsFound")} filter={expandedInsight} products={insightProducts[expandedInsight]} onSelectProduct={(product) => {
                 setQuery(product.nameEn || product.nameLo);
                 applyInsightFilter(expandedInsight);
@@ -380,7 +386,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
           </div>
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" value={insightFilter} onChange={(event) => applyInsightFilter(event.target.value as InsightFilter)} aria-label={t("insightFilter")}>
+            <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" data-testid="products-health-filter" value={insightFilter} onChange={(event) => applyInsightFilter(event.target.value as InsightFilter)} aria-label={t("insightFilter")}>
               <option value="all">{t("allProductHealth")}</option>
               <option value="out_of_stock">{t("outOfStock")}</option>
               <option value="low_stock">{t("lowStock")}</option>
@@ -479,6 +485,8 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                     <td className="max-w-[220px] px-3 py-3">
                       <div className="truncate font-semibold">{primaryName}</div>
                       {secondaryName && secondaryName !== primaryName ? <div className="mt-1 truncate text-xs text-muted-foreground">{secondaryName}</div> : null}
+                      {insightFilter === "no_image" ? <CoverageGapLine kind="image" locale={locale} product={product} t={t}/> : null}
+                      {insightFilter === "missing_barcode" ? <CoverageGapLine kind="barcode" locale={locale} product={product} t={t}/> : null}
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">{product.barcode || "-"}</td>
                     <td className="px-3 py-3 font-mono text-xs">{product.sku || "-"}</td>
@@ -1342,8 +1350,8 @@ function getProductInsights(products: Product[]) {
 }
 function getProductShellStats(products: Product[], categories: Category[]) {
     const barcodeAudit = getBarcodeAudit(products);
-    const missingBarcode = products.filter((product) => !product.barcode && product.units.every((unit) => !unit.barcode)).length;
-    const missingImages = products.filter((product) => !productHasImageRef(product)).length;
+    const missingBarcode = products.filter((product) => productMissingBarcode(product)).length;
+    const missingImages = products.filter((product) => productMissingImage(product)).length;
     const missingCost = products.filter((product) => Number(product.costPriceLak ?? 0) <= 0 && product.units.every((unit) => Number(unit.costPriceLak ?? 0) <= 0)).length;
     const lowMargin = products.filter((product) => Number(product.sellingPriceLak ?? 0) > 0 && Number(product.sellingPriceLak ?? 0) <= Number(product.costPriceLak ?? 0)).length;
     const inactiveProducts = products.filter((product) => product.status !== "active").length;
@@ -1595,6 +1603,21 @@ function getProductShellDrawerContent(drawerKey: ProductShellDrawerKey, stats: P
         title: t("productHealth"),
     };
 }
+function CoverageGapLine({ kind, locale, product, t }: {
+    kind: "barcode" | "image";
+    locale: SupportedLocale;
+    product: Product;
+    t: ProductsTranslate;
+}) {
+    const units = (kind === "image" ? missingImageUnits(product) : missingBarcodeUnits(product))
+        .map((unit) => displayProductUnitName(unit.unitName || "Piece", locale));
+    if (units.length === 0) return null;
+    return (
+      <div className="mt-1 text-xs text-warning" data-testid={kind === "image" ? "missing-image-units" : "missing-barcode-units"}>
+        {fillProductsCopy(kind === "image" ? t("missingImageUnits") : t("missingBarcodeUnits"), { units: units.join(", ") })}
+      </div>
+    );
+}
 function formatShellCount(value: number) {
     return value.toLocaleString("en-US");
 }
@@ -1628,9 +1651,9 @@ function matchesInsightFilter(product: Product, filter: InsightFilter) {
     if (filter === "dead_stock")
         return isDeadStock(product);
     if (filter === "missing_barcode")
-        return !product.barcode && product.units.every((unit) => !unit.barcode);
+        return productMissingBarcode(product);
     if (filter === "no_image")
-        return !productHasImageRef(product);
+        return productMissingImage(product);
     return true;
 }
 function isDeadStock(product: Product) {
@@ -1718,15 +1741,16 @@ function getBarcodeAudit(products: Product[], locale?: SupportedLocale) {
     }> = [];
     for (const product of products) {
         const productName = localizedProductName(product, locale);
+        for (const unit of missingBarcodeUnits(product)) {
+            missing.push({ barcode: unit.barcode?.trim() || undefined, issue: "Missing Barcode", productName, unitName: unit.unitName || undefined });
+        }
         const entries = [
-            { barcode: product.barcode, productName },
-            ...product.units.map((unit) => ({ barcode: unit.barcode, productName, unitName: unit.unitName })),
+            ...(product.units.length > 0 && product.barcode.trim() ? [{ barcode: product.barcode.trim(), productName }] : []),
+            ...sellableCoverageUnits(product)
+                .filter((unit) => hasAssignedUnitBarcode(unit.barcode))
+                .map((unit) => ({ barcode: unit.barcode!.trim(), productName, unitName: unit.unitName || undefined })),
         ];
         for (const entry of entries) {
-            if (!entry.barcode) {
-                missing.push({ ...entry, issue: "Missing Barcode" });
-                continue;
-            }
             if (!/^[A-Za-z0-9-]{4,64}$/.test(entry.barcode)) {
                 invalid.push({ ...entry, issue: "Invalid Barcode" });
             }
