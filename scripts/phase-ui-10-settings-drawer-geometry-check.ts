@@ -24,6 +24,7 @@ const activity = read("features/store-activity/components/store-activity-logs-cl
 const settingsForm = readSettingsUi();
 const settingsQr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const staff = read("features/settings/components/staff-control-section.tsx");
+const rolePanel = read("features/settings/components/role-permissions-panel.tsx");
 const settingsDetail = read("app/(dashboard)/settings/[section]/page.tsx");
 const largeDrawer = read("features/settings/components/settings-large-drawer.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
@@ -164,7 +165,8 @@ check(
   settingsActions.includes("export") &&
     settingsRepo.includes("getPrismaSettings") &&
     staff.includes("saveStaffMemberAction") &&
-    staff.includes("saveRolePermissionsAction") &&
+    rolePanel.includes("saveRolePermissionsAction") &&
+    !staff.includes("saveRolePermissionsAction") &&
     staff.includes("saveApprovalRuleAction") &&
     settingsQr.includes("saveQrPaymentBankAction") &&
     settingsQr.includes("saveQrPaymentAccountAction") &&

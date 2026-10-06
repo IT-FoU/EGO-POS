@@ -65,6 +65,7 @@ const reportsService = read("features/reports/report-service.ts");
 const reportsHub = read("features/reports/build-analytics-hub.ts");
 const reportsCatalog = read("features/reports/report-catalog.ts");
 const settingsForm = readSettingsUi();
+const settingsQr = read("features/settings/components/qr-payment-bank-management-section.tsx");
 const settingsStaff = read("features/settings/components/staff-control-section.tsx");
 const settingsPage = read("app/(dashboard)/settings/page.tsx");
 const settingsActions = read("features/settings/actions.ts");
@@ -210,7 +211,8 @@ check(
   settingsForm.includes('tSettings("companyProfile"') &&
     settingsForm.includes('tSettings("receiptSettings"') &&
     settingsForm.includes('tSettings("customerDisplay"') &&
-    settingsForm.includes('tSettings("qrPaymentBanks"') &&
+    settingsQr.includes('tSettings("qrPaymentBanks"') &&
+    !settingsForm.includes('tSettings("qrPaymentBanks"') &&
     settingsStaff.includes('tSettings("staffControl"') &&
     receiptPrintModeLabel("auto_print", "en") === "Auto Print" &&
     localizeSettingsError("Company name is required.", "lo") === slo.companyNameRequired,

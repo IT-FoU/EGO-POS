@@ -1450,7 +1450,7 @@ const lo = {
   "selectBranch": "ເລືອກສາຂາ",
   "staffCashier": "ພະນັກງານຂາຍ",
   "showDiscountDetails": "ສະແດງລາຍລະອຽດສ່ວນຫຼຸດ",
-  "showDiscountDetailsHelp": "ເຊື່ອງ ຫຼື ສະແດງແຖວສ່ວນຫຼຸດໃນ Customer Display ຂອງອຸປະກອນນີ້. ຍອດຊຳລະຄົງເດີມ.",
+  "showDiscountDetailsHelp": "ເຊື່ອງ ຫຼື ສະແດງແຖວສ່ວນຫຼຸດໃນຈໍລູກຄ້າຂອງອຸປະກອນນີ້. ຍອດຊຳລະຄົງເດີມ.",
   "showPromotionInformation": "ສະແດງຂໍ້ມູນໂປຣໂມຊັນ",
   "showPromotionInformationHelp": "ເຊື່ອງ ຫຼື ສະແດງຂໍ້ຄວາມໂປຣໂມຊັນໃຫ້ລູກຄ້າເຫັນ. POS ຍັງນຳໃຊ້ໂປຣໂມຊັນຕາມປົກກະຕິ.",
   "templateBoldGreenDesc": "ພື້ນສີນາວີ ເນັ້ນສີສົ້ມ ມີແຖບສະຖານະດ້ານເທິງ ແລະ ແບ່ງລາຍການ-ສະຫຼຸບລຸ່ມ.",

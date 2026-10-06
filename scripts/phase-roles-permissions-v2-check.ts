@@ -42,8 +42,35 @@ const staff = read("features/settings/components/staff-control-section.tsx");
 const repo = read("features/access-control/prisma-repository.ts");
 const catalog = read("features/access-control/permission-catalog.ts");
 
+const cashierSaveExtras = new Set([
+  "access.fine_v5",
+  "access.phase3",
+  "pos.access",
+  "pos.cash_in",
+  "pos.cash_out",
+  "pos.hold",
+  "pos.reprint",
+]);
+const cashierSavedExtras = cashierSaved.filter((key) => !cashierKeys.includes(key));
+const cashierDashboard = cashierDraft.dashboard?.advanced ?? {};
 check("cashier default stays POS view, create, and print", cashierKeys.every((key) => ["pos.view", "pos.create", "pos.print"].includes(key)) && cashierKeys.length === 3);
-check("cashier save does not broaden keys", cashierSaved.filter((key) => !cashierKeys.includes(key)).every((key) => key === "access.fine_v5" || key === "pos.access" || key === "pos.hold" || key === "pos.reprint" || key === "pos.cash_in" || key === "pos.cash_out") && cashierKeys.every((key) => cashierSaved.includes(key)));
+check(
+  "cashier save does not broaden keys",
+  cashierKeys.every((key) => cashierSaved.includes(key)) &&
+    cashierSavedExtras.length === cashierSaveExtras.size &&
+    cashierSavedExtras.every((key) => cashierSaveExtras.has(key)) &&
+    !cashierSaved.some((key) => key.startsWith("settings.") || key === "roles.manage" || key === "pos.refund" || key === "pos.void" || key === "pos.price_override" || key === "dashboard.profit.view" || key === "dashboard.cost.view" || key.endsWith(".delete")) &&
+    cashierDraft.dashboard?.enabled === false &&
+    cashierDashboard["dashboard.sales"] === true &&
+    cashierDashboard["dashboard.bills"] === true &&
+    cashierDashboard["dashboard.avgBill"] === true &&
+    cashierDashboard["dashboard.trend"] === true &&
+    cashierDashboard["dashboard.bestSellers"] === true &&
+    cashierDashboard["dashboard.recentBills"] === true &&
+    cashierDashboard["dashboard.cashSession"] === true &&
+    cashierDashboard["dashboard.profit"] === false &&
+    cashierDashboard["dashboard.cost"] === false,
+);
 check("cashier configured sidebar is POS only", cashierPreview.visible.length === 1 && cashierPreview.visible[0] === "pos" && cashierPreview.hidden.includes("products") && cashierPreview.hidden.includes("settings") && cashierPreview.hidden.includes("staff"));
 check("manager default excludes settings, delete, and role admin", !managerKeys.some((key) => key.startsWith("settings.") || key.endsWith(".delete") || key === "roles.manage"));
 check("manager save keeps current keys and does not add role admin", managerKeys.every((key) => managerSaved.includes(key)) && !managerSaved.includes("roles.manage") && !managerSaved.some((key) => key.startsWith("settings.")));

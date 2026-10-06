@@ -122,7 +122,14 @@ check("31. day off LO keys", () => {
   assert(copy.includes('"dayOffSettingsTitle": "ວັນພັກ"'), "day off LO missing");
 });
 check("32. day off validation", () => {
-  assert(dayOff.includes("employeeRequired") && dayOff.includes("specialDateRequired"), "day off validation missing");
+  assert(
+    dayOff.includes("employeeActionsDisabled") &&
+      dayOff.includes("disabled={employeeActionsDisabled}") &&
+      dayOff.includes("if (!userId) return") &&
+      dayOff.includes("companyDefaultEmployeeOnly") &&
+      dayOff.includes("specialDateRequired"),
+    "day off validation missing",
+  );
 });
 check("33. day off empty state", () => {
   assert(dayOff.includes("noEmployeesFound"), "day off empty state missing");
