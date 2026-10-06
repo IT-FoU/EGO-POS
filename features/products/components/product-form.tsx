@@ -285,7 +285,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     const [unitsShareStock, setUnitsShareStock] = useState(true);
     const [conversionInvalid, setConversionInvalid] = useState(false);
     const [initialStockPreview, setInitialStockPreview] = useState<InitialStockPreviewValue>({
-        addOpeningStock: false,
+        addOpeningStock: true,
         receiveUnitId: "unit-base",
         quantityReceived: 0,
         lotNumber: "",
@@ -861,7 +861,7 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             costPriceLak,
             description: String(formData.get("description") ?? "").trim() || undefined,
             imageUrl: productImages.find((image) => image.id === selectedImageId)?.storagePath,
-            initialStock: mode === "create" && openingQuantity > 0 ? {
+            initialStock: mode === "create" && initialStockPreview.addOpeningStock && openingQuantity > 0 ? {
                 expiryDate: initialStockPreview.expiryDate || undefined,
                 lotNumber: initialStockPreview.lotNumber.trim() || undefined,
                 note: initialStockPreview.note.trim() || undefined,
@@ -1855,13 +1855,14 @@ function ProductPreviewDrawer({ isPending, onClose, onSave, snapshot, }: {
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <PreviewField label={t("addOpeningStockNow")} value={snapshot.initialStock.addOpeningStock ? t("yes") : t("no")}/>
                 <PreviewField label={t("receiveUnit")} value={receiveUnit?.unitName ? displayProductUnitName(receiveUnit.unitName) : "—"}/>
-                <PreviewField label={t("quantityReceived")} value={formatMoney(snapshot.initialStock.quantityReceived)}/>
-                <PreviewField label={t("convertedBaseQty")} value={`${formatMoney(convertedBaseQuantity)} ${baseUnit?.unitName ? displayProductUnitName(baseUnit.unitName) : t("unit")}`}/>
+                <PreviewField label={t("openingQuantity")} value={formatMoney(snapshot.initialStock.quantityReceived)}/>
+                <PreviewField label={t("startingStock")} value={`${formatMoney(convertedBaseQuantity)} ${baseUnit?.unitName ? displayProductUnitName(baseUnit.unitName) : t("unit")}`}/>
                 <PreviewField label={t("lotNumber")} value={snapshot.initialStock.lotNumber || "—"}/>
                 <PreviewField label={t("expiryDate")} value={snapshot.initialStock.expiryDate || "—"}/>
                 <PreviewField label={t("receiveDate")} value={snapshot.initialStock.receiveDate || "—"}/>
                 <PreviewField label={t("supplier")} value={snapshot.initialStock.supplier || "—"}/>
-                <PreviewField label={t("costLak")} value={formatMoney(snapshot.initialStock.costLak)}/>
+                <PreviewField label={fillProductsCopy(t("costPerReceiveUnit"), { unit: receiveUnit?.unitName ? displayProductUnitName(receiveUnit.unitName) : t("unit") })} value={formatMoney(snapshot.initialStock.costLak)}/>
+                <PreviewField label={t("totalReceivedCost")} value={formatMoney(Math.max(Number(snapshot.initialStock.quantityReceived) || 0, 0) * Math.max(Number(snapshot.initialStock.costLak) || 0, 0))}/>
                 <div className="md:col-span-2 xl:col-span-3">
                   <PreviewField label={t("note")} value={snapshot.initialStock.note || "—"}/>
                 </div>
@@ -1907,7 +1908,7 @@ function ReadinessRow({ label, ok }: { label: string; ok: boolean }) {
     </div>);
 }
 
-function QuantityReceivedField({ onCommit, value }: { onCommit: (quantity: number) => void; value: number }) {
+function QuantityReceivedField({ disabled = false, onCommit, value }: { disabled?: boolean; onCommit: (quantity: number) => void; value: number }) {
     const [state, setState] = useState(() => openingQtyFromCommitted(value));
     const focusedRef = useRef(false);
     useEffect(() => {
@@ -1920,6 +1921,7 @@ function QuantityReceivedField({ onCommit, value }: { onCommit: (quantity: numbe
         autoComplete="off"
         className="field-input"
         data-field="quantity-received"
+        disabled={disabled}
         inputMode="numeric"
         type="text"
         value={openingQtyDisplay(state)}
@@ -1950,11 +1952,15 @@ function InitialStockPreview({ onChange, units, value }: {
     units: ProductUnit[];
     value: InitialStockPreviewValue;
 }) {
-    const receiveUnit = units.find((unit) => unit.id === value.receiveUnitId) ?? units.find((unit) => unit.isPurchaseUnit) ?? units.find((unit) => unit.isBaseUnit) ?? units[0];
+    const enabledUnits = units.filter((unit) => (unit.status ?? "active") !== "inactive" && Number(unit.conversionQty) > 0);
+    const receiveUnit = enabledUnits.find((unit) => unit.id === value.receiveUnitId) ?? enabledUnits.find((unit) => unit.isPurchaseUnit) ?? enabledUnits.find((unit) => unit.isBaseUnit) ?? enabledUnits[0];
     const baseUnitName = units.find((unit) => unit.isBaseUnit)?.unitName;
     const previewQuantity = Math.max(Number(value.quantityReceived) || 0, 0);
-    const conversionQty = Math.max(Number(receiveUnit?.conversionQty ?? 1), 1);
-    const previewBaseQuantity = previewQuantity * conversionQty;
+    const conversionQty = Number(receiveUnit?.conversionQty);
+    const conversionValid = Boolean(receiveUnit) && Number.isFinite(conversionQty) && conversionQty > 0;
+    const previewBaseQuantity = conversionValid ? previewQuantity * conversionQty : 0;
+    const receiveUnitLabel = receiveUnit?.unitName ? displayProductUnitName(receiveUnit.unitName) : t("unit");
+    const totalReceivedCost = previewQuantity * Math.max(Number(value.costLak) || 0, 0);
     function update(patch: Partial<InitialStockPreviewValue>) {
         onChange({ ...value, ...patch });
     }
@@ -1969,32 +1975,33 @@ function InitialStockPreview({ onChange, units, value }: {
           {t("addOpeningStockNow")}
         </label>
         <Field label={t("receiveUnit")}>
-          <select className="field-input" value={receiveUnit?.id ?? ""} onChange={(event) => update({ receiveUnitId: event.target.value })}>
-            {units.map((unit) => (<option key={unit.id} value={unit.id}>{unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit")}</option>))}
+          <select className="field-input" disabled={!value.addOpeningStock} value={receiveUnit?.id ?? ""} onChange={(event) => update({ receiveUnitId: event.target.value })}>
+            {enabledUnits.map((unit) => (<option key={unit.id} value={unit.id}>{unit.unitName ? displayProductUnitName(unit.unitName) : t("unnamedUnit")}</option>))}
           </select>
         </Field>
-        <Field label={t("quantityReceived")}>
-          <QuantityReceivedField value={value.quantityReceived} onCommit={(quantityReceived) => update({ quantityReceived })}/>
+        <Field label={t("openingQuantity")}>
+          <QuantityReceivedField disabled={!value.addOpeningStock} value={value.quantityReceived} onCommit={(quantityReceived) => update({ quantityReceived })}/>
         </Field>
         <Field label={t("lotNumber")}>
-          <input className="field-input" value={value.lotNumber} onChange={(event) => update({ lotNumber: event.target.value })} placeholder={t("previewLotPlaceholder")}/>
+          <input className="field-input" disabled={!value.addOpeningStock} value={value.lotNumber} onChange={(event) => update({ lotNumber: event.target.value })} placeholder={t("previewLotPlaceholder")}/>
         </Field>
         <Field label={t("expiryDate")}>
-          <input className="field-input" type="date" value={value.expiryDate} onChange={(event) => update({ expiryDate: event.target.value })}/>
+          <input className="field-input" disabled={!value.addOpeningStock} type="date" value={value.expiryDate} onChange={(event) => update({ expiryDate: event.target.value })}/>
         </Field>
         <Field label={t("receiveDate")}>
-          <input className="field-input" type="date" value={value.receiveDate} onChange={(event) => update({ receiveDate: event.target.value })}/>
+          <input className="field-input" disabled={!value.addOpeningStock} type="date" value={value.receiveDate} onChange={(event) => update({ receiveDate: event.target.value })}/>
         </Field>
         <Field label={t("supplier")}>
-          <input className="field-input" value={value.supplier} onChange={(event) => update({ supplier: event.target.value })} placeholder={t("previewSupplierPlaceholder")}/>
+          <input className="field-input" disabled={!value.addOpeningStock} value={value.supplier} onChange={(event) => update({ supplier: event.target.value })} placeholder={t("previewSupplierPlaceholder")}/>
         </Field>
-        <Field label={t("costLak")}>
+        <Field label={fillProductsCopy(t("costPerReceiveUnit"), { unit: receiveUnitLabel })}>
           <MoneyInput className="h-11" value={value.costLak} onValueChange={(costLak) => update({ costLak })}/>
         </Field>
-        <PreviewField label={t("convertedBaseQty")} value={`${formatMoney(previewBaseQuantity)} ${baseUnitName ? displayProductUnitName(baseUnitName) : t("unit")}`}/>
+        <PreviewField label={t("startingStock")} value={`${formatMoney(value.addOpeningStock ? previewBaseQuantity : 0)} ${baseUnitName ? displayProductUnitName(baseUnitName) : t("unit")}`}/>
+        <PreviewField label={t("totalReceivedCost")} value={formatMoney(value.addOpeningStock ? totalReceivedCost : 0)}/>
         <div className="md:col-span-3">
           <Field label={t("note")}>
-            <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" value={value.note} onChange={(event) => update({ note: event.target.value })} placeholder={t("previewNotePlaceholder")}/>
+            <textarea className="min-h-20 w-full rounded-md border border-border bg-background p-3 text-sm outline-none transition focus:border-primary" disabled={!value.addOpeningStock} value={value.note} onChange={(event) => update({ note: event.target.value })} placeholder={t("previewNotePlaceholder")}/>
           </Field>
         </div>
       </div>

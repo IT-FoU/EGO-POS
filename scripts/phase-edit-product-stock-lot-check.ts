@@ -84,9 +84,9 @@ const productRepo = read("features/products/prisma-repository.ts");
 const inventoryRepo = read("features/inventory/prisma-repository.ts");
 const inventoryActions = read("features/inventory/actions.ts");
 
-check("1. Edit Product shows Stock & Lot Tracking", form.includes("<ProductStockLotPanel") && form.includes('t("stockLotTracking")') === false && panel.includes('t("stockLotTracking")') && editPage.includes("stockSnapshot") && form.includes("InitialStockPreview") && form.includes('mode === "create" && openingQuantity > 0'));
-check("Create keeps Initial Stock & Lot Tracking", form.includes("<InitialStockPreview") && form.includes('t("initialStockLot")'));
-check("Product Save payload does not send initialStock on edit", form.includes('initialStock: mode === "create" && openingQuantity > 0'));
+check("1. Edit Product shows Receive Additional Stock", form.includes("<ProductStockLotPanel") && panel.includes('t("receiveAdditionalStock")') && panel.includes('t("stockAfterReceiving")') && editPage.includes("stockSnapshot") && form.includes("InitialStockPreview") && form.includes("initialStockPreview.addOpeningStock && openingQuantity > 0"));
+check("Create keeps Opening Stock & Lot Tracking", form.includes("<InitialStockPreview") && form.includes('t("initialStockLot")') && form.includes('t("openingQuantity")'));
+check("Product Save payload does not send initialStock on edit", form.includes('initialStock: mode === "create" && initialStockPreview.addOpeningStock && openingQuantity > 0'));
 check("Product update does not call writeStockIn", !/async function writePrismaProductUpdate[\s\S]*writeStockIn/.test(productRepo));
 check("Add Stock reuses writeStockIn / stockInAction", panel.includes("stockInAction") && inventoryRepo.includes("export async function writeStockIn"));
 check("Adjust Stock reuses createStockCount via adjustProductStockToActual", panel.includes("adjustProductStockAction") && inventoryActions.includes("adjustProductStockToActual") && inventoryRepo.includes("return createStockCount("));

@@ -207,6 +207,9 @@ export async function writeStockIn(tx: any, input: StockInInput, tenant: TenantC
     : await tx.productUnit.findFirst({
         where: { productId: data.productId, isBaseUnit: true },
       });
+  if (unit && numberValue(unit.conversionQty) <= 0) {
+    throw new Error("Receive unit conversion must be greater than zero.");
+  }
   const conversionQty = Math.max(numberValue(unit?.conversionQty, 1), 1);
   const baseQuantity = quantity * conversionQty;
   const isQuickStockIn = Boolean(
