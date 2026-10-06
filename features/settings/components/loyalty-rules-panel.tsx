@@ -193,7 +193,7 @@ export function LoyaltyRulesPanel({
       {editor ? (
         <AppSmallModal
           closeAriaLabel={tSettings("cancel", locale)}
-          description={editor.ruleType === "ITEM_QUANTITY" ? tSettings("itemQuantityHelp", locale) : editor.ruleType === "PRODUCT_BONUS" ? tSettings("productBonusHelp", locale) : editor.ruleType === "CATEGORY_BONUS" ? tSettings("categoryBonusHelp", locale) : editor.ruleType === "MINIMUM_BASKET" ? tSettings("basketOnceHelp", locale) : undefined}
+          description={editor.ruleType === "ITEM_QUANTITY" ? tSettings("itemQuantityHelp", locale) : editor.ruleType === "PRODUCT_BONUS" ? tSettings("productBonusHelp", locale) : editor.ruleType === "CATEGORY_BONUS" ? tSettings("categoryBonusHelp", locale) : editor.ruleType === "MINIMUM_BASKET" ? tSettings("basketOnceHelp", locale) : editor.ruleType === "SPEND_AMOUNT" ? tSettings("spendRuleHelp", locale) : undefined}
           footer={(
             <div className="flex justify-end gap-2">
               <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => setEditor(null)}>{tSettings("cancel", locale)}</button>

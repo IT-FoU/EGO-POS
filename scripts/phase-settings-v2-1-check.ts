@@ -51,13 +51,13 @@ check("27. LO help content", helpTopics.includes("ເລີ່ມຕົ້ນໃ
 check("28. local help search", helpPanel.includes("filterHelpTopics") && helpTopics.includes("filterHelpTopics"));
 check("29. About values safe", helpPanel.includes("versionUnavailable") && helpPanel.includes("APP_NAME") && !helpPanel.includes("NEXTAUTH") && !helpPanel.includes("password") && !helpPanel.includes("cookie"));
 check("30. Copy System Information", helpPanel.includes("copySystemInformation") && helpPanel.includes("buildCopyText"));
-check("31. no ticket form", !helpPanel.includes("submitTicket") && !landing.includes("Contact Support") && !landing.includes("Report a Problem") && landing.includes("Support ticket submission is not available yet"));
+check("31. tickets are available from Help", !helpPanel.includes("submitTicket") && !landing.includes("Contact Support") && !landing.includes("Report a Problem") && landing.includes("can submit a support ticket when your role allows it") && !landing.includes("not available yet"));
 check("32. no attachment UI", !helpPanel.includes("attachment") && !helpPanel.includes("type=\"file\""));
-check("33. deferred support explanation", landing.includes("Support ticket submission is not available yet") && settingsCopy.includes("supportTicketsDeferred"));
+check("33. support explanation matches tickets", landing.includes("can submit a support ticket when your role allows it") && settingsCopy.includes("supportTicketsDeferred") && !settingsCopy.includes("Support ticket submission is not available yet"));
 
 check("34. branch search", landing.includes("keywords: \"branch information"));
 check("35-37. help/support/about search", landing.includes("keywords: \"help support about version"));
-check("38. bug/problem explanation-only", landing.includes("problem bug feedback feature request") && landing.includes("Support ticket submission is not available yet"));
+check("38. bug/problem explains tickets exist", landing.includes("problem bug feedback feature request") && landing.includes("can submit a support ticket when your role allows it"));
 
 check("39. original categories remain", landing.includes('id: "business"') && landing.includes('id: "pos-payments"') && landing.includes('id: "customers"'));
 check("40. no schema migration for v2.1", !existsSync(join(root, "prisma/migrations/20261002140000_settings_v2_1")) && schema.includes("model Branch"));

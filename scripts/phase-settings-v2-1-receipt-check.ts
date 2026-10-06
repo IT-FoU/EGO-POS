@@ -85,8 +85,8 @@ check(
     !receiptSection.includes("BranchInformationPanel"),
 );
 check("22. receipt save includes layout fields", form.includes("receiptPaperSize: settings.receiptPaperSize") && form.includes("receiptShowCompanyName: settings.receiptShowCompanyName"));
-check("23. EN strings", copy.includes('"receiptPaperSize": "Paper size"') && copy.includes('"showStoreNameOnReceipt"'));
-check("24. LO strings", copy.includes('"receiptPaperSize": "ຂະໜາດເຈ້ຍ"') && copy.includes('"showStoreNameOnReceipt": "ສະແດງຊື່ຮ້ານ"'));
+check("23. EN strings", copy.includes('"receiptPaperSize": "Receipt Paper Layout"') && copy.includes('"showStoreNameOnReceipt"'));
+check("24. LO strings", copy.includes('"receiptPaperSize": "ຮູບແບບເຈ້ຍໃບບິນ"') && copy.includes('"showStoreNameOnReceipt": "ສະແດງຊື່ຮ້ານ"'));
 
 const defaults = parseReceiptLayoutPrefs(null);
 check("25. defaults 80mm + all visible", defaults.paperSize === "80mm" && defaults.visibility.showCompanyName === true);

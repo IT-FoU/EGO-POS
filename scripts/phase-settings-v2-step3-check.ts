@@ -55,7 +55,7 @@ check("12. search QR opens QR Payments", landing.includes("keywords: \"qr paymen
 check("13. search membership links Membership", landing.includes("keywords: \"membership") && landing.includes('href: "/membership-levels"'));
 check("14. search reorder links Reorder", landing.includes("keywords: \"reorder") && landing.includes('href: "/reports/inventory/reorder"'));
 check("15. search activity links Activity Logs", landing.includes("keywords: \"activity audit") && landing.includes('href: "/activity-logs"'));
-check("16. deferred search returns explanation", landing.includes("hours business hours holiday printer payroll terminal") && landing.includes("not a configurable setting"));
+check("16. deferred search returns explanation", landing.includes("hours business hours holiday payroll session timeout pin") && landing.includes("not a configurable setting") && landing.includes("There is no printer device setting"));
 check("17. row status Business Logo", landing.includes("Uploaded") && landing.includes("Not set") && landing.includes("hasLogo"));
 check("18. Tax status", landing.includes("vatEnabled") && landing.includes("On") && landing.includes("Off"));
 check("19. Cash Shift status", landing.includes("requireCashShiftBeforeSale") && landing.includes("Required") && landing.includes("Not required"));
@@ -65,7 +65,7 @@ check("22. Loyalty status", landing.includes("loyaltyEnabled"));
 check("23. direct route refresh works", detailPage.includes("sections.has") && businessHrefs.concat(posHrefs, staffHrefs, customerHrefs, helpHrefs).every((href) => detailPage.includes(`"${href.replace("/settings/", "")}"`)));
 check("24. Back to Settings works", form.includes('href="/settings"') && form.includes("backToSettings") && settingsCopy.includes("Back to Settings"));
 check("25. global Save absent", !landing.includes("saveSettings") && !landing.includes("Save settings") && landingPage.includes("SettingsLanding"));
-check("26. print mode labeled This device", form.includes("scopeThisDevice") && form.includes("printBehaviorThisBrowser") && settingsCopy.includes("Print behavior is saved only in this browser."));
+check("26. print mode labeled This device", form.includes("scopeThisDevice") && form.includes("printBehaviorThisBrowser") && settingsCopy.includes("This print mode applies only to this browser."));
 check("27. Customer Display labeled This device", form.includes("customerDisplayThisBrowser") && landing.includes('scope: "device"'));
 check("28. sidebar EGO POS branding unchanged", shell.includes("APP_NAME") && shell.includes("SLOGAN") && !shell.includes("readCompanyLogoUrl"));
 check("29. header Company.name unchanged", shell.includes("resolveActiveCompanyName(session.user.activeCompanyName)"));

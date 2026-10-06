@@ -75,7 +75,7 @@ const groups: Group[] = [
     rows: [
       { description: text("Whether sales require an open shift", "ກຳນົດວ່າຕ້ອງເປີດກະກ່ອນຂາຍຫຼືບໍ່"), href: "/settings/cash-shift", icon: Banknote, keywords: "cash shift start work required sale ກະ ເງິນສົດ ເລີ່ມວຽກ", scope: "company", summary: ({ settings }, locale) => settings?.requireCashShiftBeforeSale ? (locale === "lo" ? "ບັງຄັບ" : "Required") : (locale === "lo" ? "ບໍ່ບັງຄັບ" : "Not required"), title: text("Cash Shift", "ກະເງິນສົດ") },
       { description: text("Registers that share this store", "ເຄື່ອງຂາຍທີ່ໃຊ້ຮ້ານນີ້ຮ່ວມກັນ"), href: "/settings/pos-terminals", icon: Monitor, keywords: "pos terminal register device counter ເຄື່ອງ ຄັງ", scope: "company", summary: (_, locale) => locale === "lo" ? "ຫຼາຍເຄື່ອງ" : "Multi terminal", title: text("POS Terminals", "ເຄື່ອງ POS") },
-      { description: text("Receipt text and printing behavior", "ຂໍ້ຄວາມໃບບິນ ແລະ ການພິມ"), href: "/settings/receipt", icon: ReceiptText, keywords: "receipt printing print header footer prefix auto ask ໃບບິນ ພິມ", scope: "company", summary: (_, locale, mode) => printModeLabel(mode, locale), title: text("Receipt & Printing", "ໃບບິນ ແລະ ການພິມ") },
+      { description: text("Shared receipt text. Print mode is this browser only.", "ຂໍ້ຄວາມໃບບິນໃຊ້ຮ່ວມກັນ. ຮູບແບບພິມສະເພາະບຣາວເຊີນີ້."), href: "/settings/receipt", icon: ReceiptText, keywords: "receipt printing print header footer prefix auto ask paper layout ໃບບິນ ພິມ ຮູບແບບເຈ້ຍ", scope: "company", summary: (_, locale, mode) => printModeLabel(mode, locale), title: text("Receipt & Printing", "ໃບບິນ ແລະ ການພິມ") },
       { description: text("Banks and branch QR accounts", "ທະນາຄານ ແລະ ບັນຊີ QR ປະຈຳສາຂາ"), href: "/settings/qr-payments", icon: QrCode, keywords: "qr payments bank account branch scan ຊຳລະ ທະນາຄານ ບັນຊີ", scope: "company", summary: ({ activeQrAccounts, activeQrBanks }, locale) => locale === "lo" ? `${activeQrBanks} ທະນາຄານ • ${activeQrAccounts} ບັນຊີ` : `${activeQrBanks} bank${activeQrBanks === 1 ? "" : "s"} • ${activeQrAccounts} account${activeQrAccounts === 1 ? "" : "s"}`, title: text("QR Payments", "ການຊຳລະ QR") },
       { description: text("Screen layout and media", "ຮູບແບບຈໍ ແລະ ສື່ໂຄສະນາ"), href: "/settings/customer-display", icon: MonitorPlay, keywords: "customer display screen ads media promotion monitor ຈໍລູກຄ້າ ໂຄສະນາ", scope: "device", summary: (_, locale) => locale === "lo" ? "ສະເພາະອຸປະກອນນີ້" : "This device only", title: text("Customer Display", "ຈໍລູກຄ້າ") },
     ],
@@ -95,14 +95,14 @@ const groups: Group[] = [
     id: "customers",
     title: text("Customers", "ລູກຄ້າ"),
     rows: [
-      { description: text("How points are earned and redeemed", "ວິທີໄດ້ ແລະ ແລກຄະແນນ"), href: "/settings/loyalty", icon: Gift, keywords: "loyalty points earn redeem customer ຄະແນນ ລູກຄ້າ", scope: "company", summary: ({ settings }, locale) => settings?.loyaltyEnabled ? (locale === "lo" ? "ເປີດ" : "On") : (locale === "lo" ? "ປິດ" : "Off"), title: text("Loyalty", "ຄະແນນສະສົມ") },
+      { description: text("Earning Rules set how points are earned", "ກົດໄດ້ຄະແນນກຳນົດວິທີໄດ້ຄະແນນ"), href: "/settings/loyalty", icon: Gift, keywords: "loyalty points earn redeem earning rules customer ຄະແນນ ລູກຄ້າ ກົດໄດ້ຄະແນນ", scope: "company", summary: ({ settings }, locale) => settings?.loyaltyEnabled ? (locale === "lo" ? "ເປີດ" : "On") : (locale === "lo" ? "ປິດ" : "Off"), title: text("Loyalty", "ຄະແນນສະສົມ") },
     ],
   },
   {
     id: "help",
     title: text("Help & Support", "ຊ່ວຍເຫຼືອ ແລະ ສະໜັບສະໜູນ"),
     rows: [
-      { description: text("Help topics and system information", "ຫົວຂໍ້ຊ່ວຍເຫຼືອ ແລະ ຂໍ້ມູນລະບົບ"), href: "/settings/help", icon: CircleHelp, keywords: "help support about version system information ຊ່ວຍເຫຼືອ ສະໜັບສະໜູນ ເວີຊັນ", scope: "company", summary: (_, locale) => locale === "lo" ? "ຊ່ວຍເຫຼືອ ແລະ ຂໍ້ມູນ" : "Help and About", title: text("Help & Support", "ຊ່ວຍເຫຼືອ ແລະ ສະໜັບສະໜູນ") },
+      { description: text("Guides, system information, and support tickets when your role allows", "ຄູ່ມື, ຂໍ້ມູນລະບົບ, ແລະ ບັດສະໜັບສະໜູນເມື່ອບົດບາດອະນຸຍາດ"), href: "/settings/help", icon: CircleHelp, keywords: "help support about version system information ticket problem bug ຊ່ວຍເຫຼືອ ສະໜັບສະໜູນ ເວີຊັນ ບັດ", scope: "company", summary: (_, locale) => locale === "lo" ? "ຊ່ວຍເຫຼືອ ແລະ ບັດສະໜັບສະໜູນ" : "Help and tickets", title: text("Help & Support", "ຊ່ວຍເຫຼືອ ແລະ ສະໜັບສະໜູນ") },
     ],
   },
 ];
@@ -115,16 +115,21 @@ const searchExtras = [
 
 const explanations = [
   { description: text("Use the LO / EN control in the page header.", "ໃຊ້ປຸ່ມ LO / EN ຢູ່ສ່ວນຫົວໜ້າ."), keywords: "language lao english en lo ພາສາ ລາວ ອັງກິດ", title: text("Language", "ພາສາ") },
-  { description: text("POS currently uses LAK; currency and decimals are not editable here.", "POS ໃຊ້ LAK ໃນປັດຈຸບັນ; ບໍ່ສາມາດປ່ຽນສະກຸນເງິນ ຫຼື ທົດສະນິຍົມຢູ່ນີ້."), keywords: "currency lak decimal rounding ສະກຸນເງິນ ທົດສະນິຍົມ", title: text("Currency", "ສະກຸນເງິນ") },
-  { description: text("Alerts remain active; no category toggle exists.", "ການແຈ້ງເຕືອນຍັງເຮັດວຽກ; ຍັງບໍ່ມີປຸ່ມປິດເປີດຕາມປະເພດ."), keywords: "notification alerts low stock ແຈ້ງເຕືອນ ສິນຄ້າໃກ້ໝົດ", title: text("Notifications", "ການແຈ້ງເຕືອນ") },
-  { description: text("Support ticket submission is not available yet.", "ຍັງບໍ່ສາມາດສົ່ງບັດສະໜັບສະໜູນໄດ້ເທື່ອ."), keywords: "problem bug feedback feature request ticket support ບັນຫາ ບັກ ຄຳຕິຊົມ ຄຳຂໍຟີເຈີ", title: text("Support tickets", "ບັດສະໜັບສະໜູນ") },
-  { description: text("This is not a configurable setting in this release.", "ລາຍການນີ້ຍັງບໍ່ແມ່ນການຕັ້ງຄ່າໃນລຸ້ນນີ້."), keywords: "hours business hours holiday printer payroll session timeout pin ເວລາເປີດຮ້ານ ວັນພັກ ເຄື່ອງພິມ ເງິນເດືອນ", title: text("Not available in this release", "ຍັງບໍ່ມີໃນລຸ້ນນີ້") },
+  { description: text("Store POS currently operates in LAK. Currency, decimals, and rounding are not store settings.", "POS ຂອງຮ້ານໃຊ້ LAK ໃນປັດຈຸບັນ. ສະກຸນເງິນ, ທົດສະນິຍົມ, ແລະ ການປັດເສດ ບໍ່ແມ່ນການຕັ້ງຄ່າຂອງຮ້ານ."), keywords: "currency lak decimal rounding ສະກຸນເງິນ ທົດສະນິຍົມ ປັດເສດ", title: text("Currency", "ສະກຸນເງິນ") },
+  { description: text("System alerts are automatic. There are no category mute controls yet.", "ການແຈ້ງເຕືອນຂອງລະບົບເຮັດວຽກອັດຕະໂນມັດ. ຍັງບໍ່ມີປຸ່ມປິດແຈ້ງເຕືອນຕາມປະເພດ."), keywords: "notification alerts low stock mute category ແຈ້ງເຕືອນ ສິນຄ້າໃກ້ໝົດ", title: text("Notifications", "ການແຈ້ງເຕືອນ") },
+  { description: text("Help & Support shows guides and can submit a support ticket when your role allows it.", "ຊ່ວຍເຫຼືອ ແລະ ສະໜັບສະໜູນສະແດງຄູ່ມື ແລະ ສາມາດສົ່ງບັດສະໜັບສະໜູນໄດ້ເມື່ອບົດບາດອະນຸຍາດ."), keywords: "problem bug feedback feature request ticket support ບັນຫາ ບັກ ຄຳຕິຊົມ ຄຳຂໍຟີເຈີ", title: text("Support tickets", "ບັດສະໜັບສະໜູນ") },
+  { description: text("There is no printer device setting. Receipt paper layout and this browser's print mode are under Receipt & Printing.", "ຍັງບໍ່ມີການຕັ້ງເຄື່ອງພິມ. ຮູບແບບເຈ້ຍໃບບິນ ແລະ ຮູບແບບພິມຂອງບຣາວເຊີນີ້ຢູ່ໃນໃບບິນ ແລະ ການພິມ."), keywords: "printer device driver usb network ເຄື່ອງພິມ", title: text("Printer", "ເຄື່ອງພິມ") },
+  { description: text("This is not a configurable setting in this release.", "ລາຍການນີ້ຍັງບໍ່ແມ່ນການຕັ້ງຄ່າໃນລຸ້ນນີ້."), keywords: "hours business hours holiday payroll session timeout pin ເວລາເປີດຮ້ານ ວັນພັກ ເງິນເດືອນ", title: text("Not available in this release", "ຍັງບໍ່ມີໃນລຸ້ນນີ້") },
 ] as const;
 
 function printModeLabel(mode: ReceiptPrintMode, locale: SupportedLocale) {
-  if (mode === "auto_print") return locale === "lo" ? "ພິມອັດຕະໂນມັດ" : "Auto print";
-  if (mode === "no_auto_print") return locale === "lo" ? "ບໍ່ພິມອັດຕະໂນມັດ" : "No auto print";
-  return locale === "lo" ? "ຖາມທຸກຄັ້ງ" : "Ask every time";
+  const scope = locale === "lo" ? "ບຣາວເຊີນີ້" : "This browser";
+  const modeText = mode === "auto_print"
+    ? (locale === "lo" ? "ພິມອັດຕະໂນມັດ" : "Auto print")
+    : mode === "no_auto_print"
+      ? (locale === "lo" ? "ບໍ່ພິມອັດຕະໂນມັດ" : "No auto print")
+      : (locale === "lo" ? "ຖາມທຸກຄັ້ງ" : "Ask every time");
+  return `${modeText} · ${scope}`;
 }
 
 function matches(query: string, values: string[]) {

@@ -20,6 +20,7 @@ const dayOff = read("features/day-off/components/day-off-settings-panel.tsx");
 const ot = read("features/ot/components/ot-settings-panel.tsx");
 const picker = read("features/settings/components/employee-picker.tsx");
 const form = read("features/settings/components/settings-form.tsx");
+const loyaltyPanel = read("features/settings/components/loyalty-rules-panel.tsx");
 const page = read("app/(dashboard)/settings/[section]/page.tsx");
 const copy = read("lib/i18n/settings-copy.ts");
 const landing = read("features/settings/components/settings-landing.tsx");
@@ -162,7 +163,8 @@ check("45. loyalty enabled load/save", () => {
   assert(form.includes("loyaltyEnabled") && form.includes('section === "loyalty"'), "loyalty save missing");
 });
 check("46. spend-per-point", () => {
-  assert(form.includes("loyaltySpendPerPointLak"), "spend per point missing");
+  assert(loyaltyPanel.includes("spendLakPerPoint") && loyaltyPanel.includes("spendRuleHelp") && !form.includes("loyaltySpendPerPointLak"), "spend per point must stay inside Earning Rules");
+  assert(read("features/settings/prisma-repository.ts").includes("loyaltySpendPerPointLak"), "legacy spend column still persisted");
 });
 check("47. point value", () => {
   assert(form.includes("loyaltyPointValueLak"), "point value missing");
