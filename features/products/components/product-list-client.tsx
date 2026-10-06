@@ -13,12 +13,13 @@ import { preferredProductDisplayUrl, preferredProductThumbUrl } from "@/lib/stor
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import type { SupportedLocale } from "@/lib/constants";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIcon, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, AlertCircle, Archive, Clock, Package, Boxes, X, Trash2, } from "lucide-react";
 import type { Brand, Category, Product, ProductStatus } from "@/features/products/types";
 import type { ProductListPage, ProductInsightFilter } from "@/features/products/list-query";
+import { ImportProductsDrawer } from "@/features/products/components/product-import-drawer";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
 import { StatusBadge } from "@/features/products/components/status-badge";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
@@ -32,24 +33,6 @@ import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
 type ProductsTranslate = (key: string) => string;
 
-function getImportFields(t: ProductsTranslate) {
-    return [
-        t("productName"),
-        t("barcode"),
-        t("sku"),
-        t("internalCode"),
-        t("category"),
-        t("supplier"),
-        t("costPrice"),
-        t("sellingPrice"),
-        t("stock"),
-        t("unit"),
-        t("expiryEnabled"),
-        t("expiryDate"),
-        t("status"),
-        t("imageUrl"),
-    ] as const;
-}
 type ProductsModal = "image" | null;
 type ExpiryStatus = "normal" | "near_expiry" | "expired" | "no_expiry";
 type InsightFilter = ProductInsightFilter;
@@ -191,6 +174,25 @@ export function ProductListClient({ access, products: initialProducts, brands: i
         }, 250);
         return () => window.clearTimeout(handle);
     }, [brandId, categoryId, initialListPage, insightFilter, page, pageSize, query, sortLocale, sortMode, status, supplierId]);
+    const reloadProductList = useCallback(async () => {
+        const result = await loadProductListAction({
+            brandId,
+            categoryId,
+            insight: insightFilter,
+            nameLocale: sortLocale,
+            page,
+            pageSize,
+            search: query,
+            sort: sortMode,
+            status,
+            supplierId,
+        });
+        if (!result.ok || !result.data) return;
+        const next = result.data as ProductListPage;
+        setListPage(next);
+        setProducts(next.products);
+        signalPosCatalogueInvalidation();
+    }, [brandId, categoryId, insightFilter, page, pageSize, query, sortLocale, sortMode, status, supplierId]);
     const productInsights = useMemo(() => listPage?.summary ?? getProductInsights(products), [listPage, products]);
     const insightProducts = useMemo(() => getInsightProducts(products), [products]);
     const productShellStats = useMemo(() => {
@@ -423,7 +425,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                 {t("moreActions")}
               </button>
               {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl" id="products-more-actions" role="menu">
-                  <ActionMenuButton icon={Upload} label={t("importProducts")} onClick={() => openOperationDrawer("tool_import")}/>
+                  <ActionMenuButton icon={Upload} label={t("importProducts")} testId="products-import-action" onClick={() => openOperationDrawer("tool_import")}/>
                   <ActionMenuButton icon={Download} label={t("exportProducts")} onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} onClick={() => openOperationDrawer("tool_audit")}/>
                   {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
@@ -530,15 +532,16 @@ export function ProductListClient({ access, products: initialProducts, brands: i
       </section>
 
       {activeModal === "image" && previewProduct ? <ImagePreviewModal product={previewProduct} onClose={closeModal}/> : null}
-      <ProductShellDrawer categories={categories} drawerKey={shellDrawer} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)}/>
+      <ProductShellDrawer canImport={productAccess.create} categories={categories} drawerKey={shellDrawer} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
     </div>);
 }
-function ActionMenuButton({ icon: Icon, label, onClick }: {
+function ActionMenuButton({ icon: Icon, label, onClick, testId }: {
     icon: typeof Upload;
     label: string;
     onClick: () => void;
+    testId?: string;
 }) {
-    return (<button className="flex h-10 items-center gap-2 rounded-md px-3 text-left text-sm font-semibold transition hover:bg-background" type="button" role="menuitem" onClick={onClick}>
+    return (<button className="flex h-10 items-center gap-2 rounded-md px-3 text-left text-sm font-semibold transition hover:bg-background" data-testid={testId} type="button" role="menuitem" onClick={onClick}>
       <Icon className="size-4 text-primary" aria-hidden="true"/>
       {label}
     </button>);
@@ -630,11 +633,13 @@ function ProductShellTopic({ description, icon: Icon, label, onClick }: { descri
     );
 }
 
-function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, operationProducts, selectedProducts, stats }: {
+function ProductShellDrawer({ canImport, categories, drawerKey, filteredProducts, onClose, onImported, operationProducts, selectedProducts, stats }: {
+    canImport: boolean;
     categories: Category[];
     drawerKey: ProductShellDrawerKey | null;
     filteredProducts: Product[];
     onClose: () => void;
+    onImported: () => Promise<void> | void;
     operationProducts: Product[];
     selectedProducts: Product[];
     stats: ProductShellStats;
@@ -656,7 +661,7 @@ function ProductShellDrawer({ categories, drawerKey, filteredProducts, onClose, 
     if (isProductToolDrawer(drawerKey)) {
         return (
           <ProductDrawerFrame description={getProductToolDescription(drawerKey, t)} label={t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
-            <ProductToolDrawerBody categories={categories} drawerKey={drawerKey} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={stats} onClose={onClose}/>
+            <ProductToolDrawerBody canImport={canImport} categories={categories} drawerKey={drawerKey} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
           </ProductDrawerFrame>
         );
     }
@@ -753,17 +758,19 @@ function ProductShellStatusRow({ label, value }: { label: string; value: string 
     );
 }
 
-function ProductToolDrawerBody({ categories, drawerKey, filteredProducts, onClose, operationProducts, selectedProducts, stats }: {
+function ProductToolDrawerBody({ canImport, categories, drawerKey, filteredProducts, onClose, onImported, operationProducts, selectedProducts, stats }: {
+    canImport: boolean;
     categories: Category[];
     drawerKey: ProductShellDrawerKey;
     filteredProducts: Product[];
     onClose: () => void;
+    onImported: () => Promise<void> | void;
     operationProducts: Product[];
     selectedProducts: Product[];
     stats: ProductShellStats;
 }) {
     if (drawerKey === "tool_import")
-        return <ImportProductsDrawer onClose={onClose}/>;
+        return <ImportProductsDrawer canImport={canImport} onClose={onClose} onImported={onImported}/>;
     if (drawerKey === "tool_export")
         return <ExportProductsDrawer onClose={onClose} products={operationProducts} selectedCount={selectedProducts.length} stats={stats}/>;
     if (drawerKey === "tool_audit")
@@ -775,41 +782,6 @@ function ProductToolDrawerBody({ categories, drawerKey, filteredProducts, onClos
     if (drawerKey === "tool_bulk_price")
         return <BulkPricePreviewDrawer categories={categories} filteredProducts={filteredProducts} onClose={onClose} products={operationProducts} selectedProducts={selectedProducts}/>;
     return null;
-}
-
-function ImportProductsDrawer({ onClose }: { onClose: () => void }) {
-    const { t } = useProductsT();
-    return (
-      <div className="grid gap-5">
-        <ProductToolNotice text={t("importNotice")}/>
-        <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("acceptedFormats")}</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {["CSV", "XLSX"].map((format) => <span className="rounded-full border border-border bg-card px-3 py-1 text-sm font-semibold" key={format}>{format}</span>)}
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-4">
-            {[t("uploadFile"), t("reviewPreview"), t("validateRows"), t("importAfterApproval")].map((step, index) => (
-              <div className="rounded-md border border-border bg-card p-3 text-sm" key={step}>
-                <div className="font-semibold text-primary">{fillProductsCopy(t("stepN"), { n: index + 1 })}</div>
-                <div className="mt-1 text-muted-foreground">{step}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="rounded-lg border border-dashed border-border bg-background p-5 text-center">
-          <Upload className="mx-auto size-10 text-muted-foreground" aria-hidden="true"/>
-          <div className="mt-2 font-semibold">{t("uploadAreaDisabled")}</div>
-          <p className="mt-1 text-sm text-muted-foreground">{t("importDisabledHint")}</p>
-        </section>
-        <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("sampleColumns")}</h3>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {getImportFields(t).slice(0, 8).map((field) => <span className="rounded-md border border-border bg-card px-3 py-2 text-sm" key={field}>{field}</span>)}
-          </div>
-        </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: t("upload"), reason: t("notConnectedYet") }, { label: t("import"), reason: t("disabled") }]}/>
-      </div>
-    );
 }
 
 function ExportProductsDrawer({ onClose, products, selectedCount, stats }: {

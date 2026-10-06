@@ -33,6 +33,8 @@ import { bytesToBase64, importRemoteProductImageBytes } from "@/features/product
 import { clearProductImages, uploadAndAttachProductImages } from "@/features/products/product-image-service";
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
+import { importProductCsvBatch, previewProductImport } from "@/features/products/product-import-service";
+import { PRODUCT_IMPORT_BATCH_SIZE } from "@/features/products/product-import";
 
 function revalidateProductCataloguePaths() {
   revalidatePath("/products");
@@ -254,6 +256,29 @@ export async function deleteCategoryAction(categoryId: string) {
   try {
     const data = await deletePrismaCategory(categoryId, await tenant(WRITE_PERMISSIONS.categoriesManage));
     revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function previewProductImportAction(csvText: string) {
+  try {
+    const data = await previewProductImport(csvText, await tenant(WRITE_PERMISSIONS.productsCreate));
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function importProductsAction(csvText: string, options: { afterRow?: number; limit?: number } = {}) {
+  try {
+    const sessionTenant = await tenant(WRITE_PERMISSIONS.productsCreate);
+    const data = await importProductCsvBatch(csvText, sessionTenant, {
+      afterRow: Math.max(0, Number(options.afterRow) || 0),
+      limit: Math.min(PRODUCT_IMPORT_BATCH_SIZE, Math.max(1, Number(options.limit) || PRODUCT_IMPORT_BATCH_SIZE)),
+    });
+    if (data.created > 0) revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {
     return writeFailure(error);
