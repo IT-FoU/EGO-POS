@@ -65,15 +65,14 @@ export function normalizeJobRounding(value: number | null | undefined) {
   return rounding;
 }
 
-/**
- * P6 owns persistent Needs Label Reprint.
- * A successful selling-price write is the hook. There is no stored reprint flag yet.
- */
-export function shelfLabelReprintCandidate(input: { productId: string; unitId: string }) {
+/** A successful selling-price write marks this unit. Legacy products use an empty unit id. */
+export function shelfLabelReprintCandidate(input: { legacy?: boolean; productId: string; unitId: string }) {
+  const legacy = input.legacy === true || input.unitId.length === 0;
   return {
-    needsSchema: true as const,
+    legacy,
+    persist: true as const,
     productId: input.productId,
-    unitId: input.unitId,
+    unitId: legacy ? "" : input.unitId,
   };
 }
 

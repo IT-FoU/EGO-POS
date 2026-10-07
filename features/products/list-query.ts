@@ -20,6 +20,7 @@ export type ProductInsightFilter =
   | "dead_stock"
   | "missing_barcode"
   | "new_products"
+  | "needs_label_reprint"
   | "no_image";
 
 export type ProductListQuery = {
@@ -41,7 +42,9 @@ export type ProductListSummary = {
   missingBarcode: number;
   missingImages: number;
   nearExpiry: number;
+  needsLabelReprint: number;
   outOfStock: number;
+  reprintUnits: number;
   total: number;
 };
 
@@ -83,6 +86,8 @@ export const productListInclude = {
       isBaseUnit: true,
       isDefaultSaleUnit: true,
       isPurchaseUnit: true,
+      labelPrintedAt: true,
+      labelReprintNeeded: true,
       sellingPriceLak: true,
       sortOrder: true,
       status: true,
@@ -265,13 +270,15 @@ export async function resolveProductListFilter(tenant: TenantContext, input: Pro
   const query = normalizeProductListQuery(input);
   const scope = await resolveTenantScope(tenant, client);
   const insight = query.insight ?? "all";
-  const whereInsight = insight === "low_stock" || insight === "no_image" || insight === "missing_barcode" ? "all" : insight;
+  const whereInsight = insight === "low_stock" || insight === "no_image" || insight === "missing_barcode" || insight === "needs_label_reprint" ? "all" : insight;
   const where = buildProductListWhere(scope, { ...query, insight: whereInsight });
   let insightIds: string[] | null = null;
   if (insight === "low_stock") {
     insightIds = await loadLowStockIds(scope, client);
   } else if (insight === "no_image" || insight === "missing_barcode") {
     insightIds = await loadCoverageGapIds(scope, client, insight === "no_image" ? "image" : "barcode");
+  } else if (insight === "needs_label_reprint") {
+    insightIds = await loadReprintProductIds(scope, client);
   }
   return {
     empty: Boolean(insightIds && insightIds.length === 0),
@@ -336,6 +343,38 @@ export async function getPrismaProductListIds(
   return rows.map((row: { id: string }) => row.id);
 }
 
+async function loadReprintProductIds(scope: BranchScope, client: any) {
+  const rows = await client.$queryRaw<Array<{ id: string }>>`
+    SELECT p.id
+    FROM products p
+    WHERE p.company_id = ${scope.companyId}
+      AND p.status <> 'deleted'
+      AND (${scope.isOwner} OR p.branch_id = ${scope.branchId})
+      AND (
+        ${scope.isOwner}
+        OR EXISTS (
+          SELECT 1 FROM inventory_balances scoped
+          WHERE scoped.product_id = p.id AND scoped.warehouse_id = ANY(${scope.warehouseIds})
+        )
+        OR NOT EXISTS (SELECT 1 FROM inventory_balances empty WHERE empty.product_id = p.id)
+      )
+      AND (
+        EXISTS (
+          SELECT 1 FROM product_units pu
+          WHERE pu.product_id = p.id
+            AND pu.status = 'active'
+            AND pu.allow_manual_unit_select = true
+            AND pu.label_reprint_needed = true
+        )
+        OR (
+          NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id)
+          AND p.label_reprint_needed = true
+        )
+      )
+  `;
+  return rows.map((row: { id: string }) => row.id);
+}
+
 async function loadProductListSummary(scope: BranchScope, client: any): Promise<ProductListSummary> {
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 86_400_000);
@@ -346,7 +385,9 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
     missing_barcode: number;
     missing_images: number;
     near_expiry: number;
+    needs_label_reprint: number;
     out_of_stock: number;
+    reprint_units: number;
     total: number;
   }>>`
     SELECT
@@ -388,7 +429,41 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
             AND btrim(COALESCE(p.image_url, '')) = ''
           )
         )
-      )::int AS missing_images
+      )::int AS missing_images,
+      COUNT(*) FILTER (
+        WHERE (
+          EXISTS (
+            SELECT 1 FROM product_units pu
+            WHERE pu.product_id = p.id
+              AND pu.status = 'active'
+              AND pu.allow_manual_unit_select = true
+              AND pu.label_reprint_needed = true
+          )
+          OR (
+            NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = p.id)
+            AND p.label_reprint_needed = true
+          )
+        )
+      )::int AS needs_label_reprint,
+      (
+        SELECT COUNT(*)::int
+        FROM product_units pu
+        JOIN products owner ON owner.id = pu.product_id
+        WHERE owner.company_id = ${scope.companyId}
+          AND owner.status <> 'deleted'
+          AND (${scope.isOwner} OR owner.branch_id = ${scope.branchId})
+          AND pu.status = 'active'
+          AND pu.allow_manual_unit_select = true
+          AND pu.label_reprint_needed = true
+      ) + (
+        SELECT COUNT(*)::int
+        FROM products legacy
+        WHERE legacy.company_id = ${scope.companyId}
+          AND legacy.status <> 'deleted'
+          AND (${scope.isOwner} OR legacy.branch_id = ${scope.branchId})
+          AND legacy.label_reprint_needed = true
+          AND NOT EXISTS (SELECT 1 FROM product_units legacy_units WHERE legacy_units.product_id = legacy.id)
+      ) AS reprint_units
     FROM products p
     LEFT JOIN (
       SELECT product_id, SUM(quantity) AS qty
@@ -421,7 +496,9 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
     missing_barcode: 0,
     missing_images: 0,
     near_expiry: 0,
+    needs_label_reprint: 0,
     out_of_stock: 0,
+    reprint_units: 0,
     total: 0,
   };
   return {
@@ -430,7 +507,9 @@ async function loadProductListSummary(scope: BranchScope, client: any): Promise<
     missingBarcode: Number(row.missing_barcode) || 0,
     missingImages: Number(row.missing_images) || 0,
     nearExpiry: Number(row.near_expiry) || 0,
+    needsLabelReprint: Number(row.needs_label_reprint) || 0,
     outOfStock: Number(row.out_of_stock) || 0,
+    reprintUnits: Number(row.reprint_units) || 0,
     total: Number(row.total) || 0,
   };
 }

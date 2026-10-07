@@ -582,6 +582,8 @@ model Product {
   minStock        Decimal      @default(0) @map("min_stock") @db.Decimal(18, 3)
   status          ProductStatus @default(active)
   isActive        Boolean      @default(true) @map("is_active")
+  labelReprintNeeded Boolean   @default(false) @map("label_reprint_needed")
+  labelPrintedAt  DateTime?    @map("label_printed_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
   company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -612,6 +614,7 @@ model Product {
   @@index([companyId, barcode])
   @@index([companyId, nameLo])
   @@index([companyId, nameEn])
+  @@index([labelReprintNeeded], map: "products_label_reprint_needed_idx")
   @@map("products")
 }
 
@@ -633,6 +636,8 @@ model ProductUnit {
   isPurchaseUnit  Boolean  @default(false) @map("is_purchase_unit")
   allowManualUnitSelect Boolean @default(true) @map("allow_manual_unit_select")
   status          UnitStatus @default(active)
+  labelReprintNeeded Boolean @default(false) @map("label_reprint_needed")
+  labelPrintedAt  DateTime? @map("label_printed_at")
   sortOrder       Int      @default(0) @map("sort_order")
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   movements       StockMovement[]
@@ -641,6 +646,7 @@ model ProductUnit {
   saleItems       SaleItem[]
 
   @@index([barcode])
+  @@index([labelReprintNeeded], map: "product_units_label_reprint_needed_idx")
   @@map("product_units")
 }
 

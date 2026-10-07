@@ -33,6 +33,8 @@ export type BarcodeModule = { ink: boolean; width: number };
 export type BarcodePrintUnit = {
   allowManualUnitSelect?: boolean;
   barcode?: string | null;
+  id?: string | null;
+  labelReprintNeeded?: boolean;
   sellingPriceLak?: number | null;
   status?: string | null;
   unitName?: string | null;
@@ -41,6 +43,7 @@ export type BarcodePrintUnit = {
 export type BarcodePrintProduct = {
   barcode?: string | null;
   id: string;
+  labelReprintNeeded?: boolean;
   nameEn?: string | null;
   nameLo?: string | null;
   sellingPriceLak?: number | null;

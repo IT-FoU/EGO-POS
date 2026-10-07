@@ -37,7 +37,7 @@ check("override 500", quoteBulkSellingPrice({ currentPriceLak: 22820, jobRoundin
 check("override 1000", quoteBulkSellingPrice({ currentPriceLak: 22820, jobRounding: 1000, method: "increase_percent", value: 10 }).newPriceLak === 26000);
 check("no rounding", quoteBulkSellingPrice({ currentPriceLak: 22820, jobRounding: 0, method: "increase_percent", value: 10 }).newPriceLak === 25102);
 check("unit rounding still applies when the job does not override", quoteBulkSellingPrice({ currentPriceLak: 22820, method: "increase_percent", roundingLak: 1000, value: 10 }).newPriceLak === 26000);
-check("reprint hook needs schema", shelfLabelReprintCandidate({ productId: "water", unitId: "pack" }).needsSchema);
+check("reprint hook persists the changed unit", shelfLabelReprintCandidate({ productId: "water", unitId: "pack" }).persist && shelfLabelReprintCandidate({ legacy: true, productId: "old", unitId: "" }).legacy);
 
 const en = getProductsCopy("en");
 const lo = getProductsCopy("lo");
@@ -51,7 +51,7 @@ const previewButton = drawer.slice(drawer.indexOf("products-bulk-preview"), draw
 check("selection load and preview does not write", drawer.includes("productIds: ids") && !drawer.includes("products-bulk-search") && previewButton.includes("setPhase(\"preview\")") && !previewButton.includes("applyBulkSellingPricesAction"));
 const service = readFileSync("features/products/bulk-price-service.ts", "utf8");
 check("apply still writes selling price only", service.includes("data: { sellingPriceLak: line.newPriceLak }") && !service.includes("roundingLak: line") && !service.includes("costPriceLak:") && service.includes("shelfLabelReprintCandidate") && service.includes("roundingOverrideLak"));
-check("schema was not extended for reprint", !readFileSync("prisma/schema.prisma", "utf8").includes("labelReprintNeeded"));
+check("schema stores the reprint flag", readFileSync("prisma/schema.prisma", "utf8").includes("labelReprintNeeded") && readFileSync("prisma/schema.prisma", "utf8").includes("labelPrintedAt"));
 
 const failed = results.filter((result) => !result.ok);
 console.log(`\n${results.length - failed.length}/${results.length}`);

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { searchBarcodePrintProductsAction } from "@/features/products/actions";
+import { markShelfLabelsPrintedAction, searchBarcodePrintProductsAction } from "@/features/products/actions";
 import { encodeCode128B, fitBarcodeLabelName, parseLabelMillimetres, parsePrintQuantity, unitPrintRole, type BarcodeModule, type BarcodePrintProduct } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
 import {
@@ -28,7 +28,7 @@ import { useAppLocale } from "@/lib/i18n/use-app-locale";
 type Draft = { included: boolean; qty: string };
 const SIZE_KEY = "ego-pos-shelf-label-design";
 
-export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () => void; selectedIds: string[] }) {
+export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = false, selectedIds }: { onClose: () => void; onMarked?: () => void; prefillReprint?: boolean; selectedIds: string[] }) {
   const locale = useAppLocale();
   const t = (key: string) => tProducts(key, locale);
   const [products, setProducts] = useState<BarcodePrintProduct[]>([]);
@@ -43,6 +43,9 @@ export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () =>
   const [bulkQty, setBulkQty] = useState("1");
   const [editingKey, setEditingKey] = useState("");
   const [phase, setPhase] = useState<"choose" | "preview">("choose");
+  const [printSent, setPrintSent] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [markNote, setMarkNote] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(selectedIds.length > 0);
   const selectionKey = selectedIds.join("\n");
@@ -69,7 +72,7 @@ export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () =>
           shelfPrintUnits(product).forEach((unit, index) => {
             const key = lineKey(product.id, index);
             if (next[key]) return;
-            next[key] = { included: false, qty: "1" };
+            next[key] = { included: prefillReprint && unit.labelReprintNeeded && !unit.missingPrice, qty: "1" };
           });
         }
         return next;
@@ -79,7 +82,7 @@ export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () =>
     return () => {
       cancelled = true;
     };
-  }, [selectionKey]);
+  }, [prefillReprint, selectionKey]);
 
   useEffect(() => {
     const saved = readSavedDesign();
@@ -154,8 +157,42 @@ export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () =>
     setStyle(shelfLayoutStyle(layout));
   }
 
+  function sendToPrinter() {
+    window.print();
+    setPrintSent(true);
+    setMarkNote("");
+  }
+
+  async function markPrinted() {
+    const payload = lines
+      .filter((line) => line.included && !line.missingPrice && line.priceLak !== null)
+      .map((line) => ({
+        observedPriceLak: Number(line.priceLak),
+        productId: line.productId,
+        unitId: line.unitId,
+        unitName: line.unitName,
+      }));
+    if (payload.length === 0) return;
+    setMarking(true);
+    const response = await markShelfLabelsPrintedAction(payload);
+    setMarking(false);
+    if (!response.ok || !response.data) {
+      setMarkNote(response.error?.includes("Permission denied") ? t("printShelfPermissionDenied") : (response.error ?? t("reprintRequired")));
+      return;
+    }
+    const result = response.data as { conflicts: number; results: Array<{ reason: string; sku: string; status: string; unitName: string }> };
+    const conflicts = result.results.filter((row) => row.status === "conflict");
+    if (conflicts.length > 0) {
+      setMarkNote(conflicts.map((row) => `${row.sku} / ${row.unitName} — ${t("priceChangedAfterLabel")}. ${t("reprintRequired")}`).join(" "));
+      return;
+    }
+    setMarkNote(`${t("labelPrinted")}: ${result.results.filter((row) => row.status === "cleared").length}`);
+    setPrintSent(false);
+    onMarked?.();
+  }
+
   return (
-    <div className="grid gap-5" data-layout={style.layout} data-loaded={loading ? "0" : "1"} data-preset={preset} data-product-count={products.length} data-selected-count={selectedIds.length} data-testid="products-print-shelf">
+    <div className="grid gap-5" data-layout={style.layout} data-loaded={loading ? "0" : "1"} data-prefill={prefillReprint ? "reprint" : "manual"} data-preset={preset} data-product-count={products.length} data-selected-count={selectedIds.length} data-testid="products-print-shelf">
       <style dangerouslySetInnerHTML={{ __html: printCss(size.widthMm, size.heightMm) }}/>
       <p className="text-sm text-muted-foreground print:hidden">{t("shelfLabel")}. {t("printShelfSize")}</p>
       {phase === "choose" ? (
@@ -214,9 +251,17 @@ export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () =>
             <JobSummary layout={style.layout} productCount={products.length} size={size} t={t} total={job.total} units={selectedUnits}/>
             <div className="flex gap-2">
               <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-shelf-back" type="button" onClick={() => setPhase("choose")}>{t("printBack")}</button>
-              <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" data-testid="products-shelf-confirm" type="button" onClick={() => window.print()}>{t("printAction")}</button>
+              <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground" data-testid="products-shelf-confirm" type="button" onClick={sendToPrinter}>{t("printAction")}</button>
             </div>
           </div>
+          {printSent ? <div className="grid gap-2 rounded-md border border-border bg-background p-3 print:hidden" data-testid="products-shelf-print-sent">
+            <p className="text-sm font-semibold">{t("printSentToBrowser")}</p>
+            <div className="flex flex-wrap gap-2">
+              <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-shelf-mark" disabled={marking} type="button" onClick={() => void markPrinted()}>{t("markPrintedLabels")}</button>
+              <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-shelf-not-yet" type="button" onClick={() => setPrintSent(false)}>{t("notYet")}</button>
+            </div>
+            {markNote ? <p className="text-sm font-semibold" data-testid="products-shelf-mark-result">{markNote}</p> : null}
+          </div> : null}
           <div className="grid gap-2 print:hidden">
             {lines.filter((line) => line.included && !line.missingPrice).map((line) => (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2" data-testid="products-shelf-job-row" key={line.key}>
@@ -249,7 +294,7 @@ function UnitRow({ line, onChange, productId, t }: {
   t: (key: string) => string;
 }) {
   return (
-    <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:grid-cols-[auto_1fr_auto] md:items-center" data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
+    <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:grid-cols-[auto_1fr_auto] md:items-center" data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-reprint={line.labelReprintNeeded ? "1" : "0"} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
       <label className="flex items-center gap-2 text-sm font-semibold">
         <input checked={line.included} data-testid="products-shelf-include" disabled={line.missingPrice} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
         {line.unitName}

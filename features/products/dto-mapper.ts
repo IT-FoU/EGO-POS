@@ -7,6 +7,12 @@ function toNumber(value: unknown) {
   return value == null ? 0 : Number(value);
 }
 
+function isoTimestamp(value: unknown) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === "string" ? value : null;
+}
+
 export function mapPrismaProductUnit(unit: Record<string, any>): ProductUnit {
   return {
     allowManualUnitSelect: unit.allowManualUnitSelect ?? true,
@@ -19,6 +25,8 @@ export function mapPrismaProductUnit(unit: Record<string, any>): ProductUnit {
     isBaseUnit: Boolean(unit.isBaseUnit),
     isDefaultSaleUnit: Boolean(unit.isDefaultSaleUnit),
     isPurchaseUnit: Boolean(unit.isPurchaseUnit),
+    labelPrintedAt: isoTimestamp(unit.labelPrintedAt),
+    labelReprintNeeded: Boolean(unit.labelReprintNeeded),
     markupPercent: unit.markupPercent == null ? undefined : toNumber(unit.markupPercent),
     pricingMode: unit.pricingMode ?? "manual",
     roundingLak: toNumber(unit.roundingLak),
@@ -56,6 +64,8 @@ export function mapPrismaProduct(product: PrismaProduct): Product {
     expiryDate: nearestExpiry?.toISOString?.().slice(0, 10) ?? undefined,
     id: product.id,
     imageUrl: product.imageUrl ?? undefined,
+    labelPrintedAt: isoTimestamp(product.labelPrintedAt),
+    labelReprintNeeded: Boolean(product.labelReprintNeeded),
     minStock: toNumber(product.minStock),
     nameEn: product.nameEn ?? "",
     nameLo: product.nameLo,

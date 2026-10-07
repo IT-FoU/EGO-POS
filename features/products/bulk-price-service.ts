@@ -1,4 +1,5 @@
 import { BULK_PRICE_BATCH_SIZE, BULK_PRICE_MAX_LINES, classifyBulkLine, shelfLabelReprintCandidate, type BulkPriceProductSource } from "@/features/products/bulk-price";
+import { markShelfLabelReprintNeeded } from "@/features/products/label-reprint-service";
 import { resolveProductListFilter, type ProductListQuery } from "@/features/products/list-query";
 import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { prisma } from "@/lib/db/prisma";
@@ -155,6 +156,7 @@ export async function applyBulkSellingPrices(lines: BulkPriceApplyLine[], tenant
               mode: job?.mode ?? "percent",
               roundManual: Boolean(job?.roundManual),
               roundingOverrideLak: job?.roundingOverrideLak ?? null,
+              labelReprintNeeded: true,
               source: "bulk_price_update",
               updated,
             },
@@ -240,7 +242,11 @@ async function applyBulkLine(tx: any, scope: Awaited<ReturnType<typeof resolveTe
   await tx.productPriceHistory.create({
     data: history(tenant, product.id, current, line.newPriceLak, legacy ? null : unit.id, unitName, "bulk_selling_price"),
   });
-  shelfLabelReprintCandidate({ productId: product.id, unitId: legacy ? "" : String(unit.id) });
+  await markShelfLabelReprintNeeded(tx, shelfLabelReprintCandidate({
+    legacy,
+    productId: product.id,
+    unitId: legacy ? "" : String(unit.id),
+  }));
   return row(line, "updated", "", product.sku ?? "", unitName, current, line.newPriceLak);
 }
 

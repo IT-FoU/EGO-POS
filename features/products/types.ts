@@ -18,6 +18,8 @@ export type ProductUnit = {
   imageUrl?: string;
   imageDisplayUrl?: string;
   imageThumbUrl?: string;
+  labelPrintedAt?: string | null;
+  labelReprintNeeded?: boolean;
   sellingPriceLak: number;
   isBaseUnit: boolean;
   isDefaultSaleUnit?: boolean;
@@ -60,6 +62,8 @@ export type Product = {
   costPriceLak: number;
   currentStock?: number;
   expiryDate?: string;
+  labelPrintedAt?: string | null;
+  labelReprintNeeded?: boolean;
   stockDisplayMode?: StockDisplayMode;
   sellingPriceLak: number;
   minStock: number;

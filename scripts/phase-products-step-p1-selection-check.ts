@@ -37,7 +37,7 @@ check("no auto select on insight", !list.includes("setSelectedProductIds") || !/
 check("export default selected or filtered", exportDrawer.includes('useState<ExportScope>(selectedIds.length > 0 ? "selected" : "filtered")'));
 check("routing counts", [exportDrawer, barcode, shelf, bulk].every((source) => source.includes("data-selected-count={selectedIds.length}")));
 check("import ignores selection", read("features/products/components/product-import-drawer.tsx").includes('data-ignores-selection="true"'));
-check("no schema change marker", !schema.includes("needsLabelReprint") && !schema.includes("labelPrintedAt"));
+check("reprint columns use the approved names", schema.includes('labelReprintNeeded Boolean') && schema.includes('labelPrintedAt') && schema.includes('label_reprint_needed') && schema.includes('label_printed_at') && !schema.includes("needsLabelReprint"));
 
 const failed = results.filter((row) => !row.ok);
 console.log(`\n${results.length - failed.length}/${results.length}`);

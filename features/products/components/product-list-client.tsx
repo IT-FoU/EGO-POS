@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIcon, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, AlertCircle, Archive, Clock, Package, Boxes, X, Trash2, } from "lucide-react";
 import type { Brand, Category, Product, ProductStatus } from "@/features/products/types";
+import { latestReprintPrintedAt, reprintUnitNames } from "@/features/products/label-reprint";
 import type { ProductListPage, ProductInsightFilter, ProductListQuery } from "@/features/products/list-query";
 import { BarcodeAuditDrawer } from "@/features/products/components/product-barcode-audit-drawer";
 import { PrintBarcodeDrawer } from "@/features/products/components/product-print-barcode-drawer";
@@ -55,7 +56,7 @@ type ProductsTranslate = (key: string) => string;
 type ProductsModal = "image" | null;
 type ExpiryStatus = "normal" | "near_expiry" | "expired" | "no_expiry";
 type InsightFilter = ProductInsightFilter;
-type SummaryInsight = Exclude<InsightFilter, "missing_barcode" | "new_products" | "no_image">;
+type SummaryInsight = Exclude<InsightFilter, "missing_barcode" | "needs_label_reprint" | "new_products" | "no_image">;
 type ProductShellDrawerKey = "total" | "active" | "missing_images" | "missing_barcode" | "product_health" | "product_list" | "categories" | "barcode_sku" | "images" | "labels" | "tool_import" | "tool_export" | "tool_audit" | "tool_print_barcode" | "tool_print_shelf" | "tool_bulk_price";
 type ProductShellStats = ReturnType<typeof getProductShellStats>;
 type ProductShellDrawerContent = {
@@ -504,6 +505,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
               <option value="missing_barcode">{t("missingBarcode")}</option>
               <option value="no_image">{t("noImage")}</option>
               <option value="new_products">{t("newProductsFilter")}</option>
+              <option value="needs_label_reprint">{t("needsLabelReprint")} ({listPage?.summary.needsLabelReprint ?? 0})</option>
             </select>
             <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" data-testid="products-sort" value={sortMode} onChange={(event) => updateSortMode(event.target.value as ProductSortMode)} aria-label={t("sortBy")}>
               {PRODUCT_SORT_MODES.map((mode) => (
@@ -550,6 +552,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
           <span>
             {fillProductsCopy(t("showingRange"), { from: pageStart, to: pageEnd, total: totalCount })}
             {insightFilter === "new_products" ? <span data-testid="products-new-count"> · {t("newProducts")} · {t("last30Days")} · {totalCount}</span> : null}
+            {insightFilter === "needs_label_reprint" ? <span data-testid="products-reprint-count"> · {t("needsLabelReprint")} · {totalCount}{listPage?.summary.reprintUnits ? ` · ${fillProductsCopy(t("reprintUnitsDetail"), { count: listPage.summary.reprintUnits })}` : ""}</span> : null}
           </span>
           {message ? <span className="rounded-full bg-success/10 px-3 py-1 font-semibold text-success" data-cleanup-ms={deleteTimings?.cleanupMs ?? ""} data-eligibility-ms={deleteTimings?.eligibilityMs ?? ""} data-image-cleanup={deleteImageCleanup} data-statement-ms={deleteTimings?.statementMs ?? ""} data-testid={deleteTimings ? "products-delete-timings" : undefined}>{message}</span> : null}
         </div>
@@ -606,6 +609,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                       {secondaryName && secondaryName !== primaryName ? <div className="mt-1 truncate text-xs text-muted-foreground">{secondaryName}</div> : null}
                       {insightFilter === "no_image" ? <CoverageGapLine kind="image" locale={locale} product={product} t={t}/> : null}
                       {insightFilter === "missing_barcode" ? <CoverageGapLine kind="barcode" locale={locale} product={product} t={t}/> : null}
+                      <ReprintLine product={product} t={t}/>
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">{product.barcode || "-"}</td>
                     <td className="px-3 py-3 font-mono text-xs">{product.sku || "-"}</td>
@@ -639,7 +643,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             </tbody>
           </table>
         </div>
-        {totalCount === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground">{t("noProductsMatch")}</div>) : null}
+        {totalCount === 0 ? (<div className="p-8 text-center text-sm text-muted-foreground" data-testid={insightFilter === "needs_label_reprint" ? "products-reprint-empty" : undefined}>{insightFilter === "needs_label_reprint" ? t("noLabelsNeedReprint") : t("noProductsMatch")}</div>) : null}
         <div className="flex flex-col gap-3 border-t border-border bg-background px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">{t("rowsPerPage")}</span>
@@ -666,7 +670,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             <p className="font-mono text-xs">{permanentTarget.sku || "-"}</p>
           </div>
         </ProductSmallModal> : null}
-      <ProductShellDrawer canImport={productAccess.create} canViewCost={productAccess.viewCost} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredCount={totalCount} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
+      <ProductShellDrawer canImport={productAccess.create} canViewCost={productAccess.viewCost} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredCount={totalCount} filteredProducts={filteredProducts} operationProducts={operationProducts} prefillReprint={insightFilter === "needs_label_reprint"} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
     </div>);
 }
 function ActionMenuButton({ disabled = false, hint, icon: Icon, label, onClick, testId }: {
@@ -772,7 +776,7 @@ function ProductShellTopic({ description, icon: Icon, label, onClick }: { descri
     );
 }
 
-function ProductShellDrawer({ canImport, canViewCost, categories, drawerKey, exportQuery, filteredCount, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
+function ProductShellDrawer({ canImport, canViewCost, categories, drawerKey, exportQuery, filteredCount, filteredProducts, onClose, onImported, operationProducts, prefillReprint = false, selectedIds, selectedProducts, stats }: {
     canImport: boolean;
     canViewCost: boolean;
     categories: Category[];
@@ -783,6 +787,7 @@ function ProductShellDrawer({ canImport, canViewCost, categories, drawerKey, exp
     onClose: () => void;
     onImported: () => Promise<void> | void;
     operationProducts: Product[];
+    prefillReprint?: boolean;
     selectedIds: string[];
     selectedProducts: Product[];
     stats: ProductShellStats;
@@ -804,7 +809,7 @@ function ProductShellDrawer({ canImport, canViewCost, categories, drawerKey, exp
     if (isProductToolDrawer(drawerKey)) {
         return (
           <ProductDrawerFrame description={getProductToolDescription(drawerKey, t)} label={t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
-            <ProductToolDrawerBody canImport={canImport} canViewCost={canViewCost} categories={categories} drawerKey={drawerKey} exportQuery={exportQuery} filteredCount={filteredCount} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedIds} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
+            <ProductToolDrawerBody canImport={canImport} canViewCost={canViewCost} categories={categories} drawerKey={drawerKey} exportQuery={exportQuery} filteredCount={filteredCount} filteredProducts={filteredProducts} operationProducts={operationProducts} prefillReprint={prefillReprint} selectedIds={selectedIds} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
           </ProductDrawerFrame>
         );
     }
@@ -901,7 +906,7 @@ function ProductShellStatusRow({ label, value }: { label: string; value: string 
     );
 }
 
-function ProductToolDrawerBody({ canImport, canViewCost, categories, drawerKey, exportQuery, filteredCount, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
+function ProductToolDrawerBody({ canImport, canViewCost, categories, drawerKey, exportQuery, filteredCount, filteredProducts, onClose, onImported, operationProducts, prefillReprint = false, selectedIds, selectedProducts, stats }: {
     canImport: boolean;
     canViewCost: boolean;
     categories: Category[];
@@ -912,6 +917,7 @@ function ProductToolDrawerBody({ canImport, canViewCost, categories, drawerKey, 
     onClose: () => void;
     onImported: () => Promise<void> | void;
     operationProducts: Product[];
+    prefillReprint?: boolean;
     selectedIds: string[];
     selectedProducts: Product[];
     stats: ProductShellStats;
@@ -925,7 +931,7 @@ function ProductToolDrawerBody({ canImport, canViewCost, categories, drawerKey, 
     if (drawerKey === "tool_print_barcode")
         return <PrintBarcodeDrawer onClose={onClose} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_print_shelf")
-        return <PrintShelfLabelDrawer onClose={onClose} selectedIds={selectedIds}/>;
+        return <PrintShelfLabelDrawer onClose={onClose} onMarked={onImported} prefillReprint={prefillReprint} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_bulk_price")
         return <BulkPriceDrawer onApplied={onImported} onClose={onClose} query={exportQuery} selectedIds={selectedIds}/>;
     return null;
@@ -1461,7 +1467,20 @@ function matchesInsightFilter(product: Product, filter: InsightFilter) {
         return productMissingImage(product);
     if (filter === "new_products")
         return isCreatedWithin30Days(product.createdAt);
+    if (filter === "needs_label_reprint")
+        return reprintUnitNames(product).length > 0;
     return true;
+}
+function ReprintLine({ product, t }: { product: Product; t: (key: string) => string }) {
+    const names = reprintUnitNames(product);
+    if (names.length === 0) return null;
+    const printedAt = latestReprintPrintedAt(product);
+    return (
+      <div className="mt-1 text-xs font-semibold text-warning" data-testid="products-reprint-units">
+        {t("needsLabel")}: {names.join(", ")}
+        {printedAt ? <span className="ml-1 font-medium text-muted-foreground">· {t("lastPrinted")}</span> : null}
+      </div>
+    );
 }
 function isCreatedWithin30Days(createdAt?: string | null, now = Date.now()) {
     if (!createdAt) return false;

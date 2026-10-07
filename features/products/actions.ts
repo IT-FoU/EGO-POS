@@ -42,6 +42,7 @@ import { PRODUCT_IMPORT_BATCH_SIZE } from "@/features/products/product-import";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
 import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
 import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine, type BulkPriceJobAudit } from "@/features/products/bulk-price-service";
+import { markShelfLabelsPrinted, type MarkPrintedLine } from "@/features/products/label-reprint-service";
 import { FINE } from "@/features/access-control/fine-permissions";
 import { requireFinePermission } from "@/lib/auth/fine-access";
 import { buildProductExportFile, buildProductExportPreview, type ProductExportRequest } from "@/features/products/product-export-service";
@@ -341,6 +342,18 @@ export async function importProductsAction(csvText: string, options: { afterRow?
       limit: Math.min(PRODUCT_IMPORT_BATCH_SIZE, Math.max(1, Number(options.limit) || PRODUCT_IMPORT_BATCH_SIZE)),
     });
     if (data.created > 0) revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function markShelfLabelsPrintedAction(lines: MarkPrintedLine[]) {
+  try {
+    const sessionTenant = await requireReadPermission(READ_PERMISSIONS.productsView);
+    await requireFinePermission(sessionTenant, "products.print");
+    const data = await markShelfLabelsPrinted(lines, sessionTenant);
+    if (data.cleared > 0) revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {
     return writeFailure(error);

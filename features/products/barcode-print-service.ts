@@ -22,6 +22,7 @@ export async function loadBarcodePrintProducts(
     select: {
       barcode: true,
       id: true,
+      labelReprintNeeded: true,
       nameEn: true,
       nameLo: true,
       sellingPriceLak: true,
@@ -31,6 +32,8 @@ export async function loadBarcodePrintProducts(
         select: {
           allowManualUnitSelect: true,
           barcode: true,
+          id: true,
+          labelReprintNeeded: true,
           sellingPriceLak: true,
           status: true,
           unitName: true,
@@ -51,6 +54,7 @@ export async function loadBarcodePrintProducts(
     .map((product: Record<string, any>) => ({
       barcode: product.barcode ?? "",
       id: String(product.id),
+      labelReprintNeeded: Boolean(product.labelReprintNeeded),
       nameEn: product.nameEn ?? "",
       nameLo: product.nameLo ?? "",
       sellingPriceLak: Number(product.sellingPriceLak ?? 0),
@@ -58,6 +62,8 @@ export async function loadBarcodePrintProducts(
       units: (product.units ?? []).map((unit: Record<string, any>) => ({
         allowManualUnitSelect: unit.allowManualUnitSelect !== false,
         barcode: unit.barcode ?? "",
+        id: String(unit.id ?? ""),
+        labelReprintNeeded: Boolean(unit.labelReprintNeeded),
         sellingPriceLak: Number(unit.sellingPriceLak ?? 0),
         status: unit.status ?? "active",
         unitName: unit.unitName ?? "",

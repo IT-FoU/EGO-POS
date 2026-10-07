@@ -140,12 +140,14 @@ export type ShelfPrintChoice = {
   barcode: string;
   copies: number;
   graphic: boolean;
+  labelReprintNeeded: boolean;
   missingPrice: boolean;
   nameEn: string;
   nameLo: string;
   priceLak: number | null;
   productId: string;
   sku: string;
+  unitId: string;
   unitName: string;
 };
 
@@ -165,11 +167,11 @@ export function shelfPrintUnits(product: BarcodePrintProduct): ShelfPrintChoice[
   };
   const units = product.units ?? [];
   if (units.length === 0) {
-    return [choice(shared, "Piece", product.barcode, product.sellingPriceLak)];
+    return [choice(shared, "Piece", "", product.barcode, product.sellingPriceLak, Boolean(product.labelReprintNeeded))];
   }
   return units
     .filter((unit) => isSellableCoverageUnit(unit))
-    .map((unit) => choice(shared, clean(unit.unitName) || "Unit", unit.barcode, unit.sellingPriceLak));
+    .map((unit) => choice(shared, clean(unit.unitName) || "Unit", clean(unit.id), unit.barcode, unit.sellingPriceLak, Boolean(unit.labelReprintNeeded)));
 }
 
 export function buildShelfPrintJob(lines: ShelfPrintChoice[]) {
@@ -187,8 +189,10 @@ export function buildShelfPrintJob(lines: ShelfPrintChoice[]) {
 function choice(
   shared: Pick<ShelfPrintChoice, "nameEn" | "nameLo" | "productId" | "sku">,
   unitName: string,
+  unitId: string,
   barcodeValue: string | null | undefined,
   price: number | null | undefined,
+  labelReprintNeeded: boolean,
 ): ShelfPrintChoice {
   const barcode = clean(barcodeValue);
   const priceLak = shelfSellingPrice(price);
@@ -197,8 +201,10 @@ function choice(
     barcode,
     copies: 1,
     graphic: Boolean(barcode) && encodeCode128B(barcode) !== null,
+    labelReprintNeeded,
     missingPrice: priceLak === null,
     priceLak,
+    unitId,
     unitName,
   };
 }

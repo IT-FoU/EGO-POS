@@ -7,6 +7,8 @@ import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-map
 import { getPrismaProductListIds as loadPrismaProductListIds, getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
 import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
+import { sellingPriceChanged } from "@/features/products/label-reprint";
+import { markShelfLabelReprintNeeded } from "@/features/products/label-reprint-service";
 import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { applyPersistedHierarchyCosts } from "@/features/products/unit-hierarchy";
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
@@ -771,6 +773,7 @@ export async function createPrismaProduct(input: ProductWriteInput, tenant: Tena
 export async function writePrismaProductUpdate(tx: any, productId: string, input: Partial<ProductWriteInput>, tenant: TenantContext) {
   assertValidProductWriteInput(input);
   const scope = await resolveTenantScope(tenant, tx);
+  let reprintMarked = false;
   const existing = await tx.product.findFirstOrThrow({
     include: { units: true },
     where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
@@ -848,7 +851,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
           if (isPersistedUnitId(unit.id) && existingById.has(unit.id)) {
             incomingPersistedIds.add(unit.id!);
             await tx.productUnit.update({ data, where: { id: unit.id } });
-            if (existingUnit && Number(existingUnit.sellingPriceLak) !== Number(unit.sellingPriceLak)) {
+            if (existingUnit && sellingPriceChanged(Number(existingUnit.sellingPriceLak), Number(unit.sellingPriceLak))) {
               await tx.productPriceHistory.create({
                 data: {
                   changeType: "unit_price",
@@ -861,6 +864,8 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
                   unitName: unit.unitName,
                 },
               });
+              await markShelfLabelReprintNeeded(tx, { legacy: false, productId: existing.id, unitId: String(unit.id) });
+              reprintMarked = true;
             }
             if (existingUnit && normalizeBarcode(existingUnit.barcode) !== normalizeBarcode(unit.barcode)) {
               await tx.productBarcodeHistory.create({
@@ -888,7 +893,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
         await persistUnitPricingDefaults(tx, tenant.companyId, units);
       }
 
-      if (input.sellingPriceLak !== undefined && Number(existing.sellingPriceLak) !== numberValue(input.sellingPriceLak)) {
+      if (input.sellingPriceLak !== undefined && sellingPriceChanged(Number(existing.sellingPriceLak), numberValue(input.sellingPriceLak))) {
         await tx.productPriceHistory.create({
           data: {
             changeType: "product_price",
@@ -899,6 +904,11 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
             productId: existing.id,
           },
         });
+        const remainingUnits = input.units !== undefined ? input.units.length : existing.units.length;
+        if (remainingUnits === 0) {
+          await markShelfLabelReprintNeeded(tx, { legacy: true, productId: existing.id, unitId: "" });
+          reprintMarked = true;
+        }
       }
 
       if (input.barcode !== undefined && normalizeBarcode(existing.barcode) !== normalizeBarcode(input.barcode)) {
@@ -933,6 +943,7 @@ export async function writePrismaProductUpdate(tx: any, productId: string, input
         companyId: tenant.companyId,
         entityId: updatedProduct.id,
         entityType: "product",
+        metadata: reprintMarked ? { labelReprintNeeded: true, source: "product_price_change" } : undefined,
         module: "products",
         summary: String(updatedProduct.nameLo || updatedProduct.nameEn || updatedProduct.sku || "Product"),
         userId: tenant.userId,
@@ -1077,7 +1088,7 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
           const oldPrice = Number(product.sellingPriceLak);
           const newPrice = applyPriceAdjustment(oldPrice, input);
           productData.sellingPriceLak = newPrice;
-          if (oldPrice !== newPrice) {
+          if (sellingPriceChanged(oldPrice, newPrice)) {
             await tx.productPriceHistory.create({
               data: {
                 changeType: "selling_price",
@@ -1088,6 +1099,9 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
                 productId: product.id,
               },
             });
+            if (product.units.length === 0) {
+              await markShelfLabelReprintNeeded(tx, { legacy: true, productId: product.id, unitId: "" });
+            }
           }
         }
         if (Object.keys(productData).length > 0) {
@@ -1119,7 +1133,7 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
             const oldPrice = Number(unit.sellingPriceLak);
             const newPrice = applyPriceAdjustment(oldPrice, input);
             unitData.sellingPriceLak = newPrice;
-            if (oldPrice !== newPrice) {
+            if (sellingPriceChanged(oldPrice, newPrice)) {
               await tx.productPriceHistory.create({
                 data: {
                   changeType: "unit_selling_price",
@@ -1132,6 +1146,7 @@ export async function bulkUpdatePrismaProductPrices(input: BulkPriceUpdateInput,
                   unitName: unit.unitName,
                 },
               });
+              await markShelfLabelReprintNeeded(tx, { legacy: false, productId: product.id, unitId: String(unit.id) });
             }
           }
           if (Object.keys(unitData).length > 0) {
