@@ -12,6 +12,7 @@ import {
   deletePrismaProduct,
   duplicatePrismaProduct,
   permanentDeletePrismaProduct,
+  getPrismaProductListIds,
   getPrismaProductListPage,
   getPrismaUnitPricingDefaults,
   updatePrismaProduct,
@@ -81,6 +82,15 @@ export async function loadProductListAction(query: ProductListQuery = {}) {
   try {
     const tenant = await requireReadPermission(READ_PERMISSIONS.productsView);
     return writeSuccess(await getPrismaProductListPage(tenant, query));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function loadProductListIdsAction(query: ProductListQuery = {}) {
+  try {
+    const tenant = await requireReadPermission(READ_PERMISSIONS.productsView);
+    return writeSuccess(await getPrismaProductListIds(tenant, query));
   } catch (error) {
     return writeFailure(error);
   }

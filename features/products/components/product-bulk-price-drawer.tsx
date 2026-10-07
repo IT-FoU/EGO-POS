@@ -141,7 +141,7 @@ export function BulkPriceDrawer({ onApplied, onClose, query, selectedIds }: {
   }
 
   return (
-    <div className="grid gap-5" data-testid="products-bulk-price">
+    <div className="grid gap-5" data-selected-count={selectedIds.length} data-testid="products-bulk-price">
       <p className="text-sm text-muted-foreground">{t("bulkRoundingNote")}</p>
       {phase === "choose" ? (
         <div className="grid gap-4">

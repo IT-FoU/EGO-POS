@@ -112,7 +112,7 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
   }
 
   return (
-    <div className="grid gap-5" data-testid="products-print-barcode">
+    <div className="grid gap-5" data-selected-count={selectedIds.length} data-testid="products-print-barcode">
       <style dangerouslySetInnerHTML={{ __html: printCss }}/>
       <p className="text-sm text-muted-foreground print:hidden">{t("printLabelSize")}</p>
       {phase === "choose" ? (

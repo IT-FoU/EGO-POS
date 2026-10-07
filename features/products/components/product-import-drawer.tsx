@@ -157,7 +157,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const busy = phase === "validating" || phase === "importing";
 
   return (
-    <div className="grid gap-5" data-testid="products-import-workflow">
+    <div className="grid gap-5" data-ignores-selection="true" data-testid="products-import-workflow">
       <section className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted-foreground">
         {t("importNotice")}
       </section>

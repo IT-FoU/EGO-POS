@@ -29,7 +29,7 @@ import { ProductImagePlaceholder } from "@/features/products/components/product-
 import { StatusBadge } from "@/features/products/components/status-badge";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { formatLak } from "@/features/products/format";
-import { deleteProductAction, loadPermanentDeleteEligibilityAction, loadProductListAction, permanentDeleteProductAction } from "@/features/products/actions";
+import { deleteProductAction, loadPermanentDeleteEligibilityAction, loadProductListAction, loadProductListIdsAction, permanentDeleteProductAction } from "@/features/products/actions";
 import { isProductDeleteBlockReason, type ProductDeleteBlockReason } from "@/features/products/product-delete";
 import { readProductListPageSize, readProductListSort, writeProductListPageSize, writeProductListSort } from "@/features/products/list-preferences";
 import { DEFAULT_PRODUCT_SORT_MODE, PRODUCT_SORT_MODES, sortProductRecords, type ProductSortMode } from "@/features/products/product-sort";
@@ -37,12 +37,25 @@ import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-ref
 import type { Supplier } from "@/features/suppliers/types";
 import { cn } from "@/lib/utils";
 const statusOptions: Array<ProductStatus | "all"> = ["all", "active", "draft", "inactive", "deleted"];
+const PRODUCT_SELECTION_KEY = "ego-pos-product-selection";
+const NEW_PRODUCT_WINDOW_MS = 30 * 86_400_000;
+
+function readStoredSelection() {
+    if (typeof window === "undefined") return [];
+    try {
+        const parsed = JSON.parse(window.sessionStorage.getItem(PRODUCT_SELECTION_KEY) ?? "[]");
+        return Array.isArray(parsed) ? parsed.filter((id: unknown): id is string => typeof id === "string" && id.length > 0) : [];
+    }
+    catch {
+        return [];
+    }
+}
 type ProductsTranslate = (key: string) => string;
 
 type ProductsModal = "image" | null;
 type ExpiryStatus = "normal" | "near_expiry" | "expired" | "no_expiry";
 type InsightFilter = ProductInsightFilter;
-type SummaryInsight = Exclude<InsightFilter, "missing_barcode" | "no_image">;
+type SummaryInsight = Exclude<InsightFilter, "missing_barcode" | "new_products" | "no_image">;
 type ProductShellDrawerKey = "total" | "active" | "missing_images" | "missing_barcode" | "product_health" | "product_list" | "categories" | "barcode_sku" | "images" | "labels" | "tool_import" | "tool_export" | "tool_audit" | "tool_print_barcode" | "tool_print_shelf" | "tool_bulk_price";
 type ProductShellStats = ReturnType<typeof getProductShellStats>;
 type ProductShellDrawerContent = {
@@ -113,6 +126,17 @@ export function ProductListClient({ access, products: initialProducts, brands: i
     const actionMenuRef = useRef<HTMLDivElement>(null);
     const actionMenuButtonRef = useRef<HTMLButtonElement>(null);
     const skipServerFetch = useRef(true);
+    const skipSelectionWrite = useRef(true);
+    useEffect(() => {
+        setSelectedProductIds(readStoredSelection());
+    }, []);
+    useEffect(() => {
+        if (skipSelectionWrite.current) {
+            skipSelectionWrite.current = false;
+            return;
+        }
+        window.sessionStorage.setItem(PRODUCT_SELECTION_KEY, JSON.stringify(selectedProductIds));
+    }, [selectedProductIds]);
     useEffect(() => {
         const storedPageSize = readProductListPageSize();
         const storedSort = readProductListSort();
@@ -267,12 +291,33 @@ export function ProductListClient({ access, products: initialProducts, brands: i
     function toggleAllFilteredProducts() {
         setSelectedProductIds((current) => {
             const visibleIds = paginatedProducts.map((product) => product.id);
-            if (visibleIds.every((id) => current.includes(id))) {
+            if (visibleIds.length > 0 && visibleIds.every((id) => current.includes(id))) {
                 return current.filter((id) => !visibleIds.includes(id));
             }
             return Array.from(new Set([...current, ...visibleIds]));
         });
     }
+    function selectAllFilteredProducts() {
+        startTransition(async () => {
+            const result = await loadProductListIdsAction({
+                brandId,
+                categoryId,
+                insight: insightFilter,
+                nameLocale: sortLocale,
+                page: 1,
+                pageSize,
+                search: query,
+                sort: sortMode,
+                status,
+                supplierId,
+            });
+            if (!result.ok || !Array.isArray(result.data)) return;
+            const ids = result.data.filter((id): id is string => typeof id === "string");
+            setSelectedProductIds((current) => Array.from(new Set([...current, ...ids])));
+        });
+    }
+    const pageSelectionMixed = paginatedProducts.some((product) => selectedProductIds.includes(product.id)) && !allVisibleSelected;
+    const selectionRequired = selectedProductIds.length === 0;
     function applyInsightFilter(nextFilter: InsightFilter) {
         setInsightFilter(nextFilter);
         setPage(1);
@@ -458,6 +503,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
               <option value="dead_stock">{t("deadStock")}</option>
               <option value="missing_barcode">{t("missingBarcode")}</option>
               <option value="no_image">{t("noImage")}</option>
+              <option value="new_products">{t("newProductsFilter")}</option>
             </select>
             <select className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" data-testid="products-sort" value={sortMode} onChange={(event) => updateSortMode(event.target.value as ProductSortMode)} aria-label={t("sortBy")}>
               {PRODUCT_SORT_MODES.map((mode) => (
@@ -486,13 +532,14 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                 <MoreHorizontal aria-hidden="true" className="size-4"/>
                 {t("moreActions")}
               </button>
-              {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl" id="products-more-actions" role="menu">
+              {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-72 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl" id="products-more-actions" role="menu">
+                  <p className="px-3 py-1 text-xs font-semibold text-muted-foreground" data-testid="products-selection-context">{selectedProductIds.length > 0 ? fillProductsCopy(t("productsSelected"), { count: selectedProductIds.length }) : t("noProductsSelected")}</p>
                   <ActionMenuButton icon={Upload} label={t("importProducts")} testId="products-import-action" onClick={() => openOperationDrawer("tool_import")}/>
                   <ActionMenuButton icon={Download} label={t("exportProducts")} testId="products-export-action" onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} testId="products-barcode-audit-action" onClick={() => openOperationDrawer("tool_audit")}/>
-                  {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} testId="products-print-barcode-action" onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
-                  {productAccess.printBarcode ? <ActionMenuButton icon={Tags} label={t("printShelfLabel")} testId="products-print-shelf-action" onClick={() => openOperationDrawer("tool_print_shelf")}/> : null}
-                  {productAccess.editPrice ? <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} testId="products-bulk-price-action" onClick={() => openOperationDrawer("tool_bulk_price")}/> : null}
+                  {productAccess.printBarcode ? <ActionMenuButton disabled={selectionRequired} hint={selectionRequired ? t("selectProductsFirst") : undefined} icon={Printer} label={t("printBarcode")} testId="products-print-barcode-action" onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
+                  {productAccess.printBarcode ? <ActionMenuButton disabled={selectionRequired} hint={selectionRequired ? t("selectProductsFirst") : undefined} icon={Tags} label={t("printShelfLabel")} testId="products-print-shelf-action" onClick={() => openOperationDrawer("tool_print_shelf")}/> : null}
+                  {productAccess.editPrice ? <ActionMenuButton disabled={selectionRequired} hint={selectionRequired ? t("selectProductsFirst") : undefined} icon={FileSpreadsheet} label={t("bulkPriceUpdate")} testId="products-bulk-price-action" onClick={() => openOperationDrawer("tool_bulk_price")}/> : null}
                 </div>) : null}
             </div>
             </div>
@@ -501,11 +548,19 @@ export function ProductListClient({ access, products: initialProducts, brands: i
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
-            {fillProductsCopy(t("showingRange"), { from: pageStart, to: pageEnd, total: totalCount })} {selectedProductIds.length > 0 ? fillProductsCopy(t("selectedCount"), { count: selectedProductIds.length }) : t("operationsUseFilters")}
+            {fillProductsCopy(t("showingRange"), { from: pageStart, to: pageEnd, total: totalCount })}
+            {insightFilter === "new_products" ? <span data-testid="products-new-count"> · {t("newProducts")} · {t("last30Days")} · {totalCount}</span> : null}
           </span>
           {message ? <span className="rounded-full bg-success/10 px-3 py-1 font-semibold text-success" data-cleanup-ms={deleteTimings?.cleanupMs ?? ""} data-eligibility-ms={deleteTimings?.eligibilityMs ?? ""} data-image-cleanup={deleteImageCleanup} data-statement-ms={deleteTimings?.statementMs ?? ""} data-testid={deleteTimings ? "products-delete-timings" : undefined}>{message}</span> : null}
         </div>
       </section>
+
+      {selectedProductIds.length > 0 ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2" data-testid="products-selected-bar">
+        <span className="text-sm font-semibold" data-testid="products-selected-count">{fillProductsCopy(t("productsSelected"), { count: selectedProductIds.length })}</span>
+        <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-selected-more" type="button" onClick={() => { setActionMenuOpen(true); actionMenuButtonRef.current?.scrollIntoView({ block: "nearest" }); }}>{t("moreActions")}</button>
+        <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-clear-selection" type="button" onClick={() => setSelectedProductIds([])}>{t("clearSelection")}</button>
+        {totalCount > paginatedProducts.length ? <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-50" data-testid="products-select-filtered" disabled={isPending} type="button" onClick={selectAllFilteredProducts}>{fillProductsCopy(t("selectAllFiltered"), { count: totalCount })}</button> : null}
+      </div> : null}
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="max-h-[68vh] max-w-full overflow-auto">
@@ -513,7 +568,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             <thead className="sticky top-0 z-10 border-b border-border bg-background text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="w-12 px-3 py-3 font-semibold">
-                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllFilteredProducts} aria-label={t("selectAllVisible")}/>
+                  <input type="checkbox" checked={allVisibleSelected} data-testid="products-select-page" ref={(element) => { if (element) element.indeterminate = pageSelectionMixed; }} onChange={toggleAllFilteredProducts} aria-label={t("selectPage")}/>
                 </th>
                 <th className="w-16 px-3 py-3 font-semibold">{t("image")}</th>
                 <th className="px-3 py-3 font-semibold">{t("productName")}</th>
@@ -536,7 +591,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             const secondaryName = (locale === "lo" ? product.nameEn : product.nameLo)?.trim() || "";
             return (<tr className="border-b border-border last:border-b-0" key={product.id}>
                     <td className="px-3 py-3">
-                      <input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleProductSelection(product.id)} aria-label={fillProductsCopy(t("selectProduct"), { name: primaryName })}/>
+                      <input type="checkbox" checked={selectedProductIds.includes(product.id)} data-testid="products-row-select" onChange={() => toggleProductSelection(product.id)} aria-label={fillProductsCopy(t("selectProduct"), { name: primaryName })}/>
                     </td>
                     <td className="px-3 py-3">
                       <button className="group relative size-12 overflow-hidden rounded-md text-left outline-none ring-primary transition focus:ring-2" type="button" onClick={() => openImagePreview(product)} aria-label={fillProductsCopy(t("previewImageFor"), { name: primaryName })}>
@@ -614,15 +669,20 @@ export function ProductListClient({ access, products: initialProducts, brands: i
       <ProductShellDrawer canImport={productAccess.create} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
     </div>);
 }
-function ActionMenuButton({ icon: Icon, label, onClick, testId }: {
+function ActionMenuButton({ disabled = false, hint, icon: Icon, label, onClick, testId }: {
+    disabled?: boolean;
+    hint?: string;
     icon: typeof Upload;
     label: string;
     onClick: () => void;
     testId?: string;
 }) {
-    return (<button className="flex h-10 items-center gap-2 rounded-md px-3 text-left text-sm font-semibold transition hover:bg-background" data-testid={testId} type="button" role="menuitem" onClick={onClick}>
-      <Icon className="size-4 text-primary" aria-hidden="true"/>
-      {label}
+    return (<button aria-disabled={disabled || undefined} className="flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold transition hover:bg-background disabled:cursor-not-allowed disabled:opacity-50" data-disabled={disabled ? "true" : "false"} data-testid={testId} disabled={disabled} type="button" role="menuitem" onClick={onClick}>
+      <Icon className="size-4 shrink-0 text-primary" aria-hidden="true"/>
+      <span className="grid">
+        <span>{label}</span>
+        {hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : null}
+      </span>
     </button>);
 }
 function ProductsVisualShell({ onOpenDrawer, stats }: {
@@ -1395,7 +1455,14 @@ function matchesInsightFilter(product: Product, filter: InsightFilter) {
         return productMissingBarcode(product);
     if (filter === "no_image")
         return productMissingImage(product);
+    if (filter === "new_products")
+        return isCreatedWithin30Days(product.createdAt);
     return true;
+}
+function isCreatedWithin30Days(createdAt?: string | null, now = Date.now()) {
+    if (!createdAt) return false;
+    const created = Date.parse(createdAt);
+    return Number.isFinite(created) && created >= now - NEW_PRODUCT_WINDOW_MS && created <= now;
 }
 function isDeadStock(product: Product) {
     const updatedAt = new Date(`${product.updatedAt || "1970-01-01"}T00:00:00`);

@@ -19,6 +19,7 @@ export type ProductInsightFilter =
   | "near_expiry"
   | "dead_stock"
   | "missing_barcode"
+  | "new_products"
   | "no_image";
 
 export type ProductListQuery = {
@@ -118,6 +119,7 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
   const insight = query.insight ?? "all";
   const now = new Date();
   const in30Days = new Date(now.getTime() + 30 * 86_400_000);
+  const createdSince = new Date(now.getTime() - 30 * 86_400_000);
   const deadBefore = new Date(now.getTime() - 90 * 86_400_000);
 
   const insightWhere =
@@ -127,7 +129,9 @@ export function buildProductListWhere(scope: BranchScope, query: ProductListQuer
           ? { inventoryLots: { some: { expiryDate: { gt: now, lte: in30Days } } } }
             : insight === "dead_stock"
             ? { updatedAt: { lte: deadBefore } }
-            : {};
+            : insight === "new_products"
+              ? { createdAt: { gte: createdSince } }
+              : {};
 
   const searchWhere = search
     ? {
@@ -312,6 +316,24 @@ export async function getPrismaProductListPage(
     totalCount,
     totalPages: Math.max(1, Math.ceil(totalCount / query.pageSize)),
   };
+}
+
+const MAX_FILTERED_SELECTION = 2000;
+
+export async function getPrismaProductListIds(
+  tenant: TenantContext,
+  input: ProductListQuery = {},
+  client: any,
+): Promise<string[]> {
+  const resolved = await resolveProductListFilter(tenant, input, client);
+  if (resolved.empty) return [];
+  const rows = await client.product.findMany({
+    orderBy: resolved.orderBy,
+    select: { id: true },
+    take: MAX_FILTERED_SELECTION,
+    where: resolved.listWhere,
+  });
+  return rows.map((row: { id: string }) => row.id);
 }
 
 async function loadProductListSummary(scope: BranchScope, client: any): Promise<ProductListSummary> {

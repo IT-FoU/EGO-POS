@@ -16,7 +16,7 @@ export function ExportProductsDrawer({ onClose, query, selectedIds }: {
 }) {
   const locale = useAppLocale();
   const t = (key: string) => tProducts(key, locale);
-  const [scope, setScope] = useState<ExportScope>("filtered");
+  const [scope, setScope] = useState<ExportScope>(selectedIds.length > 0 ? "selected" : "filtered");
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [phase, setPhase] = useState<"idle" | "exporting" | "done">("idle");
   const [message, setMessage] = useState("");
@@ -46,7 +46,7 @@ export function ExportProductsDrawer({ onClose, query, selectedIds }: {
   }
 
   return (
-    <div className="grid gap-5" data-testid="products-export-workflow">
+    <div className="grid gap-5" data-default-scope={selectedIds.length > 0 ? "selected" : "filtered"} data-selected-count={selectedIds.length} data-testid="products-export-workflow">
       <section className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted-foreground">
         {t("exportNotice")}
       </section>

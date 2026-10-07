@@ -4,7 +4,7 @@ import { PermissionDeniedError } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { normalizeMasterName } from "@/features/products/master-name";
 import { mapPrismaCategory, mapPrismaProduct } from "@/features/products/dto-mapper";
-import { getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
+import { getPrismaProductListIds as loadPrismaProductListIds, getPrismaProductListPage as loadPrismaProductListPage, productListInclude, type ProductListQuery } from "@/features/products/list-query";
 import { writeStockIn } from "@/features/inventory/prisma-repository";
 import { applyAutomaticSellingPrices, assertSafePricingValue, toLakInteger } from "@/features/products/unit-pricing";
 import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
@@ -21,6 +21,10 @@ import { assertProductImagePathScope, isProductStoragePath, persistableProductIm
 export { productListInclude };
 
 const db = prisma as any;
+
+export async function getPrismaProductListIds(tenant: TenantContext, input: ProductListQuery = {}, client: any = db) {
+  return loadPrismaProductListIds(tenant, input, client);
+}
 
 export async function getPrismaProductListPage(tenant: TenantContext, input: ProductListQuery = {}, client: any = db) {
   const page = await loadPrismaProductListPage(tenant, input, client);

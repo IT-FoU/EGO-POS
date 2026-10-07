@@ -107,7 +107,7 @@ export function PrintShelfLabelDrawer({ onClose, selectedIds }: { onClose: () =>
   }
 
   return (
-    <div className="grid gap-5" data-testid="products-print-shelf">
+    <div className="grid gap-5" data-selected-count={selectedIds.length} data-testid="products-print-shelf">
       <style dangerouslySetInnerHTML={{ __html: printCss }}/>
       <p className="text-sm text-muted-foreground print:hidden">{t("shelfLabel")}. {t("printShelfSize")}</p>
       {phase === "choose" ? (
