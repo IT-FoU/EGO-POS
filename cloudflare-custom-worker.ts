@@ -1,5 +1,9 @@
 // @ts-ignore — `.open-next/worker.js` is generated at build time
 import { default as handler } from "./.open-next/worker.js";
+import webpDecoder from "./workers/webp_dec.wasm";
+
+const workerScope = globalThis as typeof globalThis & { __EGO_WEBP_DECODER__?: WebAssembly.Module };
+workerScope.__EGO_WEBP_DECODER__ = webpDecoder;
 
 export default {
   fetch: handler.fetch,

@@ -161,8 +161,26 @@ function downsample(rgba: Uint8Array, width: number, height: number, maxEdge: nu
 
 let webpReady: Promise<void> | null = null;
 
+function importedWebpDecoder() {
+  const value = (globalThis as { __EGO_WEBP_DECODER__?: unknown }).__EGO_WEBP_DECODER__;
+  return value instanceof WebAssembly.Module ? value : null;
+}
+
 function ensureWebpDecoder() {
   webpReady ??= (async () => {
+    const imported = importedWebpDecoder();
+    if (imported) {
+      const initDecoder = initWebpDecoder as (module: WebAssembly.Module, overrides?: object) => Promise<void>;
+      await initDecoder(imported, {
+        instantiateWasm(imports: WebAssembly.Imports, receive: (instance: WebAssembly.Instance) => void) {
+          return WebAssembly.instantiate(imported, imports).then((instance) => {
+            receive(instance);
+            return instance.exports;
+          });
+        },
+      });
+      return;
+    }
     const binary = Uint8Array.from(atob(WEBP_DECODER_WASM), (char) => char.charCodeAt(0));
     await initWebpDecoder({ wasmBinary: binary } as never);
   })();
