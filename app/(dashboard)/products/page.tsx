@@ -17,6 +17,7 @@ export default async function ProductsPage() {
   const access = {
     archive: allowsFine(keys, "products.delete"),
     create: allowsFine(keys, "products.create"),
+    editPrice: allowsFine(keys, FINE.productsChangePrice),
     printBarcode: allowsFine(keys, "products.print"),
     viewCost: allowsFine(keys, FINE.productsViewCost),
   };

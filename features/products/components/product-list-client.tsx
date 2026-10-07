@@ -22,6 +22,7 @@ import type { ProductListPage, ProductInsightFilter, ProductListQuery } from "@/
 import { BarcodeAuditDrawer } from "@/features/products/components/product-barcode-audit-drawer";
 import { PrintBarcodeDrawer } from "@/features/products/components/product-print-barcode-drawer";
 import { PrintShelfLabelDrawer } from "@/features/products/components/product-print-shelf-drawer";
+import { BulkPriceDrawer } from "@/features/products/components/product-bulk-price-drawer";
 import { ExportProductsDrawer } from "@/features/products/components/product-export-drawer";
 import { ImportProductsDrawer } from "@/features/products/components/product-import-drawer";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
@@ -59,7 +60,7 @@ function useProductsT() {
 }
 
 export function ProductListClient({ access, products: initialProducts, brands: initialBrands = [], categories: initialCategories, listPage: initialListPage, suppliers: initialSuppliers = [] }: {
-    access?: { archive: boolean; create: boolean; printBarcode: boolean; viewCost: boolean };
+    access?: { archive: boolean; create: boolean; editPrice: boolean; printBarcode: boolean; viewCost: boolean };
     products: Product[];
     brands?: Brand[];
     categories: Category[];
@@ -68,7 +69,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
 }) {
     const router = useRouter();
     const { locale, t } = useProductsT();
-    const productAccess = access ?? { archive: true, create: true, printBarcode: true, viewCost: true };
+    const productAccess = access ?? { archive: true, create: true, editPrice: true, printBarcode: true, viewCost: true };
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [brands, setBrands] = useState<Brand[]>(initialBrands);
     const [categories, setCategories] = useState<Category[]>(initialCategories);
@@ -434,7 +435,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} testId="products-barcode-audit-action" onClick={() => openOperationDrawer("tool_audit")}/>
                   {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} testId="products-print-barcode-action" onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
                   {productAccess.printBarcode ? <ActionMenuButton icon={Tags} label={t("printShelfLabel")} testId="products-print-shelf-action" onClick={() => openOperationDrawer("tool_print_shelf")}/> : null}
-                  <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} onClick={() => openOperationDrawer("tool_bulk_price")}/>
+                  {productAccess.editPrice ? <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} testId="products-bulk-price-action" onClick={() => openOperationDrawer("tool_bulk_price")}/> : null}
                 </div>) : null}
             </div>
             </div>
@@ -788,78 +789,8 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, 
     if (drawerKey === "tool_print_shelf")
         return <PrintShelfLabelDrawer onClose={onClose} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_bulk_price")
-        return <BulkPricePreviewDrawer categories={categories} filteredProducts={filteredProducts} onClose={onClose} products={operationProducts} selectedProducts={selectedProducts}/>;
+        return <BulkPriceDrawer onApplied={onImported} onClose={onClose} query={exportQuery} selectedIds={selectedIds}/>;
     return null;
-}
-
-function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, products, selectedProducts }: {
-    categories: Category[];
-    filteredProducts: Product[];
-    onClose: () => void;
-    products: Product[];
-    selectedProducts: Product[];
-}) {
-    const { locale, t } = useProductsT();
-    const [target, setTarget] = useState<"all" | "category" | "selected">("all");
-    const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
-    const [adjustmentMode, setAdjustmentMode] = useState<"increase_percent" | "decrease_percent" | "increase_amount" | "decrease_amount">("increase_percent");
-    const [adjustmentValue, setAdjustmentValue] = useState("10");
-    const [roundingLak, setRoundingLak] = useState(0);
-    const [fields, setFields] = useState({ costPrice: false, sellingPrice: true, studentPrice: false });
-    const [previewEnabled, setPreviewEnabled] = useState(true);
-    const targetProducts = target === "all"
-        ? filteredProducts
-        : target === "category"
-            ? filteredProducts.filter((product) => product.categoryId === categoryId)
-            : selectedProducts.length > 0 ? selectedProducts : products;
-    const previewRows = previewEnabled ? buildBulkPricePreview(targetProducts, {
-        adjustmentMode,
-        adjustmentValue: parseMoney(adjustmentValue),
-        fields,
-        roundingLak,
-    }, locale).slice(0, 20) : [];
-    return (
-      <div className="grid gap-5">
-        <ProductToolNotice text={t("bulkPreviewNotice")}/>
-        <section className="grid gap-4 rounded-lg border border-border bg-background p-4 lg:grid-cols-3">
-          <label className="grid gap-1 text-sm font-semibold">{t("applyTo")}<select className="field-input" value={target} onChange={(event) => setTarget(event.target.value as typeof target)}><option value="all">{t("applyToAll")}</option><option value="selected">{t("applyToSelected")}</option><option value="category">{t("applyToCategory")}</option></select></label>
-          <label className="grid gap-1 text-sm font-semibold">{t("category")}<select className="field-input" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={target !== "category"}>{categories.map((category) => <option key={category.id} value={category.id}>{locale === "lo" ? (category.nameLo || category.nameEn) : (category.nameEn || category.nameLo)}</option>)}</select></label>
-          <label className="grid gap-1 text-sm font-semibold">{t("adjustment")}<select className="field-input" value={adjustmentMode} onChange={(event) => setAdjustmentMode(event.target.value as typeof adjustmentMode)}><option value="increase_percent">{t("increasePercent")}</option><option value="decrease_percent">{t("decreasePercent")}</option><option value="increase_amount">{t("increaseAmount")}</option><option value="decrease_amount">{t("decreaseAmount")}</option></select></label>
-          <label className="grid gap-1 text-sm font-semibold">{t("value")}<input className="field-input" inputMode="decimal" value={formatMoneyInput(adjustmentValue)} onChange={(event) => setAdjustmentValue(event.target.value.replace(/[^\d.]/g, ""))}/></label>
-          <label className="grid gap-1 text-sm font-semibold">{t("rounding")}<select className="field-input" value={roundingLak} onChange={(event) => setRoundingLak(Number(event.target.value))}><option value={0}>{t("noRounding")}</option><option value={500}>{t("round500")}</option><option value={1000}>{t("round1000")}</option></select></label>
-          <div className="grid gap-2 rounded-md border border-border bg-card p-3 text-sm">
-            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.costPrice} onChange={(event) => setFields((current) => ({ ...current, costPrice: event.target.checked }))}/> {t("costPrice")}</label>
-            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.sellingPrice} onChange={(event) => setFields((current) => ({ ...current, sellingPrice: event.target.checked }))}/> {t("sellingPrice")}</label>
-            <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={fields.studentPrice} onChange={(event) => setFields((current) => ({ ...current, studentPrice: event.target.checked }))}/> {t("studentPrice")}</label>
-          </div>
-        </section>
-        <section className="rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("previewTable")}</h3>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{fillProductsCopy(t("previewRows"), { count: previewRows.length.toLocaleString("en-US") })}</span>
-              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setPreviewEnabled(true)}>{t("previewChanges")}</button>
-            </div>
-          </div>
-          <div className="mt-3 max-h-96 overflow-auto">
-            <table className="w-full min-w-[820px] text-left text-xs">
-              <thead className="sticky top-0 bg-background text-muted-foreground">
-                <tr><th className="p-2">{t("product")}</th><th className="p-2 text-right">{t("oldCost")}</th><th className="p-2 text-right">{t("previewCost")}</th><th className="p-2 text-right">{t("oldSelling")}</th><th className="p-2 text-right">{t("previewSelling")}</th><th className="p-2 text-right">{t("oldStudent")}</th><th className="p-2 text-right">{t("previewStudent")}</th></tr>
-              </thead>
-              <tbody>
-                {previewRows.map((row) => (
-                  <tr className="border-t border-border" key={`${row.productId}-${row.unitId}`}>
-                    <td className="p-2 font-semibold">{row.productName}</td><td className="p-2 text-right">{fields.costPrice ? formatLak(row.oldCost) : "-"}</td><td className="p-2 text-right">{fields.costPrice ? formatLak(row.newCost) : "-"}</td><td className="p-2 text-right">{fields.sellingPrice ? formatLak(row.oldSelling) : "-"}</td><td className="p-2 text-right">{fields.sellingPrice ? formatLak(row.newSelling) : "-"}</td><td className="p-2 text-right">{fields.studentPrice ? formatLak(row.oldStudent) : "-"}</td><td className="p-2 text-right">{fields.studentPrice ? formatLak(row.newStudent) : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {previewRows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{t("noProductsAvailablePreview")}</div> : null}
-          </div>
-        </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: t("applyChanges"), reason: t("disabled") }]}/>
-      </div>
-    );
 }
 
 function ProductToolNotice({ text }: { text: string }) {
@@ -1396,66 +1327,6 @@ function isDeadStock(product: Product) {
     const updatedAt = new Date(`${product.updatedAt || "1970-01-01"}T00:00:00`);
     const daysSinceUpdate = (Date.now() - updatedAt.getTime()) / 86400000;
     return daysSinceUpdate >= 90;
-}
-function parseMoney(value: unknown) {
-    return Number(String(value ?? "").replaceAll(",", "")) || 0;
-}
-function formatMoneyInput(value: string) {
-    const numeric = parseMoney(value);
-    return value ? numeric.toLocaleString("en-US") : "";
-}
-function applyBulkAdjustment(value: number, config: {
-    adjustmentMode: "increase_percent" | "decrease_percent" | "increase_amount" | "decrease_amount" | "set_exact";
-    adjustmentValue: number;
-    roundingLak: number;
-}) {
-    const raw = config.adjustmentMode === "increase_percent"
-        ? value + value * (config.adjustmentValue / 100)
-        : config.adjustmentMode === "decrease_percent"
-            ? value - value * (config.adjustmentValue / 100)
-            : config.adjustmentMode === "increase_amount"
-                ? value + config.adjustmentValue
-                : config.adjustmentMode === "decrease_amount"
-                    ? value - config.adjustmentValue
-                    : config.adjustmentValue;
-    const rounded = config.roundingLak > 0 ? Math.round(raw / config.roundingLak) * config.roundingLak : Math.round(raw);
-    return Math.max(0, rounded);
-}
-function buildBulkPricePreview(products: Product[], config: {
-    adjustmentMode: "increase_percent" | "decrease_percent" | "increase_amount" | "decrease_amount" | "set_exact";
-    adjustmentValue: number;
-    fields: {
-        costPrice?: boolean;
-        sellingPrice?: boolean;
-        studentPrice?: boolean;
-    };
-    roundingLak: number;
-}, locale?: SupportedLocale) {
-    return products.flatMap((product) => {
-        const units = product.units.length > 0 ? product.units : [{
-                costPriceLak: product.costPriceLak,
-                id: product.id,
-                sellingPriceLak: product.sellingPriceLak,
-                unitName: "Product",
-            }];
-        return units.map((unit) => {
-            const oldCost = Number(unit.costPriceLak ?? product.costPriceLak);
-            const oldSelling = Number(unit.sellingPriceLak ?? product.sellingPriceLak);
-            const oldStudent = oldSelling;
-            return {
-                newCost: applyBulkAdjustment(oldCost, config),
-                newSelling: applyBulkAdjustment(oldSelling, config),
-                newStudent: applyBulkAdjustment(oldStudent, config),
-                oldCost,
-                oldSelling,
-                oldStudent,
-                productId: product.id,
-                productName: localizedProductName(product, locale),
-                unitId: unit.id,
-                unitName: unit.unitName,
-            };
-        });
-    });
 }
 function getBarcodeAudit(products: Product[], locale?: SupportedLocale) {
     const barcodeMap = new Map<string, Array<{

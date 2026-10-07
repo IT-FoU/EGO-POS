@@ -37,6 +37,8 @@ import { importProductCsvBatch, previewProductImport } from "@/features/products
 import { PRODUCT_IMPORT_BATCH_SIZE } from "@/features/products/product-import";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
 import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
+import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine } from "@/features/products/bulk-price-service";
+import { FINE } from "@/features/access-control/fine-permissions";
 import { requireFinePermission } from "@/lib/auth/fine-access";
 import { buildProductExportFile, type ProductExportRequest } from "@/features/products/product-export-service";
 
@@ -230,6 +232,30 @@ export async function bulkPriceUpdateAction(input: BulkPriceUpdateInput) {
   try {
     const data = await bulkUpdatePrismaProductPrices(input, await tenant(WRITE_PERMISSIONS.productsUpdate));
     revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+async function bulkPriceTenant() {
+  const sessionTenant = await tenant(WRITE_PERMISSIONS.productsUpdate);
+  await requireFinePermission(sessionTenant, FINE.productsChangePrice);
+  return sessionTenant;
+}
+
+export async function searchBulkPriceProductsAction(input: { filtered?: ProductListQuery; productIds?: string[]; search?: string }) {
+  try {
+    return writeSuccess(await loadBulkPriceProducts(input, await bulkPriceTenant()));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function applyBulkSellingPricesAction(lines: BulkPriceApplyLine[]) {
+  try {
+    const data = await applyBulkSellingPrices(lines, await bulkPriceTenant());
+    if (data.updated > 0) revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {
     return writeFailure(error);
