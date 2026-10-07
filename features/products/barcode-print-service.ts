@@ -9,7 +9,7 @@ export async function loadBarcodePrintProducts(
   input: { productIds?: string[]; search?: string },
   tenant: TenantContext,
 ): Promise<BarcodePrintProduct[]> {
-  const ids = Array.from(new Set((input.productIds ?? []).map((id) => id.trim()).filter(Boolean))).slice(0, 50);
+  const ids = Array.from(new Set((input.productIds ?? []).map((id) => id.trim()).filter(Boolean))).slice(0, 80);
   const search = input.search?.trim() ?? "";
   if (ids.length === 0 && !search) return [];
   const resolved = await resolveProductListFilter(tenant, {
@@ -46,19 +46,22 @@ export async function loadBarcodePrintProducts(
       ],
     },
   });
-  return products.map((product: Record<string, any>) => ({
-    barcode: product.barcode ?? "",
-    id: String(product.id),
-    nameEn: product.nameEn ?? "",
-    nameLo: product.nameLo ?? "",
-    sellingPriceLak: Number(product.sellingPriceLak ?? 0),
-    sku: product.sku ?? "",
-    units: (product.units ?? []).map((unit: Record<string, any>) => ({
-      allowManualUnitSelect: unit.allowManualUnitSelect !== false,
-      barcode: unit.barcode ?? "",
-      sellingPriceLak: Number(unit.sellingPriceLak ?? 0),
-      status: unit.status ?? "active",
-      unitName: unit.unitName ?? "",
-    })),
-  }));
+  const rank = new Map(ids.map((id, index) => [id, index]));
+  return products
+    .map((product: Record<string, any>) => ({
+      barcode: product.barcode ?? "",
+      id: String(product.id),
+      nameEn: product.nameEn ?? "",
+      nameLo: product.nameLo ?? "",
+      sellingPriceLak: Number(product.sellingPriceLak ?? 0),
+      sku: product.sku ?? "",
+      units: (product.units ?? []).map((unit: Record<string, any>) => ({
+        allowManualUnitSelect: unit.allowManualUnitSelect !== false,
+        barcode: unit.barcode ?? "",
+        sellingPriceLak: Number(unit.sellingPriceLak ?? 0),
+        status: unit.status ?? "active",
+        unitName: unit.unitName ?? "",
+      })),
+    }))
+    .sort((left: BarcodePrintProduct, right: BarcodePrintProduct) => (rank.get(left.id) ?? 0) - (rank.get(right.id) ?? 0));
 }

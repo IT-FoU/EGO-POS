@@ -79,7 +79,7 @@ check("shelf print reuses the barcode product loader", drawer.includes("searchBa
 check("shelf print does not write products", !drawer.includes("update(") && !drawer.includes("create(") && !drawer.includes("delete("));
 check("barcode print drawer is unchanged in size", barcodeDrawer.includes("BARCODE_LABEL_WIDTH_MM") && barcodeDrawer.includes("BARCODE_LABEL_HEIGHT_MM") && !barcodeDrawer.includes("SHELF_LABEL_WIDTH_MM"));
 const list = readFileSync("features/products/components/product-list-client.tsx", "utf8");
-check("shelf menu uses the print permission and selected rows", list.includes('testId="products-print-shelf-action"') && list.includes("selectedIds={selectedIds}") && list.includes("productAccess.printBarcode ? <ActionMenuButton icon={Tags}"));
+check("shelf menu uses the print permission and selected rows", list.includes('testId="products-print-shelf-action"') && list.includes("selectedIds={selectedIds}") && list.includes("productAccess.printBarcode ? <ActionMenuButton") && list.includes("icon={Tags}"));
 const action = readFileSync("features/products/actions.ts", "utf8");
 const actionBody = action.slice(action.indexOf("export async function searchBarcodePrintProductsAction"), action.indexOf("export async function auditProductBarcodesAction"));
 check("print permission still guards the loader", actionBody.includes('requireFinePermission(tenant, "products.print")') && actionBody.includes("READ_PERMISSIONS.productsView"));

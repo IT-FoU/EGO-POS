@@ -116,6 +116,154 @@ export function barcodePrintUnits(product: BarcodePrintProduct): BarcodePrintCho
     .map((unit) => choice(shared, clean(unit.unitName) || "Unit", unit.barcode, unit.sellingPriceLak));
 }
 
+export const BARCODE_LABEL_PRESETS = [
+  { heightMm: 25, id: "40x25", widthMm: 40 },
+  { heightMm: BARCODE_LABEL_HEIGHT_MM, id: "50x30", widthMm: BARCODE_LABEL_WIDTH_MM },
+  { heightMm: 40, id: "60x40", widthMm: 60 },
+] as const;
+
+export const BARCODE_LABEL_MM_MIN = 20;
+export const BARCODE_LABEL_MM_MAX = 120;
+export const BARCODE_NAME_MIN_FONT_PX = 8;
+export const BARCODE_NAME_MAX_FONT_PX = 16;
+
+export type BarcodeLabelPresetId = (typeof BARCODE_LABEL_PRESETS)[number]["id"] | "custom";
+
+export type BarcodeLabelFields = {
+  barcodeGraphic: boolean;
+  barcodeText: boolean;
+  productName: boolean;
+  sellingPrice: boolean;
+  sku: boolean;
+  unitName: boolean;
+};
+
+export const DEFAULT_BARCODE_LABEL_FIELDS: BarcodeLabelFields = {
+  barcodeGraphic: true,
+  barcodeText: true,
+  productName: true,
+  sellingPrice: false,
+  sku: false,
+  unitName: true,
+};
+
+export type BarcodeLabelLayout = {
+  align: "center" | "left";
+  barcodeScale: 1 | 2 | 3;
+  nameFontPx: number;
+  priceFontPx: number;
+  spacingPx: number;
+};
+
+export const DEFAULT_BARCODE_LABEL_LAYOUT: BarcodeLabelLayout = {
+  align: "center",
+  barcodeScale: 2,
+  nameFontPx: 12,
+  priceFontPx: 11,
+  spacingPx: 2,
+};
+
+export type BarcodeLabelOverride = {
+  align?: "center" | "left";
+  barcodeText?: boolean;
+  displayName?: string;
+  nameFontPx?: number;
+  price?: boolean;
+  productName?: boolean;
+  sku?: boolean;
+  unitName?: boolean;
+};
+
+export type BarcodeLabelView = {
+  align: "center" | "left";
+  barcode: string;
+  displayName: string;
+  fontPx: number;
+  overflow: boolean;
+  priceLak: number;
+  showBarcode: boolean;
+  showBarcodeText: boolean;
+  showName: boolean;
+  showPrice: boolean;
+  showSku: boolean;
+  showUnit: boolean;
+  sku: string;
+  spacingPx: number;
+  unitName: string;
+};
+
+export function parseLabelMillimetres(value: string) {
+  const text = value.trim();
+  if (!/^\d+$/.test(text)) return null;
+  const mm = Number(text);
+  if (!Number.isInteger(mm) || mm < BARCODE_LABEL_MM_MIN || mm > BARCODE_LABEL_MM_MAX) return null;
+  return mm;
+}
+
+export function resolveBarcodeLabelSize(preset: BarcodeLabelPresetId, customWidth: string, customHeight: string) {
+  if (preset !== "custom") {
+    const match = BARCODE_LABEL_PRESETS.find((item) => item.id === preset) ?? BARCODE_LABEL_PRESETS[1]!;
+    return { heightMm: match.heightMm, widthMm: match.widthMm };
+  }
+  return {
+    heightMm: parseLabelMillimetres(customHeight) ?? BARCODE_LABEL_HEIGHT_MM,
+    widthMm: parseLabelMillimetres(customWidth) ?? BARCODE_LABEL_WIDTH_MM,
+  };
+}
+
+export function unitPrintRole(unitName: string) {
+  const value = unitName.trim().toLowerCase();
+  if (value === "piece") return "piece";
+  if (value === "pack") return "pack";
+  if (value === "box") return "box";
+  return "custom";
+}
+
+export function fitBarcodeLabelName(name: string, widthMm: number, fontPx: number) {
+  const size = clamp(Math.round(fontPx), BARCODE_NAME_MIN_FONT_PX, BARCODE_NAME_MAX_FONT_PX);
+  const lines = nameLines(name, widthMm, size);
+  if (lines <= 3) return { fontPx: size, overflow: false };
+  for (let next = size - 1; next >= BARCODE_NAME_MIN_FONT_PX; next -= 1) {
+    if (nameLines(name, widthMm, next) <= 3) return { fontPx: next, overflow: false };
+  }
+  return { fontPx: BARCODE_NAME_MIN_FONT_PX, overflow: nameLines(name, widthMm, BARCODE_NAME_MIN_FONT_PX) > 3 };
+}
+
+export function resolveBarcodeLabelView(input: {
+  fields: BarcodeLabelFields;
+  layout: BarcodeLabelLayout;
+  line: Pick<BarcodePrintChoice, "barcode" | "priceLak" | "sku" | "unitName">;
+  localeName: string;
+  override?: BarcodeLabelOverride;
+}): BarcodeLabelView {
+  const override = input.override ?? {};
+  const displayName = clean(override.displayName) || input.localeName;
+  const requestedFont = override.nameFontPx ?? input.layout.nameFontPx;
+  return {
+    align: override.align ?? input.layout.align,
+    barcode: input.line.barcode,
+    displayName,
+    fontPx: requestedFont,
+    overflow: false,
+    priceLak: input.line.priceLak,
+    showBarcode: input.fields.barcodeGraphic,
+    showBarcodeText: override.barcodeText ?? input.fields.barcodeText,
+    showName: override.productName ?? input.fields.productName,
+    showPrice: override.price ?? input.fields.sellingPrice,
+    showSku: (override.sku ?? input.fields.sku) && clean(input.line.sku).length > 0,
+    showUnit: override.unitName ?? input.fields.unitName,
+    sku: clean(input.line.sku),
+    spacingPx: input.layout.spacingPx,
+    unitName: input.line.unitName,
+  };
+}
+
+export function applyLabelFit(view: BarcodeLabelView, widthMm: number): BarcodeLabelView {
+  if (!view.showName) return { ...view, overflow: false };
+  const fit = fitBarcodeLabelName(view.displayName, widthMm, view.fontPx);
+  return { ...view, fontPx: fit.fontPx, overflow: fit.overflow };
+}
+
 export function buildBarcodePrintJob(lines: BarcodePrintChoice[]) {
   const blocked = lines.filter((line) => line.missing || !line.encodable || line.copies < 1);
   const printable = lines.filter((line) => !line.missing && line.encodable && line.copies >= 1);
@@ -148,4 +296,15 @@ function choice(
 
 function clean(value?: string | null) {
   return String(value ?? "").trim();
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function nameLines(name: string, widthMm: number, fontPx: number) {
+  const text = name.trim();
+  if (!text) return 1;
+  const charsPerLine = Math.max(4, Math.floor((Math.max(widthMm, 20) - 4) / Math.max(1.4, fontPx * 0.22)));
+  return Math.ceil(text.length / charsPerLine);
 }
