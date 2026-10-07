@@ -666,7 +666,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             <p className="font-mono text-xs">{permanentTarget.sku || "-"}</p>
           </div>
         </ProductSmallModal> : null}
-      <ProductShellDrawer canImport={productAccess.create} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
+      <ProductShellDrawer canImport={productAccess.create} canViewCost={productAccess.viewCost} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredCount={totalCount} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
     </div>);
 }
 function ActionMenuButton({ disabled = false, hint, icon: Icon, label, onClick, testId }: {
@@ -772,11 +772,13 @@ function ProductShellTopic({ description, icon: Icon, label, onClick }: { descri
     );
 }
 
-function ProductShellDrawer({ canImport, categories, drawerKey, exportQuery, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
+function ProductShellDrawer({ canImport, canViewCost, categories, drawerKey, exportQuery, filteredCount, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
     canImport: boolean;
+    canViewCost: boolean;
     categories: Category[];
     drawerKey: ProductShellDrawerKey | null;
     exportQuery: ProductListQuery;
+    filteredCount: number;
     filteredProducts: Product[];
     onClose: () => void;
     onImported: () => Promise<void> | void;
@@ -802,7 +804,7 @@ function ProductShellDrawer({ canImport, categories, drawerKey, exportQuery, fil
     if (isProductToolDrawer(drawerKey)) {
         return (
           <ProductDrawerFrame description={getProductToolDescription(drawerKey, t)} label={t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
-            <ProductToolDrawerBody canImport={canImport} categories={categories} drawerKey={drawerKey} exportQuery={exportQuery} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedIds} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
+            <ProductToolDrawerBody canImport={canImport} canViewCost={canViewCost} categories={categories} drawerKey={drawerKey} exportQuery={exportQuery} filteredCount={filteredCount} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedIds} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
           </ProductDrawerFrame>
         );
     }
@@ -899,11 +901,13 @@ function ProductShellStatusRow({ label, value }: { label: string; value: string 
     );
 }
 
-function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
+function ProductToolDrawerBody({ canImport, canViewCost, categories, drawerKey, exportQuery, filteredCount, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
     canImport: boolean;
+    canViewCost: boolean;
     categories: Category[];
     drawerKey: ProductShellDrawerKey;
     exportQuery: ProductListQuery;
+    filteredCount: number;
     filteredProducts: Product[];
     onClose: () => void;
     onImported: () => Promise<void> | void;
@@ -915,7 +919,7 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, 
     if (drawerKey === "tool_import")
         return <ImportProductsDrawer canImport={canImport} onClose={onClose} onImported={onImported}/>;
     if (drawerKey === "tool_export")
-        return <ExportProductsDrawer onClose={onClose} query={exportQuery} selectedIds={selectedIds}/>;
+        return <ExportProductsDrawer canViewCost={canViewCost} filteredCount={filteredCount} onClose={onClose} query={exportQuery} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_audit")
         return <BarcodeAuditDrawer onClose={onClose}/>;
     if (drawerKey === "tool_print_barcode")

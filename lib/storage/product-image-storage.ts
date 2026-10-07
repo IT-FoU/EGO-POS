@@ -30,6 +30,7 @@ export type ProductImageObject = {
 
 export type ProductImageStorage = {
   createSignedUrls(paths: string[], expiresInSeconds?: number): Promise<Map<string, string>>;
+  download(path: string): Promise<Uint8Array | null>;
   publicUrl?(path: string): string;
   remove(paths: string[]): Promise<void>;
   upload(path: string, object: ProductImageObject, options?: { upsert?: boolean }): Promise<void>;
@@ -53,6 +54,11 @@ class MemoryProductImageStorage implements ProductImageStorage {
     for (const path of paths) {
       this.objects.delete(path);
     }
+  }
+
+  async download(path: string) {
+    const object = this.objects.get(path);
+    return object ? new Uint8Array(object.bytes) : null;
   }
 
   async createSignedUrls(paths: string[]) {
@@ -92,6 +98,14 @@ class SupabaseProductImageStorage implements ProductImageStorage {
     if (error) {
       throw new Error(error.message || "Failed to delete product image.");
     }
+  }
+
+  async download(path: string) {
+    const objectPath = normalizeStorageObjectPath(path);
+    if (!objectPath) return null;
+    const { data, error } = await this.client.storage.from(PRODUCT_IMAGE_BUCKET).download(objectPath);
+    if (error || !data) return null;
+    return new Uint8Array(await data.arrayBuffer());
   }
 
   async createSignedUrls(paths: string[], expiresInSeconds = PRODUCT_IMAGE_SIGNED_URL_TTL_SECONDS) {
@@ -171,6 +185,16 @@ export async function signProductImagePaths(paths: string[]) {
     return await getProductImageStorage().createSignedUrls(unique);
   } catch {
     return new Map<string, string>();
+  }
+}
+
+export async function downloadProductImageObject(path: string) {
+  const normalized = normalizeStorageObjectPath(path);
+  if (!normalized) return null;
+  try {
+    return await getProductImageStorage().download(normalized);
+  } catch {
+    return null;
   }
 }
 

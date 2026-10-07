@@ -44,7 +44,7 @@ import { loadBarcodePrintProducts } from "@/features/products/barcode-print-serv
 import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine } from "@/features/products/bulk-price-service";
 import { FINE } from "@/features/access-control/fine-permissions";
 import { requireFinePermission } from "@/lib/auth/fine-access";
-import { buildProductExportFile, type ProductExportRequest } from "@/features/products/product-export-service";
+import { buildProductExportFile, buildProductExportPreview, type ProductExportRequest } from "@/features/products/product-export-service";
 
 function revalidateProductCataloguePaths() {
   revalidatePath("/products");
@@ -361,6 +361,14 @@ export async function auditProductBarcodesAction() {
   try {
     const data = await loadProductBarcodeAudit(await requireReadPermission(READ_PERMISSIONS.productsView));
     return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function previewProductExportAction(input: ProductExportRequest) {
+  try {
+    return writeSuccess(await buildProductExportPreview(input, await requireReadPermission(READ_PERMISSIONS.productsView)));
   } catch (error) {
     return writeFailure(error);
   }
