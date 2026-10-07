@@ -257,8 +257,8 @@ export async function commitPermanentDelete(productId: string, tenant: TenantCon
         'products',
         'permanent_delete',
         jsonb_build_object(
-          'actorId', ${tenant.userId},
-          'actorName', ${actor},
+          'actorId', CAST(${tenant.userId} AS text),
+          'actorName', CAST(${actor} AS text),
           'deletionType', 'permanent',
           'productId', gate.id,
           'productName', COALESCE(NULLIF(gate.name_lo, ''), gate.name_en, ''),
@@ -266,8 +266,8 @@ export async function commitPermanentDelete(productId: string, tenant: TenantCon
           'timestamp', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
         ),
         jsonb_build_object(
-          'actorId', ${tenant.userId},
-          'actorName', ${actor},
+          'actorId', CAST(${tenant.userId} AS text),
+          'actorName', CAST(${actor} AS text),
           'deletionType', 'permanent',
           'productId', gate.id,
           'productName', COALESCE(NULLIF(gate.name_lo, ''), gate.name_en, ''),
