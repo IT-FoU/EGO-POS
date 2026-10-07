@@ -20,6 +20,7 @@ import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIco
 import type { Brand, Category, Product, ProductStatus } from "@/features/products/types";
 import type { ProductListPage, ProductInsightFilter, ProductListQuery } from "@/features/products/list-query";
 import { BarcodeAuditDrawer } from "@/features/products/components/product-barcode-audit-drawer";
+import { PrintBarcodeDrawer } from "@/features/products/components/product-print-barcode-drawer";
 import { ExportProductsDrawer } from "@/features/products/components/product-export-drawer";
 import { ImportProductsDrawer } from "@/features/products/components/product-import-drawer";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
@@ -430,7 +431,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                   <ActionMenuButton icon={Upload} label={t("importProducts")} testId="products-import-action" onClick={() => openOperationDrawer("tool_import")}/>
                   <ActionMenuButton icon={Download} label={t("exportProducts")} testId="products-export-action" onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} testId="products-barcode-audit-action" onClick={() => openOperationDrawer("tool_audit")}/>
-                  {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
+                  {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} testId="products-print-barcode-action" onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
                   <ActionMenuButton icon={Tags} label={t("printShelfLabel")} onClick={() => openOperationDrawer("tool_print_shelf")}/>
                   <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} onClick={() => openOperationDrawer("tool_bulk_price")}/>
                 </div>) : null}
@@ -782,36 +783,12 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, 
     if (drawerKey === "tool_audit")
         return <BarcodeAuditDrawer onClose={onClose}/>;
     if (drawerKey === "tool_print_barcode")
-        return <PrintBarcodeDrawer onClose={onClose} products={operationProducts}/>;
+        return <PrintBarcodeDrawer onClose={onClose} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_print_shelf")
         return <PrintShelfLabelDrawer onClose={onClose} products={operationProducts}/>;
     if (drawerKey === "tool_bulk_price")
         return <BulkPricePreviewDrawer categories={categories} filteredProducts={filteredProducts} onClose={onClose} products={operationProducts} selectedProducts={selectedProducts}/>;
     return null;
-}
-
-function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
-    const { t, locale } = useProductsT();
-    const [quantity, setQuantity] = useState("1");
-    const [labelSize, setLabelSize] = useState("40x30mm");
-    const [paper, setPaper] = useState("A4");
-    const previewProduct = products[0];
-    return (
-      <div className="grid gap-5">
-        <ProductToolNotice text={t("printBarcodeNotice")}/>
-        <PrintLayoutControls labelOptions={["40x30mm", "50x30mm", "60x40mm", "Custom"]} labelValue={labelSize} paperValue={paper} quantity={quantity} onLabelChange={setLabelSize} onPaperChange={setPaper} onQuantityChange={setQuantity}/>
-        <ProductSelectionPreview products={products}/>
-        <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("barcodeLabelPreview")}</h3>
-          <div className="mt-4 max-w-sm rounded-md border border-border bg-card p-4 text-center">
-            <div className="truncate text-sm font-semibold">{previewProduct ? localizedProductName(previewProduct, locale) : t("productName")}</div>
-            <div className="mt-2 rounded bg-background p-3 font-mono text-xs tracking-[0.2em]">{previewProduct?.barcode || previewProduct?.sku || "BARCODE"}</div>
-            <div className="mt-2 text-sm font-semibold">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : t("price")}</div>
-          </div>
-        </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: t("printPreview"), reason: t("disabled") }]}/>
-      </div>
-    );
 }
 
 function PrintShelfLabelDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
@@ -950,25 +927,6 @@ function ProductOptionPanel({ onSelect, options, selected, title }: {
             </label>
           ))}
         </div>
-      </section>
-    );
-}
-
-function PrintLayoutControls({ labelOptions, labelValue, onLabelChange, onPaperChange, onQuantityChange, paperValue, quantity }: {
-    labelOptions: string[];
-    labelValue: string;
-    onLabelChange: (value: string) => void;
-    onPaperChange: (value: string) => void;
-    onQuantityChange: (value: string) => void;
-    paperValue: string;
-    quantity: string;
-}) {
-    const { t } = useProductsT();
-    return (
-      <section className="grid gap-4 rounded-lg border border-border bg-background p-4 lg:grid-cols-3">
-        <label className="grid gap-1 text-sm font-semibold">{t("quantityPerProduct")}<input className="field-input" inputMode="numeric" value={quantity} onChange={(event) => onQuantityChange(event.target.value.replace(/[^\d]/g, ""))}/></label>
-        <label className="grid gap-1 text-sm font-semibold">{t("labelSize")}<select className="field-input" value={labelValue} onChange={(event) => onLabelChange(event.target.value)}>{labelOptions.map((option) => <option key={option} value={option}>{option === "Custom" ? t("custom") : option}</option>)}</select></label>
-        <label className="grid gap-1 text-sm font-semibold">{t("paperLayout")}<select className="field-input" value={paperValue} onChange={(event) => onPaperChange(event.target.value)}>{["A4", "A5", "80mm roll", "Custom"].map((option) => <option key={option} value={option}>{option === "Custom" ? t("custom") : option}</option>)}</select></label>
       </section>
     );
 }

@@ -36,6 +36,8 @@ import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, previewProductImport } from "@/features/products/product-import-service";
 import { PRODUCT_IMPORT_BATCH_SIZE } from "@/features/products/product-import";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
+import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
+import { requireFinePermission } from "@/lib/auth/fine-access";
 import { buildProductExportFile, type ProductExportRequest } from "@/features/products/product-export-service";
 
 function revalidateProductCataloguePaths() {
@@ -282,6 +284,16 @@ export async function importProductsAction(csvText: string, options: { afterRow?
     });
     if (data.created > 0) revalidateProductCataloguePaths();
     return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function searchBarcodePrintProductsAction(input: { productIds?: string[]; search?: string }) {
+  try {
+    const tenant = await requireReadPermission(READ_PERMISSIONS.productsView);
+    await requireFinePermission(tenant, "products.print");
+    return writeSuccess(await loadBarcodePrintProducts(input, tenant));
   } catch (error) {
     return writeFailure(error);
   }
