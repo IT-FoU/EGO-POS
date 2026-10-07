@@ -1,3 +1,5 @@
+import decodeWebpImage, { init as initWebpDecoder } from "@jsquash/webp/decode";
+import { WEBP_DECODER_WASM } from "@/features/products/webp-decoder.wasm";
 import { thumbPathFromMain } from "@/lib/storage/product-image-ref";
 import { downloadProductImageObject } from "@/lib/storage/product-image-storage";
 import { PRODUCT_EXPORT_EMBED_LIMIT, safeImagePath, type ProductExportField, type ProductExportSource } from "@/features/products/product-export";
@@ -142,9 +144,19 @@ function downsample(rgba: Uint8Array, width: number, height: number, maxEdge: nu
   return { data, height: nextHeight, width: nextWidth };
 }
 
+let webpReady: Promise<void> | null = null;
+
+function ensureWebpDecoder() {
+  webpReady ??= (async () => {
+    const binary = Uint8Array.from(atob(WEBP_DECODER_WASM), (char) => char.charCodeAt(0));
+    await initWebpDecoder(await WebAssembly.compile(binary) as never);
+  })();
+  return webpReady;
+}
+
 async function decodeWebp(bytes: Uint8Array): Promise<{ data: Uint8Array; height: number; width: number } | null> {
-  const webp = await import("@jsquash/webp");
-  const image = await webp.decode(new Uint8Array(bytes).buffer);
+  await ensureWebpDecoder();
+  const image = await decodeWebpImage(new Uint8Array(bytes).buffer);
   if (!image?.data || !image.width || !image.height) return null;
   return { data: new Uint8Array(image.data), height: image.height, width: image.width };
 }
