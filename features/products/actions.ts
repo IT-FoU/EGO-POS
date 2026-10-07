@@ -41,7 +41,7 @@ import { importProductCsvBatch, previewProductImport } from "@/features/products
 import { PRODUCT_IMPORT_BATCH_SIZE } from "@/features/products/product-import";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
 import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
-import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine } from "@/features/products/bulk-price-service";
+import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine, type BulkPriceJobAudit } from "@/features/products/bulk-price-service";
 import { FINE } from "@/features/access-control/fine-permissions";
 import { requireFinePermission } from "@/lib/auth/fine-access";
 import { buildProductExportFile, buildProductExportPreview, type ProductExportRequest } from "@/features/products/product-export-service";
@@ -284,9 +284,9 @@ export async function searchBulkPriceProductsAction(input: { filtered?: ProductL
   }
 }
 
-export async function applyBulkSellingPricesAction(lines: BulkPriceApplyLine[]) {
+export async function applyBulkSellingPricesAction(lines: BulkPriceApplyLine[], job?: BulkPriceJobAudit) {
   try {
-    const data = await applyBulkSellingPrices(lines, await bulkPriceTenant());
+    const data = await applyBulkSellingPrices(lines, await bulkPriceTenant(), job);
     if (data.updated > 0) revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {

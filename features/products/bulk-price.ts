@@ -59,6 +59,24 @@ export function normalizeUnitRounding(value: number | null | undefined) {
   return PERSISTED_ROUNDING_INCREMENTS.includes(rounding as (typeof PERSISTED_ROUNDING_INCREMENTS)[number]) ? rounding : 0;
 }
 
+export function normalizeJobRounding(value: number | null | undefined) {
+  const rounding = Math.trunc(Number(value));
+  if (!Number.isFinite(rounding) || rounding < 0 || rounding > 100000) return 0;
+  return rounding;
+}
+
+/**
+ * P6 owns persistent Needs Label Reprint.
+ * A successful selling-price write is the hook. There is no stored reprint flag yet.
+ */
+export function shelfLabelReprintCandidate(input: { productId: string; unitId: string }) {
+  return {
+    needsSchema: true as const,
+    productId: input.productId,
+    unitId: input.unitId,
+  };
+}
+
 export function bulkPriceUnits(product: BulkPriceProductSource): BulkPriceChoice[] {
   const shared = {
     nameEn: clean(product.nameEn),
@@ -97,17 +115,23 @@ export function bulkPriceUnits(product: BulkPriceProductSource): BulkPriceChoice
 
 export function quoteBulkSellingPrice(input: {
   currentPriceLak: number;
+  jobRounding?: number | null;
   method: BulkPriceMethod;
+  roundExact?: boolean;
   roundingLak?: number;
   value: number;
 }): BulkPriceQuote {
   const current = savedPrice(input.currentPriceLak);
   if (current === null) return invalid("invalid_value");
   if (!Number.isFinite(input.value) || input.value < 0) return invalid("invalid_value");
-  const rounding = normalizeUnitRounding(input.roundingLak);
+  const rounding = input.jobRounding === undefined || input.jobRounding === null
+    ? normalizeUnitRounding(input.roundingLak)
+    : normalizeJobRounding(input.jobRounding);
 
   if (input.method === "set_exact") {
-    return priced(current, Math.round(input.value));
+    const exact = Math.round(input.value);
+    if (input.roundExact && rounding > 0) return priced(current, ceilToLakIncrement(BigInt(exact), 1n, rounding));
+    return priced(current, exact);
   }
 
   if (input.method === "increase_percent" || input.method === "decrease_percent") {

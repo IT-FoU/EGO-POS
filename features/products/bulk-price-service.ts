@@ -1,4 +1,4 @@
-import { BULK_PRICE_BATCH_SIZE, BULK_PRICE_MAX_LINES, classifyBulkLine, type BulkPriceProductSource } from "@/features/products/bulk-price";
+import { BULK_PRICE_BATCH_SIZE, BULK_PRICE_MAX_LINES, classifyBulkLine, shelfLabelReprintCandidate, type BulkPriceProductSource } from "@/features/products/bulk-price";
 import { resolveProductListFilter, type ProductListQuery } from "@/features/products/list-query";
 import { recordEssentialActivity } from "@/features/store-activity/record-essential-activity";
 import { prisma } from "@/lib/db/prisma";
@@ -12,6 +12,12 @@ export type BulkPriceApplyLine = {
   newPriceLak: number;
   productId: string;
   unitId: string;
+};
+
+export type BulkPriceJobAudit = {
+  mode: "manual" | "percent";
+  roundManual: boolean;
+  roundingOverrideLak: number | null;
 };
 
 export type BulkPriceApplyResult = {
@@ -100,7 +106,7 @@ export async function loadBulkPriceProducts(
   }));
 }
 
-export async function applyBulkSellingPrices(lines: BulkPriceApplyLine[], tenant: TenantContext): Promise<BulkPriceApplyResult> {
+export async function applyBulkSellingPrices(lines: BulkPriceApplyLine[], tenant: TenantContext, job?: BulkPriceJobAudit): Promise<BulkPriceApplyResult> {
   const unique = new Map<string, BulkPriceApplyLine>();
   for (const line of lines) {
     const productId = line.productId.trim();
@@ -126,6 +132,9 @@ export async function applyBulkSellingPrices(lines: BulkPriceApplyLine[], tenant
           productId: line.productId,
           unitId: line.unitId,
         })),
+        mode: job?.mode ?? null,
+        roundManual: Boolean(job?.roundManual),
+        roundingOverrideLak: job?.roundingOverrideLak ?? null,
         source: "Bulk Price Update",
       },
       tenant,
@@ -142,7 +151,13 @@ export async function applyBulkSellingPrices(lines: BulkPriceApplyLine[], tenant
             branchId: scope.branchId,
             companyId: tenant.companyId,
             entityType: "product",
-            metadata: { source: "bulk_price_update", updated },
+            metadata: {
+              mode: job?.mode ?? "percent",
+              roundManual: Boolean(job?.roundManual),
+              roundingOverrideLak: job?.roundingOverrideLak ?? null,
+              source: "bulk_price_update",
+              updated,
+            },
             module: "products",
             summary: "Bulk Price Update",
             userId: tenant.userId,
@@ -225,6 +240,7 @@ async function applyBulkLine(tx: any, scope: Awaited<ReturnType<typeof resolveTe
   await tx.productPriceHistory.create({
     data: history(tenant, product.id, current, line.newPriceLak, legacy ? null : unit.id, unitName, "bulk_selling_price"),
   });
+  shelfLabelReprintCandidate({ productId: product.id, unitId: legacy ? "" : String(unit.id) });
   return row(line, "updated", "", product.sku ?? "", unitName, current, line.newPriceLak);
 }
 
