@@ -12,6 +12,7 @@ import {
 } from "@/features/products/bulk-price";
 import type { BulkPriceApplyResult, BulkPriceJobAudit } from "@/features/products/bulk-price-service";
 import { formatLak } from "@/features/products/format";
+import { SelectedProductsList, selectedProductsPriceGridClassName, selectedProductsRowClassName } from "@/features/products/components/selected-products-list";
 import type { ProductListQuery } from "@/features/products/list-query";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
@@ -189,25 +190,24 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <div className="grid max-h-[36vh] gap-3 overflow-auto">
+          <SelectedProductsList>
+            <div className={`${selectedProductsRowClassName} ${selectedProductsPriceGridClassName} sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground`}>
+              <span>{t("productName")}</span>
+              <span>{t("unit")}</span>
+              <span>{t("barcode")}</span>
+              <span className="text-right">{t("cost")}</span>
+              <span className="text-right">{t("bulkCurrentSellingPrice")}</span>
+              <span className="text-right">{t("bulkNewSellingPrice")}</span>
+              <span/>
+            </div>
             {products.map((product) => (
-              <section className="rounded-lg border border-border bg-background p-4" data-testid="products-bulk-product" key={product.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold">{localizedProductName(product, locale)}</h3>
-                    <p className="text-xs text-muted-foreground">{product.sku}</p>
-                  </div>
-                  <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-bulk-remove-product" type="button" onClick={() => setProducts((current) => current.filter((item) => item.id !== product.id))}>{t("printRemoveProduct")}</button>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">{t("printSelectUnits")}</p>
-                  {lines.filter((line) => line.productId === product.id).map((line) => (
-                    <UnitRow key={line.key} line={line} mode={mode} t={t} onManual={(value) => setManualPrices((current) => ({ ...current, [line.key]: value.replace(/[^\d]/g, "") }))} onToggle={(checked) => setIncluded((current) => ({ ...current, [line.key]: checked }))}/>
-                  ))}
-                </div>
-              </section>
+              <div data-testid="products-bulk-product" key={product.id}>
+                {lines.filter((line) => line.productId === product.id).map((line) => (
+                  <UnitRow direction={direction} jobRounding={jobRounding} key={line.key} line={line} mode={mode} percent={percent} productName={localizedProductName(product, locale)} roundManual={roundManual && roundChoice !== "unit"} t={t} onManual={(value) => setManualPrices((current) => ({ ...current, [line.key]: value.replace(/[^\d]/g, "") }))} onRemove={() => setProducts((current) => current.filter((item) => item.id !== product.id))} onToggle={(checked) => setIncluded((current) => ({ ...current, [line.key]: checked }))}/>
+                ))}
+              </div>
             ))}
-          </div>
+          </SelectedProductsList>
           <div className="grid gap-3 rounded-lg border border-border p-4">
             <div className="flex flex-wrap gap-2">
               <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${mode === "percent" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-mode-percent" type="button" onClick={() => setMode("percent")}>{t("bulkPercent")}</button>
@@ -270,8 +270,9 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
                   <th className="p-2">{t("product")}</th>
                   <th className="p-2">SKU</th>
                   <th className="p-2">{t("unit")}</th>
-                  <th className="p-2 text-right">{t("bulkCurrentPrice")}</th>
-                  <th className="p-2 text-right">{t("bulkNewPrice")}</th>
+                  <th className="p-2 text-right">{t("cost")}</th>
+                  <th className="p-2 text-right">{t("bulkCurrentSellingPrice")}</th>
+                  <th className="p-2 text-right">{t("bulkNewSellingPrice")}</th>
                   <th className="p-2 text-right">{t("bulkDifference")}</th>
                 </tr>
               </thead>
@@ -281,6 +282,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
                     <td className="p-2 font-semibold">{line.localeName}</td>
                     <td className="p-2 font-mono text-xs">{line.sku}</td>
                     <td className="p-2">{line.unitName}</td>
+                    <td className="p-2 text-right">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
                     <td className="p-2 text-right">{formatLak(line.priceLak)}</td>
                     <td className="p-2 text-right">{line.quote.newPriceLak === null ? t(line.quote.reason === "negative" ? "bulkNegative" : "bulkInvalid") : formatLak(line.quote.newPriceLak)}</td>
                     <td className="p-2 text-right">{line.quote.amount === null ? "—" : `${line.quote.amount > 0 ? "+" : ""}${formatLak(line.quote.amount)}${line.quote.percent === null ? "" : ` (${line.quote.percent > 0 ? "+" : ""}${line.quote.percent}%)`}`}</td>
@@ -293,7 +295,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
           <div className="flex flex-wrap justify-end gap-2">
             <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-back" type="button" onClick={() => setPhase("choose")}>{t("printBack")}</button>
             <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-refresh" type="button" onClick={() => { void refreshPreview(); }}>{t("bulkRefreshPreview")}</button>
-            <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-bulk-apply" disabled={ready.length === 0 || applying} type="button" onClick={() => { void applyUpdates(); }}>{t("bulkApply")}</button>
+            <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-bulk-apply" disabled={ready.length === 0 || applying} type="button" onClick={() => { void applyUpdates(); }}>{t("save")}</button>
           </div>
         </div>
       ) : null}
@@ -321,24 +323,37 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
   );
 }
 
-function UnitRow({ line, mode, onManual, onToggle, t }: {
+function UnitRow({ direction, jobRounding, line, mode, onManual, onRemove, onToggle, percent, productName, roundManual, t }: {
+  direction: Direction;
+  jobRounding: number | null;
   line: BulkPriceChoice & { included: boolean; key: string; manual: string };
   mode: Mode;
   onManual: (value: string) => void;
+  onRemove: () => void;
   onToggle: (checked: boolean) => void;
+  percent: string;
+  productName: string;
+  roundManual: boolean;
   t: (key: string) => string;
 }) {
+  const quote = quoteForLine(line, { direction, jobRounding, mode, percent, roundManual });
   return (
-    <label className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm" data-price={line.priceLak} data-product={line.productId} data-role={unitPrintRole(line.unitName)} data-rounding={line.roundingLak} data-sku={line.sku} data-testid="products-bulk-unit" data-unit={line.unitName} data-unit-id={line.unitId}>
-      <span className="flex items-center gap-2 font-semibold">
+    <div className={`${selectedProductsRowClassName} ${selectedProductsPriceGridClassName}`} data-price={line.priceLak} data-product={line.productId} data-role={unitPrintRole(line.unitName)} data-rounding={line.roundingLak} data-sku={line.sku} data-testid="products-bulk-unit" data-unit={line.unitName} data-unit-id={line.unitId}>
+      <span className="truncate font-semibold">{productName}</span>
+      <label className="flex items-center gap-2 font-semibold">
         <input checked={line.included} data-testid="products-bulk-include" type="checkbox" onChange={(event) => onToggle(event.target.checked)}/>
-        {line.unitName}
-      </span>
-      <span className="flex items-center gap-2">
-        <span>{t("bulkCurrentPrice")}: {formatLak(line.priceLak)}</span>
-        {mode === "manual" ? <input className="h-9 w-28 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-bulk-manual-price" inputMode="numeric" value={line.manual} onChange={(event) => onManual(event.target.value)}/> : null}
-      </span>
-    </label>
+        <span className="truncate">{line.unitName}</span>
+      </label>
+      <span className="truncate font-mono text-xs">{line.barcode || "—"}</span>
+      <span className="text-right">{line.costLak === null ? "—" : formatLak(line.costLak)}</span>
+      <span className="text-right">{formatLak(line.priceLak)}</span>
+      {mode === "manual" ? (
+        <input className="h-8 w-full rounded-md border border-border bg-white px-2 text-right text-sm" data-testid="products-bulk-manual-price" inputMode="numeric" value={line.manual} onChange={(event) => onManual(event.target.value)}/>
+      ) : (
+        <span className="text-right font-semibold" data-testid="products-bulk-proposed">{quote.newPriceLak === null ? "—" : formatLak(quote.newPriceLak)}</span>
+      )}
+      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-bulk-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button>
+    </div>
   );
 }
 

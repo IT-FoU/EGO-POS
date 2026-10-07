@@ -8,6 +8,9 @@ import {
   BARCODE_LABEL_WIDTH_MM,
   BARCODE_NAME_MAX_FONT_PX,
   BARCODE_NAME_MIN_FONT_PX,
+  BARCODE_PRICE_MAX_FONT_PX,
+  BARCODE_PRICE_MIN_FONT_PX,
+  BARCODE_SCALE_MAX,
   DEFAULT_BARCODE_LABEL_FIELDS,
   DEFAULT_BARCODE_LABEL_LAYOUT,
   applyLabelFit,
@@ -28,6 +31,7 @@ import {
   type BarcodePrintProduct,
 } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
+import { SelectedProductsList, selectedProductsPrintGridClassName, selectedProductsRowClassName } from "@/features/products/components/selected-products-list";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
@@ -186,32 +190,26 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
               {t("printSetQtyAll")}
               <input className="h-9 w-20 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-qty-all" inputMode="numeric" value={bulkQty} onChange={(event) => setBulkQty(event.target.value)}/>
             </label>
-            {[1, 5, 10].map((qty) => (
-              <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" key={qty} type="button" onClick={() => setBulkQty(String(qty))}>{qty}</button>
-            ))}
-            <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" data-testid="products-print-qty-all-apply" type="button" onClick={setQuantityForIncluded}>{t("printSetQtyAll")}</button>
+            <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" data-testid="products-print-qty-all-apply" type="button" onClick={setQuantityForIncluded}>{t("quantityOk")}</button>
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <div className="grid max-h-[42vh] gap-3 overflow-auto">
+          <SelectedProductsList>
+            <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName} sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground`}>
+              <span>{t("productName")}</span>
+              <span>{t("unit")}</span>
+              <span>{t("barcode")}</span>
+              <span>{t("printQuantity")}</span>
+              <span/>
+            </div>
             {products.map((product) => (
-              <section className="rounded-lg border border-border bg-background p-4" data-testid="products-print-product" key={product.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold">{localizedProductName(product, locale)}</h3>
-                    {product.sku ? <p className="text-xs text-muted-foreground">{product.sku}</p> : null}
-                  </div>
-                  <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-print-remove-product" type="button" onClick={() => removeProduct(product.id)}>{t("printRemoveProduct")}</button>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">{t("printSelectUnits")}</p>
-                  {lines.filter((line) => line.productId === product.id).map((line) => (
-                    <UnitRow key={line.key} line={line} productId={product.id} t={t} onChange={updateDraft}/>
-                  ))}
-                </div>
-              </section>
+              <div data-testid="products-print-product" key={product.id}>
+                {lines.filter((line) => line.productId === product.id).map((line) => (
+                  <UnitRow key={line.key} line={line} productId={product.id} productName={localizedProductName(product, locale)} t={t} onChange={updateDraft} onRemove={() => removeProduct(product.id)}/>
+                ))}
+              </div>
             ))}
-          </div>
+          </SelectedProductsList>
           <LabelSettings customHeight={customHeight} customWidth={customWidth} fields={fields} layout={layout} preset={preset} t={t} onCustomHeight={setCustomHeight} onCustomWidth={setCustomWidth} onFields={setFields} onLayout={setLayout} onPreset={setPreset}/>
           {sample ? <LivePreview fields={fields} layout={layout} line={sample} locale={locale} override={overrides[sample.key]} size={size} t={t} onEdit={() => setEditingKey(sample.key)}/> : null}
           {editingKey ? <OverrideEditor fields={fields} line={lines.find((line) => line.key === editingKey)} override={overrides[editingKey]} t={t} onChange={(patch) => setOverrides((current) => ({ ...current, [editingKey]: { ...current[editingKey], ...patch } }))} onClose={() => setEditingKey("")} onReset={() => { setOverrides((current) => { const next = { ...current }; delete next[editingKey]; return next; }); setEditingKey(""); }}/> : null}
@@ -257,33 +255,30 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
   );
 }
 
-function UnitRow({ line, onChange, productId, t }: {
+function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
   line: BarcodePrintChoice & { included: boolean; key: string; qty: string; qtyValid: boolean };
   onChange: (key: string, patch: Partial<Draft>) => void;
+  onRemove: () => void;
   productId: string;
+  productName: string;
   t: (key: string) => string;
 }) {
   const blocked = line.missing || !line.encodable;
   return (
-    <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:grid-cols-[auto_1fr_auto] md:items-center" data-barcode={line.barcode} data-role={unitPrintRole(line.unitName)} data-testid={blocked ? "products-print-missing" : "products-print-unit"} data-unit={line.unitName}>
-      <label className="flex items-center gap-2 text-sm font-semibold">
+    <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName}`} data-barcode={line.barcode} data-role={unitPrintRole(line.unitName)} data-testid={blocked ? "products-print-missing" : "products-print-unit"} data-unit={line.unitName}>
+      <span className="truncate font-semibold">{productName}</span>
+      <label className="flex items-center gap-2 font-semibold">
         <input checked={line.included} data-testid="products-print-include" disabled={blocked} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
-        {line.unitName}
+        <span className="truncate">{line.unitName}</span>
       </label>
-      <div className="text-xs">
+      <span className="truncate text-xs">
         {line.missing ? <span className="font-semibold text-danger">{t("printMissingBarcode")}</span> : null}
         {!line.missing && !line.encodable ? <span className="font-semibold text-danger">{t("printUnencodable")}</span> : null}
         {!blocked ? <span className="font-mono">{line.barcode}</span> : null}
         {blocked ? <Link className="ml-2 font-semibold text-primary" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="text-xs font-semibold">{t("printQuantity")}</span>
-        {[1, 5, 10].map((qty) => (
-          <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold disabled:opacity-40" disabled={blocked} key={qty} type="button" onClick={() => onChange(line.key, { qty: String(qty) })}>{qty}</button>
-        ))}
-        <input className="h-8 w-16 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-qty" disabled={blocked} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/>
-      </div>
-      {!blocked && line.included && !line.qtyValid ? <p className="text-xs font-semibold text-danger md:col-span-3">{t("printQtyInvalid")}</p> : null}
+      </span>
+      <input className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm" data-testid="products-print-qty" disabled={blocked} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/>
+      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-print-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button>
     </div>
   );
 }
@@ -333,11 +328,11 @@ function LabelSettings({ customHeight, customWidth, fields, layout, onCustomHeig
         ))}
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className="grid gap-1 text-xs font-semibold">{t("printNameSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-name-size" max={BARCODE_NAME_MAX_FONT_PX} min={BARCODE_NAME_MIN_FONT_PX} type="number" value={layout.nameFontPx} onChange={(event) => onLayout({ ...layout, nameFontPx: Number(event.target.value) || layout.nameFontPx })}/></label>
-        <label className="grid gap-1 text-xs font-semibold">{t("printBarcodeSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-barcode-size" max={3} min={1} type="number" value={layout.barcodeScale} onChange={(event) => onLayout({ ...layout, barcodeScale: clampScale(Number(event.target.value)) })}/></label>
+        <label className="grid gap-1 text-xs font-semibold">{t("printNameSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-name-size" max={BARCODE_NAME_MAX_FONT_PX} min={BARCODE_NAME_MIN_FONT_PX} type="number" value={layout.nameFontPx} onChange={(event) => onLayout({ ...layout, nameFontPx: clampFont(Number(event.target.value), BARCODE_NAME_MIN_FONT_PX, BARCODE_NAME_MAX_FONT_PX, layout.nameFontPx) })}/></label>
+        <label className="grid gap-1 text-xs font-semibold">{t("printBarcodeSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-barcode-size" max={BARCODE_SCALE_MAX} min={1} type="number" value={layout.barcodeScale} onChange={(event) => onLayout({ ...layout, barcodeScale: clampScale(Number(event.target.value)) })}/></label>
         <label className="grid gap-1 text-xs font-semibold">{t("printSpacing")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-spacing" max={8} min={0} type="number" value={layout.spacingPx} onChange={(event) => onLayout({ ...layout, spacingPx: Math.max(0, Math.min(8, Number(event.target.value) || 0)) })}/></label>
         <label className="grid gap-1 text-xs font-semibold">{t("printAlign")}<select className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-align" value={layout.align} onChange={(event) => onLayout({ ...layout, align: event.target.value === "left" ? "left" : "center" })}><option value="center">{t("printAlignCenter")}</option><option value="left">{t("printAlignLeft")}</option></select></label>
-        {fields.sellingPrice ? <label className="grid gap-1 text-xs font-semibold">{t("printPriceSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" max={18} min={8} type="number" value={layout.priceFontPx} onChange={(event) => onLayout({ ...layout, priceFontPx: Number(event.target.value) || layout.priceFontPx })}/></label> : null}
+        {fields.sellingPrice ? <label className="grid gap-1 text-xs font-semibold">{t("printPriceSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-price-size" max={BARCODE_PRICE_MAX_FONT_PX} min={BARCODE_PRICE_MIN_FONT_PX} type="number" value={layout.priceFontPx} onChange={(event) => onLayout({ ...layout, priceFontPx: clampFont(Number(event.target.value), BARCODE_PRICE_MIN_FONT_PX, BARCODE_PRICE_MAX_FONT_PX, layout.priceFontPx) })}/></label> : null}
       </div>
     </section>
   );
@@ -377,7 +372,7 @@ function OverrideEditor({ fields, line, onChange, onClose, onReset, override, t 
       <p className="text-sm font-semibold">{t("printEditLabel")}</p>
       <p className="text-xs text-muted-foreground">{t("printLabelOnly")}</p>
       <label className="grid gap-1 text-xs font-semibold">{t("productName")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-override-name" value={current.displayName ?? line.localeName} onChange={(event) => onChange({ displayName: event.target.value })}/></label>
-      <label className="grid gap-1 text-xs font-semibold">{t("printNameSize")}<input className="h-9 w-24 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-override-font" max={BARCODE_NAME_MAX_FONT_PX} min={BARCODE_NAME_MIN_FONT_PX} type="number" value={current.nameFontPx ?? 12} onChange={(event) => onChange({ nameFontPx: Number(event.target.value) || BARCODE_NAME_MIN_FONT_PX })}/></label>
+      <label className="grid gap-1 text-xs font-semibold">{t("printNameSize")}<input className="h-9 w-24 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-override-font" max={BARCODE_NAME_MAX_FONT_PX} min={BARCODE_NAME_MIN_FONT_PX} type="number" value={current.nameFontPx ?? 12} onChange={(event) => onChange({ nameFontPx: clampFont(Number(event.target.value), BARCODE_NAME_MIN_FONT_PX, BARCODE_NAME_MAX_FONT_PX, current.nameFontPx ?? 12) })}/></label>
       <div className="flex flex-wrap gap-3 text-sm">
         <OverrideFlag checked={current.productName ?? fields.productName} label={t("productName")} testId="products-print-override-name-toggle" onChange={(value) => onChange({ productName: value })}/>
         <OverrideFlag checked={current.unitName ?? fields.unitName} label={t("printUnitName")} onChange={(value) => onChange({ unitName: value })}/>
@@ -416,20 +411,26 @@ function LabelCard({ copy, fields, heightMm, layout, line, localeName, override,
   const locale = useAppLocale();
   const view = applyLabelFit(resolveBarcodeLabelView({ fields, layout, line, localeName, override }), widthMm);
   const modules = view.showBarcode ? encodeCode128B(view.barcode) : null;
+  const pricePx = clampFont(layout.priceFontPx, BARCODE_PRICE_MIN_FONT_PX, BARCODE_PRICE_MAX_FONT_PX, layout.priceFontPx);
+  const barcodeMm = modules ? (18 + layout.barcodeScale * 10) / 3 : 0;
+  const nameMm = view.showName ? (view.fontPx * 1.15) / 3.78 : 0;
+  const priceMm = view.showPrice ? pricePx / 3.78 : 0;
+  const priceTight = barcodeMm + nameMm + priceMm + 4 > heightMm;
   return (
-    <article className="barcode-label grid overflow-hidden rounded-md border border-neutral-300 bg-white text-neutral-950" data-barcode={view.barcode} data-copy={copy} data-name={view.displayName} data-overflow={view.overflow ? "1" : "0"} data-price={view.showPrice ? view.priceLak : ""} data-sku={view.showSku ? view.sku : ""} data-testid={preview ? "products-print-live-preview" : "products-print-label"} data-unit={view.showUnit ? view.unitName : ""} style={{ gap: view.spacingPx, height: `${heightMm}mm`, padding: "1.5mm", textAlign: view.align, width: `${widthMm}mm` }}>
+    <article className="barcode-label grid overflow-hidden rounded-md border border-neutral-300 bg-white text-neutral-950" data-barcode={view.barcode} data-copy={copy} data-name={view.displayName} data-overflow={view.overflow || priceTight ? "1" : "0"} data-price={view.showPrice ? view.priceLak : ""} data-sku={view.showSku ? view.sku : ""} data-testid={preview ? "products-print-live-preview" : "products-print-label"} data-unit={view.showUnit ? view.unitName : ""} style={{ gap: view.spacingPx, height: `${heightMm}mm`, padding: "1.5mm", textAlign: view.align, width: `${widthMm}mm` }}>
       {view.showName ? <div className="font-semibold" style={{ WebkitBoxOrient: "vertical", WebkitLineClamp: 3, display: "-webkit-box", fontSize: `${view.fontPx}px`, lineHeight: 1.15, overflow: "hidden" }}>{view.displayName}</div> : null}
       {view.overflow ? <p className="text-[9px] font-semibold text-danger print:hidden" data-testid="products-print-name-warning">{tProducts("printNameOverflow", locale)}</p> : null}
       {view.showUnit ? <div className="text-[10px]">{view.unitName}</div> : null}
       {modules ? <BarcodeSvg modules={modules} scale={layout.barcodeScale}/> : null}
       {view.showBarcodeText ? <div className="truncate font-mono text-[10px]">{view.barcode}</div> : null}
       {view.showSku ? <div className="truncate text-[10px]">{view.sku}</div> : null}
-      {view.showPrice ? <div className="font-semibold" style={{ fontSize: `${layout.priceFontPx}px` }}>{formatLak(view.priceLak)}</div> : null}
+      {view.showPrice ? <div className="overflow-hidden font-semibold leading-none" style={{ fontSize: `${pricePx}px` }}>{formatLak(view.priceLak)}</div> : null}
+      {priceTight ? <p className="text-[9px] font-semibold text-danger print:hidden" data-testid="products-print-size-warning">{tProducts("printSizeOverflow", locale)}</p> : null}
     </article>
   );
 }
 
-function BarcodeSvg({ modules, scale }: { modules: BarcodeModule[]; scale: 1 | 2 | 3 }) {
+function BarcodeSvg({ modules, scale }: { modules: BarcodeModule[]; scale: 1 | 2 | 3 | 4 | 5 }) {
   const width = modules.reduce((sum, module) => sum + module.width, 0);
   let x = 0;
   const height = 18 + scale * 10;
@@ -441,10 +442,17 @@ function BarcodeSvg({ modules, scale }: { modules: BarcodeModule[]; scale: 1 | 2
   return <svg aria-hidden="true" className="w-full" style={{ height: `${height / 3}mm` }} viewBox={`0 0 ${width} ${height}`}>{bars}</svg>;
 }
 
-function clampScale(value: number): 1 | 2 | 3 {
-  if (value <= 1) return 1;
-  if (value >= 3) return 3;
-  return 2;
+function clampScale(value: number): 1 | 2 | 3 | 4 | 5 {
+  const scale = Math.round(value);
+  if (!Number.isFinite(scale) || scale <= 1) return 1;
+  if (scale >= BARCODE_SCALE_MAX) return BARCODE_SCALE_MAX;
+  return scale as 1 | 2 | 3 | 4 | 5;
+}
+
+function clampFont(value: number, min: number, max: number, fallback: number) {
+  const next = Math.round(value);
+  if (!Number.isFinite(next)) return fallback;
+  return Math.min(max, Math.max(min, next));
 }
 
 function lineKey(productId: string, index: number) {

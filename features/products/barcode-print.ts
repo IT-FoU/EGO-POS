@@ -128,7 +128,10 @@ export const BARCODE_LABEL_PRESETS = [
 export const BARCODE_LABEL_MM_MIN = 20;
 export const BARCODE_LABEL_MM_MAX = 120;
 export const BARCODE_NAME_MIN_FONT_PX = 8;
-export const BARCODE_NAME_MAX_FONT_PX = 16;
+export const BARCODE_NAME_MAX_FONT_PX = 30;
+export const BARCODE_PRICE_MIN_FONT_PX = 8;
+export const BARCODE_PRICE_MAX_FONT_PX = 30;
+export const BARCODE_SCALE_MAX = 5;
 
 export type BarcodeLabelPresetId = (typeof BARCODE_LABEL_PRESETS)[number]["id"] | "custom";
 
@@ -152,7 +155,7 @@ export const DEFAULT_BARCODE_LABEL_FIELDS: BarcodeLabelFields = {
 
 export type BarcodeLabelLayout = {
   align: "center" | "left";
-  barcodeScale: 1 | 2 | 3;
+  barcodeScale: 1 | 2 | 3 | 4 | 5;
   nameFontPx: number;
   priceFontPx: number;
   spacingPx: number;
@@ -222,8 +225,8 @@ export function unitPrintRole(unitName: string) {
   return "custom";
 }
 
-export function fitBarcodeLabelName(name: string, widthMm: number, fontPx: number) {
-  const size = clamp(Math.round(fontPx), BARCODE_NAME_MIN_FONT_PX, BARCODE_NAME_MAX_FONT_PX);
+export function fitBarcodeLabelName(name: string, widthMm: number, fontPx: number, maxFontPx = BARCODE_NAME_MAX_FONT_PX) {
+  const size = clamp(Math.round(fontPx), BARCODE_NAME_MIN_FONT_PX, maxFontPx);
   const lines = nameLines(name, widthMm, size);
   if (lines <= 3) return { fontPx: size, overflow: false };
   for (let next = size - 1; next >= BARCODE_NAME_MIN_FONT_PX; next -= 1) {

@@ -58,6 +58,7 @@ export async function loadBulkPriceProducts(
   const products = await db.product.findMany({
     orderBy: [{ nameLo: "asc" }, { id: "asc" }],
     select: {
+      costPriceLak: true,
       id: true,
       nameEn: true,
       nameLo: true,
@@ -68,6 +69,7 @@ export async function loadBulkPriceProducts(
         select: {
           allowManualUnitSelect: true,
           barcode: true,
+          costPriceLak: true,
           id: true,
           isBaseUnit: true,
           isDefaultSaleUnit: true,
@@ -88,6 +90,7 @@ export async function loadBulkPriceProducts(
     },
   });
   return products.map((product: Record<string, any>) => ({
+    costPriceLak: product.costPriceLak == null ? null : Number(product.costPriceLak),
     id: String(product.id),
     nameEn: product.nameEn ?? "",
     nameLo: product.nameLo ?? "",
@@ -96,6 +99,7 @@ export async function loadBulkPriceProducts(
     units: (product.units ?? []).map((unit: Record<string, any>) => ({
       allowManualUnitSelect: unit.allowManualUnitSelect !== false,
       barcode: unit.barcode ?? "",
+      costPriceLak: unit.costPriceLak == null ? null : Number(unit.costPriceLak),
       id: String(unit.id),
       isBaseUnit: Boolean(unit.isBaseUnit),
       isDefaultSaleUnit: Boolean(unit.isDefaultSaleUnit),

@@ -50,7 +50,7 @@ const drawer = readFileSync("features/products/components/product-bulk-price-dra
 const previewButton = drawer.slice(drawer.indexOf("products-bulk-preview"), drawer.indexOf("products-bulk-preview") + 400);
 check("selection load and preview does not write", drawer.includes("productIds: ids") && !drawer.includes("products-bulk-search") && previewButton.includes("setPhase(\"preview\")") && !previewButton.includes("applyBulkSellingPricesAction"));
 const service = readFileSync("features/products/bulk-price-service.ts", "utf8");
-check("apply still writes selling price only", service.includes("data: { sellingPriceLak: line.newPriceLak }") && !service.includes("roundingLak: line") && !service.includes("costPriceLak:") && service.includes("shelfLabelReprintCandidate") && service.includes("roundingOverrideLak"));
+check("apply still writes selling price only", service.includes("data: { sellingPriceLak: line.newPriceLak }") && !service.includes("roundingLak: line") && !service.includes("costPriceLak: line") && !service.includes("data: { costPriceLak") && service.includes("shelfLabelReprintCandidate") && service.includes("roundingOverrideLak"));
 check("schema stores the reprint flag", readFileSync("prisma/schema.prisma", "utf8").includes("labelReprintNeeded") && readFileSync("prisma/schema.prisma", "utf8").includes("labelPrintedAt"));
 
 const failed = results.filter((result) => !result.ok);

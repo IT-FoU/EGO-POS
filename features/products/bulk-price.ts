@@ -16,6 +16,7 @@ export type BulkPriceMethod = "set_exact" | "increase_amount" | "decrease_amount
 export type BulkPriceUnitSource = {
   allowManualUnitSelect?: boolean;
   barcode?: string | null;
+  costPriceLak?: number | null;
   id?: string;
   isBaseUnit?: boolean;
   isDefaultSaleUnit?: boolean;
@@ -26,6 +27,7 @@ export type BulkPriceUnitSource = {
 };
 
 export type BulkPriceProductSource = {
+  costPriceLak?: number | null;
   id: string;
   nameEn?: string | null;
   nameLo?: string | null;
@@ -36,6 +38,7 @@ export type BulkPriceProductSource = {
 
 export type BulkPriceChoice = {
   barcode: string;
+  costLak: number | null;
   isDefaultSale: boolean;
   nameEn: string;
   nameLo: string;
@@ -90,6 +93,7 @@ export function bulkPriceUnits(product: BulkPriceProductSource): BulkPriceChoice
     return [{
       ...shared,
       barcode: "",
+      costLak: savedCost(product.costPriceLak),
       isDefaultSale: true,
       priceLak: price,
       roundingLak: 0,
@@ -103,6 +107,7 @@ export function bulkPriceUnits(product: BulkPriceProductSource): BulkPriceChoice
     return [{
       ...shared,
       barcode: clean(unit.barcode),
+      costLak: savedCost(unit.costPriceLak),
       isDefaultSale: Boolean(unit.isDefaultSaleUnit),
       priceLak: price,
       roundingLak: normalizeUnitRounding(unit.roundingLak),
@@ -183,6 +188,13 @@ function savedPrice(value: number | null | undefined) {
   const price = Number(value);
   if (!Number.isFinite(price) || price < 0) return null;
   return Math.round(price);
+}
+
+function savedCost(value: number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  const cost = Number(value);
+  if (!Number.isFinite(cost) || cost < 0) return null;
+  return Math.round(cost);
 }
 
 function clean(value?: string | null) {

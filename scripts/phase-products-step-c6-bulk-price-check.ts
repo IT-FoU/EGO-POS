@@ -67,7 +67,7 @@ const drawer = readFileSync("features/products/components/product-bulk-price-dra
 const previewButton = drawer.slice(drawer.indexOf("products-bulk-preview"), drawer.indexOf("products-bulk-preview") + 400);
 check("preview does not write", previewButton.includes("setPhase(\"preview\")") && !previewButton.includes("applyBulkSellingPricesAction"));
 const service = readFileSync("features/products/bulk-price-service.ts", "utf8");
-check("apply writes selling price only", service.includes("data: { sellingPriceLak: line.newPriceLak }") && !service.includes("costPriceLak:") && !service.includes("conversionQty") && !service.includes("imageUrl"));
+check("apply writes selling price only", service.includes("data: { sellingPriceLak: line.newPriceLak }") && !service.includes("costPriceLak: line") && !service.includes("data: { costPriceLak") && !service.includes("conversionQty") && !service.includes("imageUrl"));
 check("apply records price history and bulk activity", service.includes("productPriceHistory.create") && service.includes("bulk_selling_price") && service.includes("Bulk Price Update") && service.includes("BULK_PRICE_BATCH_SIZE"));
 check("apply rechecks the current price", service.includes("classifyBulkLine"));
 const action = readFileSync("features/products/actions.ts", "utf8");

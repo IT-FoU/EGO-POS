@@ -37,6 +37,18 @@ export const DEFAULT_SHELF_LABEL_FIELDS: ShelfLabelFields = {
   unitName: true,
 };
 
+export const SHELF_NAME_MIN_FONT_PX = 8;
+export const SHELF_NAME_MAX_FONT_PX = 40;
+export const SHELF_PRICE_MIN_FONT_PX = 12;
+export const SHELF_PRICE_MAX_FONT_PX = 60;
+
+export function fitShelfPriceFont(requested: number, heightMm: number) {
+  const size = Math.min(SHELF_PRICE_MAX_FONT_PX, Math.max(SHELF_PRICE_MIN_FONT_PX, Math.round(requested)));
+  const cap = Math.max(SHELF_PRICE_MIN_FONT_PX, Math.floor(Math.max(heightMm, 20) * 1.6));
+  if (size <= cap) return { fontPx: size, overflow: false };
+  return { fontPx: cap, overflow: true };
+}
+
 export type ShelfLabelStyle = {
   align: "center" | "left";
   barcodeScale: 1 | 2 | 3;

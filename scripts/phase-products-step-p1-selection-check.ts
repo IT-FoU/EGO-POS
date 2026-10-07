@@ -29,7 +29,7 @@ check("id query capped", query.includes("const MAX_FILTERED_SELECTION = 2000") &
 check("ids action", actions.includes("loadProductListIdsAction") && actions.includes("getPrismaProductListIds"));
 check("page checkbox", list.includes('data-testid="products-select-page"') && list.includes('aria-label={t("selectPage")}'));
 check("row checkbox", list.includes('data-testid="products-row-select"'));
-check("selected bar", list.includes('data-testid="products-selected-bar"') && list.includes('data-testid="products-clear-selection"'));
+check("selected bar", list.includes('data-testid="products-selected-bar"') && list.includes('data-testid="products-clear-selection"') && list.includes('data-testid="products-selected-count"') && !list.includes('data-testid="products-selected-more"') && list.includes('data-testid="products-more-actions"'));
 check("select filtered explicit", list.includes('data-testid="products-select-filtered"') && list.includes("totalCount > paginatedProducts.length"));
 check("selection required disabled", list.includes("disabled={selectionRequired}") && list.includes('data-testid="products-selection-context"'));
 check("session selection", list.includes("ego-pos-product-selection"));

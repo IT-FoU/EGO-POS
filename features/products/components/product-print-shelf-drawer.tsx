@@ -5,11 +5,17 @@ import Link from "next/link";
 import { markShelfLabelsPrintedAction, searchBarcodePrintProductsAction } from "@/features/products/actions";
 import { encodeCode128B, fitBarcodeLabelName, parseLabelMillimetres, parsePrintQuantity, unitPrintRole, type BarcodeModule, type BarcodePrintProduct } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
+import { SelectedProductsList, selectedProductsPrintGridClassName, selectedProductsRowClassName } from "@/features/products/components/selected-products-list";
 import {
   DEFAULT_SHELF_LABEL_FIELDS,
   SHELF_LABEL_HEIGHT_MM,
   SHELF_LABEL_WIDTH_MM,
+  SHELF_NAME_MAX_FONT_PX,
+  SHELF_NAME_MIN_FONT_PX,
+  SHELF_PRICE_MAX_FONT_PX,
+  SHELF_PRICE_MIN_FONT_PX,
   buildShelfPrintJob,
+  fitShelfPriceFont,
   resolveShelfLabelSize,
   resolveShelfLabelView,
   shelfLayoutStyle,
@@ -215,30 +221,26 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="grid gap-1 text-xs font-semibold">{t("printSetQtyAll")}<input className="h-9 w-20 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-shelf-qty-all" inputMode="numeric" value={bulkQty} onChange={(event) => setBulkQty(event.target.value)}/></label>
-            {[1, 5, 10].map((qty) => <button className="h-9 rounded-md border border-border px-2 text-xs font-semibold" key={qty} type="button" onClick={() => setBulkQty(String(qty))}>{qty}</button>)}
-            <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" data-testid="products-shelf-qty-all-apply" type="button" onClick={setQuantityForIncluded}>{t("printSetQtyAll")}</button>
+            <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" data-testid="products-shelf-qty-all-apply" type="button" onClick={setQuantityForIncluded}>{t("quantityOk")}</button>
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <div className="grid max-h-[36vh] gap-3 overflow-auto">
+          <SelectedProductsList>
+            <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName} sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground`}>
+              <span>{t("productName")}</span>
+              <span>{t("unit")}</span>
+              <span>{t("barcode")}</span>
+              <span>{t("printQuantity")}</span>
+              <span/>
+            </div>
             {products.map((product) => (
-              <section className="rounded-lg border border-border bg-background p-4" data-testid="products-shelf-product" key={product.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold">{localizedProductName(product, locale)}</h3>
-                    {product.sku ? <p className="text-xs text-muted-foreground">{product.sku}</p> : null}
-                  </div>
-                  <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-shelf-remove-product" type="button" onClick={() => setProducts((current) => current.filter((item) => item.id !== product.id))}>{t("printRemoveProduct")}</button>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">{t("printSelectUnits")}</p>
-                  {lines.filter((line) => line.productId === product.id).map((line) => (
-                    <UnitRow key={line.key} line={line} productId={product.id} t={t} onChange={updateDraft}/>
-                  ))}
-                </div>
-              </section>
+              <div data-testid="products-shelf-product" key={product.id}>
+                {lines.filter((line) => line.productId === product.id).map((line) => (
+                  <UnitRow key={line.key} line={line} productId={product.id} productName={localizedProductName(product, locale)} t={t} onChange={updateDraft} onRemove={() => setProducts((current) => current.filter((item) => item.id !== product.id))}/>
+                ))}
+              </div>
             ))}
-          </div>
+          </SelectedProductsList>
           <ShelfSettings customHeight={customHeight} customWidth={customWidth} fields={fields} preset={preset} style={style} t={t} onCustomHeight={setCustomHeight} onCustomWidth={setCustomWidth} onFields={setFields} onLayout={chooseLayout} onPreset={setPreset} onStyle={setStyle}/>
           <JobSummary layout={style.layout} productCount={products.length} size={size} t={t} total={job.overLimit ? 0 : job.total} units={selectedUnits}/>
           {sample ? <ShelfCard fields={fields} heightMm={size.heightMm} line={sample} localeName={sample.localeName} override={overrides[sample.key]} preview style={style} widthMm={size.widthMm}/> : null}
@@ -294,27 +296,28 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
   );
 }
 
-function UnitRow({ line, onChange, productId, t }: {
+function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
   line: ShelfPrintChoice & { included: boolean; key: string; qty: string; qtyValid: boolean };
   onChange: (key: string, patch: Partial<Draft>) => void;
+  onRemove: () => void;
   productId: string;
+  productName: string;
   t: (key: string) => string;
 }) {
   return (
-    <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:grid-cols-[auto_1fr_auto] md:items-center" data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-reprint={line.labelReprintNeeded ? "1" : "0"} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
-      <label className="flex items-center gap-2 text-sm font-semibold">
+    <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName}`} data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-reprint={line.labelReprintNeeded ? "1" : "0"} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
+      <span className="truncate font-semibold">{productName}</span>
+      <label className="flex items-center gap-2 font-semibold">
         <input checked={line.included} data-testid="products-shelf-include" disabled={line.missingPrice} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
-        {line.unitName}
+        <span className="truncate">{line.unitName}</span>
       </label>
-      <div className="text-xs">
-        {line.missingPrice ? <span className="font-semibold text-danger">{t("printMissingPrice")}</span> : <span className="font-semibold">{formatLak(line.priceLak ?? 0)}</span>}
+      <span className="truncate text-xs">
+        {line.barcode ? <span className="font-mono">{line.barcode}</span> : <span className="text-muted-foreground">{t("shelfNoBarcode")}</span>}
+        {line.missingPrice ? <span className="ml-2 font-semibold text-danger">{t("printMissingPrice")}</span> : <span className="ml-2 font-semibold">{formatLak(line.priceLak ?? 0)}</span>}
         {line.missingPrice ? <Link className="ml-2 font-semibold text-primary" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="text-xs font-semibold">{t("printQuantity")}</span>
-        {[1, 5, 10].map((qty) => <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold disabled:opacity-40" disabled={line.missingPrice} key={qty} type="button" onClick={() => onChange(line.key, { qty: String(qty) })}>{qty}</button>)}
-        <input className="h-8 w-16 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-shelf-qty" disabled={line.missingPrice} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/>
-      </div>
+      </span>
+      <input className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm" data-testid="products-shelf-qty" disabled={line.missingPrice} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/>
+      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-shelf-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button>
     </div>
   );
 }
@@ -376,8 +379,8 @@ function ShelfSettings({ customHeight, customWidth, fields, onCustomHeight, onCu
         ))}
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <NumberField label={t("printNameSize")} max={28} min={8} testId="products-shelf-name-size" value={style.nameFontPx} onChange={(value) => onStyle({ ...style, nameFontPx: clamp(value, 8, 28) })}/>
-        <NumberField label={t("printPriceSize")} max={48} min={12} testId="products-shelf-price-size" value={style.priceFontPx} onChange={(value) => onStyle({ ...style, priceFontPx: clamp(value, 12, 48) })}/>
+        <NumberField label={t("printNameSize")} max={SHELF_NAME_MAX_FONT_PX} min={SHELF_NAME_MIN_FONT_PX} testId="products-shelf-name-size" value={style.nameFontPx} onChange={(value) => onStyle({ ...style, nameFontPx: clamp(value, SHELF_NAME_MIN_FONT_PX, SHELF_NAME_MAX_FONT_PX) })}/>
+        <NumberField label={t("printPriceSize")} max={SHELF_PRICE_MAX_FONT_PX} min={SHELF_PRICE_MIN_FONT_PX} testId="products-shelf-price-size" value={style.priceFontPx} onChange={(value) => onStyle({ ...style, priceFontPx: clamp(value, SHELF_PRICE_MIN_FONT_PX, SHELF_PRICE_MAX_FONT_PX) })}/>
         <NumberField label={t("shelfUnitSize")} max={20} min={8} testId="products-shelf-unit-size" value={style.unitFontPx} onChange={(value) => onStyle({ ...style, unitFontPx: clamp(value, 8, 20) })}/>
         <NumberField label={t("printSpacing")} max={8} min={0} testId="products-shelf-spacing" value={style.spacingPx} onChange={(value) => onStyle({ ...style, spacingPx: clamp(value, 0, 8) })}/>
         {fields.barcodeGraphic ? <NumberField label={t("printBarcodeSize")} testId="products-shelf-barcode-size" value={style.barcodeScale} onChange={(value) => onStyle({ ...style, barcodeScale: value <= 1 ? 1 : value >= 3 ? 3 : 2 })}/> : null}
@@ -429,8 +432,8 @@ function OverrideEditor({ fields, line, onChange, onClose, onReset, override, st
       <p className="text-xs text-muted-foreground">{t("printLabelOnly")}</p>
       <label className="grid gap-1 text-xs font-semibold">{t("productName")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-shelf-override-name" value={current.displayName ?? line.localeName} onChange={(event) => onChange({ displayName: event.target.value })}/></label>
       <div className="flex flex-wrap gap-2">
-        <NumberField label={t("printNameSize")} max={28} min={8} testId="products-shelf-override-name-size" value={current.nameFontPx ?? style.nameFontPx} onChange={(value) => onChange({ nameFontPx: clamp(value, 8, 28) })}/>
-        <NumberField label={t("printPriceSize")} max={48} min={12} testId="products-shelf-override-price-size" value={current.priceFontPx ?? style.priceFontPx} onChange={(value) => onChange({ priceFontPx: clamp(value, 12, 48) })}/>
+        <NumberField label={t("printNameSize")} max={SHELF_NAME_MAX_FONT_PX} min={SHELF_NAME_MIN_FONT_PX} testId="products-shelf-override-name-size" value={current.nameFontPx ?? style.nameFontPx} onChange={(value) => onChange({ nameFontPx: clamp(value, SHELF_NAME_MIN_FONT_PX, SHELF_NAME_MAX_FONT_PX) })}/>
+        <NumberField label={t("printPriceSize")} max={SHELF_PRICE_MAX_FONT_PX} min={SHELF_PRICE_MIN_FONT_PX} testId="products-shelf-override-price-size" value={current.priceFontPx ?? style.priceFontPx} onChange={(value) => onChange({ priceFontPx: clamp(value, SHELF_PRICE_MIN_FONT_PX, SHELF_PRICE_MAX_FONT_PX) })}/>
         <NumberField label={t("shelfUnitSize")} max={20} min={8} testId="products-shelf-override-unit-size" value={current.unitFontPx ?? style.unitFontPx} onChange={(value) => onChange({ unitFontPx: clamp(value, 8, 20) })}/>
         <label className="grid gap-1 text-xs font-semibold">{t("printAlign")}<select className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-shelf-override-align" value={current.align ?? style.align} onChange={(event) => onChange({ align: event.target.value === "left" ? "left" : "center" })}><option value="center">{t("printAlignCenter")}</option><option value="left">{t("printAlignLeft")}</option></select></label>
       </div>
@@ -467,14 +470,18 @@ function ShelfCard({ copy = 0, fields, heightMm, line, localeName, override, pre
 }) {
   const locale = useAppLocale();
   const view = resolveShelfLabelView({ fields, graphic: line.graphic, line, localeName, override, style });
-  const fit = view.showName ? fitBarcodeLabelName(view.displayName, widthMm, view.nameFontPx) : { fontPx: view.nameFontPx, overflow: false };
+  const nameCap = Math.min(SHELF_NAME_MAX_FONT_PX, Math.max(SHELF_NAME_MIN_FONT_PX, Math.floor(heightMm * 1.15)));
+  const fit = view.showName ? fitBarcodeLabelName(view.displayName, widthMm, Math.min(view.nameFontPx, nameCap), SHELF_NAME_MAX_FONT_PX) : { fontPx: view.nameFontPx, overflow: false };
+  const nameReduced = view.showName && (fit.overflow || fit.fontPx < view.nameFontPx);
+  const priceFit = view.showPrice ? fitShelfPriceFont(view.priceFontPx, heightMm) : { fontPx: view.priceFontPx, overflow: false };
   const modules = view.showBarcode ? encodeCode128B(view.barcode) : null;
   return (
-    <article className="shelf-label grid overflow-hidden rounded-md border border-neutral-300 bg-white text-neutral-950" data-barcode={view.showBarcodeText ? view.barcode : ""} data-copy={copy} data-name={view.displayName} data-overflow={fit.overflow ? "1" : "0"} data-price={view.showPrice ? view.priceLak ?? "" : ""} data-sku={view.showSku ? view.sku : ""} data-testid={preview ? "products-shelf-live-preview" : "products-shelf-label"} data-unit={view.showUnit ? view.unitName : ""} style={{ gap: view.spacingPx, height: `${heightMm}mm`, padding: "1.5mm", textAlign: view.align, width: `${widthMm}mm` }}>
+    <article className="shelf-label grid overflow-hidden rounded-md border border-neutral-300 bg-white text-neutral-950" data-barcode={view.showBarcodeText ? view.barcode : ""} data-copy={copy} data-name={view.displayName} data-overflow={nameReduced || priceFit.overflow ? "1" : "0"} data-price={view.showPrice ? view.priceLak ?? "" : ""} data-sku={view.showSku ? view.sku : ""} data-testid={preview ? "products-shelf-live-preview" : "products-shelf-label"} data-unit={view.showUnit ? view.unitName : ""} style={{ gap: view.spacingPx, height: `${heightMm}mm`, padding: "1.5mm", textAlign: view.align, width: `${widthMm}mm` }}>
       {view.showName ? <div className="shelf-name font-semibold" style={{ WebkitBoxOrient: "vertical", WebkitLineClamp: 2, display: "-webkit-box", fontSize: `${fit.fontPx}px`, lineHeight: 1.15, overflow: "hidden" }}>{view.displayName}</div> : null}
-      {fit.overflow ? <p className="text-[9px] font-semibold text-danger print:hidden" data-testid="products-shelf-name-warning">{tProducts("printNameOverflow", locale)}</p> : null}
+      {nameReduced ? <p className="text-[9px] font-semibold text-danger print:hidden" data-testid="products-shelf-name-warning">{tProducts("printNameOverflow", locale)}</p> : null}
       {view.showUnit ? <div style={{ fontSize: `${view.unitFontPx}px` }}>{view.unitName}</div> : null}
-      {view.showPrice ? <div className="shelf-price font-black leading-none" style={{ fontSize: `${view.priceFontPx}px` }}>{formatLak(view.priceLak ?? 0)}</div> : null}
+      {view.showPrice ? <div className="shelf-price overflow-hidden font-black leading-none" style={{ fontSize: `${priceFit.fontPx}px` }}>{formatLak(view.priceLak ?? 0)}</div> : null}
+      {priceFit.overflow ? <p className="text-[9px] font-semibold text-danger print:hidden" data-testid="products-shelf-price-warning">{tProducts("printSizeOverflow", locale)}</p> : null}
       {modules ? <BarcodeSvg modules={modules} scale={style.barcodeScale}/> : null}
       {view.showNoBarcode ? <p className="text-[9px] text-neutral-500 print:hidden" data-testid="products-shelf-no-barcode">{tProducts("shelfNoBarcode", locale)}</p> : null}
       {view.showBarcodeText ? <div className="truncate font-mono text-[10px]">{view.barcode}</div> : null}

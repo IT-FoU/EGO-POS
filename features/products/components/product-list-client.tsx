@@ -560,7 +560,6 @@ export function ProductListClient({ access, products: initialProducts, brands: i
 
       {selectedProductIds.length > 0 ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2" data-testid="products-selected-bar">
         <span className="text-sm font-semibold" data-testid="products-selected-count">{fillProductsCopy(t("productsSelected"), { count: selectedProductIds.length })}</span>
-        <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-selected-more" type="button" onClick={() => { setActionMenuOpen(true); actionMenuButtonRef.current?.scrollIntoView({ block: "nearest" }); }}>{t("moreActions")}</button>
         <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-clear-selection" type="button" onClick={() => setSelectedProductIds([])}>{t("clearSelection")}</button>
         {totalCount > paginatedProducts.length ? <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-50" data-testid="products-select-filtered" disabled={isPending} type="button" onClick={selectAllFilteredProducts}>{fillProductsCopy(t("selectAllFiltered"), { count: totalCount })}</button> : null}
       </div> : null}
