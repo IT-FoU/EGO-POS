@@ -212,7 +212,13 @@ export async function clearProductImages(productId: string, tenant: TenantContex
 }
 
 export async function cleanupHardDeletedProductImages(product: { imageUrl?: string | null; units?: Array<{ imageUrl?: string | null }> }) {
-  await removeProductImageObjects(collectImageStoragePaths(product)).catch(() => undefined);
+  try {
+    await removeProductImageObjects(collectImageStoragePaths(product));
+    return true;
+  } catch (error) {
+    console.error("product-image-cleanup-failed", error instanceof Error ? error.message : error);
+    return false;
+  }
 }
 
 export function storedThumbPath(imageUrl?: string | null) {

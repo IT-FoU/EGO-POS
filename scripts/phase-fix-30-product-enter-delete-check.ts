@@ -1,10 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  hasNonZeroInventoryBalance,
-  resolveProductDeleteMode,
-  sumHistoricalProductRefs,
-} from "../features/products/product-delete";
+import { permanentDeleteBlockReason } from "../features/products/product-delete";
 import { productsCopyKeyParity } from "../lib/i18n/products-copy";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -63,15 +59,33 @@ check("6. Explicit Save click creates via createProductAction path", () => {
   assert(productForm.includes("onSave={handleSaveClick}"), "footer save not wired");
 });
 
-check("7. Fresh product with only zero-qty seeded balance → hard delete", () => {
-  assert(resolveProductDeleteMode({ balances: [{ quantity: 0 }], historicalReferenceCount: 0 }) === "hard", "zero balance should hard delete");
-  assert(resolveProductDeleteMode({ balances: [], historicalReferenceCount: 0 }) === "hard", "no refs should hard delete");
+const safeFacts = {
+  hasActiveReservations: false,
+  hasAdjustments: false,
+  hasGoodsReceiptItems: false,
+  hasHoldBillItems: false,
+  hasLotAllocations: false,
+  hasLots: false,
+  hasMovements: false,
+  hasNonZeroStock: false,
+  hasPurchaseItems: false,
+  hasRefundExchangeItems: false,
+  hasRefundItems: false,
+  hasSaleItems: false,
+  hasStockTransferItems: false,
+  needsRecount: false,
+  status: "deleted",
+};
+
+check("7. Fresh deleted product with zero stock can be permanently deleted", () => {
+  assert(permanentDeleteBlockReason(safeFacts) === null, "safe deleted product should allow permanent delete");
+  assert(permanentDeleteBlockReason({ ...safeFacts, status: "active" }) === "NOT_DELETED", "first delete must not hard-delete");
 });
 
-check("8. Seed balance cleanup before hard delete in repository", () => {
-  assert(repo.includes("inventoryBalance.deleteMany"), "zero balance cleanup missing");
-  assert(repo.includes("resolveProductDeleteMode"), "classifier unused");
-  assert(repo.includes('deleteMode: "hard"') || repo.includes("deleteMode,"), "hard mode not returned");
+check("8. Permanent delete cleans zero balances after eligibility, not on first delete", () => {
+  assert(repo.includes("softDeletePrismaProduct"), "first delete must stay soft");
+  assert(!repo.slice(repo.indexOf("export async function deletePrismaProduct"), repo.indexOf("export async function permanentDeletePrismaProduct")).includes("product.delete"), "first delete must not hard-delete");
+  assert(readFileSync(join(root, "features/products/product-delete-service.ts"), "utf8").includes("DELETE FROM inventory_balances"), "zero balance cleanup missing");
 });
 
 check("9. Default list excludes deleted (status active)", () => {
@@ -83,11 +97,9 @@ check("10. Default Total excludes deleted", () => {
   assert(listQuery.includes("p.status <> 'deleted'"), "summary must exclude deleted");
 });
 
-check("11. Product with real sale/history → soft delete", () => {
-  assert(resolveProductDeleteMode({ balances: [{ quantity: 0 }], historicalReferenceCount: 1 }) === "soft", "sale history must soft delete");
-  assert(resolveProductDeleteMode({ balances: [{ quantity: 5 }], historicalReferenceCount: 0 }) === "soft", "non-zero stock must soft delete");
-  assert(hasNonZeroInventoryBalance([{ quantity: "0.000" }]) === false, "string zero treated as non-zero");
-  assert(sumHistoricalProductRefs({ saleItems: 2, movements: 1 }) === 3, "historical sum wrong");
+check("11. Product with real sale/history or stock cannot be permanently deleted", () => {
+  assert(permanentDeleteBlockReason({ ...safeFacts, hasSaleItems: true }) === "HAS_TRANSACTION_HISTORY", "sale history must block permanent delete");
+  assert(permanentDeleteBlockReason({ ...safeFacts, hasNonZeroStock: true }) === "HAS_STOCK", "non-zero stock must block permanent delete");
 });
 
 check("12. Soft-delete message + history preserved copy", () => {

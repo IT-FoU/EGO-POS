@@ -12,7 +12,7 @@ import { applyPersistedHierarchyCosts } from "@/features/products/unit-hierarchy
 import { mergeUnitPricingDefaultsFromUnits, parseUnitPricingDefaults, type UnitPricingDefaultsMap } from "@/features/products/unit-pricing-defaults";
 import { attachProductImageDelivery } from "@/features/products/product-image-delivery";
 import { cleanupHardDeletedProductImages } from "@/features/products/product-image-service";
-import { resolveProductDeleteMode, sumHistoricalProductRefs } from "@/features/products/product-delete";
+import { commitPermanentDelete, softDeletePrismaProduct } from "@/features/products/product-delete-service";
 import type { TenantContext } from "@/lib/db/write-context";
 import { numberValue, optionalString, stringValue, withTenantTransaction } from "@/lib/db/write-context";
 import { branchOwnedWhere, resolveTenantScope, type BranchScope } from "@/lib/db/tenant-scope";
@@ -1155,13 +1155,7 @@ export async function writePrismaProductArchive(tx: any, productId: string, tena
 }
 
 export async function archivePrismaProduct(productId: string, tenant: TenantContext) {
-  return withTenantTransaction({
-    action: "archive",
-    module: "products",
-    newData: { productId, isActive: false, status: "deleted" },
-    tenant,
-    write: (tx) => writePrismaProductArchive(tx, productId, tenant),
-  });
+  return softDeletePrismaProduct(productId, tenant);
 }
 
 export type ProductDeleteResult = {
@@ -1170,60 +1164,30 @@ export type ProductDeleteResult = {
 };
 
 export async function deletePrismaProduct(productId: string, tenant: TenantContext): Promise<ProductDeleteResult> {
-  let hardDeletedImages: { imageUrl?: string | null; units?: Array<{ imageUrl?: string | null }> } | null = null;
-  const result = await withTenantTransaction({
-    action: "delete",
-    module: "products",
-    oldData: { productId },
-    tenant,
-    write: async (tx) => {
-      const scope = await resolveTenantScope(tenant, tx);
-      const existing = await tx.product.findFirstOrThrow({
-        include: {
-          _count: {
-            select: {
-              adjustments: true,
-              goodsReceiptItems: true,
-              inventoryLots: true,
-              movements: true,
-              purchaseItems: true,
-              saleItems: true,
-            },
-          },
-          balances: { select: { id: true, quantity: true } },
-          units: { select: { imageUrl: true } },
-        },
-        where: { companyId: tenant.companyId, id: productId, ...branchOwnedWhere(scope) },
-      });
-      const historicalReferenceCount = sumHistoricalProductRefs(existing._count as Record<string, number>);
-      const deleteMode = resolveProductDeleteMode({
-        balances: existing.balances,
-        historicalReferenceCount,
-      });
+  const result = await softDeletePrismaProduct(productId, tenant);
+  return { deleteMode: "soft", product: mapPrismaProduct({ ...result.product, balances: [], units: [] }) };
+}
 
-      if (deleteMode === "soft") {
-        const archivedProduct = await tx.product.update({
-          data: { isActive: false, status: "deleted" },
-          where: { id: existing.id },
-        });
-
-        return { deleteMode, product: mapPrismaProduct(archivedProduct) } satisfies ProductDeleteResult;
-      }
-
-      if (existing.balances.length > 0) {
-        await tx.inventoryBalance.deleteMany({ where: { productId: existing.id } });
-      }
-
-      hardDeletedImages = { imageUrl: existing.imageUrl, units: existing.units };
-      const deletedProduct = await tx.product.delete({ where: { id: existing.id } });
-
-      return { deleteMode, product: mapPrismaProduct(deletedProduct) } satisfies ProductDeleteResult;
-    },
-  });
+export async function permanentDeletePrismaProduct(productId: string, tenant: TenantContext) {
+  const committed = await commitPermanentDelete(productId, tenant);
+  const hardDeletedImages = committed.images;
+  let cleanupMs = 0;
+  let imageCleanup: "failed" | "none" | "ok" = "none";
   if (hardDeletedImages) {
-    await cleanupHardDeletedProductImages(hardDeletedImages);
+    const cleanupStarted = Date.now();
+    const cleaned = await cleanupHardDeletedProductImages(hardDeletedImages);
+    cleanupMs = Date.now() - cleanupStarted;
+    imageCleanup = cleaned ? "ok" : "failed";
+    if (!cleaned) {
+      console.error("product-permanent-delete-image-cleanup-failed", committed.productId);
+    }
   }
-  return result;
+  return {
+    deleteMode: "permanent" as const,
+    imageCleanup,
+    productId: committed.productId,
+    timings: { ...committed.timings, cleanupMs },
+  };
 }
 
 export async function upsertPrismaCategory(input: {

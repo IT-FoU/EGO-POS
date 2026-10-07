@@ -11,6 +11,7 @@ import {
   deletePrismaCategory,
   deletePrismaProduct,
   duplicatePrismaProduct,
+  permanentDeletePrismaProduct,
   getPrismaProductListPage,
   getPrismaUnitPricingDefaults,
   updatePrismaProduct,
@@ -31,6 +32,8 @@ import {
 } from "@/features/products/product-image-search";
 import { bytesToBase64, importRemoteProductImageBytes } from "@/features/products/remote-image-import";
 import { clearProductImages, uploadAndAttachProductImages } from "@/features/products/product-image-service";
+import { deleteFailureCode } from "@/features/products/product-delete";
+import { loadPermanentDeleteEligibility } from "@/features/products/product-delete-service";
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, previewProductImport } from "@/features/products/product-import-service";
@@ -204,7 +207,7 @@ export async function archiveProductAction(productId: string) {
     revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {
-    return writeFailure(error);
+    return { error: deleteFailureCode(error), ok: false as const };
   }
 }
 
@@ -214,7 +217,26 @@ export async function deleteProductAction(productId: string) {
     revalidateProductCataloguePaths();
     return writeSuccess(data);
   } catch (error) {
-    return writeFailure(error);
+    return { error: deleteFailureCode(error), ok: false as const };
+  }
+}
+
+export async function loadPermanentDeleteEligibilityAction(productIds: string[]) {
+  try {
+    const data = await loadPermanentDeleteEligibility(productIds, await tenant(WRITE_PERMISSIONS.productsDelete));
+    return writeSuccess(data);
+  } catch (error) {
+    return { error: deleteFailureCode(error), ok: false as const };
+  }
+}
+
+export async function permanentDeleteProductAction(productId: string) {
+  try {
+    const data = await permanentDeletePrismaProduct(productId, await tenant(WRITE_PERMISSIONS.productsDelete));
+    revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return { error: deleteFailureCode(error), ok: false as const };
   }
 }
 

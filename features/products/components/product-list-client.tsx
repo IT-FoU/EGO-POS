@@ -29,7 +29,8 @@ import { ProductImagePlaceholder } from "@/features/products/components/product-
 import { StatusBadge } from "@/features/products/components/status-badge";
 import { ProductSmallModal } from "@/features/products/components/product-small-modal";
 import { formatLak } from "@/features/products/format";
-import { deleteProductAction, loadProductListAction } from "@/features/products/actions";
+import { deleteProductAction, loadPermanentDeleteEligibilityAction, loadProductListAction, permanentDeleteProductAction } from "@/features/products/actions";
+import { isProductDeleteBlockReason, type ProductDeleteBlockReason } from "@/features/products/product-delete";
 import { readProductListPageSize, readProductListSort, writeProductListPageSize, writeProductListSort } from "@/features/products/list-preferences";
 import { DEFAULT_PRODUCT_SORT_MODE, PRODUCT_SORT_MODES, sortProductRecords, type ProductSortMode } from "@/features/products/product-sort";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
@@ -276,6 +277,44 @@ export function ProductListClient({ access, products: initialProducts, brands: i
         setInsightFilter(nextFilter);
         setPage(1);
     }
+    const [deleteEligibility, setDeleteEligibility] = useState<Record<string, { allowed: boolean; reason: ProductDeleteBlockReason | null }>>({});
+    const [deleteTimings, setDeleteTimings] = useState<{ cleanupMs: number; eligibilityMs: number; statementMs: number } | null>(null);
+    const [deleteImageCleanup, setDeleteImageCleanup] = useState("");
+    const [permanentTarget, setPermanentTarget] = useState<Product | null>(null);
+    const deletedIds = useMemo(() => products.filter((product) => product.status === "deleted").map((product) => product.id).join(","), [products]);
+    useEffect(() => {
+        const ids = deletedIds ? deletedIds.split(",") : [];
+        if (ids.length === 0) return;
+        let cancelled = false;
+        void loadPermanentDeleteEligibilityAction(ids).then((result) => {
+            if (cancelled) return;
+            if (!result.ok || !result.data) {
+                const next: Record<string, { allowed: boolean; reason: ProductDeleteBlockReason | null }> = {};
+                for (const id of ids) next[id] = { allowed: false, reason: "TEMPORARILY_UNAVAILABLE" };
+                setDeleteEligibility(next);
+                return;
+            }
+            const next: Record<string, { allowed: boolean; reason: ProductDeleteBlockReason | null }> = {};
+            for (const row of result.data) {
+                next[row.productId] = { allowed: row.allowed, reason: row.reason };
+            }
+            setDeleteEligibility(next);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [deletedIds]);
+    function deleteReasonText(reason: ProductDeleteBlockReason | null) {
+        if (reason === "HAS_TRANSACTION_HISTORY") return t("deleteHistoryReason");
+        if (reason === "HAS_STOCK") return t("deleteStockReason");
+        if (reason === "NEEDS_RECOUNT") return t("deleteRecountReason");
+        if (reason === "HAS_LOTS") return t("deleteLotReason");
+        if (reason === "HAS_RESERVATION") return t("deleteReservationReason");
+        if (reason === "REFERENCED_RECORD") return t("deleteReferencedReason");
+        if (reason === "NOT_DELETED") return t("deleteNotDeletedReason");
+        if (reason === "TEMPORARILY_UNAVAILABLE") return t("deleteTemporarilyUnavailable");
+        return "";
+    }
     function deleteProduct(productId: string) {
         startTransition(async () => {
             const result = await deleteProductAction(productId);
@@ -285,10 +324,30 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             }
             setProducts((current) => current.filter((product) => product.id !== productId));
             setSelectedProductIds((current) => current.filter((id) => id !== productId));
-            const deleteMode = result.data && typeof result.data === "object" && "deleteMode" in result.data
-                ? (result.data as { deleteMode?: string }).deleteMode
-                : undefined;
-            setMessage(deleteMode === "soft" ? t("productRemovedFromCatalogue") : t("productDeleted"));
+            setMessage(t("productRemovedFromCatalogue"));
+            signalPosCatalogueInvalidation();
+            router.refresh();
+        });
+    }
+    function confirmPermanentDelete() {
+        if (!permanentTarget) return;
+        const productId = permanentTarget.id;
+        startTransition(async () => {
+            const result = await permanentDeleteProductAction(productId);
+            if (!result.ok) {
+                const reason = isProductDeleteBlockReason(String(result.error ?? "")) ? result.error as ProductDeleteBlockReason : "TEMPORARILY_UNAVAILABLE";
+                setMessage(localizeProductError(reason));
+                setPermanentTarget(null);
+                setDeleteEligibility((current) => ({ ...current, [productId]: { allowed: false, reason } }));
+                return;
+            }
+            const payload = result.data && typeof result.data === "object" ? result.data as { imageCleanup?: string; timings?: { cleanupMs: number; eligibilityMs: number; statementMs: number } } : null;
+            setDeleteTimings(payload?.timings ?? null);
+            setDeleteImageCleanup(payload?.imageCleanup ?? "");
+            setProducts((current) => current.filter((product) => product.id !== productId));
+            setSelectedProductIds((current) => current.filter((id) => id !== productId));
+            setPermanentTarget(null);
+            setMessage(t("productDeleted"));
             signalPosCatalogueInvalidation();
             router.refresh();
         });
@@ -298,24 +357,22 @@ export function ProductListClient({ access, products: initialProducts, brands: i
             setMessage(t("selectProductsToDelete"));
             return;
         }
+        const softIds = selectedProductIds.filter((productId) => products.find((product) => product.id === productId)?.status !== "deleted");
+        if (softIds.length === 0) {
+            setMessage(t("deletePermanently"));
+            return;
+        }
         startTransition(async () => {
-            let softCount = 0;
-            for (const productId of selectedProductIds) {
+            for (const productId of softIds) {
                 const result = await deleteProductAction(productId);
                 if (!result.ok) {
                     setMessage(localizeProductError(result.error ?? "Bulk delete failed."));
                     return;
                 }
-                if (result.data && typeof result.data === "object" && "deleteMode" in result.data
-                    && (result.data as { deleteMode?: string }).deleteMode === "soft") {
-                    softCount += 1;
-                }
             }
-            setProducts((current) => current.filter((product) => !selectedProductIds.includes(product.id)));
-            setMessage(softCount > 0
-                ? t("productRemovedFromCatalogue")
-                : fillProductsCopy(t("productsDeleted"), { count: selectedProductIds.length }));
-            setSelectedProductIds([]);
+            setProducts((current) => current.filter((product) => !softIds.includes(product.id)));
+            setMessage(t("productRemovedFromCatalogue"));
+            setSelectedProductIds((current) => current.filter((id) => !softIds.includes(id)));
             signalPosCatalogueInvalidation();
             router.refresh();
         });
@@ -446,7 +503,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
           <span>
             {fillProductsCopy(t("showingRange"), { from: pageStart, to: pageEnd, total: totalCount })} {selectedProductIds.length > 0 ? fillProductsCopy(t("selectedCount"), { count: selectedProductIds.length }) : t("operationsUseFilters")}
           </span>
-          {message ? <span className="rounded-full bg-success/10 px-3 py-1 font-semibold text-success">{message}</span> : null}
+          {message ? <span className="rounded-full bg-success/10 px-3 py-1 font-semibold text-success" data-cleanup-ms={deleteTimings?.cleanupMs ?? ""} data-eligibility-ms={deleteTimings?.eligibilityMs ?? ""} data-image-cleanup={deleteImageCleanup} data-statement-ms={deleteTimings?.statementMs ?? ""} data-testid={deleteTimings ? "products-delete-timings" : undefined}>{message}</span> : null}
         </div>
       </section>
 
@@ -509,10 +566,17 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                           <Edit3 aria-hidden="true" className="size-4"/>
                           {t("edit")}
                         </Link>
-                        {productAccess.archive ? <button className="inline-flex h-9 items-center gap-2 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger transition hover:bg-danger/10" type="button" onClick={() => deleteProduct(product.id)}>
+                        {productAccess.archive && product.status !== "deleted" ? <button className="inline-flex h-9 items-center gap-2 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger transition hover:bg-danger/10" data-testid="products-soft-delete" type="button" onClick={() => deleteProduct(product.id)}>
                           <Trash2 aria-hidden="true" className="size-4"/>
                           {t("delete")}
                         </button> : null}
+                        {productAccess.archive && product.status === "deleted" ? <div className="grid justify-items-end gap-1">
+                          <button className="inline-flex h-9 items-center gap-2 rounded-md border border-danger/40 px-3 text-xs font-semibold text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50" data-allowed={deleteEligibility[product.id]?.allowed ? "true" : "false"} data-reason={deleteEligibility[product.id]?.reason ?? ""} data-testid="products-permanent-delete" disabled={!deleteEligibility[product.id]?.allowed || isPending} type="button" onClick={() => setPermanentTarget(product)}>
+                            <Trash2 aria-hidden="true" className="size-4"/>
+                            {t("deletePermanently")}
+                          </button>
+                          {deleteEligibility[product.id] && !deleteEligibility[product.id]?.allowed ? <span className="max-w-64 text-right text-[11px] leading-4 text-muted-foreground" data-testid="products-delete-reason">{deleteReasonText(deleteEligibility[product.id]?.reason ?? null)}</span> : null}
+                        </div> : null}
                       </div>
                     </td>
                   </tr>);
@@ -537,6 +601,16 @@ export function ProductListClient({ access, products: initialProducts, brands: i
       </section>
 
       {activeModal === "image" && previewProduct ? <ImagePreviewModal product={previewProduct} onClose={closeModal}/> : null}
+      {permanentTarget ? <ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
+          <button className="h-10 rounded-md border border-border px-4 text-sm font-semibold" type="button" onClick={() => setPermanentTarget(null)}>{t("cancel")}</button>
+          <button className="h-10 rounded-md bg-danger px-4 text-sm font-semibold text-white disabled:opacity-50" data-testid="products-permanent-confirm" disabled={isPending} type="button" onClick={confirmPermanentDelete}>{t("deletePermanently")}</button>
+        </div>} onClose={() => setPermanentTarget(null)} size="sm" title={t("deletePermanently")}>
+          <div className="grid gap-2 text-sm" data-testid="products-permanent-dialog">
+            <p>{t("deletePermanentUndo")}</p>
+            <p className="font-semibold">{localizedProductName(permanentTarget, locale)}</p>
+            <p className="font-mono text-xs">{permanentTarget.sku || "-"}</p>
+          </div>
+        </ProductSmallModal> : null}
       <ProductShellDrawer canImport={productAccess.create} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
     </div>);
 }

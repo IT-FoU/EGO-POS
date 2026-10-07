@@ -18,7 +18,8 @@ import { ArrowLeft, ImagePlus, Loader2, Pencil, Plus, RefreshCw, Save, Search, T
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { Brand, Category, MockProductImage, Product, ProductUnit, } from "@/features/products/types";
 import type { ProductStockSnapshot } from "@/features/inventory/types";
-import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteBrandAction, deleteCategoryAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
+import { duplicateProductAction, archiveProductAction, createProductAction, deleteProductAction, deleteBrandAction, deleteCategoryAction, loadPermanentDeleteEligibilityAction, permanentDeleteProductAction, updateProductAction, upsertBrandAction, upsertCategoryAction, uploadProductImageAction, clearProductImageAction, importRemoteProductImageAction, } from "@/features/products/actions";
+import { isProductDeleteBlockReason, type ProductDeleteBlockReason } from "@/features/products/product-delete";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
 import { archiveSupplierAction, createSupplierAction, updateSupplierAction } from "@/features/suppliers/actions";
 import type { Supplier } from "@/features/suppliers/types";
@@ -261,6 +262,8 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
     });
     const [categoryDialog, setCategoryDialog] = useState<CategoryDialogState>(null);
     const [statusConfirm, setStatusConfirm] = useState<ProductStatusConfirm>(null);
+    const [permanentReason, setPermanentReason] = useState<ProductDeleteBlockReason | null>(null);
+    const [permanentAllowed, setPermanentAllowed] = useState(false);
     const [localCategories, setLocalCategories] = useState<Category[]>(categories);
     const [selectedCategoryId, setSelectedCategoryId] = useState(product?.categoryId ?? "");
     const [localBrands, setLocalBrands] = useState<Brand[]>(brands);
@@ -1227,6 +1230,52 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             router.refresh();
         });
     }
+    useEffect(() => {
+        if (!product || product.status !== "deleted") return;
+        let cancelled = false;
+        void loadPermanentDeleteEligibilityAction([product.id]).then((result) => {
+            if (cancelled) return;
+            if (!result.ok || !result.data) {
+                setPermanentAllowed(false);
+                setPermanentReason("TEMPORARILY_UNAVAILABLE");
+                return;
+            }
+            const row = result.data[0];
+            setPermanentAllowed(Boolean(row?.allowed));
+            setPermanentReason(row?.reason ?? null);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [product?.id, product?.status]);
+    function permanentReasonText(reason: ProductDeleteBlockReason | null) {
+        if (reason === "HAS_TRANSACTION_HISTORY") return t("deleteHistoryReason");
+        if (reason === "HAS_STOCK") return t("deleteStockReason");
+        if (reason === "NEEDS_RECOUNT") return t("deleteRecountReason");
+        if (reason === "HAS_LOTS") return t("deleteLotReason");
+        if (reason === "HAS_RESERVATION") return t("deleteReservationReason");
+        if (reason === "REFERENCED_RECORD") return t("deleteReferencedReason");
+        if (reason === "NOT_DELETED") return t("deleteNotDeletedReason");
+        return t("deleteTemporarilyUnavailable");
+    }
+    function confirmPermanentDelete() {
+        if (!product) return;
+        startTransition(async () => {
+            const result = await permanentDeleteProductAction(product.id);
+            if (!result.ok) {
+                const reason = isProductDeleteBlockReason(String(result.error ?? "")) ? result.error as ProductDeleteBlockReason : "TEMPORARILY_UNAVAILABLE";
+                showFeedback(localizeProductError(reason), "error");
+                setPermanentReason(reason);
+                setPermanentAllowed(false);
+                setStatusConfirm(null);
+                return;
+            }
+            showFeedback(t("productDeleted"), "success");
+            signalPosCatalogueInvalidation();
+            router.refresh();
+            router.push("/products");
+        });
+    }
     function changeProductStatus(action: "archive" | "delete") {
         if (!product)
             return;
@@ -1274,12 +1323,19 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
             <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-primary disabled:opacity-50" type="button" disabled={isPending} onClick={duplicateProduct}>
               {t("duplicateProduct")}
             </button>
+            {product.status === "deleted" ? <div className="grid gap-1">
+              <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-danger px-4 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50" data-allowed={permanentAllowed ? "true" : "false"} data-testid="products-permanent-delete" disabled={!permanentAllowed || isPending} type="button" onClick={() => setStatusConfirm("delete")}>
+                {t("deletePermanently")}
+              </button>
+              {!permanentAllowed && permanentReason ? <span className="max-w-72 text-xs text-muted-foreground" data-testid="products-delete-reason">{permanentReasonText(permanentReason)}</span> : null}
+            </div> : <>
             <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-semibold transition hover:border-warning disabled:opacity-50" type="button" disabled={isPending} onClick={() => setStatusConfirm("archive")}>
               {t("archive")}
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-danger px-4 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" type="button" disabled={isPending} onClick={() => setStatusConfirm("delete")}>
+            <button className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-danger px-4 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50" data-testid="products-soft-delete" type="button" disabled={isPending} onClick={() => setStatusConfirm("delete")}>
               {t("delete")}
             </button>
+            </>}
           </div>) : null}
       </div>
 
@@ -1291,9 +1347,13 @@ export function ProductForm({ mode, product, brands = [], categories, images: _i
       {supplierDialog ? (<SupplierCrudDialog draft={supplierDraft} isPending={isPending} state={supplierDialog} suppliers={localSuppliers} onArchive={archiveSupplierInline} onClose={closeSupplierDialog} onDraftChange={setSupplierDraft} onSave={saveSupplierInline}/>) : null}
       {statusConfirm && product ? (<ProductSmallModal closeAriaLabel={t("close")} closeOnBackdrop={false} closeOnEscape={false} footer={<div className="flex justify-end gap-2">
             <button className={DIALOG_BTN_SECONDARY} type="button" onClick={closeStatusConfirm}>{t("cancel")}</button>
-            {statusConfirm === "archive" ? (<button className={DIALOG_BTN_PRIMARY} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : (<button className={DIALOG_BTN_DANGER} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
-          </div>} onClose={closeStatusConfirm} size="sm" title={statusConfirm === "archive" ? t("archive") : t("deleteProduct")}>
-          <p className="rounded-md border border-border bg-background p-3 text-sm font-semibold">{productName || product.nameEn || product.nameLo}</p>
+            {statusConfirm === "archive" ? (<button className={DIALOG_BTN_PRIMARY} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("archive")}</button>) : product.status === "deleted" ? (<button className={DIALOG_BTN_DANGER} data-testid="products-permanent-confirm" type="button" onClick={() => { setStatusConfirm(null); confirmPermanentDelete(); }}>{t("deletePermanently")}</button>) : (<button className={DIALOG_BTN_DANGER} type="button" onClick={() => { const action = statusConfirm; setStatusConfirm(null); changeProductStatus(action); }}>{t("delete")}</button>)}
+          </div>} onClose={closeStatusConfirm} size="sm" title={statusConfirm === "archive" ? t("archive") : product.status === "deleted" ? t("deletePermanently") : t("deleteProduct")}>
+          {product.status === "deleted" ? <div className="grid gap-2 text-sm" data-testid="products-permanent-dialog">
+            <p>{t("deletePermanentUndo")}</p>
+            <p className="font-semibold">{productName || product.nameEn || product.nameLo}</p>
+            <p className="font-mono text-xs">{product.sku || "-"}</p>
+          </div> : <p className="rounded-md border border-border bg-background p-3 text-sm font-semibold">{productName || product.nameEn || product.nameLo}</p>}
         </ProductSmallModal>) : null}
       {previewSnapshot ? (<ProductPreviewDrawer isPending={isPending} onClose={() => setPreviewSnapshot(null)} onSave={() => {
             setPreviewSnapshot(null);
