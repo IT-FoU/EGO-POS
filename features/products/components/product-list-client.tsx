@@ -21,6 +21,7 @@ import type { Brand, Category, Product, ProductStatus } from "@/features/product
 import type { ProductListPage, ProductInsightFilter, ProductListQuery } from "@/features/products/list-query";
 import { BarcodeAuditDrawer } from "@/features/products/components/product-barcode-audit-drawer";
 import { PrintBarcodeDrawer } from "@/features/products/components/product-print-barcode-drawer";
+import { PrintShelfLabelDrawer } from "@/features/products/components/product-print-shelf-drawer";
 import { ExportProductsDrawer } from "@/features/products/components/product-export-drawer";
 import { ImportProductsDrawer } from "@/features/products/components/product-import-drawer";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
@@ -432,7 +433,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
                   <ActionMenuButton icon={Download} label={t("exportProducts")} testId="products-export-action" onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} testId="products-barcode-audit-action" onClick={() => openOperationDrawer("tool_audit")}/>
                   {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} testId="products-print-barcode-action" onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
-                  <ActionMenuButton icon={Tags} label={t("printShelfLabel")} onClick={() => openOperationDrawer("tool_print_shelf")}/>
+                  {productAccess.printBarcode ? <ActionMenuButton icon={Tags} label={t("printShelfLabel")} testId="products-print-shelf-action" onClick={() => openOperationDrawer("tool_print_shelf")}/> : null}
                   <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} onClick={() => openOperationDrawer("tool_bulk_price")}/>
                 </div>) : null}
             </div>
@@ -785,36 +786,10 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, 
     if (drawerKey === "tool_print_barcode")
         return <PrintBarcodeDrawer onClose={onClose} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_print_shelf")
-        return <PrintShelfLabelDrawer onClose={onClose} products={operationProducts}/>;
+        return <PrintShelfLabelDrawer onClose={onClose} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_bulk_price")
         return <BulkPricePreviewDrawer categories={categories} filteredProducts={filteredProducts} onClose={onClose} products={operationProducts} selectedProducts={selectedProducts}/>;
     return null;
-}
-
-function PrintShelfLabelDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
-    const { t, locale } = useProductsT();
-    const [paper, setPaper] = useState("A4");
-    const previewProduct = products[0];
-    const toggles = [t("productName"), t("price"), t("unit"), t("barcodeOptional"), t("promoTagOptional")];
-    return (
-      <div className="grid gap-5">
-        <ProductToolNotice text={t("printShelfNotice")}/>
-        <section className="grid gap-4 lg:grid-cols-2">
-          <ProductOptionPanel title={t("shelfLabelLayout")} options={["A4", "A5", "80mm roll", "Custom"]} selected={paper} onSelect={setPaper}/>
-          <ProductOptionPanel title={t("labelContent")} options={toggles}/>
-        </section>
-        <ProductSelectionPreview products={products}/>
-        <section className="rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("shelfLabelPreview")}</h3>
-          <div className="mt-4 max-w-sm rounded-md border border-border bg-card p-4">
-            <div className="truncate text-lg font-semibold">{previewProduct ? localizedProductName(previewProduct, locale) : t("productName")}</div>
-            <div className="mt-2 text-2xl font-black text-primary">{previewProduct ? formatLak(previewProduct.sellingPriceLak) : t("price")}</div>
-            <div className="mt-2 text-xs text-muted-foreground">{previewProduct?.units[0]?.unitName ?? t("unit")} | {previewProduct?.barcode || t("barcodeOptional")}</div>
-          </div>
-        </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: t("printPreview"), reason: t("disabled") }]}/>
-      </div>
-    );
 }
 
 function BulkPricePreviewDrawer({ categories, filteredProducts, onClose, products, selectedProducts }: {
@@ -906,49 +881,6 @@ function ProductToolFooter({ actions, onClose }: { actions: Array<{ label: strin
           </button>
         ))}
       </div>
-    );
-}
-
-function ProductOptionPanel({ onSelect, options, selected, title }: {
-    onSelect?: (value: string) => void;
-    options: string[];
-    selected?: string;
-    title: string;
-}) {
-    const { t } = useProductsT();
-    return (
-      <section className="rounded-lg border border-border bg-background p-4">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
-        <div className="mt-3 grid gap-2">
-          {options.map((option) => (
-            <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold" key={option}>
-              <span>{option === "Custom" ? t("custom") : option}</span>
-              <input type="checkbox" checked={selected ? selected === option : true} readOnly={!onSelect} onChange={() => onSelect?.(option)}/>
-            </label>
-          ))}
-        </div>
-      </section>
-    );
-}
-
-function ProductSelectionPreview({ products }: { products: Product[] }) {
-    const { t, locale } = useProductsT();
-    return (
-      <section className="rounded-lg border border-border bg-background p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("productSelectionPreview")}</h3>
-          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground">{fillProductsCopy(t("selectedFiltered"), { count: products.length.toLocaleString("en-US") })}</span>
-        </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {products.slice(0, 6).map((product) => (
-            <div className="rounded-md border border-border bg-card p-3 text-sm" key={product.id}>
-              <div className="truncate font-semibold">{localizedProductName(product, locale)}</div>
-              <div className="mt-1 font-mono text-xs text-muted-foreground">{product.barcode || product.sku || t("noCode")}</div>
-            </div>
-          ))}
-        </div>
-        {products.length === 0 ? <div className="mt-3 rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{t("noProductsAvailablePreview")}</div> : null}
-      </section>
     );
 }
 
