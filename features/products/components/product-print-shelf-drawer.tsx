@@ -174,8 +174,15 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
       }));
     if (payload.length === 0) return;
     setMarking(true);
-    const response = await markShelfLabelsPrintedAction(payload);
-    setMarking(false);
+    let response: Awaited<ReturnType<typeof markShelfLabelsPrintedAction>>;
+    try {
+      response = await markShelfLabelsPrintedAction(payload);
+    } catch {
+      setMarkNote(t("reprintRequired"));
+      return;
+    } finally {
+      setMarking(false);
+    }
     if (!response.ok || !response.data) {
       setMarkNote(response.error?.includes("Permission denied") ? t("printShelfPermissionDenied") : (response.error ?? t("reprintRequired")));
       return;
@@ -260,8 +267,8 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
               <button className="h-10 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-shelf-mark" disabled={marking} type="button" onClick={() => void markPrinted()}>{t("markPrintedLabels")}</button>
               <button className="h-10 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-shelf-not-yet" type="button" onClick={() => setPrintSent(false)}>{t("notYet")}</button>
             </div>
-            {markNote ? <p className="text-sm font-semibold" data-testid="products-shelf-mark-result">{markNote}</p> : null}
           </div> : null}
+          {markNote ? <p className="text-sm font-semibold print:hidden" data-testid="products-shelf-mark-result">{markNote}</p> : null}
           <div className="grid gap-2 print:hidden">
             {lines.filter((line) => line.included && !line.missingPrice).map((line) => (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2" data-testid="products-shelf-job-row" key={line.key}>
