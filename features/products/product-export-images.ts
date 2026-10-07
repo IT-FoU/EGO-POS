@@ -13,8 +13,18 @@ export type PreparedExportImage = {
 
 const DISPLAY_EDGE = 64;
 const DOWNLOAD_CONCURRENCY = 4;
+let exportImageNote = "";
+
+export function readExportImageNote() {
+  return exportImageNote;
+}
+
+function noteExportImage(message: string) {
+  if (!exportImageNote) exportImageNote = message.slice(0, 180);
+}
 
 export async function loadExportThumbnails(products: ProductExportSource[], fields: readonly ProductExportField[]) {
+  exportImageNote = "";
   const images = new Map<string, PreparedExportImage>();
   if (!fields.includes("productImage") && !fields.includes("unitImage")) return images;
   const paths: string[] = [];
@@ -27,9 +37,13 @@ export async function loadExportThumbnails(products: ProductExportSource[], fiel
   }
   await mapPool(paths.slice(0, PRODUCT_EXPORT_EMBED_LIMIT), DOWNLOAD_CONCURRENCY, async (path) => {
     const bytes = await downloadThumbnail(path);
-    if (!bytes) return;
+    if (!bytes) {
+      noteExportImage("download-miss");
+      return;
+    }
     const prepared = await prepareExportThumbnail(bytes);
     if (prepared) images.set(path, prepared);
+    else noteExportImage(`prepare-miss kind=${imageKind(bytes)} bytes=${bytes.length}`);
   });
   return images;
 }
@@ -49,7 +63,8 @@ export async function prepareExportThumbnail(bytes: Uint8Array): Promise<Prepare
     const scaled = downsample(decoded.data, decoded.width, decoded.height, DISPLAY_EDGE);
     const jpeg = await encodeJpeg(scaled.data, scaled.width, scaled.height);
     return { buffer: jpeg, extension: "jpeg", height: fitted.height, width: fitted.width };
-  } catch {
+  } catch (error) {
+    noteExportImage(error instanceof Error ? error.message : "decode-failed");
     return null;
   }
 }
@@ -149,7 +164,7 @@ let webpReady: Promise<void> | null = null;
 function ensureWebpDecoder() {
   webpReady ??= (async () => {
     const binary = Uint8Array.from(atob(WEBP_DECODER_WASM), (char) => char.charCodeAt(0));
-    await initWebpDecoder(await WebAssembly.compile(binary) as never);
+    await initWebpDecoder({ wasmBinary: binary } as never);
   })();
   return webpReady;
 }

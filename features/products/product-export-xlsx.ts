@@ -8,7 +8,7 @@ import {
   type DetailedExportSheet,
   type ProductExportSource,
 } from "@/features/products/product-export";
-import { type PreparedExportImage } from "@/features/products/product-export-images";
+import { readExportImageNote, type PreparedExportImage } from "@/features/products/product-export-images";
 
 const TEXT_FORMAT = "@";
 
@@ -52,6 +52,8 @@ export async function buildDetailedProductExportXlsx(products: ProductExportSour
   const detailed = buildDetailedProductExport(products, fields, allowCost);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "EGO POS";
+  const imageNote = readExportImageNote();
+  if (imageNote) workbook.subject = imageNote;
   const imageIds = new Map<string, number>();
   if (detailed.productsSheet) writeDetailedSheet(workbook, "Products", detailed.productsSheet, images, imageIds);
   if (detailed.unitsSheet) writeDetailedSheet(workbook, "Units", detailed.unitsSheet, images, imageIds);
