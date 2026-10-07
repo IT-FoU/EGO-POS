@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIcon, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, AlertCircle, Archive, Clock, Package, Boxes, X, Trash2, } from "lucide-react";
 import type { Brand, Category, Product, ProductStatus } from "@/features/products/types";
 import type { ProductListPage, ProductInsightFilter, ProductListQuery } from "@/features/products/list-query";
+import { BarcodeAuditDrawer } from "@/features/products/components/product-barcode-audit-drawer";
 import { ExportProductsDrawer } from "@/features/products/components/product-export-drawer";
 import { ImportProductsDrawer } from "@/features/products/components/product-import-drawer";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
@@ -428,7 +429,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
               {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl" id="products-more-actions" role="menu">
                   <ActionMenuButton icon={Upload} label={t("importProducts")} testId="products-import-action" onClick={() => openOperationDrawer("tool_import")}/>
                   <ActionMenuButton icon={Download} label={t("exportProducts")} testId="products-export-action" onClick={() => openOperationDrawer("tool_export")}/>
-                  <ActionMenuButton icon={Search} label={t("barcodeAudit")} onClick={() => openOperationDrawer("tool_audit")}/>
+                  <ActionMenuButton icon={Search} label={t("barcodeAudit")} testId="products-barcode-audit-action" onClick={() => openOperationDrawer("tool_audit")}/>
                   {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
                   <ActionMenuButton icon={Tags} label={t("printShelfLabel")} onClick={() => openOperationDrawer("tool_print_shelf")}/>
                   <ActionMenuButton icon={FileSpreadsheet} label={t("bulkPriceUpdate")} onClick={() => openOperationDrawer("tool_bulk_price")}/>
@@ -779,7 +780,7 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, 
     if (drawerKey === "tool_export")
         return <ExportProductsDrawer onClose={onClose} query={exportQuery} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_audit")
-        return <BarcodeAuditDrawer onClose={onClose} products={filteredProducts} stats={stats}/>;
+        return <BarcodeAuditDrawer onClose={onClose}/>;
     if (drawerKey === "tool_print_barcode")
         return <PrintBarcodeDrawer onClose={onClose} products={operationProducts}/>;
     if (drawerKey === "tool_print_shelf")
@@ -787,70 +788,6 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, 
     if (drawerKey === "tool_bulk_price")
         return <BulkPricePreviewDrawer categories={categories} filteredProducts={filteredProducts} onClose={onClose} products={operationProducts} selectedProducts={selectedProducts}/>;
     return null;
-}
-
-function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void; products: Product[]; stats: ProductShellStats }) {
-    const { t, locale } = useProductsT();
-    const [filter, setFilter] = useState("all");
-    const audit = getBarcodeAudit(products, locale);
-    const missingSku = products.filter((product) => !product.sku);
-    const issueLabels: Record<string, string> = {
-        "Missing barcode": t("missingBarcode"),
-        "Duplicate barcode": t("duplicateBarcode"),
-        "Invalid barcode": t("invalidBarcode"),
-        "Missing SKU": t("missingSku"),
-    };
-    const rows = [
-        ...audit.missing.map((item) => ({ issue: "Missing barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: "-" })),
-        ...audit.duplicates.map((item) => ({ issue: "Duplicate barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: item.barcode })),
-        ...audit.invalid.map((item) => ({ issue: "Invalid barcode", productName: item.productName, unitName: item.unitName ?? t("product"), value: item.barcode ?? "-" })),
-        ...missingSku.map((product) => ({ issue: "Missing SKU", productName: localizedProductName(product, locale), unitName: t("product"), value: product.barcode || "-" })),
-    ].filter((row) => filter === "all" || row.issue.toLowerCase().replaceAll(" ", "_") === filter);
-    return (
-      <div className="grid gap-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <ProductShellDrawerSummary label={t("totalProducts")} value={formatShellCount(stats.totalProducts)}/>
-          <ProductShellDrawerSummary label={t("missingBarcode")} value={formatShellCount(audit.missing.length)}/>
-          <ProductShellDrawerSummary label={t("duplicateBarcode")} value={formatShellCount(audit.duplicates.length)}/>
-          <ProductShellDrawerSummary label={t("invalidBarcode")} value={formatShellCount(audit.invalid.length)}/>
-          <ProductShellDrawerSummary label={t("missingSku")} value={formatShellCount(missingSku.length)}/>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {[
-            ["all", t("all")],
-            ["missing_barcode", t("missingBarcode")],
-            ["duplicate_barcode", t("duplicateBarcode")],
-            ["invalid_barcode", t("invalidBarcode")],
-            ["missing_sku", t("missingSku")],
-          ].map(([value, label]) => (
-            <button className={cn("h-9 rounded-full border px-3 text-xs font-semibold", filter === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")} key={value} type="button" onClick={() => setFilter(value)}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <section className="overflow-hidden rounded-lg border border-border bg-background">
-          <div className="max-h-[420px] overflow-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
-                <tr><th className="p-3">{t("issue")}</th><th className="p-3">{t("product")}</th><th className="p-3">{t("unit")}</th><th className="p-3">{t("barcodeSku")}</th></tr>
-              </thead>
-              <tbody>
-                {rows.map((row, index) => (
-                  <tr className="border-t border-border" key={`${row.issue}-${row.productName}-${index}`}>
-                    <td className="p-3 font-semibold">{issueLabels[row.issue] ?? row.issue}</td>
-                    <td className="p-3">{row.productName}</td>
-                    <td className="p-3">{row.unitName}</td>
-                    <td className="p-3 font-mono text-xs">{row.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{t("noBarcodeIssues")}</div> : null}
-          </div>
-        </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: t("autoFix"), reason: t("disabled") }, { label: t("exportAudit"), reason: t("disabled") }]}/>
-      </div>
-    );
 }
 
 function PrintBarcodeDrawer({ onClose, products }: { onClose: () => void; products: Product[] }) {
@@ -1660,9 +1597,6 @@ function getBarcodeAudit(products: Product[], locale?: SupportedLocale) {
                 .map((unit) => ({ barcode: unit.barcode!.trim(), productName, unitName: unit.unitName || undefined })),
         ];
         for (const entry of entries) {
-            if (!/^[A-Za-z0-9-]{4,64}$/.test(entry.barcode)) {
-                invalid.push({ ...entry, issue: "Invalid Barcode" });
-            }
             const current = barcodeMap.get(entry.barcode) ?? [];
             current.push(entry);
             barcodeMap.set(entry.barcode, current);
