@@ -257,39 +257,49 @@ async function loadCoverageGapIds(scope: BranchScope, client: any, kind: "barcod
   return rows.map((row: { id: string }) => row.id);
 }
 
-export async function getPrismaProductListPage(
-  tenant: TenantContext,
-  input: ProductListQuery = {},
-  client: any,
-): Promise<ProductListPage> {
+export async function resolveProductListFilter(tenant: TenantContext, input: ProductListQuery = {}, client: any) {
   const query = normalizeProductListQuery(input);
   const scope = await resolveTenantScope(tenant, client);
   const insight = query.insight ?? "all";
   const whereInsight = insight === "low_stock" || insight === "no_image" || insight === "missing_barcode" ? "all" : insight;
   const where = buildProductListWhere(scope, { ...query, insight: whereInsight });
-
   let insightIds: string[] | null = null;
   if (insight === "low_stock") {
     insightIds = await loadLowStockIds(scope, client);
   } else if (insight === "no_image" || insight === "missing_barcode") {
     insightIds = await loadCoverageGapIds(scope, client, insight === "no_image" ? "image" : "barcode");
   }
+  return {
+    empty: Boolean(insightIds && insightIds.length === 0),
+    listWhere: insightIds ? { AND: [where, { id: { in: insightIds } }] } : where,
+    orderBy: productListOrderBy(parseProductSortMode(query.sort), query.nameLocale === "lo" ? "lo" : "en"),
+    query,
+    scope,
+  };
+}
 
-  const listWhere = insightIds ? { AND: [where, { id: { in: insightIds } }] } : where;
+export async function getPrismaProductListPage(
+  tenant: TenantContext,
+  input: ProductListQuery = {},
+  client: any,
+): Promise<ProductListPage> {
+  const resolved = await resolveProductListFilter(tenant, input, client);
+  const { query } = resolved;
+  const listWhere = resolved.listWhere;
   const skip = (query.page - 1) * query.pageSize;
 
   const [totalCount, products, summary] = await Promise.all([
-    insightIds && insightIds.length === 0 ? Promise.resolve(0) : client.product.count({ where: listWhere }),
-    insightIds && insightIds.length === 0
+    resolved.empty ? Promise.resolve(0) : client.product.count({ where: listWhere }),
+    resolved.empty
       ? Promise.resolve([])
       : client.product.findMany({
           include: productListInclude,
-          orderBy: productListOrderBy(parseProductSortMode(query.sort), query.nameLocale === "lo" ? "lo" : "en"),
+          orderBy: resolved.orderBy,
           skip,
           take: query.pageSize,
           where: listWhere,
         }),
-    loadProductListSummary(scope, client),
+    loadProductListSummary(resolved.scope, client),
   ]);
 
   const ordered = products;

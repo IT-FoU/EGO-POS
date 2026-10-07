@@ -18,7 +18,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, Edit3, Eye, FileSpreadsheet, ChevronDown, ChevronUp, ImageIcon, MoreHorizontal, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, AlertCircle, Archive, Clock, Package, Boxes, X, Trash2, } from "lucide-react";
 import type { Brand, Category, Product, ProductStatus } from "@/features/products/types";
-import type { ProductListPage, ProductInsightFilter } from "@/features/products/list-query";
+import type { ProductListPage, ProductInsightFilter, ProductListQuery } from "@/features/products/list-query";
+import { ExportProductsDrawer } from "@/features/products/components/product-export-drawer";
 import { ImportProductsDrawer } from "@/features/products/components/product-import-drawer";
 import { ProductImagePlaceholder } from "@/features/products/components/product-image-placeholder";
 import { StatusBadge } from "@/features/products/components/status-badge";
@@ -426,7 +427,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
               </button>
               {actionMenuOpen ? (<div className="absolute right-0 z-30 mt-2 grid w-56 gap-1 rounded-lg border border-border bg-card p-2 shadow-xl" id="products-more-actions" role="menu">
                   <ActionMenuButton icon={Upload} label={t("importProducts")} testId="products-import-action" onClick={() => openOperationDrawer("tool_import")}/>
-                  <ActionMenuButton icon={Download} label={t("exportProducts")} onClick={() => openOperationDrawer("tool_export")}/>
+                  <ActionMenuButton icon={Download} label={t("exportProducts")} testId="products-export-action" onClick={() => openOperationDrawer("tool_export")}/>
                   <ActionMenuButton icon={Search} label={t("barcodeAudit")} onClick={() => openOperationDrawer("tool_audit")}/>
                   {productAccess.printBarcode ? <ActionMenuButton icon={Printer} label={t("printBarcode")} onClick={() => openOperationDrawer("tool_print_barcode")}/> : null}
                   <ActionMenuButton icon={Tags} label={t("printShelfLabel")} onClick={() => openOperationDrawer("tool_print_shelf")}/>
@@ -532,7 +533,7 @@ export function ProductListClient({ access, products: initialProducts, brands: i
       </section>
 
       {activeModal === "image" && previewProduct ? <ImagePreviewModal product={previewProduct} onClose={closeModal}/> : null}
-      <ProductShellDrawer canImport={productAccess.create} categories={categories} drawerKey={shellDrawer} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
+      <ProductShellDrawer canImport={productAccess.create} categories={categories} drawerKey={shellDrawer} exportQuery={{ brandId, categoryId, insight: insightFilter, nameLocale: sortLocale, search: query, sort: sortMode, status, supplierId }} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedProductIds} selectedProducts={selectedProducts} stats={productShellStats} onClose={() => setShellDrawer(null)} onImported={reloadProductList}/>
     </div>);
 }
 function ActionMenuButton({ icon: Icon, label, onClick, testId }: {
@@ -633,14 +634,16 @@ function ProductShellTopic({ description, icon: Icon, label, onClick }: { descri
     );
 }
 
-function ProductShellDrawer({ canImport, categories, drawerKey, filteredProducts, onClose, onImported, operationProducts, selectedProducts, stats }: {
+function ProductShellDrawer({ canImport, categories, drawerKey, exportQuery, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
     canImport: boolean;
     categories: Category[];
     drawerKey: ProductShellDrawerKey | null;
+    exportQuery: ProductListQuery;
     filteredProducts: Product[];
     onClose: () => void;
     onImported: () => Promise<void> | void;
     operationProducts: Product[];
+    selectedIds: string[];
     selectedProducts: Product[];
     stats: ProductShellStats;
 }) {
@@ -661,7 +664,7 @@ function ProductShellDrawer({ canImport, categories, drawerKey, filteredProducts
     if (isProductToolDrawer(drawerKey)) {
         return (
           <ProductDrawerFrame description={getProductToolDescription(drawerKey, t)} label={t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
-            <ProductToolDrawerBody canImport={canImport} categories={categories} drawerKey={drawerKey} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
+            <ProductToolDrawerBody canImport={canImport} categories={categories} drawerKey={drawerKey} exportQuery={exportQuery} filteredProducts={filteredProducts} operationProducts={operationProducts} selectedIds={selectedIds} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
           </ProductDrawerFrame>
         );
     }
@@ -758,21 +761,23 @@ function ProductShellStatusRow({ label, value }: { label: string; value: string 
     );
 }
 
-function ProductToolDrawerBody({ canImport, categories, drawerKey, filteredProducts, onClose, onImported, operationProducts, selectedProducts, stats }: {
+function ProductToolDrawerBody({ canImport, categories, drawerKey, exportQuery, filteredProducts, onClose, onImported, operationProducts, selectedIds, selectedProducts, stats }: {
     canImport: boolean;
     categories: Category[];
     drawerKey: ProductShellDrawerKey;
+    exportQuery: ProductListQuery;
     filteredProducts: Product[];
     onClose: () => void;
     onImported: () => Promise<void> | void;
     operationProducts: Product[];
+    selectedIds: string[];
     selectedProducts: Product[];
     stats: ProductShellStats;
 }) {
     if (drawerKey === "tool_import")
         return <ImportProductsDrawer canImport={canImport} onClose={onClose} onImported={onImported}/>;
     if (drawerKey === "tool_export")
-        return <ExportProductsDrawer onClose={onClose} products={operationProducts} selectedCount={selectedProducts.length} stats={stats}/>;
+        return <ExportProductsDrawer onClose={onClose} query={exportQuery} selectedIds={selectedIds}/>;
     if (drawerKey === "tool_audit")
         return <BarcodeAuditDrawer onClose={onClose} products={filteredProducts} stats={stats}/>;
     if (drawerKey === "tool_print_barcode")
@@ -782,45 +787,6 @@ function ProductToolDrawerBody({ canImport, categories, drawerKey, filteredProdu
     if (drawerKey === "tool_bulk_price")
         return <BulkPricePreviewDrawer categories={categories} filteredProducts={filteredProducts} onClose={onClose} products={operationProducts} selectedProducts={selectedProducts}/>;
     return null;
-}
-
-function ExportProductsDrawer({ onClose, products, selectedCount, stats }: {
-    onClose: () => void;
-    products: Product[];
-    selectedCount: number;
-    stats: ProductShellStats;
-}) {
-    const { t } = useProductsT();
-    const [selectedIds, setSelectedIds] = useState<string[]>(products.slice(0, 8).map((product) => product.id));
-    const previewProducts = products.slice(0, 12);
-    const fields = [t("productName"), t("barcode"), t("sku"), t("category"), t("sellingPrice"), t("costPrice"), t("stock"), t("status"), t("imageStatus")];
-    return (
-      <div className="grid gap-5">
-        <ProductToolNotice text={t("exportNotice")}/>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <ProductShellDrawerSummary label={t("totalProducts")} value={formatShellCount(products.length)}/>
-          <ProductShellDrawerSummary label={t("selectedRows")} value={formatShellCount(selectedIds.length)}/>
-          <ProductShellDrawerSummary label={t("missingBarcode")} value={formatShellCount(stats.missingBarcode)}/>
-          <ProductShellDrawerSummary label={t("missingImage")} value={formatShellCount(stats.missingImages)}/>
-        </div>
-        <section className="rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t("productSelectionPreview")}</h3>
-            <div className="flex gap-2">
-              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setSelectedIds(previewProducts.map((product) => product.id))}>{t("selectAllPreview")}</button>
-              <button className="h-9 rounded-md border border-border px-3 text-xs font-semibold" type="button" onClick={() => setSelectedIds([])}>{t("clearSelection")}</button>
-            </div>
-          </div>
-          <ProductPreviewTable products={previewProducts} selectedIds={selectedIds} onToggle={(productId) => setSelectedIds((current) => current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId])}/>
-          <p className="mt-3 text-xs text-muted-foreground">{selectedCount > 0 ? t("exportScopeSelected") : t("exportScopeFilters")}</p>
-        </section>
-        <section className="grid gap-4 lg:grid-cols-2">
-          <ProductOptionPanel title={t("fieldsSelection")} options={fields}/>
-          <ProductOptionPanel title={t("exportFormat")} options={["CSV", "XLSX"]}/>
-        </section>
-        <ProductToolFooter onClose={onClose} actions={[{ label: t("exportCsv"), reason: t("disabled") }, { label: t("exportXlsx"), reason: t("disabled") }]}/>
-      </div>
-    );
 }
 
 function BarcodeAuditDrawer({ onClose, products, stats }: { onClose: () => void; products: Product[]; stats: ProductShellStats }) {
@@ -1025,35 +991,6 @@ function ProductToolFooter({ actions, onClose }: { actions: Array<{ label: strin
             {action.label} - {action.reason}
           </button>
         ))}
-      </div>
-    );
-}
-
-function ProductPreviewTable({ onToggle, products, selectedIds }: {
-    onToggle: (productId: string) => void;
-    products: Product[];
-    selectedIds: string[];
-}) {
-    const { t, locale } = useProductsT();
-    return (
-      <div className="mt-3 max-h-80 overflow-auto rounded-md border border-border">
-        <table className="w-full min-w-[720px] text-left text-xs">
-          <thead className="sticky top-0 bg-background text-muted-foreground">
-            <tr><th className="p-2">{t("select")}</th><th className="p-2">{t("product")}</th><th className="p-2">{t("barcode")}</th><th className="p-2">{t("sku")}</th><th className="p-2">{t("status")}</th></tr>
-          </thead>
-          <tbody>
-            {products.map((product) => (
-              <tr className="border-t border-border" key={product.id}>
-                <td className="p-2"><input type="checkbox" checked={selectedIds.includes(product.id)} onChange={() => onToggle(product.id)} aria-label={fillProductsCopy(t("selectProductPreview"), { name: localizedProductName(product, locale) })}/></td>
-                <td className="p-2 font-semibold">{localizedProductName(product, locale)}</td>
-                <td className="p-2 font-mono">{product.barcode || "-"}</td>
-                <td className="p-2 font-mono">{product.sku || "-"}</td>
-                <td className="p-2">{productStatusLabel(product.status, locale)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {products.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground">{t("noProductsAvailablePreview")}</div> : null}
       </div>
     );
 }
