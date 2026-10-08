@@ -12,7 +12,7 @@ import {
 } from "@/features/products/bulk-price";
 import type { BulkPriceApplyResult, BulkPriceJobAudit } from "@/features/products/bulk-price-service";
 import { formatLak } from "@/features/products/format";
-import { WhiteDataTable } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable, WhiteTableText } from "@/features/products/components/selected-products-list";
 import type { ProductListQuery } from "@/features/products/list-query";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
@@ -259,7 +259,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
             <tbody>
               {quotes.map((line) => (
                 <tr data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-raw={line.quote.rawPriceLak ?? ""} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
-                  <td className="font-semibold">{line.localeName}</td>
+                  <td className="font-semibold"><WhiteTableText>{line.localeName}</WhiteTableText></td>
                   <td className="font-mono text-xs">{line.sku}</td>
                   <td className="mid">{line.unitName}</td>
                   <td className="num">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
@@ -322,7 +322,7 @@ function UnitRow({ amount, direction, jobRounding, line, mode, onRemove, onToggl
   const quote = line.included ? quoteForLine(line, { amount, direction, jobRounding, mode, percent }) : null;
   return (
     <tr data-price={line.priceLak} data-product={line.productId} data-role={unitPrintRole(line.unitName)} data-rounding={line.roundingLak} data-sku={line.sku} data-testid="products-bulk-unit" data-unit={line.unitName} data-unit-id={line.unitId}>
-      <td className="font-semibold">{productName}</td>
+      <td className="font-semibold"><WhiteTableText>{productName}</WhiteTableText></td>
       <td className="mid">
         <label className="inline-flex items-center gap-2 font-semibold">
           <input checked={line.included} data-testid="products-bulk-include" type="checkbox" onChange={(event) => onToggle(event.target.checked)}/>

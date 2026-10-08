@@ -10,7 +10,7 @@ import {
   type BarcodeAuditIssueType,
   type BarcodeAuditResult,
 } from "@/features/products/barcode-audit";
-import { WhiteDataTable } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable, WhiteTableText } from "@/features/products/components/selected-products-list";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { SupportedLocale } from "@/lib/constants";
 import { productStatusLabel, tProducts } from "@/lib/i18n/products-copy";
@@ -149,7 +149,7 @@ function AuditRow({ detail, issue, label, locale, openLabel }: {
   const name = localizedProductName({ nameEn: issue.nameEn, nameLo: issue.nameLo }, locale);
   return (
     <tr data-testid="products-barcode-audit-row">
-      <td className="font-semibold">{name}</td>
+      <td className="font-semibold"><WhiteTableText>{name}</WhiteTableText></td>
       <td className="font-mono text-xs">{issue.sku || "-"}</td>
       <td className="mid">{issue.unitName}</td>
       <td className="font-mono text-xs">{issue.barcode || "-"}</td>

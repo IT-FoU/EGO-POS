@@ -9,7 +9,7 @@ import {
   type ProductExportField,
 } from "@/features/products/product-export";
 import type { ProductListQuery } from "@/features/products/list-query";
-import { WhiteDataTable } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable, WhiteTableText } from "@/features/products/components/selected-products-list";
 import { fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
@@ -212,7 +212,7 @@ export function ExportProductsDrawer({ canViewCost = true, filteredCount, onClos
                 {preview.sampleRows.map((row, index) => (
                   <tr data-testid="products-export-preview-row" key={`${row[0] ?? "row"}-${index}`}>
                     {preview.headers.map((header, cellIndex) => (
-                      <td key={`${index}-${header}-${cellIndex}`}>{row[cellIndex] || "-"}</td>
+                      <td key={`${index}-${header}-${cellIndex}`}><WhiteTableText>{row[cellIndex] || "-"}</WhiteTableText></td>
                     ))}
                   </tr>
                 ))}

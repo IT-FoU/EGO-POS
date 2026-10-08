@@ -33,7 +33,7 @@ import {
 import { formatLak } from "@/features/products/format";
 import { LabelPreviewPager, useLabelPreviewPaging } from "@/features/products/components/label-preview-controls";
 import { expandLabelCopies, sliceLabelPreview } from "@/features/products/label-preview-page";
-import { WhiteDataTable } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable, WhiteTableText } from "@/features/products/components/selected-products-list";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
@@ -289,7 +289,7 @@ function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
   const blocked = line.missing || !line.encodable;
   return (
     <tr data-barcode={line.barcode} data-role={unitPrintRole(line.unitName)} data-testid={blocked ? "products-print-missing" : "products-print-unit"} data-unit={line.unitName}>
-      <td className="font-semibold">{productName}</td>
+      <td className="font-semibold"><WhiteTableText>{productName}</WhiteTableText></td>
       <td className="mid">
         <label className="inline-flex items-center gap-2 font-semibold">
           <input checked={line.included} data-testid="products-print-include" disabled={blocked} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
@@ -302,7 +302,7 @@ function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
         {!blocked ? <span className="font-mono">{line.barcode}</span> : null}
         {blocked ? <Link className="ego-row-open ml-2" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
       </td>
-      <td className="num"><input data-testid="products-print-qty" disabled={blocked} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/></td>
+      <td className="num"><input aria-label={t("printQuantity")} data-testid="products-print-qty" disabled={blocked} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/></td>
       <td className="mid"><button className="ego-row-remove" data-testid="products-print-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button></td>
     </tr>
   );

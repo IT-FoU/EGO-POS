@@ -7,7 +7,7 @@ import { encodeCode128B, fitBarcodeLabelName, parseLabelMillimetres, parsePrintQ
 import { formatLak } from "@/features/products/format";
 import { LabelPreviewPager, useLabelPreviewPaging } from "@/features/products/components/label-preview-controls";
 import { expandLabelCopies, sliceLabelPreview } from "@/features/products/label-preview-page";
-import { WhiteDataTable } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable, WhiteTableText } from "@/features/products/components/selected-products-list";
 import {
   DEFAULT_SHELF_LABEL_FIELDS,
   SHELF_LABEL_HEIGHT_MM,
@@ -329,7 +329,7 @@ function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
 }) {
   return (
     <tr data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-reprint={line.labelReprintNeeded ? "1" : "0"} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
-      <td className="font-semibold">{productName}</td>
+      <td className="font-semibold"><WhiteTableText>{productName}</WhiteTableText></td>
       <td className="mid">
         <label className="inline-flex items-center gap-2 font-semibold">
           <input checked={line.included} data-testid="products-shelf-include" disabled={line.missingPrice} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
@@ -341,7 +341,7 @@ function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
         {line.missingPrice ? <span className="ego-danger ml-2">{t("printMissingPrice")}</span> : <span className="ml-2 font-semibold">{formatLak(line.priceLak ?? 0)}</span>}
         {line.missingPrice ? <Link className="ego-row-open ml-2" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
       </td>
-      <td className="num"><input data-testid="products-shelf-qty" disabled={line.missingPrice} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/></td>
+      <td className="num"><input aria-label={t("printQuantity")} data-testid="products-shelf-qty" disabled={line.missingPrice} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/></td>
       <td className="mid"><button className="ego-row-remove" data-testid="products-shelf-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button></td>
     </tr>
   );
