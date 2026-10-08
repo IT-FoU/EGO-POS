@@ -161,7 +161,7 @@ const csv = barcodeAuditCsv(piecePiece.issues, {
   scan_conflict: "Scan can match more than one unit.",
   shared_barcode: "Another record also stores this barcode.",
 });
-check("audit csv columns", csv.includes("Product Name,SKU,Unit,Barcode,Issue Type,Details") && csv.includes("Barcode Conflict"));
+check("audit csv columns", csv.includes("Product Name,SKU,Unit,Barcode,Issue Type,Details,Related Product") && csv.includes("Barcode Conflict"));
 
 const en = getProductsCopy("en");
 const lo = getProductsCopy("lo");

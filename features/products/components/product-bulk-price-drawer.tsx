@@ -246,8 +246,8 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
           <WhiteDataTable minWidth="1120px" testId="products-bulk-quote-table">
             <thead>
               <tr>
-                <th>{t("product")}</th>
-                <th>SKU</th>
+                <th>{t("productName")}</th>
+                <th>{t("barcode")}</th>
                 <th className="mid">{t("unit")}</th>
                 <th className="num">{t("cost")}</th>
                 <th className="num">{t("bulkCurrentSellingPrice")}</th>
@@ -258,9 +258,9 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
             </thead>
             <tbody>
               {quotes.map((line) => (
-                <tr data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-raw={line.quote.rawPriceLak ?? ""} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
+                <tr data-barcode={line.barcode} data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-raw={line.quote.rawPriceLak ?? ""} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
                   <td className="font-semibold"><WhiteTableText>{line.localeName}</WhiteTableText></td>
-                  <td className="font-mono text-xs">{line.sku}</td>
+                  <td className="font-mono text-xs" data-testid="products-bulk-preview-barcode">{line.barcode || "—"}</td>
                   <td className="mid">{line.unitName}</td>
                   <td className="num">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
                   <td className="num">{formatLak(line.priceLak)}</td>

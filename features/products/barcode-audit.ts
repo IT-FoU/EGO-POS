@@ -37,6 +37,14 @@ export type BarcodeAuditProduct = {
   units?: BarcodeAuditUnit[] | null;
 };
 
+export type BarcodeAuditRelatedProduct = {
+  nameEn: string;
+  nameLo: string;
+  productId: string;
+  productName: string;
+  sku: string;
+};
+
 export type BarcodeAuditIssue = {
   barcode: string;
   details: "missing_barcode" | "scan_conflict" | "shared_barcode";
@@ -45,6 +53,7 @@ export type BarcodeAuditIssue = {
   nameLo: string;
   productId: string;
   productName: string;
+  relatedProducts: BarcodeAuditRelatedProduct[];
   sku: string;
   status: string;
   unitName: string;
@@ -76,7 +85,7 @@ type ScanTarget = {
 };
 
 export function buildBarcodeAudit(products: BarcodeAuditProduct[]): BarcodeAuditResult {
-  const issues: BarcodeAuditIssue[] = [];
+  const issues: DraftIssue[] = [];
   let unitsChecked = 0;
   for (const product of products) {
     unitsChecked += sellableCoverageUnits(product).length;
@@ -116,7 +125,7 @@ export function buildBarcodeAudit(products: BarcodeAuditProduct[]): BarcodeAudit
     }
   }
 
-  const ordered = issues.sort(compareIssues);
+  const ordered = attachRelatedProducts(issues.sort(compareIssues));
   const missingProductIds = [...new Set(ordered.filter((issue) => issue.issue === "missing").map((issue) => issue.productId))].sort();
   return {
     conflictCount: ordered.filter((issue) => issue.issue === "conflict").length,
@@ -131,8 +140,19 @@ export function buildBarcodeAudit(products: BarcodeAuditProduct[]): BarcodeAudit
   };
 }
 
+export function relatedProductLabel(
+  issue: Pick<BarcodeAuditIssue, "relatedProducts">,
+  nameOf: (product: BarcodeAuditRelatedProduct) => string = (product) => product.productName,
+) {
+  const named = issue.relatedProducts.map((product) => ({ name: nameOf(product), product }));
+  const counts = new Map<string, number>();
+  for (const item of named) counts.set(item.name, (counts.get(item.name) ?? 0) + 1);
+  const labels = named.map((item) => (counts.get(item.name)! > 1 && item.product.sku ? `${item.name} (${item.product.sku})` : item.name));
+  return labels.length > 0 ? labels.join(", ") : "—";
+}
+
 export function barcodeAuditCsv(issues: BarcodeAuditIssue[], labels: Record<BarcodeAuditIssue["details"] | BarcodeAuditIssueType, string>) {
-  const headers = ["Product Name", "SKU", "Unit", "Barcode", "Issue Type", "Details"];
+  const headers = ["Product Name", "SKU", "Unit", "Barcode", "Issue Type", "Details", "Related Product"];
   const lines = [
     headers.join(","),
     ...issues.map((issue) => [
@@ -142,6 +162,7 @@ export function barcodeAuditCsv(issues: BarcodeAuditIssue[], labels: Record<Barc
       issue.barcode,
       labels[issue.issue] ?? issue.issue,
       labels[issue.details] ?? issue.details,
+      relatedProductLabel(issue),
     ].map(csvCell).join(",")),
   ];
   return `\uFEFF${lines.join("\n")}\n`;
@@ -225,7 +246,40 @@ function ambiguousKeys(group: ScanTarget[]) {
   return keys;
 }
 
-function compareIssues(left: BarcodeAuditIssue, right: BarcodeAuditIssue) {
+type DraftIssue = Omit<BarcodeAuditIssue, "relatedProducts">;
+
+function attachRelatedProducts(issues: DraftIssue[]): BarcodeAuditIssue[] {
+  const byBarcode = new Map<string, DraftIssue[]>();
+  for (const issue of issues) {
+    if (!issue.barcode || issue.issue === "missing") continue;
+    const group = byBarcode.get(issue.barcode) ?? [];
+    group.push(issue);
+    byBarcode.set(issue.barcode, group);
+  }
+  return issues.map((issue) => ({
+    ...issue,
+    relatedProducts: relatedProductsFor(issue, byBarcode.get(issue.barcode) ?? []),
+  }));
+}
+
+function relatedProductsFor(issue: DraftIssue, group: DraftIssue[]): BarcodeAuditRelatedProduct[] {
+  const seen = new Set<string>();
+  const related: BarcodeAuditRelatedProduct[] = [];
+  for (const other of group) {
+    if (other.productId === issue.productId || seen.has(other.productId)) continue;
+    seen.add(other.productId);
+    related.push({
+      nameEn: other.nameEn,
+      nameLo: other.nameLo,
+      productId: other.productId,
+      productName: other.productName,
+      sku: other.sku,
+    });
+  }
+  return related.sort((left, right) => left.productName.localeCompare(right.productName) || left.productId.localeCompare(right.productId));
+}
+
+function compareIssues(left: DraftIssue, right: DraftIssue) {
   const order = { missing: 0, conflict: 1, duplicate: 2 };
   return order[left.issue] - order[right.issue]
     || left.productName.localeCompare(right.productName)
@@ -233,7 +287,7 @@ function compareIssues(left: BarcodeAuditIssue, right: BarcodeAuditIssue) {
     || left.barcode.localeCompare(right.barcode);
 }
 
-function issueFrom(product: BarcodeAuditProduct, issue: Pick<BarcodeAuditIssue, "barcode" | "details" | "issue" | "unitName">): BarcodeAuditIssue {
+function issueFrom(product: BarcodeAuditProduct, issue: Pick<DraftIssue, "barcode" | "details" | "issue" | "unitName">): DraftIssue {
   return {
     ...issue,
     nameEn: clean(product.nameEn),

@@ -6,6 +6,7 @@ import { auditProductBarcodesAction } from "@/features/products/actions";
 import {
   barcodeAuditCsv,
   barcodeAuditFilename,
+  relatedProductLabel,
   type BarcodeAuditIssue,
   type BarcodeAuditIssueType,
   type BarcodeAuditResult,
@@ -61,7 +62,8 @@ export function BarcodeAuditDrawer({ onClose }: { onClose: () => void }) {
     if (filter !== "all" && issue.issue !== filter) return false;
     const needle = search.trim().toLowerCase();
     if (!needle) return true;
-    return [issue.productName, issue.nameEn, issue.nameLo, issue.sku, issue.barcode, issue.unitName].some((value) => value.toLowerCase().includes(needle));
+    const related = relatedProductLabel(issue, (product) => localizedProductName(product, locale));
+    return [issue.productName, issue.nameEn, issue.nameLo, issue.sku, issue.barcode, issue.unitName, related].some((value) => value.toLowerCase().includes(needle));
   });
 
   function exportAudit() {
@@ -69,6 +71,10 @@ export function BarcodeAuditDrawer({ onClose }: { onClose: () => void }) {
     const csv = barcodeAuditCsv(rows.map((issue) => ({
       ...issue,
       productName: localizedProductName({ nameEn: issue.nameEn, nameLo: issue.nameLo }, locale),
+      relatedProducts: issue.relatedProducts.map((product) => ({
+        ...product,
+        productName: localizedProductName(product, locale),
+      })),
     })), labels);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -107,7 +113,7 @@ export function BarcodeAuditDrawer({ onClose }: { onClose: () => void }) {
       </div>
       <input className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" data-testid="products-barcode-audit-search" placeholder={t("auditSearch")} value={search} onChange={(event) => setSearch(event.target.value)}/>
       {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-      <WhiteDataTable minWidth="980px" testId="products-barcode-audit-table">
+      <WhiteDataTable minWidth="1120px" testId="products-barcode-audit-table">
         <thead>
           <tr>
             <th>{t("auditProduct")}</th>
@@ -115,6 +121,7 @@ export function BarcodeAuditDrawer({ onClose }: { onClose: () => void }) {
             <th className="mid">{t("auditUnit")}</th>
             <th>{t("auditBarcode")}</th>
             <th>{t("auditIssue")}</th>
+            <th>{t("auditRelatedProduct")}</th>
             <th>{t("status")}</th>
             <th className="mid">{t("action")}</th>
           </tr>
@@ -125,10 +132,10 @@ export function BarcodeAuditDrawer({ onClose }: { onClose: () => void }) {
           ))}
           {!loading && rows.length === 0 ? (
             <tr>
-              <td className="mid" colSpan={7} data-testid="products-barcode-audit-empty">{filter === "invalid" ? t("auditInvalidNote") : t("auditNoIssues")}</td>
+              <td className="mid" colSpan={8} data-testid="products-barcode-audit-empty">{filter === "invalid" ? t("auditInvalidNote") : t("auditNoIssues")}</td>
             </tr>
           ) : null}
-          {loading ? <tr><td className="mid" colSpan={7}>{t("auditBusy")}</td></tr> : null}
+          {loading ? <tr><td className="mid" colSpan={8}>{t("auditBusy")}</td></tr> : null}
         </tbody>
       </WhiteDataTable>
       <div className="flex flex-wrap justify-end gap-2">
@@ -157,6 +164,7 @@ function AuditRow({ detail, issue, label, locale, openLabel }: {
         <div className="font-semibold">{label}</div>
         <div className="ego-muted text-xs">{detail}</div>
       </td>
+      <td data-testid="products-barcode-audit-related"><WhiteTableText>{relatedProductLabel(issue, (product) => localizedProductName(product, locale))}</WhiteTableText></td>
       <td>{productStatusLabel(issue.status, locale)}</td>
       <td className="mid">
         <Link className="ego-row-open" data-testid="products-barcode-audit-open" href={`/products/${issue.productId}/edit`}>{openLabel}</Link>
