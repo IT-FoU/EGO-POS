@@ -10,6 +10,7 @@ import {
   type BarcodeAuditIssueType,
   type BarcodeAuditResult,
 } from "@/features/products/barcode-audit";
+import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import type { SupportedLocale } from "@/lib/constants";
 import { productStatusLabel, tProducts } from "@/lib/i18n/products-copy";
@@ -106,30 +107,30 @@ export function BarcodeAuditDrawer({ onClose }: { onClose: () => void }) {
       </div>
       <input className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none transition focus:border-primary" data-testid="products-barcode-audit-search" placeholder={t("auditSearch")} value={search} onChange={(event) => setSearch(event.target.value)}/>
       {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-      <section className="overflow-hidden rounded-lg border border-border bg-background">
-        <div className="max-h-[420px] overflow-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="p-3">{t("auditProduct")}</th>
-                <th className="p-3">{t("sku")}</th>
-                <th className="p-3">{t("auditUnit")}</th>
-                <th className="p-3">{t("auditBarcode")}</th>
-                <th className="p-3">{t("auditIssue")}</th>
-                <th className="p-3">{t("status")}</th>
-                <th className="p-3"/>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((issue, index) => (
-                <AuditRow detail={labels[issue.details]} issue={issue} key={`${issue.issue}-${issue.productId}-${issue.unitName}-${issue.barcode}-${index}`} label={labels[issue.issue]} locale={locale} openLabel={t("auditOpenProduct")}/>
-              ))}
-            </tbody>
-          </table>
-          {!loading && rows.length === 0 ? <div className="p-6 text-center text-sm text-muted-foreground" data-testid="products-barcode-audit-empty">{filter === "invalid" ? t("auditInvalidNote") : t("auditNoIssues")}</div> : null}
-          {loading ? <div className="p-6 text-center text-sm text-muted-foreground">{t("auditBusy")}</div> : null}
-        </div>
-      </section>
+      <WhiteDataTable minWidth="980px" testId="products-barcode-audit-table">
+        <thead>
+          <tr>
+            <th>{t("auditProduct")}</th>
+            <th>{t("sku")}</th>
+            <th className="mid">{t("auditUnit")}</th>
+            <th>{t("auditBarcode")}</th>
+            <th>{t("auditIssue")}</th>
+            <th>{t("status")}</th>
+            <th className="mid">{t("action")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((issue, index) => (
+            <AuditRow detail={labels[issue.details]} issue={issue} key={`${issue.issue}-${issue.productId}-${issue.unitName}-${issue.barcode}-${index}`} label={labels[issue.issue]} locale={locale} openLabel={t("auditOpenProduct")}/>
+          ))}
+          {!loading && rows.length === 0 ? (
+            <tr>
+              <td className="mid" colSpan={7} data-testid="products-barcode-audit-empty">{filter === "invalid" ? t("auditInvalidNote") : t("auditNoIssues")}</td>
+            </tr>
+          ) : null}
+          {loading ? <tr><td className="mid" colSpan={7}>{t("auditBusy")}</td></tr> : null}
+        </tbody>
+      </WhiteDataTable>
       <div className="flex flex-wrap justify-end gap-2">
         <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("closeDrawer")}</button>
         <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-barcode-audit-export" disabled={!audit} type="button" onClick={exportAudit}>{t("auditExport")}</button>
@@ -147,18 +148,18 @@ function AuditRow({ detail, issue, label, locale, openLabel }: {
 }) {
   const name = localizedProductName({ nameEn: issue.nameEn, nameLo: issue.nameLo }, locale);
   return (
-    <tr className="border-t border-border" data-testid="products-barcode-audit-row">
-      <td className="p-3 font-semibold">{name}</td>
-      <td className="p-3 font-mono text-xs">{issue.sku || "-"}</td>
-      <td className="p-3">{issue.unitName}</td>
-      <td className="p-3 font-mono text-xs">{issue.barcode || "-"}</td>
-      <td className="p-3">
+    <tr data-testid="products-barcode-audit-row">
+      <td className="font-semibold">{name}</td>
+      <td className="font-mono text-xs">{issue.sku || "-"}</td>
+      <td className="mid">{issue.unitName}</td>
+      <td className="font-mono text-xs">{issue.barcode || "-"}</td>
+      <td>
         <div className="font-semibold">{label}</div>
-        <div className="text-xs text-muted-foreground">{detail}</div>
+        <div className="ego-muted text-xs">{detail}</div>
       </td>
-      <td className="p-3">{productStatusLabel(issue.status, locale)}</td>
-      <td className="p-3 text-right">
-        <Link className="inline-flex h-9 items-center rounded-md border border-border px-3 text-xs font-semibold" data-testid="products-barcode-audit-open" href={`/products/${issue.productId}/edit`}>{openLabel}</Link>
+      <td>{productStatusLabel(issue.status, locale)}</td>
+      <td className="mid">
+        <Link className="ego-row-open" data-testid="products-barcode-audit-open" href={`/products/${issue.productId}/edit`}>{openLabel}</Link>
       </td>
     </tr>
   );

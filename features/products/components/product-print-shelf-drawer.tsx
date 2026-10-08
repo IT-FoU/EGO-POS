@@ -5,7 +5,7 @@ import Link from "next/link";
 import { markShelfLabelsPrintedAction, searchBarcodePrintProductsAction } from "@/features/products/actions";
 import { encodeCode128B, fitBarcodeLabelName, parseLabelMillimetres, parsePrintQuantity, unitPrintRole, type BarcodeModule, type BarcodePrintProduct } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
-import { SelectedProductsList, selectedProductsPrintGridClassName, selectedProductsRowClassName } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import {
   DEFAULT_SHELF_LABEL_FIELDS,
   SHELF_LABEL_HEIGHT_MM,
@@ -225,22 +225,24 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <SelectedProductsList>
-            <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName} sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground`}>
-              <span>{t("productName")}</span>
-              <span>{t("unit")}</span>
-              <span>{t("barcode")}</span>
-              <span>{t("printQuantity")}</span>
-              <span/>
-            </div>
+          <WhiteDataTable minWidth="860px">
+            <thead>
+              <tr>
+                <th>{t("productName")}</th>
+                <th className="mid">{t("unit")}</th>
+                <th>{t("barcode")}</th>
+                <th className="num">{t("printQuantity")}</th>
+                <th className="mid">{t("action")}</th>
+              </tr>
+            </thead>
             {products.map((product) => (
-              <div data-testid="products-shelf-product" key={product.id}>
+              <tbody data-testid="products-shelf-product" key={product.id}>
                 {lines.filter((line) => line.productId === product.id).map((line) => (
                   <UnitRow key={line.key} line={line} productId={product.id} productName={localizedProductName(product, locale)} t={t} onChange={updateDraft} onRemove={() => setProducts((current) => current.filter((item) => item.id !== product.id))}/>
                 ))}
-              </div>
+              </tbody>
             ))}
-          </SelectedProductsList>
+          </WhiteDataTable>
           <ShelfSettings customHeight={customHeight} customWidth={customWidth} fields={fields} preset={preset} style={style} t={t} onCustomHeight={setCustomHeight} onCustomWidth={setCustomWidth} onFields={setFields} onLayout={chooseLayout} onPreset={setPreset} onStyle={setStyle}/>
           <JobSummary layout={style.layout} productCount={products.length} size={size} t={t} total={job.overLimit ? 0 : job.total} units={selectedUnits}/>
           {sample ? <ShelfCard fields={fields} heightMm={size.heightMm} line={sample} localeName={sample.localeName} override={overrides[sample.key]} preview style={style} widthMm={size.widthMm}/> : null}
@@ -305,20 +307,22 @@ function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
   t: (key: string) => string;
 }) {
   return (
-    <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName}`} data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-reprint={line.labelReprintNeeded ? "1" : "0"} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
-      <span className="truncate font-semibold">{productName}</span>
-      <label className="flex items-center gap-2 font-semibold">
-        <input checked={line.included} data-testid="products-shelf-include" disabled={line.missingPrice} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
-        <span className="truncate">{line.unitName}</span>
-      </label>
-      <span className="truncate text-xs">
-        {line.barcode ? <span className="font-mono">{line.barcode}</span> : <span className="text-muted-foreground">{t("shelfNoBarcode")}</span>}
-        {line.missingPrice ? <span className="ml-2 font-semibold text-danger">{t("printMissingPrice")}</span> : <span className="ml-2 font-semibold">{formatLak(line.priceLak ?? 0)}</span>}
-        {line.missingPrice ? <Link className="ml-2 font-semibold text-primary" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
-      </span>
-      <input className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm" data-testid="products-shelf-qty" disabled={line.missingPrice} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/>
-      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-shelf-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button>
-    </div>
+    <tr data-barcode={line.barcode} data-price={line.priceLak ?? ""} data-reprint={line.labelReprintNeeded ? "1" : "0"} data-role={unitPrintRole(line.unitName)} data-testid={line.missingPrice ? "products-shelf-missing" : "products-shelf-unit"} data-unit={line.unitName}>
+      <td className="font-semibold">{productName}</td>
+      <td className="mid">
+        <label className="inline-flex items-center gap-2 font-semibold">
+          <input checked={line.included} data-testid="products-shelf-include" disabled={line.missingPrice} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
+          <span>{line.unitName}</span>
+        </label>
+      </td>
+      <td>
+        {line.barcode ? <span className="font-mono">{line.barcode}</span> : <span className="ego-muted">{t("shelfNoBarcode")}</span>}
+        {line.missingPrice ? <span className="ego-danger ml-2">{t("printMissingPrice")}</span> : <span className="ml-2 font-semibold">{formatLak(line.priceLak ?? 0)}</span>}
+        {line.missingPrice ? <Link className="ego-row-open ml-2" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
+      </td>
+      <td className="num"><input data-testid="products-shelf-qty" disabled={line.missingPrice} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/></td>
+      <td className="mid"><button className="ego-row-remove" data-testid="products-shelf-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button></td>
+    </tr>
   );
 }
 

@@ -12,7 +12,7 @@ import {
 } from "@/features/products/bulk-price";
 import type { BulkPriceApplyResult, BulkPriceJobAudit } from "@/features/products/bulk-price-service";
 import { formatLak } from "@/features/products/format";
-import { SelectedProductsList, selectedProductsPriceGridClassName, selectedProductsRowClassName } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import type { ProductListQuery } from "@/features/products/list-query";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-refresh";
@@ -190,24 +190,26 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <SelectedProductsList>
-            <div className={`${selectedProductsRowClassName} ${selectedProductsPriceGridClassName} sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground`}>
-              <span>{t("productName")}</span>
-              <span>{t("unit")}</span>
-              <span>{t("barcode")}</span>
-              <span className="text-right">{t("cost")}</span>
-              <span className="text-right">{t("bulkCurrentSellingPrice")}</span>
-              <span className="text-right">{t("bulkNewSellingPrice")}</span>
-              <span/>
-            </div>
+          <WhiteDataTable minWidth="1120px">
+            <thead>
+              <tr>
+                <th>{t("productName")}</th>
+                <th className="mid">{t("unit")}</th>
+                <th>{t("barcode")}</th>
+                <th className="num">{t("cost")}</th>
+                <th className="num">{t("bulkCurrentSellingPrice")}</th>
+                <th className="num">{t("bulkNewSellingPrice")}</th>
+                <th className="mid">{t("action")}</th>
+              </tr>
+            </thead>
             {products.map((product) => (
-              <div data-testid="products-bulk-product" key={product.id}>
+              <tbody data-testid="products-bulk-product" key={product.id}>
                 {lines.filter((line) => line.productId === product.id).map((line) => (
                   <UnitRow direction={direction} jobRounding={jobRounding} key={line.key} line={line} mode={mode} percent={percent} productName={localizedProductName(product, locale)} roundManual={roundManual && roundChoice !== "unit"} t={t} onManual={(value) => setManualPrices((current) => ({ ...current, [line.key]: value.replace(/[^\d]/g, "") }))} onRemove={() => setProducts((current) => current.filter((item) => item.id !== product.id))} onToggle={(checked) => setIncluded((current) => ({ ...current, [line.key]: checked }))}/>
                 ))}
-              </div>
+              </tbody>
             ))}
-          </SelectedProductsList>
+          </WhiteDataTable>
           <div className="grid gap-3 rounded-lg border border-border p-4">
             <div className="flex flex-wrap gap-2">
               <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${mode === "percent" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-mode-percent" type="button" onClick={() => setMode("percent")}>{t("bulkPercent")}</button>
@@ -263,34 +265,32 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
             {" · "}{t("bulkUnchanged")}: {unchanged.length}
             {" · "}{t("bulkInvalid")}: {invalid.length}
           </p>
-          <div className="max-h-[28rem] overflow-auto rounded-lg border border-border">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="sticky top-0 bg-card text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="p-2">{t("product")}</th>
-                  <th className="p-2">SKU</th>
-                  <th className="p-2">{t("unit")}</th>
-                  <th className="p-2 text-right">{t("cost")}</th>
-                  <th className="p-2 text-right">{t("bulkCurrentSellingPrice")}</th>
-                  <th className="p-2 text-right">{t("bulkNewSellingPrice")}</th>
-                  <th className="p-2 text-right">{t("bulkDifference")}</th>
+          <WhiteDataTable minWidth="980px" testId="products-bulk-quote-table">
+            <thead>
+              <tr>
+                <th>{t("product")}</th>
+                <th>SKU</th>
+                <th className="mid">{t("unit")}</th>
+                <th className="num">{t("cost")}</th>
+                <th className="num">{t("bulkCurrentSellingPrice")}</th>
+                <th className="num">{t("bulkNewSellingPrice")}</th>
+                <th className="num">{t("bulkDifference")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {quotes.map((line) => (
+                <tr data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
+                  <td className="font-semibold">{line.localeName}</td>
+                  <td className="font-mono text-xs">{line.sku}</td>
+                  <td className="mid">{line.unitName}</td>
+                  <td className="num">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
+                  <td className="num">{formatLak(line.priceLak)}</td>
+                  <td className="num">{line.quote.newPriceLak === null ? t(line.quote.reason === "negative" ? "bulkNegative" : "bulkInvalid") : formatLak(line.quote.newPriceLak)}</td>
+                  <td className="num">{line.quote.amount === null ? "—" : `${line.quote.amount > 0 ? "+" : ""}${formatLak(line.quote.amount)}${line.quote.percent === null ? "" : ` (${line.quote.percent > 0 ? "+" : ""}${line.quote.percent}%)`}`}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {quotes.map((line) => (
-                  <tr className="border-t border-border" data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
-                    <td className="p-2 font-semibold">{line.localeName}</td>
-                    <td className="p-2 font-mono text-xs">{line.sku}</td>
-                    <td className="p-2">{line.unitName}</td>
-                    <td className="p-2 text-right">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
-                    <td className="p-2 text-right">{formatLak(line.priceLak)}</td>
-                    <td className="p-2 text-right">{line.quote.newPriceLak === null ? t(line.quote.reason === "negative" ? "bulkNegative" : "bulkInvalid") : formatLak(line.quote.newPriceLak)}</td>
-                    <td className="p-2 text-right">{line.quote.amount === null ? "—" : `${line.quote.amount > 0 ? "+" : ""}${formatLak(line.quote.amount)}${line.quote.percent === null ? "" : ` (${line.quote.percent > 0 ? "+" : ""}${line.quote.percent}%)`}`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </WhiteDataTable>
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
           <div className="flex flex-wrap justify-end gap-2">
             <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-back" type="button" onClick={() => setPhase("choose")}>{t("printBack")}</button>
@@ -338,22 +338,26 @@ function UnitRow({ direction, jobRounding, line, mode, onManual, onRemove, onTog
 }) {
   const quote = quoteForLine(line, { direction, jobRounding, mode, percent, roundManual });
   return (
-    <div className={`${selectedProductsRowClassName} ${selectedProductsPriceGridClassName}`} data-price={line.priceLak} data-product={line.productId} data-role={unitPrintRole(line.unitName)} data-rounding={line.roundingLak} data-sku={line.sku} data-testid="products-bulk-unit" data-unit={line.unitName} data-unit-id={line.unitId}>
-      <span className="truncate font-semibold">{productName}</span>
-      <label className="flex items-center gap-2 font-semibold">
-        <input checked={line.included} data-testid="products-bulk-include" type="checkbox" onChange={(event) => onToggle(event.target.checked)}/>
-        <span className="truncate">{line.unitName}</span>
-      </label>
-      <span className="truncate font-mono text-xs">{line.barcode || "—"}</span>
-      <span className="text-right">{line.costLak === null ? "—" : formatLak(line.costLak)}</span>
-      <span className="text-right">{formatLak(line.priceLak)}</span>
-      {mode === "manual" ? (
-        <input className="h-8 w-full rounded-md border border-border bg-white px-2 text-right text-sm" data-testid="products-bulk-manual-price" inputMode="numeric" value={line.manual} onChange={(event) => onManual(event.target.value)}/>
-      ) : (
-        <span className="text-right font-semibold" data-testid="products-bulk-proposed">{quote.newPriceLak === null ? "—" : formatLak(quote.newPriceLak)}</span>
-      )}
-      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-bulk-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button>
-    </div>
+    <tr data-price={line.priceLak} data-product={line.productId} data-role={unitPrintRole(line.unitName)} data-rounding={line.roundingLak} data-sku={line.sku} data-testid="products-bulk-unit" data-unit={line.unitName} data-unit-id={line.unitId}>
+      <td className="font-semibold">{productName}</td>
+      <td className="mid">
+        <label className="inline-flex items-center gap-2 font-semibold">
+          <input checked={line.included} data-testid="products-bulk-include" type="checkbox" onChange={(event) => onToggle(event.target.checked)}/>
+          <span>{line.unitName}</span>
+        </label>
+      </td>
+      <td className="font-mono text-xs">{line.barcode || "—"}</td>
+      <td className="num">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
+      <td className="num">{formatLak(line.priceLak)}</td>
+      <td className="num">
+        {mode === "manual" ? (
+          <input data-testid="products-bulk-manual-price" inputMode="numeric" value={line.manual} onChange={(event) => onManual(event.target.value)}/>
+        ) : (
+          <span className="font-semibold" data-testid="products-bulk-proposed">{quote.newPriceLak === null ? "—" : formatLak(quote.newPriceLak)}</span>
+        )}
+      </td>
+      <td className="mid"><button className="ego-row-remove" data-testid="products-bulk-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button></td>
+    </tr>
   );
 }
 

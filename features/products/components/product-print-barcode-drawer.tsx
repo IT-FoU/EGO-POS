@@ -31,7 +31,7 @@ import {
   type BarcodePrintProduct,
 } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
-import { SelectedProductsList, selectedProductsPrintGridClassName, selectedProductsRowClassName } from "@/features/products/components/selected-products-list";
+import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
@@ -194,22 +194,24 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <SelectedProductsList>
-            <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName} sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground`}>
-              <span>{t("productName")}</span>
-              <span>{t("unit")}</span>
-              <span>{t("barcode")}</span>
-              <span>{t("printQuantity")}</span>
-              <span/>
-            </div>
+          <WhiteDataTable minWidth="860px">
+            <thead>
+              <tr>
+                <th>{t("productName")}</th>
+                <th className="mid">{t("unit")}</th>
+                <th>{t("barcode")}</th>
+                <th className="num">{t("printQuantity")}</th>
+                <th className="mid">{t("action")}</th>
+              </tr>
+            </thead>
             {products.map((product) => (
-              <div data-testid="products-print-product" key={product.id}>
+              <tbody data-testid="products-print-product" key={product.id}>
                 {lines.filter((line) => line.productId === product.id).map((line) => (
                   <UnitRow key={line.key} line={line} productId={product.id} productName={localizedProductName(product, locale)} t={t} onChange={updateDraft} onRemove={() => removeProduct(product.id)}/>
                 ))}
-              </div>
+              </tbody>
             ))}
-          </SelectedProductsList>
+          </WhiteDataTable>
           <LabelSettings customHeight={customHeight} customWidth={customWidth} fields={fields} layout={layout} preset={preset} t={t} onCustomHeight={setCustomHeight} onCustomWidth={setCustomWidth} onFields={setFields} onLayout={setLayout} onPreset={setPreset}/>
           {sample ? <LivePreview fields={fields} layout={layout} line={sample} locale={locale} override={overrides[sample.key]} size={size} t={t} onEdit={() => setEditingKey(sample.key)}/> : null}
           {editingKey ? <OverrideEditor fields={fields} line={lines.find((line) => line.key === editingKey)} override={overrides[editingKey]} t={t} onChange={(patch) => setOverrides((current) => ({ ...current, [editingKey]: { ...current[editingKey], ...patch } }))} onClose={() => setEditingKey("")} onReset={() => { setOverrides((current) => { const next = { ...current }; delete next[editingKey]; return next; }); setEditingKey(""); }}/> : null}
@@ -265,21 +267,23 @@ function UnitRow({ line, onChange, onRemove, productId, productName, t }: {
 }) {
   const blocked = line.missing || !line.encodable;
   return (
-    <div className={`${selectedProductsRowClassName} ${selectedProductsPrintGridClassName}`} data-barcode={line.barcode} data-role={unitPrintRole(line.unitName)} data-testid={blocked ? "products-print-missing" : "products-print-unit"} data-unit={line.unitName}>
-      <span className="truncate font-semibold">{productName}</span>
-      <label className="flex items-center gap-2 font-semibold">
-        <input checked={line.included} data-testid="products-print-include" disabled={blocked} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
-        <span className="truncate">{line.unitName}</span>
-      </label>
-      <span className="truncate text-xs">
-        {line.missing ? <span className="font-semibold text-danger">{t("printMissingBarcode")}</span> : null}
-        {!line.missing && !line.encodable ? <span className="font-semibold text-danger">{t("printUnencodable")}</span> : null}
+    <tr data-barcode={line.barcode} data-role={unitPrintRole(line.unitName)} data-testid={blocked ? "products-print-missing" : "products-print-unit"} data-unit={line.unitName}>
+      <td className="font-semibold">{productName}</td>
+      <td className="mid">
+        <label className="inline-flex items-center gap-2 font-semibold">
+          <input checked={line.included} data-testid="products-print-include" disabled={blocked} type="checkbox" onChange={(event) => onChange(line.key, { included: event.target.checked })}/>
+          <span>{line.unitName}</span>
+        </label>
+      </td>
+      <td>
+        {line.missing ? <span className="ego-danger">{t("printMissingBarcode")}</span> : null}
+        {!line.missing && !line.encodable ? <span className="ego-danger">{t("printUnencodable")}</span> : null}
         {!blocked ? <span className="font-mono">{line.barcode}</span> : null}
-        {blocked ? <Link className="ml-2 font-semibold text-primary" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
-      </span>
-      <input className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm" data-testid="products-print-qty" disabled={blocked} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/>
-      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-print-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button>
-    </div>
+        {blocked ? <Link className="ego-row-open ml-2" href={`/products/${productId}/edit`}>{t("auditOpenProduct")}</Link> : null}
+      </td>
+      <td className="num"><input data-testid="products-print-qty" disabled={blocked} inputMode="numeric" value={line.qty} onChange={(event) => onChange(line.key, { qty: event.target.value })}/></td>
+      <td className="mid"><button className="ego-row-remove" data-testid="products-print-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button></td>
+    </tr>
   );
 }
 

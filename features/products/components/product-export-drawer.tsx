@@ -9,6 +9,7 @@ import {
   type ProductExportField,
 } from "@/features/products/product-export";
 import type { ProductListQuery } from "@/features/products/list-query";
+import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import { fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
@@ -198,19 +199,25 @@ export function ExportProductsDrawer({ canViewCost = true, filteredCount, onClos
           <p className="text-sm">{t("products")}: {preview.productCount}</p>
           <p className="text-sm">{t("exportUnits")}: {preview.unitCount}</p>
           <p className="text-sm">{t("images")}: {preview.imageCount}</p>
-          <p className="text-sm text-muted-foreground">{preview.headers.join(", ")}</p>
           {preview.sampleRows.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-xs">
-                <tbody>
-                  {preview.sampleRows.map((row, index) => (
-                    <tr key={`${row[0] ?? "row"}-${index}`}>
-                      {row.slice(0, 6).map((cell, cellIndex) => <td className="border-b border-border px-2 py-1" key={`${index}-${cellIndex}`}>{cell || "-"}</td>)}
-                    </tr>
+            <WhiteDataTable minWidth={`${Math.max(preview.headers.length, 1) * 148}px`} testId="products-export-preview-table">
+              <thead>
+                <tr>
+                  {preview.headers.map((header, index) => (
+                    <th key={`${header}-${index}`}>{header}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.sampleRows.map((row, index) => (
+                  <tr data-testid="products-export-preview-row" key={`${row[0] ?? "row"}-${index}`}>
+                    {preview.headers.map((header, cellIndex) => (
+                      <td key={`${index}-${header}-${cellIndex}`}>{row[cellIndex] || "-"}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </WhiteDataTable>
           ) : <p className="text-sm">{t("exportNoProducts")}</p>}
         </section>
       ) : null}
