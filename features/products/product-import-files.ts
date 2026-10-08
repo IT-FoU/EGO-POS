@@ -1,3 +1,9 @@
+import {
+  classifyEmbeddedImages,
+  type EmbeddedImageAnchor,
+  type ProductImportEmbeddedImage,
+} from "@/features/products/product-import-images";
+import { inspectZipCentralDirectory } from "@/features/products/product-import-zip";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import {
@@ -21,6 +27,7 @@ export type ProductImportSheetInfo = {
 export type ProductImportFileRead = {
   format: ProductImportFormat | null;
   grid: ProductImportGridRow[];
+  images: ProductImportEmbeddedImage[];
   parsed: ProductImportParseResult;
   selectedSheet: string | null;
   sheets: ProductImportSheetInfo[];
@@ -59,6 +66,7 @@ export async function readProductImportFile(input: {
     return {
       format,
       grid: table.rows,
+      images: [],
       parsed: mapProductImportGrid(table.rows, table.skippedBlankRows),
       selectedSheet: null,
       sheets: [],
@@ -66,6 +74,10 @@ export async function readProductImportFile(input: {
   }
 
   try {
+    if (format === "xlsx" || format === "ods") {
+      const zip = inspectZipCentralDirectory(input.bytes);
+      if (!zip.ok) return blocked(zip.code, format);
+    }
     const workbook = format === "xlsx"
       ? await readXlsxWorkbook(input.bytes)
       : readSheetJsWorkbook(input.bytes);
@@ -80,6 +92,7 @@ function blocked(code: string, format: ProductImportFormat | null = null, detail
   return {
     format,
     grid: [],
+    images: [],
     parsed: { fileIssues: [issue], rows: [], skippedBlankRows: 0 },
     selectedSheet: null,
     sheets: [],
@@ -127,6 +140,7 @@ async function readXlsxWorkbook(bytes: Uint8Array): Promise<ImportedWorkbook> {
   return {
     sheets: workbook.worksheets.map((sheet) => ({
       empty: sheet.actualRowCount === 0,
+      images: () => sheetEmbeddedImages(workbook, sheet),
       name: sheet.name,
       rows: () => excelRows(sheet),
     })),
@@ -150,6 +164,7 @@ function readSheetJsWorkbook(bytes: Uint8Array): ImportedWorkbook {
       const grid = sheet ? sheetJsRows(sheet) : { rows: [], skippedBlankRows: 0, tooMany: false };
       return {
         empty: grid.rows.length === 0,
+        images: () => [],
         name,
         rows: () => grid,
       };
@@ -159,6 +174,7 @@ function readSheetJsWorkbook(bytes: Uint8Array): ImportedWorkbook {
 
 type ImportedSheet = {
   empty: boolean;
+  images: () => EmbeddedImageAnchor[];
   name: string;
   rows: () => { rows: ProductImportGridRow[]; skippedBlankRows: number; tooMany: boolean };
 };
@@ -184,6 +200,7 @@ function workbookToImport(workbook: ImportedWorkbook, sheetName: string | undefi
         skippedBlankRows: grid.skippedBlankRows,
       },
       grid: [],
+      images: [],
       selectedSheet: selected.name,
       sheets,
     };
@@ -191,10 +208,26 @@ function workbookToImport(workbook: ImportedWorkbook, sheetName: string | undefi
   return {
     format,
     grid: grid.rows,
+    images: classifyEmbeddedImages(selected.images(), grid.rows.slice(1).map((row) => row.lineNumber)),
     parsed: mapProductImportGrid(grid.rows, grid.skippedBlankRows),
     selectedSheet: selected.name,
     sheets,
   };
+}
+
+function sheetEmbeddedImages(workbook: ExcelJS.Workbook, sheet: ExcelJS.Worksheet): EmbeddedImageAnchor[] {
+  const media = sheet.getImages?.() ?? [];
+  return media.flatMap((image) => {
+    const stored = workbook.getImage(Number(image.imageId));
+    const buffer = stored?.buffer;
+    if (!buffer) return [];
+    const range = image.range;
+    return [{
+      bottomRow: typeof range?.br?.nativeRow === "number" ? range.br.nativeRow : null,
+      bytes: new Uint8Array(buffer),
+      topRow: typeof range?.tl?.nativeRow === "number" ? range.tl.nativeRow : null,
+    }];
+  });
 }
 
 function excelRows(sheet: ExcelJS.Worksheet) {

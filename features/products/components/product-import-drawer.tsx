@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { importProductsFileAction, previewProductImportFileAction } from "@/features/products/actions";
+import { importProductsFileAction, previewProductImportFileAction, uploadProductImageAction } from "@/features/products/actions";
+import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
+import type { ProductImportEmbeddedImage } from "@/features/products/product-import-images";
 import {
   PRODUCT_IMPORT_BATCH_SIZE,
   PRODUCT_IMPORT_COLUMNS,
@@ -22,6 +24,9 @@ type PreviewData = {
   errorCount: number;
   fileIssues: ProductImportIssue[];
   format: string | null;
+  imageCount: number;
+  imageReviewCount: number;
+  images: ProductImportEmbeddedImage[];
   rows: ProductImportPreviewRow[];
   selectedSheet: string | null;
   sheets: Array<{ empty: boolean; name: string }>;
@@ -33,11 +38,13 @@ type PreviewData = {
 type StoredFile = {
   fileBase64: string;
   fileName: string;
+  size: number;
 };
 
 type ResultRow = {
   issues: ProductImportIssue[];
   outcome: "created" | "failed" | "skipped";
+  productId?: string;
   productName: string;
   rowNumber: number;
 };
@@ -54,6 +61,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [phase, setPhase] = useState<"idle" | "reading" | "validating" | "importing" | "done">("idle");
   const [message, setMessage] = useState("");
+  const [includeImages, setIncludeImages] = useState(true);
   const [result, setResult] = useState<{ created: number; failed: number; rows: ResultRow[]; skipped: number; warnings: number } | null>(null);
 
   function issueText(issue: ProductImportIssue) {
@@ -104,8 +112,9 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     setPreview(null);
     setResult(null);
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const stored = { fileBase64: bytesToBase64(bytes), fileName: file.name };
+    const stored = { fileBase64: bytesToBase64(bytes), fileName: file.name, size: file.size };
     setStoredFile(stored);
+    setIncludeImages(true);
     await validateFile(stored);
   }
 
@@ -170,7 +179,26 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
       warnings += batch.warnings;
       rows.push(...batch.rows);
       afterRow = batch.nextAfterRow;
+      setMessage(fillProductsCopy(t("importBatchProgress"), { created: String(created) }));
       if (batch.remaining <= 0) break;
+    }
+    let imageFailures = 0;
+    if (includeImages) {
+      for (const row of rows) {
+        const image = preview.images.find((item) => item.status === "mapped" && item.rowNumber === row.rowNumber && item.dataUrl);
+        if (row.outcome !== "created" || !row.productId || !image?.dataUrl) continue;
+        try {
+          const optimized = await optimizeProductImageFile(await fileFromDataUrl(image.dataUrl));
+          const form = new FormData();
+          form.set("main", optimized.main);
+          form.set("thumb", optimized.thumb);
+          form.set("setProductMain", "true");
+          const uploaded = await uploadProductImageAction(row.productId, form);
+          if (!uploaded.ok) imageFailures += 1;
+        } catch {
+          imageFailures += 1;
+        }
+      }
     }
     const summary = {
       created,
@@ -181,6 +209,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     };
     setResult(summary);
     setPhase("done");
+    setMessage(imageFailures > 0 ? t("importImageAttachFailed") : "");
     if (created > 0) await onImported();
   }
 
@@ -200,6 +229,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const formatLabel = preview?.format ? preview.format.toUpperCase() : "";
   const workbookSheets = preview?.sheets ?? [];
   const mappingColumns = preview?.columns ?? [];
+  const mappedImages = preview?.images ?? [];
+  const imageByRow = new Map(mappedImages.filter((image) => image.status === "mapped" && image.dataUrl).map((image) => [image.rowNumber, image]));
   const productNameMapped = mappingColumns.some((column) => column.status === "mapped" && column.choice === "product_name");
 
   return (
@@ -222,6 +253,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
         </button>
         {formatLabel ? <span className="rounded-full border border-border px-3 py-1 text-sm font-semibold" data-testid="products-import-format">{t("importFileFormat")}: {formatLabel}</span> : null}
         {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filename">{storedFile.fileName}</span> : null}
+        {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filesize">{formatImportFileSize(storedFile.size)}</span> : null}
         <input ref={fileRef} accept=".csv,.tsv,.xlsx,.xls,.ods,text/csv,text/tab-separated-values" className="hidden" data-testid="products-import-input" type="file" onChange={(event) => { void onFileChange(event.target.files?.[0]); event.target.value = ""; }}/>
       </div>
       {workbookSheets.length > 0 ? (
@@ -245,6 +277,20 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
             <p className="text-sm text-muted-foreground">{t("importMappingHint")}</p>
           </div>
           {!productNameMapped ? <p className="text-sm font-semibold text-danger" data-testid="products-import-name-required">{t("importMappingNameRequired")}</p> : null}
+          {mappedImages.length > 0 ? (
+            <div className="grid gap-2" data-testid="products-import-images">
+              <label className="flex items-center gap-2 text-sm font-semibold">
+                <input checked={includeImages} data-testid="products-import-include-images" disabled={busy} type="checkbox" onChange={(event) => setIncludeImages(event.target.checked)} />
+                {t("importIncludeImages")}
+              </label>
+              <p className="text-sm text-muted-foreground">{fillProductsCopy(t("importImageCount"), { count: String(preview?.imageCount ?? 0), review: String(preview?.imageReviewCount ?? 0) })}</p>
+              <ul className="grid gap-1 text-sm text-muted-foreground">
+                {imageReviewReasons(mappedImages).map((reason) => (
+                  <li data-testid={`products-import-image-reason-${reason}`} key={reason}>{t(`importImageReason_${reason}`)}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="max-h-[320px] overflow-auto rounded-lg border border-border">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
@@ -277,7 +323,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
           </div>
         </section>
       ) : null}
-      {message ? <p className="text-sm font-semibold text-danger" data-testid="products-import-message">{message}</p> : null}
+      {message ? <p className={cn("text-sm font-semibold", phase === "importing" ? "text-muted-foreground" : "text-danger")} data-testid="products-import-message">{message}</p> : null}
 
       {preview ? (
         <section className="grid gap-4">
@@ -311,7 +357,15 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
                 {preview.rows.map((row) => (
                   <tr className="border-t border-border" key={row.rowNumber}>
                     <td className="p-3">{row.rowNumber}</td>
-                    <td className="p-3 font-semibold">{row.productName || "-"}</td>
+                    <td className="p-3 font-semibold">
+                      <div className="flex items-center gap-2">
+                        {imageByRow.get(row.rowNumber)?.dataUrl ? <img alt="" className="size-10 rounded-md border border-border object-cover" data-testid={`products-import-thumb-${row.rowNumber}`} src={imageByRow.get(row.rowNumber)?.dataUrl ?? ""} /> : null}
+                        <span>{row.productName || "-"}</span>
+                      </div>
+                      {reviewReasonsForRow(mappedImages, row.rowNumber).map((reason) => (
+                        <div className="mt-1 text-xs text-muted-foreground" key={`${row.rowNumber}-${reason}`}>{t(`importImageReason_${reason}`)}</div>
+                      ))}
+                    </td>
                     <td className="p-3 font-mono text-xs">{row.sku || "-"}</td>
                     <td className="p-3">{row.units.split(", ").filter(Boolean).map((unit) => displayProductUnitName(unit, locale)).join(", ")}</td>
                     <td className="p-3">{row.status || "-"}</td>
@@ -361,6 +415,27 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
       </div>
     </div>
   );
+}
+
+function imageReviewReasons(images: ProductImportEmbeddedImage[]) {
+  return [...new Set(images.flatMap((image) => image.status === "review" && image.reason ? [image.reason] : []))];
+}
+
+function reviewReasonsForRow(images: ProductImportEmbeddedImage[], rowNumber: number) {
+  return [...new Set(images.flatMap((image) => image.status === "review" && image.rowNumber === rowNumber && image.reason ? [image.reason] : []))];
+}
+
+function formatImportFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function fileFromDataUrl(dataUrl: string) {
+  return fetch(dataUrl).then(async (response) => {
+    const blob = await response.blob();
+    return new File([blob], "import-image", { type: blob.type || "image/png" });
+  });
 }
 
 function mappingStatusKey(status: ProductImportMappedColumn["status"]) {

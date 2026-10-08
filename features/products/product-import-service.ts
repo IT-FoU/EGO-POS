@@ -44,6 +44,9 @@ export async function previewProductImportFile(
     ...publicProductImportPreview(evaluateProductImport(mapped.parsed, catalog)),
     columns: mapped.columns,
     format: read.format,
+    imageReviewCount: read.images.filter((image) => image.status === "review").length,
+    imageCount: read.images.filter((image) => image.status === "mapped").length,
+    images: read.images,
     selectedSheet: read.selectedSheet,
     sheets: read.sheets,
     skippedBlankRows: mapped.parsed.skippedBlankRows,
@@ -117,12 +120,13 @@ async function importParsedBatch(
 
   for (const row of batch) {
     try {
-      await createPrismaProduct(toProductWriteInput(row.draft!), tenant);
+      const createdProduct = await createPrismaProduct(toProductWriteInput(row.draft!), tenant);
       created += 1;
       if (row.state === "warning") warnings += 1;
       rows.push({
         issues: row.issues,
         outcome: "created",
+        productId: createdProduct.id,
         productName: row.productName,
         rowNumber: row.rowNumber,
       });
@@ -152,6 +156,7 @@ async function importParsedBatch(
 type ProductImportBatchRow = {
   issues: ProductImportEvaluation["rows"][number]["issues"];
   outcome: "created" | "failed";
+  productId?: string;
   productName: string;
   rowNumber: number;
 };
