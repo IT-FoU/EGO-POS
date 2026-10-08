@@ -348,11 +348,12 @@ export async function importProductsAction(csvText: string, options: { afterRow?
   }
 }
 
-export async function previewProductImportFileAction(input: { fileBase64: string; fileName: string; sheetName?: string }) {
+export async function previewProductImportFileAction(input: { columns?: Array<{ field?: string | null; index?: number }>; fileBase64: string; fileName: string; sheetName?: string }) {
   try {
     const bytes = decodeProductImportFile(input.fileBase64);
     const data = await previewProductImportFile({
       bytes,
+      columns: input.columns,
       fileName: input.fileName,
       sheetName: input.sheetName,
     }, await tenant(WRITE_PERMISSIONS.productsCreate));
@@ -362,11 +363,12 @@ export async function previewProductImportFileAction(input: { fileBase64: string
   }
 }
 
-export async function importProductsFileAction(input: { afterRow?: number; fileBase64: string; fileName: string; limit?: number; sheetName?: string }) {
+export async function importProductsFileAction(input: { afterRow?: number; columns?: Array<{ field?: string | null; index?: number }>; fileBase64: string; fileName: string; limit?: number; sheetName?: string }) {
   try {
     const sessionTenant = await tenant(WRITE_PERMISSIONS.productsCreate);
     const data = await importProductFileBatch({
       bytes: decodeProductImportFile(input.fileBase64),
+      columns: input.columns,
       fileName: input.fileName,
       sheetName: input.sheetName,
     }, sessionTenant, {

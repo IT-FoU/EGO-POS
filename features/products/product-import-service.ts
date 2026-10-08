@@ -2,8 +2,13 @@ import { createPrismaProduct, type ProductWriteInput } from "@/features/products
 import { readProductImportFile } from "@/features/products/product-import-files";
 import {
   evaluateProductImport,
+  mapProductImportGrid,
   parseProductImportCsv,
+  PRODUCT_IMPORT_COLUMNS,
   publicProductImportPreview,
+  resolveProductImportColumns,
+  type ProductImportColumn,
+  type ProductImportColumnChoice,
   type ProductImportDraft,
   type ProductImportEvaluation,
   type ProductImportParseResult,
@@ -29,28 +34,58 @@ export async function importProductCsvBatch(
 }
 
 export async function previewProductImportFile(
-  input: { bytes: Uint8Array; fileName: string; sheetName?: string },
+  input: { bytes: Uint8Array; columns?: Array<{ field?: unknown; index?: unknown }>; fileName: string; sheetName?: string },
   tenant: TenantContext,
 ) {
   const read = await readProductImportFile(input);
-  const catalog = await loadProductImportCatalog(tenant, read.parsed);
+  const mapped = mapReadProductImport(read, input.columns);
+  const catalog = await loadProductImportCatalog(tenant, mapped.parsed);
   return {
-    ...publicProductImportPreview(evaluateProductImport(read.parsed, catalog)),
+    ...publicProductImportPreview(evaluateProductImport(mapped.parsed, catalog)),
+    columns: mapped.columns,
     format: read.format,
     selectedSheet: read.selectedSheet,
     sheets: read.sheets,
-    skippedBlankRows: read.parsed.skippedBlankRows,
+    skippedBlankRows: mapped.parsed.skippedBlankRows,
   };
 }
 
 export async function importProductFileBatch(
-  input: { bytes: Uint8Array; fileName: string; sheetName?: string },
+  input: { bytes: Uint8Array; columns?: Array<{ field?: unknown; index?: unknown }>; fileName: string; sheetName?: string },
   tenant: TenantContext,
   options: { afterRow: number; limit: number },
 ) {
   const read = await readProductImportFile(input);
-  const result = await importParsedBatch(read.parsed, tenant, options);
-  return { ...result, format: read.format, selectedSheet: read.selectedSheet, sheets: read.sheets };
+  const mapped = mapReadProductImport(read, input.columns);
+  const result = await importParsedBatch(mapped.parsed, tenant, options);
+  return { ...result, columns: mapped.columns, format: read.format, selectedSheet: read.selectedSheet, sheets: read.sheets };
+}
+
+function mapReadProductImport(
+  read: Awaited<ReturnType<typeof readProductImportFile>>,
+  columns: Array<{ field?: unknown; index?: unknown }> | undefined,
+) {
+  if (read.grid.length === 0) return { columns: [], parsed: read.parsed };
+  const choices = sanitizeProductImportChoices(columns);
+  return {
+    columns: resolveProductImportColumns(read.grid, choices),
+    parsed: mapProductImportGrid(read.grid, read.parsed.skippedBlankRows, choices),
+  };
+}
+
+function sanitizeProductImportChoices(columns: Array<{ field?: unknown; index?: unknown }> | undefined) {
+  if (!columns) return undefined;
+  const allowed = new Set<string>(PRODUCT_IMPORT_COLUMNS);
+  const choices: ProductImportColumnChoice[] = [];
+  for (const column of columns) {
+    const index = Number(column.index);
+    if (!Number.isInteger(index) || index < 0 || index > 63) continue;
+    const field = column.field === "ignore" || (typeof column.field === "string" && allowed.has(column.field))
+      ? column.field as ProductImportColumn | "ignore"
+      : null;
+    choices.push({ field, index });
+  }
+  return choices;
 }
 
 async function importParsedBatch(

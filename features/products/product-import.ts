@@ -66,6 +66,81 @@ const HEADER_ALIASES: Record<string, ProductImportColumn> = {
   box_qty_in_base: "box_qty",
   min_stock: "reorder_level",
   name: "product_name",
+  name_en: "product_name",
+  product_name_en: "product_name",
+  english_name: "product_name",
+  item_name: "product_name",
+  ຊື່ສິນຄ້າ: "product_name",
+  ຊື່ສິນຄ້າພາສາອັງກິດ: "product_name",
+  ชื่อสินค้า: "product_name",
+  ชื่อสินค้าภาษาอังกฤษ: "product_name",
+  ชื่อภาษาอังกฤษ: "product_name",
+  supplier_product_code: "sku",
+  product_code: "sku",
+  item_code: "sku",
+  supplier_code: "sku",
+  ລະຫັດສິນຄ້າ: "sku",
+  รหัสสินค้า: "sku",
+  barcode: "piece_barcode",
+  main_barcode: "piece_barcode",
+  product_barcode: "piece_barcode",
+  barcode_ຫຼັກ: "piece_barcode",
+  ບາໂຄດ: "piece_barcode",
+  ບາໂຄດຫຼັກ: "piece_barcode",
+  บาร์โค้ด: "piece_barcode",
+  บาร์โค้ดหลัก: "piece_barcode",
+  cost: "piece_cost",
+  cost_price: "piece_cost",
+  unit_cost: "piece_cost",
+  ລາຄາທຶນ: "piece_cost",
+  ຕົ້ນທຶນ: "piece_cost",
+  ราคาทุน: "piece_cost",
+  ต้นทุน: "piece_cost",
+  selling_price: "piece_selling_price",
+  sale_price: "piece_selling_price",
+  retail_price: "piece_selling_price",
+  ລາຄາຂາຍ: "piece_selling_price",
+  ราคาขาย: "piece_selling_price",
+  product_category: "category",
+  ປະເພດສິນຄ້າ: "category",
+  ປະເພດ: "category",
+  ประเภทสินค้า: "category",
+  ประเภท: "category",
+  ຍີ່ຫໍ້: "brand",
+  ยี่ห้อ: "brand",
+  vendor: "supplier",
+  ຜູ້ສະໜອງ: "supplier",
+  ผู้จำหน่าย: "supplier",
+  ผู้จัดจำหน่าย: "supplier",
+};
+
+const IGNORE_HEADER_ALIASES = new Set([
+  "image",
+  "product_image",
+  "picture",
+  "photo",
+  "embedded_image",
+  "image_url",
+  "ຮູບ",
+  "ຮູບພາບ",
+  "ຮູບສິນຄ້າ",
+  "รูป",
+  "รูปภาพ",
+  "รูปสินค้า",
+]);
+
+export type ProductImportColumnChoice = {
+  field: ProductImportColumn | "ignore" | null;
+  index: number;
+};
+
+export type ProductImportMappedColumn = {
+  choice: ProductImportColumn | "ignore" | null;
+  header: string;
+  index: number;
+  sample: string;
+  status: "mapped" | "review" | "ignored" | "conflict";
+  suggestion: ProductImportColumn | "ignore" | null;
 };
 
 const ROUNDING_VALUES = new Set([0, 500, 1000, 5000]);
@@ -218,33 +293,68 @@ export function parseProductImportDelimited(text: string, delimiter: "," | "\t")
   return mapProductImportGrid(table.rows, table.skippedBlankRows);
 }
 
-export function mapProductImportGrid(table: ProductImportGridRow[], skippedBlankRows = 0): ProductImportParseResult {
+export function productImportDelimitedGrid(text: string, delimiter: "," | "\t") {
+  return parseDelimitedTable(text.replace(/^\uFEFF/, ""), delimiter);
+}
+
+export function resolveProductImportColumns(
+  table: ProductImportGridRow[],
+  choices?: ProductImportColumnChoice[],
+): ProductImportMappedColumn[] {
+  const width = table.reduce((max, row) => Math.max(max, row.cells.length), 0);
+  const samples = Array.from({ length: width }, (_, index) => {
+    for (const row of table.slice(1, 6)) {
+      const value = (row.cells[index] ?? "").trim();
+      if (value) return value.slice(0, 80);
+    }
+    return "";
+  });
+  const suggested = Array.from({ length: width }, (_, index) => {
+    const header = table[0]?.cells[index] ?? "";
+    return suggestProductImportColumn(header, index, samples[index] ?? "");
+  });
+  if (!choices) return markProductImportConflicts(suggested);
+  const byIndex = new Map(choices.map((choice) => [choice.index, choice.field]));
+  const chosen = suggested.map((column) => {
+    if (!byIndex.has(column.index)) return { ...column, choice: null, status: "review" as const };
+    const field = byIndex.get(column.index);
+    if (field === "ignore") return { ...column, choice: "ignore" as const, status: "ignored" as const };
+    if (!field) return { ...column, choice: null, status: "review" as const };
+    return { ...column, choice: field, status: "mapped" as const };
+  });
+  return markProductImportConflicts(chosen);
+}
+
+export function mapProductImportGrid(
+  table: ProductImportGridRow[],
+  skippedBlankRows = 0,
+  choices?: ProductImportColumnChoice[],
+): ProductImportParseResult {
   if (table.length === 0) {
     return { fileIssues: [{ code: "empty_file", level: "error" }], rows: [], skippedBlankRows };
   }
 
-  const header = table[0];
+  const columns = resolveProductImportColumns(table, choices);
   const columnIndex = new Map<ProductImportColumn, number>();
   const fileIssues: ProductImportIssue[] = [];
   const seenUnknown = new Set<string>();
 
-  header.cells.forEach((cell, index) => {
-    const key = normalizeHeader(cell);
-    if (!key) return;
-    const column = HEADER_ALIASES[key];
-    if (!column) {
-      if (!seenUnknown.has(key)) {
-        seenUnknown.add(key);
-        fileIssues.push({ code: "unknown_column", detail: cell.trim(), level: "warning" });
-      }
-      return;
+  for (const column of columns) {
+    const header = column.header.trim();
+    if (column.status === "mapped" && column.choice && column.choice !== "ignore") {
+      columnIndex.set(column.choice, column.index);
+      continue;
     }
-    if (columnIndex.has(column)) {
-      fileIssues.push({ code: "duplicate_header", detail: cell.trim(), level: "warning" });
-      return;
+    if (column.status === "conflict" && header) {
+      fileIssues.push({ code: "duplicate_header", detail: header, level: "warning" });
+      continue;
     }
-    columnIndex.set(column, index);
-  });
+    if (!header || seenUnknown.has(header)) continue;
+    if (column.status === "ignored" || column.status === "review") {
+      seenUnknown.add(header);
+      fileIssues.push({ code: "unknown_column", detail: header, level: "warning" });
+    }
+  }
 
   if (!columnIndex.has("product_name")) {
     return { fileIssues: [...fileIssues, { code: "missing_header", level: "error" }], rows: [], skippedBlankRows };
@@ -642,8 +752,71 @@ function unitDraft(
   };
 }
 
+function suggestProductImportColumn(header: string, index: number, sample: string): ProductImportMappedColumn {
+  const key = normalizeHeader(header);
+  const { aliases, ignore } = normalizedAliasTables();
+  if (!key) {
+    return { choice: null, header, index, sample, status: "review", suggestion: null };
+  }
+  if (ignore.has(key)) {
+    return { choice: "ignore", header, index, sample, status: "ignored", suggestion: "ignore" };
+  }
+  const exact = aliases.get(key);
+  if (exact) {
+    return { choice: exact, header, index, sample, status: "mapped", suggestion: exact };
+  }
+  return { choice: null, header, index, sample, status: "review", suggestion: heuristicProductImportField(key) };
+}
+
+function heuristicProductImportField(key: string): ProductImportColumn | "ignore" | null {
+  const { aliases, ignore } = normalizedAliasTables();
+  const fields = new Set<ProductImportColumn | "ignore">();
+  for (const [alias, field] of aliases) {
+    if (alias.length < 4 || alias === key || !headerContainsAlias(key, alias)) continue;
+    fields.add(field);
+  }
+  for (const alias of ignore) {
+    if (alias.length < 4 || alias === key || !headerContainsAlias(key, alias)) continue;
+    fields.add("ignore");
+  }
+  if (fields.size !== 1) return null;
+  return [...fields][0] ?? null;
+}
+
+let normalizedAliases: Map<string, ProductImportColumn> | null = null;
+let normalizedIgnore: Set<string> | null = null;
+
+function normalizedAliasTables() {
+  if (!normalizedAliases || !normalizedIgnore) {
+    normalizedAliases = new Map(Object.entries(HEADER_ALIASES).map(([alias, field]) => [normalizeHeader(alias), field]));
+    normalizedIgnore = new Set([...IGNORE_HEADER_ALIASES].map((alias) => normalizeHeader(alias)));
+  }
+  return { aliases: normalizedAliases, ignore: normalizedIgnore };
+}
+
+function headerContainsAlias(key: string, alias: string) {
+  return key.startsWith(`${alias}_`) || key.endsWith(`_${alias}`) || key.includes(`_${alias}_`);
+}
+
+function markProductImportConflicts(columns: ProductImportMappedColumn[]) {
+  const seen = new Set<ProductImportColumn>();
+  return columns.map((column) => {
+    if (column.status !== "mapped" || !column.choice || column.choice === "ignore") return column;
+    if (seen.has(column.choice)) return { ...column, status: "conflict" as const };
+    seen.add(column.choice);
+    return column;
+  });
+}
+
 function normalizeHeader(value: string) {
-  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return value
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
 }
 
 function csvCell(value: string) {

@@ -4,7 +4,7 @@ import {
   PRODUCT_IMPORT_MAX_CHARS,
   PRODUCT_IMPORT_MAX_ROWS,
   mapProductImportGrid,
-  parseProductImportDelimited,
+  productImportDelimitedGrid,
   type ProductImportGridRow,
   type ProductImportIssue,
   type ProductImportParseResult,
@@ -20,6 +20,7 @@ export type ProductImportSheetInfo = {
 
 export type ProductImportFileRead = {
   format: ProductImportFormat | null;
+  grid: ProductImportGridRow[];
   parsed: ProductImportParseResult;
   selectedSheet: string | null;
   sheets: ProductImportSheetInfo[];
@@ -54,8 +55,14 @@ export async function readProductImportFile(input: {
     } catch {
       return blocked("malformed_file", format);
     }
-    const parsed = parseProductImportDelimited(text, format === "tsv" ? "\t" : ",");
-    return { format, parsed, selectedSheet: null, sheets: [] };
+    const table = productImportDelimitedGrid(text, format === "tsv" ? "\t" : ",");
+    return {
+      format,
+      grid: table.rows,
+      parsed: mapProductImportGrid(table.rows, table.skippedBlankRows),
+      selectedSheet: null,
+      sheets: [],
+    };
   }
 
   try {
@@ -72,6 +79,7 @@ function blocked(code: string, format: ProductImportFormat | null = null, detail
   const issue: ProductImportIssue = { code, level: "error", ...(detail ? { detail } : {}) };
   return {
     format,
+    grid: [],
     parsed: { fileIssues: [issue], rows: [], skippedBlankRows: 0 },
     selectedSheet: null,
     sheets: [],
@@ -175,12 +183,14 @@ function workbookToImport(workbook: ImportedWorkbook, sheetName: string | undefi
         rows: [],
         skippedBlankRows: grid.skippedBlankRows,
       },
+      grid: [],
       selectedSheet: selected.name,
       sheets,
     };
   }
   return {
     format,
+    grid: grid.rows,
     parsed: mapProductImportGrid(grid.rows, grid.skippedBlankRows),
     selectedSheet: selected.name,
     sheets,

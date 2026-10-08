@@ -5,9 +5,12 @@ import { Upload } from "lucide-react";
 import { importProductsFileAction, previewProductImportFileAction } from "@/features/products/actions";
 import {
   PRODUCT_IMPORT_BATCH_SIZE,
+  PRODUCT_IMPORT_COLUMNS,
   PRODUCT_IMPORT_MAX_CHARS,
   PRODUCT_IMPORT_TEMPLATE_CSV,
+  type ProductImportColumn,
   type ProductImportIssue,
+  type ProductImportMappedColumn,
   type ProductImportPreviewRow,
 } from "@/features/products/product-import";
 import { displayProductUnitName, fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
@@ -15,6 +18,7 @@ import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { cn } from "@/lib/utils";
 
 type PreviewData = {
+  columns: ProductImportMappedColumn[];
   errorCount: number;
   fileIssues: ProductImportIssue[];
   format: string | null;
@@ -66,11 +70,12 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     downloadText("ego-product-import-template.csv", PRODUCT_IMPORT_TEMPLATE_CSV);
   }
 
-  async function validateFile(file: StoredFile, sheetName?: string) {
+  async function validateFile(file: StoredFile, sheetName?: string, columns?: Array<{ field: string | null; index: number }>) {
     setPhase("validating");
     setResult(null);
     setMessage("");
     const response = await previewProductImportFileAction({
+      columns,
       fileBase64: file.fileBase64,
       fileName: file.fileName,
       sheetName,
@@ -96,6 +101,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     }
     setPhase("reading");
     setMessage("");
+    setPreview(null);
     setResult(null);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const stored = { fileBase64: bytesToBase64(bytes), fileName: file.name };
@@ -105,7 +111,17 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
 
   async function onSheetChange(sheetName: string) {
     if (!storedFile) return;
+    setPreview(null);
     await validateFile(storedFile, sheetName);
+  }
+
+  async function onMappingChange(index: number, field: string) {
+    if (!storedFile || !preview) return;
+    const columns = preview.columns.map((column) => ({
+      field: column.index === index ? field : (column.choice ?? ""),
+      index: column.index,
+    }));
+    await validateFile(storedFile, preview.selectedSheet ?? undefined, columns);
   }
 
   async function confirmImport() {
@@ -124,6 +140,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
       guard += 1;
       const response = await importProductsFileAction({
         afterRow,
+        columns: preview.columns.map((column) => ({ field: column.choice ?? "", index: column.index })),
         fileBase64: storedFile.fileBase64,
         fileName: storedFile.fileName,
         limit: PRODUCT_IMPORT_BATCH_SIZE,
@@ -182,6 +199,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const busy = phase === "reading" || phase === "validating" || phase === "importing";
   const formatLabel = preview?.format ? preview.format.toUpperCase() : "";
   const workbookSheets = preview?.sheets ?? [];
+  const mappingColumns = preview?.columns ?? [];
+  const productNameMapped = mappingColumns.some((column) => column.status === "mapped" && column.choice === "product_name");
 
   return (
     <div className="grid gap-5" data-ignores-selection="true" data-testid="products-import-workflow">
@@ -219,6 +238,45 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
         </div>
       ) : null}
       <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
+      {mappingColumns.length > 0 ? (
+        <section className="grid gap-3" data-testid="products-import-mapping">
+          <div>
+            <h3 className="text-base font-semibold">{t("importMappingTitle")}</h3>
+            <p className="text-sm text-muted-foreground">{t("importMappingHint")}</p>
+          </div>
+          {!productNameMapped ? <p className="text-sm font-semibold text-danger" data-testid="products-import-name-required">{t("importMappingNameRequired")}</p> : null}
+          <div className="max-h-[320px] overflow-auto rounded-lg border border-border">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="p-3">{t("importMapHeader")}</th>
+                  <th className="p-3">{t("importMapSample")}</th>
+                  <th className="p-3">{t("importMapSuggested")}</th>
+                  <th className="p-3">{t("importMapField")}</th>
+                  <th className="p-3">{t("importMapStatus")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mappingColumns.map((column) => (
+                  <tr className="border-t border-border" key={column.index}>
+                    <td className="p-3 font-semibold">{column.header.trim() || "-"}</td>
+                    <td className="p-3 font-mono text-xs">{column.sample || "-"}</td>
+                    <td className="p-3">{mappingFieldLabel(column.suggestion, t)}</td>
+                    <td className="p-3">
+                      <select className="h-11 w-full max-w-56 rounded-md border border-border bg-background px-3" data-testid={`products-import-map-${column.index}`} disabled={busy} value={column.status === "review" ? "" : (column.choice ?? "")} onChange={(event) => { void onMappingChange(column.index, event.target.value); }}>
+                        <option value="">{t("importMapChoose")}</option>
+                        <option value="ignore">{t("importMapIgnore")}</option>
+                        {PRODUCT_IMPORT_COLUMNS.map((field) => <option key={field} value={field}>{mappingFieldLabel(field, t)}</option>)}
+                      </select>
+                    </td>
+                    <td className={cn("p-3 font-semibold", column.status === "conflict" ? "text-danger" : column.status === "mapped" ? "text-success" : column.status === "review" ? "text-primary" : "text-muted-foreground")} data-testid={`products-import-map-status-${column.index}`}>{t(mappingStatusKey(column.status))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
       {message ? <p className="text-sm font-semibold text-danger" data-testid="products-import-message">{message}</p> : null}
 
       {preview ? (
@@ -296,13 +354,28 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
         ) : null}
         <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{phase === "done" ? t("importDone") : t("closeDrawer")}</button>
         {phase !== "done" ? (
-          <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-import-confirm" disabled={!canImport || busy || readyCount === 0} type="button" onClick={() => { void confirmImport(); }}>
+          <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-import-confirm" disabled={!canImport || busy || readyCount === 0 || !productNameMapped} type="button" onClick={() => { void confirmImport(); }}>
             {phase === "importing" ? t("importBusy") : t("importConfirm")}
           </button>
         ) : null}
       </div>
     </div>
   );
+}
+
+function mappingStatusKey(status: ProductImportMappedColumn["status"]) {
+  if (status === "mapped") return "importMapMapped";
+  if (status === "ignored") return "importMapIgnored";
+  if (status === "conflict") return "importMapConflict";
+  return "importMapReview";
+}
+
+function mappingFieldLabel(field: ProductImportColumn | "ignore" | null, t: (key: string) => string) {
+  if (field === "ignore") return t("importMapIgnore");
+  if (!field) return t("importMapNone");
+  const key = `importField_${field}`;
+  const label = t(key);
+  return label === key ? field : label;
 }
 
 function Summary({ label, testId, value }: { label: string; testId?: string; value: number }) {
