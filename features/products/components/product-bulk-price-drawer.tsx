@@ -19,7 +19,7 @@ import { signalPosCatalogueInvalidation } from "@/features/pos/pos-catalogue-ref
 import { tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
-type Mode = "manual" | "percent";
+type Mode = "amount" | "percent";
 type Direction = "decrease" | "increase";
 type RoundChoice = "0" | "100" | "500" | "1000" | "custom" | "unit";
 
@@ -33,14 +33,13 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
   const t = (key: string) => tProducts(key, locale);
   const [products, setProducts] = useState<BulkPriceProductSource[]>([]);
   const [included, setIncluded] = useState<Record<string, boolean>>({});
-  const [manualPrices, setManualPrices] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<Mode>("percent");
   const [direction, setDirection] = useState<Direction>("increase");
   const [percent, setPercent] = useState("10");
+  const [amount, setAmount] = useState("1000");
   const [roundChoice, setRoundChoice] = useState<RoundChoice>("unit");
   const [customRounding, setCustomRounding] = useState("100");
-  const [roundManual, setRoundManual] = useState(false);
-  const [samePrice, setSamePrice] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
   const [phase, setPhase] = useState<"choose" | "preview" | "result">("choose");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(selectedIds.length > 0);
@@ -86,22 +85,22 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
     included: included[lineKey(unit)] === true,
     key: lineKey(unit),
     localeName: localizedProductName(product, locale),
-    manual: manualPrices[lineKey(unit)] ?? "",
-  }))), [included, locale, manualPrices, products]);
+  }))), [included, locale, products]);
 
   const jobRounding = roundChoice === "unit" ? null : roundChoice === "custom" ? Number(customRounding) : Number(roundChoice);
   const roundingReady = roundChoice !== "custom" || (Number.isInteger(jobRounding) && (jobRounding ?? 0) >= 0 && (jobRounding ?? 0) <= 100000);
   const quotes = lines.filter((line) => line.included).map((line) => ({
     ...line,
-    quote: quoteForLine(line, { direction, jobRounding, mode, percent, roundManual: roundManual && roundChoice !== "unit" }),
+    quote: quoteForLine(line, { amount, direction, jobRounding, mode, percent }),
   }));
   const increases = quotes.filter((line) => (line.quote.amount ?? 0) > 0);
   const decreases = quotes.filter((line) => (line.quote.amount ?? 0) < 0);
   const unchanged = quotes.filter((line) => line.quote.newPriceLak === line.priceLak);
   const invalid = quotes.filter((line) => line.quote.reason);
   const ready = quotes.filter((line) => line.quote.newPriceLak !== null && line.quote.newPriceLak !== line.priceLak);
-  const percentValue = Number(percent);
-  const previewDisabled = quotes.length === 0 || !roundingReady || ready.length > BULK_PRICE_MAX_LINES || (mode === "percent" && (!Number.isFinite(percentValue) || percent.trim() === ""));
+  const adjustment = mode === "percent" ? percent : amount;
+  const adjustmentValue = Number(adjustment);
+  const previewDisabled = quotes.length === 0 || !roundingReady || ready.length > BULK_PRICE_MAX_LINES || adjustment.trim() === "" || !Number.isFinite(adjustmentValue) || adjustmentValue < 0;
   const roundingLabel = roundChoice === "unit" ? t("bulkUnitRounding") : jobRounding === 0 ? t("bulkNoRounding") : formatLak(jobRounding ?? 0);
 
   function selectRole(role: "box" | "pack" | "piece") {
@@ -123,20 +122,6 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
     });
   }
 
-  function applySamePrice() {
-    const value = samePrice.replace(/[^\d]/g, "");
-    if (!value) return;
-    setManualPrices((current) => {
-      const next = { ...current };
-      for (const line of lines) {
-        if (!line.included) continue;
-        next[line.key] = value;
-      }
-      return next;
-    });
-    setMode("manual");
-  }
-
   async function refreshPreview() {
     const ids = products.map((product) => product.id);
     if (ids.length === 0) return;
@@ -153,7 +138,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
     setMessage("");
     const job: BulkPriceJobAudit = {
       mode,
-      roundManual: roundManual && roundChoice !== "unit",
+      roundManual: false,
       roundingOverrideLak: roundChoice === "unit" ? null : jobRounding,
     };
     const response = await applyBulkSellingPricesAction(ready.map((line) => ({
@@ -190,7 +175,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
           </div>
           {loading ? <p className="text-sm text-muted-foreground">{t("printBusy")}</p> : null}
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
-          <WhiteDataTable minWidth="1120px">
+          <WhiteDataTable minWidth="1280px">
             <thead>
               <tr>
                 <th>{t("productName")}</th>
@@ -198,6 +183,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
                 <th>{t("barcode")}</th>
                 <th className="num">{t("cost")}</th>
                 <th className="num">{t("bulkCurrentSellingPrice")}</th>
+                <th className="num">{t("bulkRawResult")}</th>
                 <th className="num">{t("bulkNewSellingPrice")}</th>
                 <th className="mid">{t("action")}</th>
               </tr>
@@ -205,7 +191,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
             {products.map((product) => (
               <tbody data-testid="products-bulk-product" key={product.id}>
                 {lines.filter((line) => line.productId === product.id).map((line) => (
-                  <UnitRow direction={direction} jobRounding={jobRounding} key={line.key} line={line} mode={mode} percent={percent} productName={localizedProductName(product, locale)} roundManual={roundManual && roundChoice !== "unit"} t={t} onManual={(value) => setManualPrices((current) => ({ ...current, [line.key]: value.replace(/[^\d]/g, "") }))} onRemove={() => setProducts((current) => current.filter((item) => item.id !== product.id))} onToggle={(checked) => setIncluded((current) => ({ ...current, [line.key]: checked }))}/>
+                  <UnitRow amount={amount} direction={direction} jobRounding={jobRounding} key={line.key} line={line} mode={mode} percent={percent} productName={localizedProductName(product, locale)} t={t} onRemove={() => setProducts((current) => current.filter((item) => item.id !== product.id))} onToggle={(checked) => setIncluded((current) => ({ ...current, [line.key]: checked }))}/>
                 ))}
               </tbody>
             ))}
@@ -213,22 +199,19 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
           <div className="grid gap-3 rounded-lg border border-border p-4">
             <div className="flex flex-wrap gap-2">
               <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${mode === "percent" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-mode-percent" type="button" onClick={() => setMode("percent")}>{t("bulkPercent")}</button>
-              <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${mode === "manual" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-mode-manual" type="button" onClick={() => setMode("manual")}>{t("bulkManual")}</button>
+              <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${mode === "amount" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-mode-amount" type="button" onClick={() => setMode("amount")}>{t("bulkAmount")}</button>
             </div>
-            {mode === "percent" ? (
-              <div className="flex flex-wrap items-end gap-2">
-                <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${direction === "increase" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-increase" type="button" onClick={() => setDirection("increase")}>{t("bulkIncrease")}</button>
-                <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${direction === "decrease" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-decrease" type="button" onClick={() => setDirection("decrease")}>{t("bulkDecrease")}</button>
+            <div className="flex flex-wrap items-end gap-2">
+              <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${direction === "increase" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-increase" type="button" onClick={() => setDirection("increase")}>{t("bulkIncrease")}</button>
+              <button className={`h-10 rounded-md border px-3 text-sm font-semibold ${direction === "decrease" ? "border-primary bg-primary/10" : "border-border"}`} data-testid="products-bulk-decrease" type="button" onClick={() => setDirection("decrease")}>{t("bulkDecrease")}</button>
+              {mode === "percent" ? (
                 <label className="grid gap-1 text-xs font-semibold">{t("bulkPercent")}<input className="h-10 w-24 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-bulk-percent" inputMode="decimal" value={percent} onChange={(event) => setPercent(event.target.value.replace(/[^\d.]/g, ""))}/></label>
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="grid gap-1 text-xs font-semibold">{t("bulkSetSamePrice")}<input className="h-10 w-36 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-bulk-same-price" inputMode="numeric" value={samePrice} onChange={(event) => setSamePrice(event.target.value.replace(/[^\d]/g, ""))}/></label>
-                <button className="h-10 rounded-md border border-border px-3 text-xs font-semibold" data-testid="products-bulk-same-price-apply" type="button" onClick={applySamePrice}>{t("bulkSetSamePrice")}</button>
-              </div>
-            )}
+              ) : (
+                <label className="grid gap-1 text-xs font-semibold">{t("bulkAmount")}<input className="h-10 w-28 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-bulk-amount" inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d]/g, ""))}/></label>
+              )}
+            </div>
             <label className="flex items-center gap-2 text-sm font-semibold">
-              <input checked={roundChoice !== "unit"} data-testid="products-bulk-override" type="checkbox" onChange={(event) => { setRoundChoice(event.target.checked ? "1000" : "unit"); if (!event.target.checked) setRoundManual(false); }}/>
+              <input checked={roundChoice !== "unit"} data-testid="products-bulk-override" type="checkbox" onChange={(event) => setRoundChoice(event.target.checked ? "1000" : "unit")}/>
               {t("bulkOverrideRounding")}
             </label>
             {roundChoice !== "unit" ? (
@@ -237,12 +220,6 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
                   <button className={`h-9 rounded-md border px-3 text-xs font-semibold ${roundChoice === choice ? "border-primary bg-primary/10" : "border-border"}`} data-testid={`products-bulk-round-${choice}`} key={choice} type="button" onClick={() => setRoundChoice(choice)}>{choice === "0" ? t("bulkNoRounding") : choice === "custom" ? t("bulkCustomIncrement") : formatLak(Number(choice))}</button>
                 ))}
                 {roundChoice === "custom" ? <input className="h-9 w-28 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-bulk-custom-rounding" inputMode="numeric" value={customRounding} onChange={(event) => setCustomRounding(event.target.value.replace(/[^\d]/g, ""))}/> : null}
-                {mode === "manual" ? (
-                  <label className="flex items-center gap-2 text-sm">
-                    <input checked={roundManual} data-testid="products-bulk-round-manual" type="checkbox" onChange={(event) => setRoundManual(event.target.checked)}/>
-                    {t("bulkApplyRoundingManual")}
-                  </label>
-                ) : null}
               </div>
             ) : null}
           </div>
@@ -256,7 +233,8 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
       {phase === "preview" ? (
         <div className="grid gap-4">
           <p className="text-sm font-semibold" data-testid="products-bulk-summary">
-            {t("bulkMode")}: {mode === "percent" ? t("bulkPercent") : t("bulkManual")}
+            {t("bulkMode")}: {mode === "percent" ? t("bulkPercent") : t("bulkAmount")}
+            {" · "}{direction === "increase" ? t("bulkIncrease") : t("bulkDecrease")}
             {" · "}{t("bulkRoundingLabel")}: {roundingLabel}
             {" · "}{t("bulkProductsAffected")}: {new Set(quotes.map((line) => line.productId)).size}
             {" · "}{t("bulkUnitsAffected")}: {quotes.length}
@@ -265,7 +243,7 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
             {" · "}{t("bulkUnchanged")}: {unchanged.length}
             {" · "}{t("bulkInvalid")}: {invalid.length}
           </p>
-          <WhiteDataTable minWidth="980px" testId="products-bulk-quote-table">
+          <WhiteDataTable minWidth="1120px" testId="products-bulk-quote-table">
             <thead>
               <tr>
                 <th>{t("product")}</th>
@@ -273,29 +251,35 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
                 <th className="mid">{t("unit")}</th>
                 <th className="num">{t("cost")}</th>
                 <th className="num">{t("bulkCurrentSellingPrice")}</th>
+                <th className="num">{t("bulkRawResult")}</th>
                 <th className="num">{t("bulkNewSellingPrice")}</th>
                 <th className="num">{t("bulkDifference")}</th>
               </tr>
             </thead>
             <tbody>
               {quotes.map((line) => (
-                <tr data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
+                <tr data-new={line.quote.newPriceLak ?? ""} data-old={line.priceLak} data-raw={line.quote.rawPriceLak ?? ""} data-sku={line.sku} data-testid="products-bulk-row" data-unit={line.unitName} key={line.key}>
                   <td className="font-semibold">{line.localeName}</td>
                   <td className="font-mono text-xs">{line.sku}</td>
                   <td className="mid">{line.unitName}</td>
                   <td className="num">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
                   <td className="num">{formatLak(line.priceLak)}</td>
-                  <td className="num">{line.quote.newPriceLak === null ? t(line.quote.reason === "negative" ? "bulkNegative" : "bulkInvalid") : formatLak(line.quote.newPriceLak)}</td>
+                  <td className="num" data-testid="products-bulk-raw">{line.quote.rawPriceLak === null ? "—" : formatLak(line.quote.rawPriceLak)}</td>
+                  <td className="num" data-testid="products-bulk-final">{line.quote.newPriceLak === null ? t(line.quote.reason === "negative" ? "bulkNegative" : "bulkInvalid") : formatLak(line.quote.newPriceLak)}</td>
                   <td className="num">{line.quote.amount === null ? "—" : `${line.quote.amount > 0 ? "+" : ""}${formatLak(line.quote.amount)}${line.quote.percent === null ? "" : ` (${line.quote.percent > 0 ? "+" : ""}${line.quote.percent}%)`}`}</td>
                 </tr>
               ))}
             </tbody>
           </WhiteDataTable>
           {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <input checked={confirmed} data-testid="products-bulk-confirm" type="checkbox" onChange={(event) => setConfirmed(event.target.checked)}/>
+            {t("bulkConfirmUpdates")}
+          </label>
           <div className="flex flex-wrap justify-end gap-2">
-            <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-back" type="button" onClick={() => setPhase("choose")}>{t("printBack")}</button>
-            <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-refresh" type="button" onClick={() => { void refreshPreview(); }}>{t("bulkRefreshPreview")}</button>
-            <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-bulk-apply" disabled={ready.length === 0 || applying} type="button" onClick={() => { void applyUpdates(); }}>{t("save")}</button>
+            <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-back" type="button" onClick={() => { setConfirmed(false); setPhase("choose"); }}>{t("printBack")}</button>
+            <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-bulk-refresh" type="button" onClick={() => { setConfirmed(false); void refreshPreview(); }}>{t("bulkRefreshPreview")}</button>
+            <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-bulk-apply" disabled={ready.length === 0 || invalid.length > 0 || !confirmed || applying} type="button" onClick={() => { void applyUpdates(); }}>{t("save")}</button>
           </div>
         </div>
       ) : null}
@@ -323,20 +307,19 @@ export function BulkPriceDrawer({ onApplied, onClose, selectedIds }: {
   );
 }
 
-function UnitRow({ direction, jobRounding, line, mode, onManual, onRemove, onToggle, percent, productName, roundManual, t }: {
+function UnitRow({ amount, direction, jobRounding, line, mode, onRemove, onToggle, percent, productName, t }: {
+  amount: string;
   direction: Direction;
   jobRounding: number | null;
-  line: BulkPriceChoice & { included: boolean; key: string; manual: string };
+  line: BulkPriceChoice & { included: boolean; key: string };
   mode: Mode;
-  onManual: (value: string) => void;
   onRemove: () => void;
   onToggle: (checked: boolean) => void;
   percent: string;
   productName: string;
-  roundManual: boolean;
   t: (key: string) => string;
 }) {
-  const quote = quoteForLine(line, { direction, jobRounding, mode, percent, roundManual });
+  const quote = line.included ? quoteForLine(line, { amount, direction, jobRounding, mode, percent }) : null;
   return (
     <tr data-price={line.priceLak} data-product={line.productId} data-role={unitPrintRole(line.unitName)} data-rounding={line.roundingLak} data-sku={line.sku} data-testid="products-bulk-unit" data-unit={line.unitName} data-unit-id={line.unitId}>
       <td className="font-semibold">{productName}</td>
@@ -349,42 +332,30 @@ function UnitRow({ direction, jobRounding, line, mode, onManual, onRemove, onTog
       <td className="font-mono text-xs">{line.barcode || "—"}</td>
       <td className="num">{line.costLak === null ? "—" : formatLak(line.costLak)}</td>
       <td className="num">{formatLak(line.priceLak)}</td>
-      <td className="num">
-        {mode === "manual" ? (
-          <input data-testid="products-bulk-manual-price" inputMode="numeric" value={line.manual} onChange={(event) => onManual(event.target.value)}/>
-        ) : (
-          <span className="font-semibold" data-testid="products-bulk-proposed">{quote.newPriceLak === null ? "—" : formatLak(quote.newPriceLak)}</span>
-        )}
-      </td>
+      <td className="num" data-testid="products-bulk-raw">{quote?.rawPriceLak == null ? "—" : formatLak(quote.rawPriceLak)}</td>
+      <td className="num"><span className="font-semibold" data-testid="products-bulk-proposed">{quote?.newPriceLak == null ? "—" : formatLak(quote.newPriceLak)}</span></td>
       <td className="mid"><button className="ego-row-remove" data-testid="products-bulk-remove-product" type="button" onClick={onRemove}>{t("printRemoveProduct")}</button></td>
     </tr>
   );
 }
 
-function quoteForLine(line: { manual: string; priceLak: number; roundingLak: number }, input: {
+function quoteForLine(line: { priceLak: number; roundingLak: number }, input: {
+  amount: string;
   direction: Direction;
   jobRounding: number | null;
   mode: Mode;
   percent: string;
-  roundManual: boolean;
 }) {
-  if (input.mode === "manual") {
-    if (!line.manual.trim()) return quoteBulkSellingPrice({ currentPriceLak: line.priceLak, method: "set_exact", value: Number.NaN });
-    return quoteBulkSellingPrice({
-      currentPriceLak: line.priceLak,
-      jobRounding: input.roundManual ? input.jobRounding : null,
-      method: "set_exact",
-      roundExact: input.roundManual,
-      roundingLak: line.roundingLak,
-      value: Number(line.manual),
-    });
-  }
+  const valueText = input.mode === "percent" ? input.percent : input.amount;
+  const method = input.mode === "percent"
+    ? input.direction === "increase" ? "increase_percent" : "decrease_percent"
+    : input.direction === "increase" ? "increase_amount" : "decrease_amount";
   return quoteBulkSellingPrice({
     currentPriceLak: line.priceLak,
     jobRounding: input.jobRounding,
-    method: input.direction === "increase" ? "increase_percent" : "decrease_percent",
+    method,
     roundingLak: line.roundingLak,
-    value: Number(input.percent),
+    value: valueText.trim() === "" ? Number.NaN : Number(valueText),
   });
 }
 

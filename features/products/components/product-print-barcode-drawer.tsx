@@ -31,13 +31,14 @@ import {
   type BarcodePrintProduct,
 } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
+import { LabelPreviewPager, useLabelPreviewPaging } from "@/features/products/components/label-preview-controls";
+import { expandLabelCopies, sliceLabelPreview } from "@/features/products/label-preview-page";
 import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import { localizedProductName } from "@/features/pos/product-display-name";
 import { tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
 type Draft = { included: boolean; qty: string };
-type Locale = ReturnType<typeof useAppLocale>;
 
 const SIZE_KEY = "ego-pos-barcode-label-size";
 
@@ -124,6 +125,10 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
   const job = buildBarcodePrintJob(lines.filter((line) => line.included).map((line) => ({ ...line, copies: line.copies })));
   const qtyError = lines.some((line) => line.included && !line.qtyValid);
   const sample = lines.find((line) => line.included && !line.missing && line.encodable);
+  const printLabelsAll = expandLabelCopies(job.printable);
+  const printSignature = job.printable.map((line) => `${line.productId}:${line.unitName}:${line.barcode}:${line.copies}`).join("|");
+  const paging = useLabelPreviewPaging(printLabelsAll.length, printSignature);
+  const previewPage = sliceLabelPreview(printLabelsAll, paging.page, paging.pageSize);
 
   function updateDraft(key: string, patch: Partial<Draft>) {
     setDrafts((current) => ({ ...current, [key]: { ...(current[key] ?? { included: false, qty: "1" }), ...patch } }));
@@ -213,7 +218,16 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
             ))}
           </WhiteDataTable>
           <LabelSettings customHeight={customHeight} customWidth={customWidth} fields={fields} layout={layout} preset={preset} t={t} onCustomHeight={setCustomHeight} onCustomWidth={setCustomWidth} onFields={setFields} onLayout={setLayout} onPreset={setPreset}/>
-          {sample ? <LivePreview fields={fields} layout={layout} line={sample} locale={locale} override={overrides[sample.key]} size={size} t={t} onEdit={() => setEditingKey(sample.key)}/> : null}
+          <div className="max-h-72 overflow-auto rounded-lg border border-border p-3" data-testid="products-print-unit-previews">
+            <div className="flex flex-wrap items-start gap-3">
+              {lines.map((line) => (
+                <div className="grid justify-items-start gap-2" data-role={unitPrintRole(line.unitName)} data-testid="products-print-unit-preview" data-unit={line.unitName} key={line.key}>
+                  <LabelCard copy={0} fields={fields} heightMm={size.heightMm} layout={layout} line={line} localeName={line.localeName || localizedProductName(line, locale)} override={overrides[line.key]} preview widthMm={size.widthMm}/>
+                  <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid={line.key === sample?.key ? "products-print-edit-sample" : "products-print-edit-unit"} type="button" onClick={() => setEditingKey(line.key)}>{t("printEditLabel")}</button>
+                </div>
+              ))}
+            </div>
+          </div>
           {editingKey ? <OverrideEditor fields={fields} line={lines.find((line) => line.key === editingKey)} override={overrides[editingKey]} t={t} onChange={(patch) => setOverrides((current) => ({ ...current, [editingKey]: { ...current[editingKey], ...patch } }))} onClose={() => setEditingKey("")} onReset={() => { setOverrides((current) => { const next = { ...current }; delete next[editingKey]; return next; }); setEditingKey(""); }}/> : null}
           <p className="text-sm font-semibold" data-testid="products-print-total">{t("printTotalLabels")}: {job.overLimit ? 0 : job.total}</p>
           {qtyError || (preset === "custom" && !customValid) ? <p className="text-sm font-semibold text-danger">{t("printQtyInvalid")}</p> : null}
@@ -243,12 +257,19 @@ export function PrintBarcodeDrawer({ onClose, selectedIds }: { onClose: () => vo
               </div>
             ))}
           </div>
-          <div className="barcode-print-sheet grid gap-3 print:block" data-testid="products-print-sheet">
-            {job.printable.flatMap((line) => {
+          <LabelPreviewPager page={previewPage.page} pageSize={paging.pageSize} pages={previewPage.pages} t={t} testPrefix="products-print" onPage={paging.setPage} onPageSize={paging.setPageSize}/>
+          <div className="max-h-[52vh] overflow-auto rounded-lg border border-border p-3 print:hidden" data-page={previewPage.page} data-page-size={paging.pageSize} data-preview-count={previewPage.items.length} data-testid="products-print-preview-window">
+            <div className="flex flex-wrap items-start gap-3">
+              {previewPage.items.map(({ copy, line }) => {
+                const source = lines.find((item) => item.productId === line.productId && item.unitName === line.unitName && item.barcode === line.barcode);
+                return <LabelCard copy={copy} fields={fields} heightMm={size.heightMm} key={`${line.productId}-${line.unitName}-${line.barcode}-${copy}`} layout={layout} line={line} localeName={source?.localeName || localizedProductName(line, locale)} override={source ? overrides[source.key] : undefined} preview widthMm={size.widthMm}/>;
+              })}
+            </div>
+          </div>
+          <div className="barcode-print-sheet hidden print:block" data-label-count={printLabelsAll.length} data-testid="products-print-sheet">
+            {printLabelsAll.map(({ copy, line }) => {
               const source = lines.find((item) => item.productId === line.productId && item.unitName === line.unitName && item.barcode === line.barcode);
-              return Array.from({ length: line.copies }, (_, copy) => (
-                <LabelCard copy={copy} fields={fields} heightMm={size.heightMm} key={`${line.productId}-${line.unitName}-${line.barcode}-${copy}`} layout={layout} line={line} localeName={source?.localeName || localizedProductName(line, locale)} override={source ? overrides[source.key] : undefined} widthMm={size.widthMm}/>
-              ));
+              return <LabelCard copy={copy} fields={fields} heightMm={size.heightMm} key={`${line.productId}-${line.unitName}-${line.barcode}-${copy}`} layout={layout} line={line} localeName={source?.localeName || localizedProductName(line, locale)} override={source ? overrides[source.key] : undefined} widthMm={size.widthMm}/>;
             })}
           </div>
         </div>
@@ -339,24 +360,6 @@ function LabelSettings({ customHeight, customWidth, fields, layout, onCustomHeig
         {fields.sellingPrice ? <label className="grid gap-1 text-xs font-semibold">{t("printPriceSize")}<input className="h-9 rounded-md border border-border bg-background px-2 text-sm" data-testid="products-print-price-size" max={BARCODE_PRICE_MAX_FONT_PX} min={BARCODE_PRICE_MIN_FONT_PX} type="number" value={layout.priceFontPx} onChange={(event) => onLayout({ ...layout, priceFontPx: clampFont(Number(event.target.value), BARCODE_PRICE_MIN_FONT_PX, BARCODE_PRICE_MAX_FONT_PX, layout.priceFontPx) })}/></label> : null}
       </div>
     </section>
-  );
-}
-
-function LivePreview({ fields, layout, line, locale, onEdit, override, size, t }: {
-  fields: BarcodeLabelFields;
-  layout: BarcodeLabelLayout;
-  line: BarcodePrintChoice & { localeName: string };
-  locale: Locale;
-  onEdit: () => void;
-  override?: BarcodeLabelOverride;
-  size: { heightMm: number; widthMm: number };
-  t: (key: string) => string;
-}) {
-  return (
-    <div className="grid justify-items-start gap-2">
-      <LabelCard copy={0} fields={fields} heightMm={size.heightMm} layout={layout} line={line} localeName={line.localeName || localizedProductName(line, locale)} override={override} preview widthMm={size.widthMm}/>
-      <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-print-edit-sample" type="button" onClick={onEdit}>{t("printEditLabel")}</button>
-    </div>
   );
 }
 
@@ -486,9 +489,12 @@ function printCss(widthMm: number, heightMm: number) {
     left: 0 !important;
     top: 0 !important;
     display: block !important;
+    max-height: none !important;
+    overflow: visible !important;
     width: auto !important;
   }
   .barcode-label {
+    display: block !important;
     width: ${widthMm - 2}mm;
     height: ${heightMm - 2}mm;
     break-after: page;

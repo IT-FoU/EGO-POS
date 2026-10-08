@@ -116,7 +116,8 @@ export function barcodePrintUnits(product: BarcodePrintProduct): BarcodePrintCho
   }
   return units
     .filter((unit) => (unit.status ?? "active") !== "inactive" && unit.allowManualUnitSelect !== false)
-    .map((unit) => choice(shared, clean(unit.unitName) || "Unit", unit.barcode, unit.sellingPriceLak));
+    .map((unit) => choice(shared, clean(unit.unitName) || "Unit", unit.barcode, unit.sellingPriceLak))
+    .sort((left, right) => comparePrintUnitNames(left.unitName, right.unitName));
 }
 
 export const BARCODE_LABEL_PRESETS = [
@@ -217,12 +218,20 @@ export function resolveBarcodeLabelSize(preset: BarcodeLabelPresetId, customWidt
   };
 }
 
+const PRINT_ROLE_ORDER = { piece: 0, pack: 1, box: 2, custom: 3 } as const;
+
 export function unitPrintRole(unitName: string) {
   const value = unitName.trim().toLowerCase();
   if (value === "piece") return "piece";
   if (value === "pack") return "pack";
   if (value === "box") return "box";
   return "custom";
+}
+
+export function comparePrintUnitNames(left: string, right: string) {
+  const diff = PRINT_ROLE_ORDER[unitPrintRole(left)] - PRINT_ROLE_ORDER[unitPrintRole(right)];
+  if (diff !== 0) return diff;
+  return left.localeCompare(right);
 }
 
 export function fitBarcodeLabelName(name: string, widthMm: number, fontPx: number, maxFontPx = BARCODE_NAME_MAX_FONT_PX) {

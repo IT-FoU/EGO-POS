@@ -1,4 +1,4 @@
-import { encodeCode128B, BARCODE_PRINT_MAX_LABELS, type BarcodePrintProduct } from "@/features/products/barcode-print";
+import { comparePrintUnitNames, encodeCode128B, BARCODE_PRINT_MAX_LABELS, type BarcodePrintProduct } from "@/features/products/barcode-print";
 import { isSellableCoverageUnit } from "@/features/products/unit-coverage";
 
 /**
@@ -183,7 +183,8 @@ export function shelfPrintUnits(product: BarcodePrintProduct): ShelfPrintChoice[
   }
   return units
     .filter((unit) => isSellableCoverageUnit(unit))
-    .map((unit) => choice(shared, clean(unit.unitName) || "Unit", clean(unit.id), unit.barcode, unit.sellingPriceLak, Boolean(unit.labelReprintNeeded)));
+    .map((unit) => choice(shared, clean(unit.unitName) || "Unit", clean(unit.id), unit.barcode, unit.sellingPriceLak, Boolean(unit.labelReprintNeeded)))
+    .sort((left, right) => comparePrintUnitNames(left.unitName, right.unitName));
 }
 
 export function buildShelfPrintJob(lines: ShelfPrintChoice[]) {

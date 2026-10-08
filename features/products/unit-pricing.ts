@@ -40,6 +40,15 @@ export function ceilToLakIncrement(rawNumerator: bigint, rawDenominator: bigint,
   return Number(roundedSteps * step);
 }
 
+export function floorToLakIncrement(rawNumerator: bigint, rawDenominator: bigint, increment: number) {
+  if (rawDenominator <= 0n) return 0;
+  if (rawNumerator <= 0n) return 0;
+  if (increment <= 0) return Number(rawNumerator / rawDenominator);
+  const step = BigInt(increment);
+  const scaledDenominator = rawDenominator * step;
+  return Number((rawNumerator / scaledDenominator) * step);
+}
+
 export function sellingPriceFromCost(input: {
   addAmountLak?: number;
   costPriceLak?: number;

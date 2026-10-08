@@ -1,11 +1,13 @@
-import { ceilToLakIncrement, PERSISTED_ROUNDING_INCREMENTS } from "@/features/products/unit-pricing";
+import { comparePrintUnitNames } from "@/features/products/barcode-print";
+import { ceilToLakIncrement, floorToLakIncrement, PERSISTED_ROUNDING_INCREMENTS } from "@/features/products/unit-pricing";
 import { isSellableCoverageUnit } from "@/features/products/unit-coverage";
 
 /**
  * Selling-price quotes for bulk update.
- * Set exact price is stored as entered, matching a manual Product Edit.
- * Amount and percentage use that unit's own rounding via ceilToLakIncrement.
- * Pack and Box are never derived from Piece or from conversion quantity.
+ * Percent and amount always start from that unit's own current selling price.
+ * Increase rounds up and decrease rounds down. No Rounding keeps the LAK integer.
+ * Exact multiples of the increment stay unchanged.
+ * Pack and Box are never derived from Piece, cost, or conversion quantity.
  */
 export const BULK_PRICE_MAX_LINES = 200;
 export const BULK_PRICE_MAX_PERCENT = 1000;
@@ -54,6 +56,7 @@ export type BulkPriceQuote = {
   amount: number | null;
   newPriceLak: number | null;
   percent: number | null;
+  rawPriceLak: number | null;
   reason: "invalid_value" | "negative" | "percent_range" | null;
 };
 
@@ -114,7 +117,7 @@ export function bulkPriceUnits(product: BulkPriceProductSource): BulkPriceChoice
       unitId: clean(unit.id),
       unitName: clean(unit.unitName) || "Unit",
     }];
-  });
+  }).sort((left, right) => comparePrintUnitNames(left.unitName, right.unitName));
 }
 
 export function quoteBulkSellingPrice(input: {
@@ -134,8 +137,8 @@ export function quoteBulkSellingPrice(input: {
 
   if (input.method === "set_exact") {
     const exact = Math.round(input.value);
-    if (input.roundExact && rounding > 0) return priced(current, ceilToLakIncrement(BigInt(exact), 1n, rounding));
-    return priced(current, exact);
+    if (input.roundExact && rounding > 0) return priced(current, ceilToLakIncrement(BigInt(exact), 1n, rounding), exact);
+    return priced(current, exact, exact);
   }
 
   if (input.method === "increase_percent" || input.method === "decrease_percent") {
@@ -143,14 +146,17 @@ export function quoteBulkSellingPrice(input: {
     if (points > BULK_PRICE_MAX_PERCENT * 10) return invalid("percent_range");
     if (input.method === "decrease_percent" && points > 1000) return invalid("negative");
     const factor = input.method === "increase_percent" ? 1000 + points : 1000 - points;
-    const next = ceilToLakIncrement(BigInt(current) * BigInt(factor), 1000n, rounding);
-    return priced(current, next);
+    const numerator = BigInt(current) * BigInt(factor);
+    const raw = Number(numerator / 1000n);
+    const next = roundDirected(numerator, 1000n, rounding, input.method === "increase_percent" ? "up" : "down");
+    return priced(current, next, raw);
   }
 
   const amount = Math.round(input.value);
   const raw = input.method === "increase_amount" ? current + amount : current - amount;
   if (raw < 0) return invalid("negative");
-  return priced(current, ceilToLakIncrement(BigInt(raw), 1n, rounding));
+  const next = roundDirected(BigInt(raw), 1n, rounding, input.method === "increase_amount" ? "up" : "down");
+  return priced(current, next, raw);
 }
 
 export function classifyBulkLine(input: {
@@ -168,19 +174,27 @@ export function classifyBulkLine(input: {
   return "updated" as const;
 }
 
-function priced(current: number, next: number): BulkPriceQuote {
+function roundDirected(numerator: bigint, denominator: bigint, increment: number, direction: "down" | "up") {
+  if (increment <= 0) return Number(numerator / denominator);
+  return direction === "up"
+    ? ceilToLakIncrement(numerator, denominator, increment)
+    : floorToLakIncrement(numerator, denominator, increment);
+}
+
+function priced(current: number, next: number, raw: number): BulkPriceQuote {
   if (!Number.isFinite(next) || next < 0) return invalid("negative");
   const amount = next - current;
   return {
     amount,
     newPriceLak: next,
     percent: current === 0 ? null : Math.round((amount / current) * 1000) / 10,
+    rawPriceLak: raw,
     reason: null,
   };
 }
 
 function invalid(reason: BulkPriceQuote["reason"]): BulkPriceQuote {
-  return { amount: null, newPriceLak: null, percent: null, reason };
+  return { amount: null, newPriceLak: null, percent: null, rawPriceLak: null, reason };
 }
 
 function savedPrice(value: number | null | undefined) {

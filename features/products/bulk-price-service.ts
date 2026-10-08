@@ -16,7 +16,7 @@ export type BulkPriceApplyLine = {
 };
 
 export type BulkPriceJobAudit = {
-  mode: "manual" | "percent";
+  mode: "amount" | "percent";
   roundManual: boolean;
   roundingOverrideLak: number | null;
 };

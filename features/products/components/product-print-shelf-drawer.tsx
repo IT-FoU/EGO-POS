@@ -5,6 +5,8 @@ import Link from "next/link";
 import { markShelfLabelsPrintedAction, searchBarcodePrintProductsAction } from "@/features/products/actions";
 import { encodeCode128B, fitBarcodeLabelName, parseLabelMillimetres, parsePrintQuantity, unitPrintRole, type BarcodeModule, type BarcodePrintProduct } from "@/features/products/barcode-print";
 import { formatLak } from "@/features/products/format";
+import { LabelPreviewPager, useLabelPreviewPaging } from "@/features/products/components/label-preview-controls";
+import { expandLabelCopies, sliceLabelPreview } from "@/features/products/label-preview-page";
 import { WhiteDataTable } from "@/features/products/components/selected-products-list";
 import {
   DEFAULT_SHELF_LABEL_FIELDS,
@@ -122,6 +124,10 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
   const qtyError = lines.some((line) => line.included && !line.qtyValid);
   const sample = lines.find((line) => line.included && !line.missingPrice);
   const selectedUnits = lines.filter((line) => line.included && !line.missingPrice).length;
+  const printLabelsAll = expandLabelCopies(job.printable);
+  const printSignature = job.printable.map((line) => `${line.productId}:${line.unitName}:${line.barcode}:${line.copies}`).join("|");
+  const paging = useLabelPreviewPaging(printLabelsAll.length, printSignature);
+  const previewPage = sliceLabelPreview(printLabelsAll, paging.page, paging.pageSize);
 
   function updateDraft(key: string, patch: Partial<Draft>) {
     setDrafts((current) => ({ ...current, [key]: { ...(current[key] ?? { included: false, qty: "1" }), ...patch } }));
@@ -245,8 +251,16 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
           </WhiteDataTable>
           <ShelfSettings customHeight={customHeight} customWidth={customWidth} fields={fields} preset={preset} style={style} t={t} onCustomHeight={setCustomHeight} onCustomWidth={setCustomWidth} onFields={setFields} onLayout={chooseLayout} onPreset={setPreset} onStyle={setStyle}/>
           <JobSummary layout={style.layout} productCount={products.length} size={size} t={t} total={job.overLimit ? 0 : job.total} units={selectedUnits}/>
-          {sample ? <ShelfCard fields={fields} heightMm={size.heightMm} line={sample} localeName={sample.localeName} override={overrides[sample.key]} preview style={style} widthMm={size.widthMm}/> : null}
-          {sample ? <button className="h-8 w-fit rounded-md border border-border px-2 text-xs font-semibold" data-testid="products-shelf-edit-sample" type="button" onClick={() => setEditingKey(sample.key)}>{t("printEditLabel")}</button> : null}
+          <div className="max-h-72 overflow-auto rounded-lg border border-border p-3" data-testid="products-shelf-unit-previews">
+            <div className="flex flex-wrap items-start gap-3">
+              {lines.map((line) => (
+                <div className="grid justify-items-start gap-2" data-role={unitPrintRole(line.unitName)} data-testid="products-shelf-unit-preview" data-unit={line.unitName} key={line.key}>
+                  <ShelfCard fields={fields} heightMm={size.heightMm} line={line} localeName={line.localeName} override={overrides[line.key]} preview style={style} widthMm={size.widthMm}/>
+                  <button className="h-8 rounded-md border border-border px-2 text-xs font-semibold" data-testid={line.key === sample?.key ? "products-shelf-edit-sample" : "products-shelf-edit-unit"} type="button" onClick={() => setEditingKey(line.key)}>{t("printEditLabel")}</button>
+                </div>
+              ))}
+            </div>
+          </div>
           {editingKey ? <OverrideEditor fields={fields} line={lines.find((line) => line.key === editingKey)} override={overrides[editingKey]} style={style} t={t} onChange={(patch) => setOverrides((current) => ({ ...current, [editingKey]: { ...current[editingKey], ...patch } }))} onClose={() => setEditingKey("")} onReset={() => { setOverrides((current) => { const next = { ...current }; delete next[editingKey]; return next; }); setEditingKey(""); }}/> : null}
           <p className="text-sm font-semibold" data-testid="products-shelf-total">{t("printTotalLabels")}: {job.overLimit ? 0 : job.total}</p>
           {qtyError || (preset === "custom" && !customValid) ? <p className="text-sm font-semibold text-danger">{t("printQtyInvalid")}</p> : null}
@@ -284,12 +298,19 @@ export function PrintShelfLabelDrawer({ onClose, onMarked, prefillReprint = fals
               </div>
             ))}
           </div>
-          <div className="shelf-print-sheet grid gap-3 print:block" data-testid="products-shelf-sheet">
-            {job.printable.flatMap((line) => {
+          <LabelPreviewPager page={previewPage.page} pageSize={paging.pageSize} pages={previewPage.pages} t={t} testPrefix="products-shelf" onPage={paging.setPage} onPageSize={paging.setPageSize}/>
+          <div className="max-h-[52vh] overflow-auto rounded-lg border border-border p-3 print:hidden" data-page={previewPage.page} data-page-size={paging.pageSize} data-preview-count={previewPage.items.length} data-testid="products-shelf-preview-window">
+            <div className="flex flex-wrap items-start gap-3">
+              {previewPage.items.map(({ copy, line }) => {
+                const source = lines.find((item) => item.productId === line.productId && item.unitName === line.unitName && item.barcode === line.barcode);
+                return <ShelfCard copy={copy} fields={fields} heightMm={size.heightMm} key={`${line.productId}-${line.unitName}-${line.barcode}-${copy}`} line={line} localeName={source?.localeName || localizedProductName(line, locale)} override={source ? overrides[source.key] : undefined} preview style={style} widthMm={size.widthMm}/>;
+              })}
+            </div>
+          </div>
+          <div className="shelf-print-sheet hidden print:block" data-label-count={printLabelsAll.length} data-testid="products-shelf-sheet">
+            {printLabelsAll.map(({ copy, line }) => {
               const source = lines.find((item) => item.productId === line.productId && item.unitName === line.unitName && item.barcode === line.barcode);
-              return Array.from({ length: line.copies }, (_, copy) => (
-                <ShelfCard copy={copy} fields={fields} heightMm={size.heightMm} key={`${line.productId}-${line.unitName}-${line.barcode}-${copy}`} line={line} localeName={source?.localeName || localizedProductName(line, locale)} override={source ? overrides[source.key] : undefined} style={style} widthMm={size.widthMm}/>
-              ));
+              return <ShelfCard copy={copy} fields={fields} heightMm={size.heightMm} key={`${line.productId}-${line.unitName}-${line.barcode}-${copy}`} line={line} localeName={source?.localeName || localizedProductName(line, locale)} override={source ? overrides[source.key] : undefined} style={style} widthMm={size.widthMm}/>;
             })}
           </div>
         </div>
@@ -534,9 +555,12 @@ function printCss(widthMm: number, heightMm: number) {
     left: 0 !important;
     top: 0 !important;
     display: block !important;
+    max-height: none !important;
+    overflow: visible !important;
     width: auto !important;
   }
   .shelf-label {
+    display: block !important;
     width: ${widthMm - 3}mm;
     height: ${heightMm - 3}mm;
     break-after: page;
