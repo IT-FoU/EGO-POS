@@ -37,8 +37,8 @@ import { deleteFailureCode } from "@/features/products/product-delete";
 import { loadPermanentDeleteEligibility } from "@/features/products/product-delete-service";
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
-import { importProductCsvBatch, previewProductImport } from "@/features/products/product-import-service";
-import { PRODUCT_IMPORT_BATCH_SIZE } from "@/features/products/product-import";
+import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
+import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS } from "@/features/products/product-import";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
 import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
 import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine, type BulkPriceJobAudit } from "@/features/products/bulk-price-service";
@@ -346,6 +346,47 @@ export async function importProductsAction(csvText: string, options: { afterRow?
   } catch (error) {
     return writeFailure(error);
   }
+}
+
+export async function previewProductImportFileAction(input: { fileBase64: string; fileName: string; sheetName?: string }) {
+  try {
+    const bytes = decodeProductImportFile(input.fileBase64);
+    const data = await previewProductImportFile({
+      bytes,
+      fileName: input.fileName,
+      sheetName: input.sheetName,
+    }, await tenant(WRITE_PERMISSIONS.productsCreate));
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function importProductsFileAction(input: { afterRow?: number; fileBase64: string; fileName: string; limit?: number; sheetName?: string }) {
+  try {
+    const sessionTenant = await tenant(WRITE_PERMISSIONS.productsCreate);
+    const data = await importProductFileBatch({
+      bytes: decodeProductImportFile(input.fileBase64),
+      fileName: input.fileName,
+      sheetName: input.sheetName,
+    }, sessionTenant, {
+      afterRow: Math.max(0, Number(input.afterRow) || 0),
+      limit: Math.min(PRODUCT_IMPORT_BATCH_SIZE, Math.max(1, Number(input.limit) || PRODUCT_IMPORT_BATCH_SIZE)),
+    });
+    if (data.created > 0) revalidateProductCataloguePaths();
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+function decodeProductImportFile(fileBase64: string) {
+  const compact = fileBase64.replace(/\s/g, "");
+  if (!compact || compact.length > Math.ceil(PRODUCT_IMPORT_MAX_CHARS * 4 / 3) + 8) {
+    return new Uint8Array(PRODUCT_IMPORT_MAX_CHARS + 1);
+  }
+  const bytes = Buffer.from(compact, "base64");
+  return bytes.byteLength > PRODUCT_IMPORT_MAX_CHARS ? new Uint8Array(PRODUCT_IMPORT_MAX_CHARS + 1) : bytes;
 }
 
 export async function markShelfLabelsPrintedAction(lines: MarkPrintedLine[]) {

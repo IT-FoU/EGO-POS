@@ -145,6 +145,12 @@ export type ProductImportCatalog = {
 export type ProductImportParseResult = {
   fileIssues: ProductImportIssue[];
   rows: Array<{ rowNumber: number; values: Partial<Record<ProductImportColumn, string>> }>;
+  skippedBlankRows: number;
+};
+
+export type ProductImportGridRow = {
+  cells: string[];
+  lineNumber: number;
 };
 
 export type ProductImportEvaluation = {
@@ -200,13 +206,21 @@ export function buildProductImportCsv(dataRows: string[][]) {
 }
 
 export function parseProductImportCsv(csvText: string): ProductImportParseResult {
-  if (csvText.length > PRODUCT_IMPORT_MAX_CHARS) {
-    return { fileIssues: [{ code: "file_too_large", level: "error" }], rows: [] };
+  return parseProductImportDelimited(csvText, ",");
+}
+
+export function parseProductImportDelimited(text: string, delimiter: "," | "\t"): ProductImportParseResult {
+  if (text.length > PRODUCT_IMPORT_MAX_CHARS) {
+    return { fileIssues: [{ code: "file_too_large", level: "error" }], rows: [], skippedBlankRows: 0 };
   }
 
-  const table = parseCsvTable(csvText.replace(/^\uFEFF/, ""));
+  const table = parseDelimitedTable(text.replace(/^\uFEFF/, ""), delimiter);
+  return mapProductImportGrid(table.rows, table.skippedBlankRows);
+}
+
+export function mapProductImportGrid(table: ProductImportGridRow[], skippedBlankRows = 0): ProductImportParseResult {
   if (table.length === 0) {
-    return { fileIssues: [{ code: "empty_file", level: "error" }], rows: [] };
+    return { fileIssues: [{ code: "empty_file", level: "error" }], rows: [], skippedBlankRows };
   }
 
   const header = table[0];
@@ -225,21 +239,26 @@ export function parseProductImportCsv(csvText: string): ProductImportParseResult
       }
       return;
     }
-    if (!columnIndex.has(column)) columnIndex.set(column, index);
+    if (columnIndex.has(column)) {
+      fileIssues.push({ code: "duplicate_header", detail: cell.trim(), level: "warning" });
+      return;
+    }
+    columnIndex.set(column, index);
   });
 
   if (!columnIndex.has("product_name")) {
-    return { fileIssues: [...fileIssues, { code: "missing_header", level: "error" }], rows: [] };
+    return { fileIssues: [...fileIssues, { code: "missing_header", level: "error" }], rows: [], skippedBlankRows };
   }
 
   const dataRows = table.slice(1).filter((row) => row.cells.some((cell) => cell.trim() !== ""));
   if (dataRows.length === 0) {
-    return { fileIssues: [...fileIssues, { code: "empty_file", level: "error" }], rows: [] };
+    return { fileIssues: [...fileIssues, { code: "empty_file", level: "error" }], rows: [], skippedBlankRows };
   }
   if (dataRows.length > PRODUCT_IMPORT_MAX_ROWS) {
     return {
       fileIssues: [...fileIssues, { code: "too_many_rows", detail: String(PRODUCT_IMPORT_MAX_ROWS), level: "error" }],
       rows: [],
+      skippedBlankRows,
     };
   }
 
@@ -254,6 +273,7 @@ export function parseProductImportCsv(csvText: string): ProductImportParseResult
         }),
       ) as Partial<Record<ProductImportColumn, string>>,
     })),
+    skippedBlankRows,
   };
 }
 
@@ -631,19 +651,22 @@ function csvCell(value: string) {
   return value;
 }
 
-function parseCsvTable(csvText: string) {
-  const source = csvText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const rows: Array<{ cells: string[]; lineNumber: number }> = [];
+function parseDelimitedTable(text: string, delimiter: "," | "\t") {
+  const source = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const rows: ProductImportGridRow[] = [];
   let cells: string[] = [];
   let cell = "";
   let inQuotes = false;
   let lineNumber = 1;
   let rowStart = 1;
+  let skippedBlankRows = 0;
 
   function finishRow() {
     cells.push(cell);
     if (cells.some((value) => value.trim() !== "")) {
       rows.push({ cells, lineNumber: rowStart });
+    } else {
+      skippedBlankRows += 1;
     }
     cells = [];
     cell = "";
@@ -668,7 +691,7 @@ function parseCsvTable(csvText: string) {
     }
     if (char === '"') {
       inQuotes = true;
-    } else if (char === ",") {
+    } else if (char === delimiter) {
       cells.push(cell);
       cell = "";
     } else if (char === "\n") {
@@ -679,5 +702,5 @@ function parseCsvTable(csvText: string) {
     }
   }
   if (cell.length > 0 || cells.length > 0) finishRow();
-  return rows;
+  return { rows, skippedBlankRows };
 }

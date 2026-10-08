@@ -1,10 +1,12 @@
 import { createPrismaProduct, type ProductWriteInput } from "@/features/products/prisma-repository";
+import { readProductImportFile } from "@/features/products/product-import-files";
 import {
   evaluateProductImport,
   parseProductImportCsv,
   publicProductImportPreview,
   type ProductImportDraft,
   type ProductImportEvaluation,
+  type ProductImportParseResult,
 } from "@/features/products/product-import";
 import { prisma } from "@/lib/db/prisma";
 import { branchOwnedWhere, resolveTenantScope } from "@/lib/db/tenant-scope";
@@ -23,7 +25,39 @@ export async function importProductCsvBatch(
   tenant: TenantContext,
   options: { afterRow: number; limit: number },
 ) {
-  const parsed = parseProductImportCsv(csvText);
+  return importParsedBatch(parseProductImportCsv(csvText), tenant, options);
+}
+
+export async function previewProductImportFile(
+  input: { bytes: Uint8Array; fileName: string; sheetName?: string },
+  tenant: TenantContext,
+) {
+  const read = await readProductImportFile(input);
+  const catalog = await loadProductImportCatalog(tenant, read.parsed);
+  return {
+    ...publicProductImportPreview(evaluateProductImport(read.parsed, catalog)),
+    format: read.format,
+    selectedSheet: read.selectedSheet,
+    sheets: read.sheets,
+    skippedBlankRows: read.parsed.skippedBlankRows,
+  };
+}
+
+export async function importProductFileBatch(
+  input: { bytes: Uint8Array; fileName: string; sheetName?: string },
+  tenant: TenantContext,
+  options: { afterRow: number; limit: number },
+) {
+  const read = await readProductImportFile(input);
+  const result = await importParsedBatch(read.parsed, tenant, options);
+  return { ...result, format: read.format, selectedSheet: read.selectedSheet, sheets: read.sheets };
+}
+
+async function importParsedBatch(
+  parsed: ProductImportParseResult,
+  tenant: TenantContext,
+  options: { afterRow: number; limit: number },
+) {
   const catalog = await loadProductImportCatalog(tenant, parsed);
   const evaluation = evaluateProductImport(parsed, catalog);
   if (evaluation.fileIssues.some((issue) => issue.level === "error")) {

@@ -2,9 +2,10 @@
 
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { importProductsAction, previewProductImportAction } from "@/features/products/actions";
+import { importProductsFileAction, previewProductImportFileAction } from "@/features/products/actions";
 import {
   PRODUCT_IMPORT_BATCH_SIZE,
+  PRODUCT_IMPORT_MAX_CHARS,
   PRODUCT_IMPORT_TEMPLATE_CSV,
   type ProductImportIssue,
   type ProductImportPreviewRow,
@@ -16,9 +17,18 @@ import { cn } from "@/lib/utils";
 type PreviewData = {
   errorCount: number;
   fileIssues: ProductImportIssue[];
+  format: string | null;
   rows: ProductImportPreviewRow[];
+  selectedSheet: string | null;
+  sheets: Array<{ empty: boolean; name: string }>;
+  skippedBlankRows: number;
   validCount: number;
   warningCount: number;
+};
+
+type StoredFile = {
+  fileBase64: string;
+  fileName: string;
 };
 
 type ResultRow = {
@@ -36,10 +46,9 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const locale = useAppLocale();
   const t = (key: string) => tProducts(key, locale);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [csvText, setCsvText] = useState("");
-  const [fileName, setFileName] = useState("");
+  const [storedFile, setStoredFile] = useState<StoredFile | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [phase, setPhase] = useState<"idle" | "validating" | "importing" | "done">("idle");
+  const [phase, setPhase] = useState<"idle" | "reading" | "validating" | "importing" | "done">("idle");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<{ created: number; failed: number; rows: ResultRow[]; skipped: number; warnings: number } | null>(null);
 
@@ -57,11 +66,15 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     downloadText("ego-product-import-template.csv", PRODUCT_IMPORT_TEMPLATE_CSV);
   }
 
-  async function validateFile(text: string) {
+  async function validateFile(file: StoredFile, sheetName?: string) {
     setPhase("validating");
     setResult(null);
     setMessage("");
-    const response = await previewProductImportAction(text);
+    const response = await previewProductImportFileAction({
+      fileBase64: file.fileBase64,
+      fileName: file.fileName,
+      sheetName,
+    });
     if (!response.ok || !response.data) {
       setPreview(null);
       setPhase("idle");
@@ -74,23 +87,29 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
 
   async function onFileChange(file: File | undefined) {
     if (!file) return;
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith(".csv")) {
-      setCsvText("");
-      setFileName(file.name);
+    if (file.size > PRODUCT_IMPORT_MAX_CHARS) {
+      setStoredFile(null);
       setPreview(null);
       setResult(null);
-      setMessage(t("importCsvOnly"));
+      setMessage(t("importIssue_file_too_large"));
       return;
     }
-    const text = await file.text();
-    setFileName(file.name);
-    setCsvText(text);
-    await validateFile(text);
+    setPhase("reading");
+    setMessage("");
+    setResult(null);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const stored = { fileBase64: bytesToBase64(bytes), fileName: file.name };
+    setStoredFile(stored);
+    await validateFile(stored);
+  }
+
+  async function onSheetChange(sheetName: string) {
+    if (!storedFile) return;
+    await validateFile(storedFile, sheetName);
   }
 
   async function confirmImport() {
-    if (!csvText || !preview || preview.validCount + preview.warningCount === 0) return;
+    if (!storedFile || !preview || preview.validCount + preview.warningCount === 0) return;
     setPhase("importing");
     setMessage("");
     let afterRow = 0;
@@ -103,7 +122,13 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     let guard = 0;
     while (guard < 60) {
       guard += 1;
-      const response = await importProductsAction(csvText, { afterRow, limit: PRODUCT_IMPORT_BATCH_SIZE });
+      const response = await importProductsFileAction({
+        afterRow,
+        fileBase64: storedFile.fileBase64,
+        fileName: storedFile.fileName,
+        limit: PRODUCT_IMPORT_BATCH_SIZE,
+        sheetName: preview.selectedSheet ?? undefined,
+      });
       if (!response.ok || !response.data) {
         setPhase("idle");
         setMessage(response.error?.includes("Permission denied") ? t("importPermissionDenied") : response.error || t("importFailed"));
@@ -154,7 +179,9 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   }
 
   const readyCount = (preview?.validCount ?? 0) + (preview?.warningCount ?? 0);
-  const busy = phase === "validating" || phase === "importing";
+  const busy = phase === "reading" || phase === "validating" || phase === "importing";
+  const formatLabel = preview?.format ? preview.format.toUpperCase() : "";
+  const workbookSheets = preview?.sheets ?? [];
 
   return (
     <div className="grid gap-5" data-ignores-selection="true" data-testid="products-import-workflow">
@@ -162,6 +189,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
         {t("importNotice")}
       </section>
       {!canImport ? <p className="text-sm font-semibold text-danger">{t("importPermissionDenied")}</p> : null}
+      <p className="text-sm text-muted-foreground" data-testid="products-import-formats">{t("importFormatsHint")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <button className="inline-flex h-11 items-center rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-template" type="button" onClick={downloadTemplate}>
           {t("importDownloadTemplate")}
@@ -170,22 +198,36 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
           <Upload aria-hidden="true" className="size-4"/>
           {t("importChooseFile")}
         </button>
-        <button className="inline-flex h-11 items-center rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-50" data-testid="products-import-validate" disabled={!canImport || !csvText || busy} type="button" onClick={() => validateFile(csvText)}>
-          {phase === "validating" ? t("importValidating") : t("importValidate")}
+        <button className="inline-flex h-11 items-center rounded-md border border-border px-3 text-sm font-semibold disabled:opacity-50" data-testid="products-import-validate" disabled={!canImport || !storedFile || busy} type="button" onClick={() => storedFile && void validateFile(storedFile, preview?.selectedSheet ?? undefined)}>
+          {phase === "validating" || phase === "reading" ? t("importParsing") : t("importValidate")}
         </button>
-        <span className="rounded-full border border-border px-3 py-1 text-sm font-semibold">CSV</span>
-        {fileName ? <span className="text-sm text-muted-foreground">{fileName}</span> : null}
-        <input ref={fileRef} accept=".csv,text/csv" className="hidden" data-testid="products-import-input" type="file" onChange={(event) => { void onFileChange(event.target.files?.[0]); event.target.value = ""; }}/>
+        {formatLabel ? <span className="rounded-full border border-border px-3 py-1 text-sm font-semibold" data-testid="products-import-format">{t("importFileFormat")}: {formatLabel}</span> : null}
+        {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filename">{storedFile.fileName}</span> : null}
+        <input ref={fileRef} accept=".csv,.tsv,.xlsx,.xls,.ods,text/csv,text/tab-separated-values" className="hidden" data-testid="products-import-input" type="file" onChange={(event) => { void onFileChange(event.target.files?.[0]); event.target.value = ""; }}/>
       </div>
+      {workbookSheets.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold" data-testid="products-import-sheet-name">{t("importSelectedSheet")}: {preview?.selectedSheet}</span>
+          {workbookSheets.length > 1 ? (
+            <label className="flex items-center gap-2 text-sm">
+              {t("importSheet")}
+              <select className="h-11 rounded-md border border-border bg-background px-3" data-testid="products-import-sheet" disabled={busy} value={preview?.selectedSheet ?? ""} onChange={(event) => { void onSheetChange(event.target.value); }}>
+                {workbookSheets.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
       <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
-      {message ? <p className="text-sm font-semibold text-danger">{message}</p> : null}
+      {message ? <p className="text-sm font-semibold text-danger" data-testid="products-import-message">{message}</p> : null}
 
       {preview ? (
         <section className="grid gap-4">
-          <div className="grid gap-3 sm:grid-cols-4" data-testid="products-import-summary">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="products-import-summary">
             <Summary label={t("importValid")} value={preview.validCount}/>
             <Summary label={t("importWarnings")} value={preview.warningCount}/>
             <Summary label={t("importError")} value={preview.errorCount}/>
+            <Summary label={t("importSkippedBlank")} testId="products-import-blank-skipped" value={preview.skippedBlankRows}/>
             <Summary label={t("importReady")} value={readyCount}/>
           </div>
           {preview.fileIssues.length > 0 ? (
@@ -250,7 +292,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
           <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={downloadErrors}>{t("importDownloadErrors")}</button>
         ) : null}
         {phase === "done" ? (
-          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => { setPreview(null); setResult(null); setCsvText(""); setFileName(""); setPhase("idle"); }}>{t("importAnother")}</button>
+          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => { setPreview(null); setResult(null); setStoredFile(null); setPhase("idle"); }}>{t("importAnother")}</button>
         ) : null}
         <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{phase === "done" ? t("importDone") : t("closeDrawer")}</button>
         {phase !== "done" ? (
@@ -279,6 +321,15 @@ function downloadText(filename: string, contents: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
 }
 
 function csvCell(value: string) {
