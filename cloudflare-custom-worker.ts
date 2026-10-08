@@ -15,17 +15,17 @@ export default {
       console.error("auto-end cron skipped: missing EGO_CRON_SECRET/CRON_SECRET or NEXTAUTH_URL");
       return;
     }
-    const url = `${String(base).replace(/\/$/, "")}/api/internal/attendance/auto-end`;
-    ctx.waitUntil(
-      handler.fetch(
-        new Request(url, {
-          headers: { "x-ego-cron-secret": String(secret) },
-          method: "POST",
-        }),
-        env,
-        ctx,
-      ),
+    const root = String(base).replace(/\/$/, "");
+    const call = (path: string) => handler.fetch(
+      new Request(`${root}${path}`, {
+        headers: { "x-ego-cron-secret": String(secret) },
+        method: "POST",
+      }),
+      env,
+      ctx,
     );
+    ctx.waitUntil(call("/api/internal/attendance/auto-end"));
+    ctx.waitUntil(call("/api/internal/product-import-cleanup"));
   },
 };
 

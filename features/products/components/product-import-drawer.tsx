@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { importProductsFileAction, previewProductImportFileAction, uploadProductImageAction } from "@/features/products/actions";
+import { cancelLargeProductImportUploadAction, importProductsFileAction, previewProductImportFileAction, startLargeProductImportUploadAction, uploadProductImageAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import type { ProductImportEmbeddedImage } from "@/features/products/product-import-images";
 import {
@@ -15,6 +15,8 @@ import {
   type ProductImportMappedColumn,
   type ProductImportPreviewRow,
 } from "@/features/products/product-import";
+import { PRODUCT_IMPORT_LARGE_MAX_BYTES } from "@/features/products/product-import-large";
+import { readLargeImportResumeUrl, uploadLargeImportWithTus } from "@/features/products/product-import-large-tus";
 import { displayProductUnitName, fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,17 @@ type StoredFile = {
   size: number;
 };
 
+type LargeUploadState = {
+  byteSize: number;
+  file: File;
+  fileName: string;
+  idempotencyKey: string;
+  jobId: string;
+  objectPath: string;
+  percent: number;
+  status: "uploading" | "verifying" | "uploaded" | "failed" | "cancelled";
+};
+
 type ResultRow = {
   issues: ProductImportIssue[];
   outcome: "created" | "failed" | "skipped";
@@ -62,6 +75,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const [phase, setPhase] = useState<"idle" | "reading" | "validating" | "importing" | "done">("idle");
   const [message, setMessage] = useState("");
   const [includeImages, setIncludeImages] = useState(true);
+  const [largeUpload, setLargeUpload] = useState<LargeUploadState | null>(null);
+  const largeTransfer = useRef<ReturnType<typeof uploadLargeImportWithTus> | null>(null);
   const [result, setResult] = useState<{ created: number; failed: number; rows: ResultRow[]; skipped: number; warnings: number } | null>(null);
 
   function issueText(issue: ProductImportIssue) {
@@ -98,8 +113,99 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     setPhase("idle");
   }
 
+  async function beginLargeUpload(file: File, idempotencyKey: string) {
+    largeTransfer.current?.abort();
+    setStoredFile(null);
+    setPreview(null);
+    setResult(null);
+    setMessage("");
+    setPhase("idle");
+    const started = await startLargeProductImportUploadAction({
+      byteSize: file.size,
+      fileName: file.name,
+      idempotencyKey,
+    });
+    if (!started.ok || !started.data) {
+      setLargeUpload(null);
+      setMessage(started.error?.includes("Permission denied") ? t("importPermissionDenied") : started.error || t("importLargeFailed"));
+      return;
+    }
+    const upload = started.data;
+    if (upload.status === "uploaded" || !upload.token || !upload.tusEndpoint) {
+      setLargeUpload({
+        byteSize: file.size,
+        file,
+        fileName: file.name,
+        idempotencyKey,
+        jobId: upload.jobId,
+        objectPath: upload.objectPath,
+        percent: upload.status === "uploaded" ? 100 : 0,
+        status: upload.status === "uploaded" ? "uploaded" : "failed",
+      });
+      return;
+    }
+    setLargeUpload({
+      byteSize: file.size,
+      file,
+      fileName: file.name,
+      idempotencyKey,
+      jobId: upload.jobId,
+      objectPath: upload.objectPath,
+      percent: 0,
+      status: "uploading",
+    });
+    const transfer = uploadLargeImportWithTus({
+      endpoint: upload.tusEndpoint,
+      file,
+      objectPath: upload.objectPath,
+      onProgress: (loaded, total) => {
+        setLargeUpload((current) => current && current.jobId === upload.jobId ? { ...current, percent: Math.min(100, Math.round((loaded / total) * 100)) } : current);
+      },
+      resumeUrl: readLargeImportResumeUrl(upload.objectPath),
+      token: upload.token,
+    });
+    largeTransfer.current = transfer;
+    try {
+      await transfer.start();
+      setLargeUpload((current) => current && current.jobId === upload.jobId ? { ...current, percent: 100, status: "verifying" } : current);
+      const verified = await verifyLargeProductImportUploadAction(upload.jobId);
+      const status = verified.ok && verified.data?.status === "uploaded" ? "uploaded" : "failed";
+      setLargeUpload((current) => current && current.jobId === upload.jobId ? { ...current, status } : current);
+      if (status !== "uploaded") setMessage(t("importLargeFailed"));
+    } catch {
+      setLargeUpload((current) => current && current.jobId === upload.jobId && current.status !== "cancelled" ? { ...current, status: "failed" } : current);
+      setMessage(t("importLargeFailed"));
+    }
+  }
+
+  async function cancelLargeUpload() {
+    if (!largeUpload) return;
+    largeTransfer.current?.abort();
+    const cancelled = await cancelLargeProductImportUploadAction(largeUpload.jobId);
+    setLargeUpload((current) => current ? { ...current, status: cancelled.ok ? "cancelled" : "failed" } : current);
+    if (!cancelled.ok) setMessage(t("importLargeFailed"));
+  }
+
   async function onFileChange(file: File | undefined) {
     if (!file) return;
+    if (file.name.toLowerCase().endsWith(".xlsx") && file.size > PRODUCT_IMPORT_MAX_CHARS) {
+      if (file.size > PRODUCT_IMPORT_LARGE_MAX_BYTES) {
+        setLargeUpload(null);
+        setStoredFile(null);
+        setPreview(null);
+        setResult(null);
+        setMessage(t("importIssue_large_file_too_large"));
+        return;
+      }
+      const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+      if (header[0] !== 0x50 || header[1] !== 0x4b || header[2] !== 0x03 || header[3] !== 0x04) {
+        setLargeUpload(null);
+        setMessage(t("importIssue_malformed_file"));
+        return;
+      }
+      await beginLargeUpload(file, idempotencyKeyFor(file));
+      return;
+    }
     if (file.size > PRODUCT_IMPORT_MAX_CHARS) {
       setStoredFile(null);
       setPreview(null);
@@ -111,6 +217,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     setMessage("");
     setPreview(null);
     setResult(null);
+    setLargeUpload(null);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const stored = { fileBase64: bytesToBase64(bytes), fileName: file.name, size: file.size };
     setStoredFile(stored);
@@ -254,6 +361,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
         {formatLabel ? <span className="rounded-full border border-border px-3 py-1 text-sm font-semibold" data-testid="products-import-format">{t("importFileFormat")}: {formatLabel}</span> : null}
         {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filename">{storedFile.fileName}</span> : null}
         {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filesize">{formatImportFileSize(storedFile.size)}</span> : null}
+        {largeUpload ? <span className="text-sm text-muted-foreground" data-testid="products-import-filesize">{formatImportFileSize(largeUpload.byteSize)}</span> : null}
         <input ref={fileRef} accept=".csv,.tsv,.xlsx,.xls,.ods,text/csv,text/tab-separated-values" className="hidden" data-testid="products-import-input" type="file" onChange={(event) => { void onFileChange(event.target.files?.[0]); event.target.value = ""; }}/>
       </div>
       {workbookSheets.length > 0 ? (
@@ -268,6 +376,27 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
             </label>
           ) : null}
         </div>
+      ) : null}
+      {largeUpload ? (
+        <section className="grid gap-3 rounded-lg border border-border bg-background p-4" data-testid="products-import-large-upload">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold" data-testid="products-import-large-name">{largeUpload.fileName}</p>
+              <p className="text-sm text-muted-foreground">{formatImportFileSize(largeUpload.byteSize)}</p>
+            </div>
+            <p className="text-sm font-semibold" data-testid="products-import-large-status">{largeStatusLabel(largeUpload.status, t)}</p>
+          </div>
+          <p className="text-sm text-muted-foreground" data-testid="products-import-large-progress">{fillProductsCopy(t("importLargeProgress"), { percent: String(largeUpload.percent) })}</p>
+          <p className="text-sm text-muted-foreground">{t("importLargeHint")}</p>
+          <div className="flex flex-wrap gap-2">
+            {largeUpload.status === "failed" || largeUpload.status === "cancelled" ? (
+              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-large-retry" type="button" onClick={() => { void beginLargeUpload(largeUpload.file, largeUpload.idempotencyKey); }}>{t("importLargeRetry")}</button>
+            ) : null}
+            {largeUpload.status === "uploading" || largeUpload.status === "verifying" ? (
+              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-large-cancel" type="button" onClick={() => { void cancelLargeUpload(); }}>{t("importLargeCancel")}</button>
+            ) : null}
+          </div>
+        </section>
       ) : null}
       <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
       {mappingColumns.length > 0 ? (
@@ -404,10 +533,10 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
           <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={downloadErrors}>{t("importDownloadErrors")}</button>
         ) : null}
         {phase === "done" ? (
-          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => { setPreview(null); setResult(null); setStoredFile(null); setPhase("idle"); }}>{t("importAnother")}</button>
+          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={() => { setPreview(null); setResult(null); setStoredFile(null); setLargeUpload(null); setPhase("idle"); }}>{t("importAnother")}</button>
         ) : null}
         <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{phase === "done" ? t("importDone") : t("closeDrawer")}</button>
-        {phase !== "done" ? (
+        {phase !== "done" && !largeUpload ? (
           <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-import-confirm" disabled={!canImport || busy || readyCount === 0 || !productNameMapped} type="button" onClick={() => { void confirmImport(); }}>
             {phase === "importing" ? t("importBusy") : t("importConfirm")}
           </button>
@@ -429,6 +558,23 @@ function formatImportFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function largeStatusLabel(status: LargeUploadState["status"], t: (key: string) => string) {
+  if (status === "uploaded") return t("importLargeUploaded");
+  if (status === "verifying") return t("importLargeVerifying");
+  if (status === "failed") return t("importLargeFailed");
+  if (status === "cancelled") return t("importLargeCancelled");
+  return t("importLargeUploading");
+}
+
+function idempotencyKeyFor(file: File) {
+  const stamp = `ego-large-import-key:${file.name}:${file.size}:${file.lastModified}`;
+  const existing = sessionStorage.getItem(stamp);
+  if (existing) return existing;
+  const key = crypto.randomUUID();
+  sessionStorage.setItem(stamp, key);
+  return key;
 }
 
 function fileFromDataUrl(dataUrl: string) {

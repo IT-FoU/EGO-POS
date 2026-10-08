@@ -39,6 +39,7 @@ import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
 import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS } from "@/features/products/product-import";
+import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
 import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
 import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine, type BulkPriceJobAudit } from "@/features/products/bulk-price-service";
@@ -377,6 +378,30 @@ export async function importProductsFileAction(input: { afterRow?: number; colum
     });
     if (data.created > 0) revalidateProductCataloguePaths();
     return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function startLargeProductImportUploadAction(input: { byteSize: number; fileName: string; idempotencyKey: string }) {
+  try {
+    return writeSuccess(await startLargeImportUpload(input, await tenant(WRITE_PERMISSIONS.productsCreate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function verifyLargeProductImportUploadAction(jobId: string) {
+  try {
+    return writeSuccess(await verifyLargeImportUpload(jobId, await tenant(WRITE_PERMISSIONS.productsCreate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function cancelLargeProductImportUploadAction(jobId: string) {
+  try {
+    return writeSuccess(await cancelLargeImportUpload(jobId, await tenant(WRITE_PERMISSIONS.productsCreate)));
   } catch (error) {
     return writeFailure(error);
   }

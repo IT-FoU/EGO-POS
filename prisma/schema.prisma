@@ -2296,3 +2296,23 @@ model Backup {
   @@index([companyId, backupDate])
   @@map("backups")
 }
+
+/// Temporary large-catalogue upload. Not a product import.
+/// Apply only after Owner approval. Do not run this migration automatically.
+model ProductImportUpload {
+  id             String    @id
+  companyId      String    @map("company_id")
+  userId         String    @map("user_id")
+  idempotencyKey String    @map("idempotency_key")
+  fileName       String    @map("file_name")
+  objectPath     String    @map("object_path")
+  byteSize       Int       @map("byte_size")
+  status         String
+  createdAt      DateTime  @default(now()) @map("created_at")
+  expiresAt      DateTime  @map("expires_at")
+  verifiedAt     DateTime? @map("verified_at")
+
+  @@unique([companyId, userId, idempotencyKey])
+  @@index([status, expiresAt])
+  @@map("product_import_uploads")
+}
