@@ -13,6 +13,7 @@ dist
 *.tsbuildinfo
 prisma/dev.db
 generated/prisma
+workers/import-processor/server.mjs
 coverage
 
 # Logs (runtime / test output - never commit)

@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "egopos-qa-import",
+  "main": "workers/import-processor/index.ts",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "containers": [
+    {
+      "class_name": "ImportMetadataContainer",
+      "image": "./workers/import-processor/Dockerfile",
+      "instance_type": "standard-1",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "ImportMetadataContainer",
+        "name": "IMPORT_CONTAINER"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ImportMetadataContainer"]
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "egopos-qa-product-import",
+        "max_batch_size": 1,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "dead_letter_queue": "egopos-qa-product-import-dlq"
+      }
+    ]
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "d700f843b4f24988be099197bf94516a"
+    }
+  ]
+}

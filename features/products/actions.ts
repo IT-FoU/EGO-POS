@@ -40,6 +40,8 @@ import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
 import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS } from "@/features/products/product-import";
 import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
+import { cancelImportProcess, readImportProcess, startImportProcess } from "@/features/products/product-import-process-service";
+import { assertImportProcessId } from "@/features/products/product-import-process";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
 import { loadBarcodePrintProducts } from "@/features/products/barcode-print-service";
 import { applyBulkSellingPrices, loadBulkPriceProducts, type BulkPriceApplyLine, type BulkPriceJobAudit } from "@/features/products/bulk-price-service";
@@ -405,6 +407,38 @@ export async function cancelLargeProductImportUploadAction(jobId: string) {
   } catch (error) {
     return writeFailure(error);
   }
+}
+
+export async function startLargeImportProcessAction(uploadId: string) {
+  try {
+    return writeSuccess(await startImportProcess(uploadId, await tenant(WRITE_PERMISSIONS.productsCreate), {
+      sender: { send: sendImportProcessMessage },
+    }));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function readLargeImportProcessAction(processId: string) {
+  try {
+    return writeSuccess(await readImportProcess(processId, await tenant(WRITE_PERMISSIONS.productsCreate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function cancelLargeImportProcessAction(processId: string) {
+  try {
+    return writeSuccess(await cancelImportProcess(processId, await tenant(WRITE_PERMISSIONS.productsCreate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+async function sendImportProcessMessage(processId: string) {
+  const env = getCloudflareContext().env as { IMPORT_PROCESS_QUEUE?: { send(body: { processId: string }): Promise<unknown> } };
+  if (!env.IMPORT_PROCESS_QUEUE) throw new Error("Import processing queue is not configured.");
+  await env.IMPORT_PROCESS_QUEUE.send({ processId: assertImportProcessId(processId) });
 }
 
 function decodeProductImportFile(fileBase64: string) {

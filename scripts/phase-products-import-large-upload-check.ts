@@ -71,7 +71,7 @@ const old = await startLargeImportUpload({
   idempotencyKey: "idempotency-key-002",
 }, tenant, { now: new Date("2026-10-01T00:00:00Z"), storage: expiredStorage.storage, store: expiredStore });
 expiredStorage.objects.set(old.objectPath, header);
-const cleaned = await cleanupExpiredLargeImports(new Date("2026-10-08T00:00:00Z"), { storage: expiredStorage.storage, store: expiredStore });
+const cleaned = await cleanupExpiredLargeImports(new Date("2026-10-08T00:00:00Z"), { protectedUploadIds: [], storage: expiredStorage.storage, store: expiredStore });
 check("expired uploads are deleted", cleaned.removed === 1 && !expiredStorage.objects.has(old.objectPath));
 
 check("files over 100 MB are rejected before authorization", await throwsAsync(() => startLargeImportUpload({

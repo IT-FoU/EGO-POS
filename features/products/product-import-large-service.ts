@@ -110,19 +110,26 @@ export async function cancelLargeImportUpload(
 
 export async function cleanupExpiredLargeImports(
   now = new Date(),
-  deps?: { storage?: LargeImportStorage; store?: LargeImportStore },
+  deps?: { protectedUploadIds?: string[]; storage?: LargeImportStorage; store?: LargeImportStore },
 ) {
   const store = deps?.store ?? getLargeImportStore();
   const storage = deps?.storage ?? getLargeImportStorage();
+  const protectedIds = new Set(deps && "protectedUploadIds" in deps ? deps.protectedUploadIds ?? [] : await protectedUploadIds());
   const jobs = await store.listExpired(now, CLEANUP_LIMIT);
   let removed = 0;
   for (const job of jobs) {
+    if (protectedIds.has(job.id)) continue;
     await storage.remove([job.objectPath]);
     job.status = "expired";
     await store.save(job);
     removed += 1;
   }
   return { removed };
+}
+
+async function protectedUploadIds() {
+  const { getImportProcessStore } = await import("@/features/products/product-import-process-store");
+  return getImportProcessStore().listProtectedUploadIds();
 }
 
 async function ownedJob(store: LargeImportStore, jobId: string, tenant: TenantContext) {

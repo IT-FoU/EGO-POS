@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { cancelLargeProductImportUploadAction, importProductsFileAction, previewProductImportFileAction, startLargeProductImportUploadAction, uploadProductImageAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
+import { cancelLargeImportProcessAction, cancelLargeProductImportUploadAction, importProductsFileAction, previewProductImportFileAction, readLargeImportProcessAction, startLargeImportProcessAction, startLargeProductImportUploadAction, uploadProductImageAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import type { ProductImportEmbeddedImage } from "@/features/products/product-import-images";
 import {
@@ -54,6 +54,14 @@ type LargeUploadState = {
   status: "uploading" | "verifying" | "uploaded" | "failed" | "cancelled";
 };
 
+type ProcessView = {
+  errorCode: string | null;
+  processId: string;
+  rowCount: number | null;
+  sheets: Array<{ name: string; rows: number }>;
+  status: string;
+};
+
 type ResultRow = {
   issues: ProductImportIssue[];
   outcome: "created" | "failed" | "skipped";
@@ -76,6 +84,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const [message, setMessage] = useState("");
   const [includeImages, setIncludeImages] = useState(true);
   const [largeUpload, setLargeUpload] = useState<LargeUploadState | null>(null);
+  const [processView, setProcessView] = useState<ProcessView | null>(null);
+  const processPoll = useRef(0);
   const largeTransfer = useRef<ReturnType<typeof uploadLargeImportWithTus> | null>(null);
   const [result, setResult] = useState<{ created: number; failed: number; rows: ResultRow[]; skipped: number; warnings: number } | null>(null);
 
@@ -114,6 +124,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   }
 
   async function beginLargeUpload(file: File, idempotencyKey: string) {
+    processPoll.current += 1;
+    setProcessView(null);
     largeTransfer.current?.abort();
     setStoredFile(null);
     setPreview(null);
@@ -178,6 +190,34 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     }
   }
 
+  async function beginMetadata() {
+    if (!largeUpload || largeUpload.status !== "uploaded") return;
+    const started = await startLargeImportProcessAction(largeUpload.jobId);
+    if (!started.ok || !started.data) {
+      setMessage(started.error || t("importProcessFailed"));
+      return;
+    }
+    let view = started.data as ProcessView;
+    setProcessView(view);
+    const token = processPoll.current + 1;
+    processPoll.current = token;
+    while (token === processPoll.current && !terminalProcess(view.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (token !== processPoll.current) return;
+      const current = await readLargeImportProcessAction(view.processId);
+      if (!current.ok || !current.data) break;
+      view = current.data as ProcessView;
+      setProcessView(view);
+    }
+  }
+
+  async function cancelMetadata() {
+    if (!processView) return;
+    processPoll.current += 1;
+    const cancelled = await cancelLargeImportProcessAction(processView.processId);
+    if (cancelled.ok && cancelled.data) setProcessView(cancelled.data as ProcessView);
+  }
+
   async function cancelLargeUpload() {
     if (!largeUpload) return;
     largeTransfer.current?.abort();
@@ -190,8 +230,9 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     if (!file) return;
     if (file.name.toLowerCase().endsWith(".xlsx") && file.size > PRODUCT_IMPORT_MAX_CHARS) {
       if (file.size > PRODUCT_IMPORT_LARGE_MAX_BYTES) {
-        setLargeUpload(null);
-        setStoredFile(null);
+    setProcessView(null);
+    setLargeUpload(null);
+    setStoredFile(null);
         setPreview(null);
         setResult(null);
         setMessage(t("importIssue_large_file_too_large"));
@@ -395,7 +436,24 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
             {largeUpload.status === "uploading" || largeUpload.status === "verifying" ? (
               <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-large-cancel" type="button" onClick={() => { void cancelLargeUpload(); }}>{t("importLargeCancel")}</button>
             ) : null}
+            {largeUpload.status === "uploaded" && (!processView || processView.status === "failed") ? (
+              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-process-start" type="button" onClick={() => { void beginMetadata(); }}>{t("importProcessStart")}</button>
+            ) : null}
+            {processView && (processView.status === "queued" || processView.status === "running") ? (
+              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-process-cancel" type="button" onClick={() => { void cancelMetadata(); }}>{t("importProcessCancel")}</button>
+            ) : null}
           </div>
+          {processView ? (
+            <div data-testid="products-import-process">
+              <p className="text-sm font-semibold" data-testid="products-import-process-status">{processStatusLabel(processView.status, t)}</p>
+              <p className="text-sm text-muted-foreground">{t("importProcessHint")}</p>
+              {processView.sheets.length > 0 ? (
+                <ul className="grid gap-1 text-sm" data-testid="products-import-process-sheets">
+                  {processView.sheets.map((sheet) => <li key={sheet.name}>{sheet.name}: {sheet.rows} {t("importProcessRows")}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
       <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
@@ -558,6 +616,18 @@ function formatImportFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function terminalProcess(status: string) {
+  return status === "ready" || status === "failed" || status === "cancelled" || status === "expired";
+}
+
+function processStatusLabel(status: string, t: (key: string) => string) {
+  if (status === "ready") return t("importProcessReady");
+  if (status === "failed") return t("importProcessFailed");
+  if (status === "cancelled") return t("importProcessCancelled");
+  if (status === "running") return t("importProcessRunning");
+  return t("importProcessQueued");
 }
 
 function largeStatusLabel(status: LargeUploadState["status"], t: (key: string) => string) {

@@ -2316,3 +2316,33 @@ model ProductImportUpload {
   @@index([status, expiresAt])
   @@map("product_import_uploads")
 }
+
+/// Metadata-only read of a temporary catalogue upload.
+/// Does not store product rows or images.
+model ProductImportProcess {
+  id                String    @id
+  uploadId          String    @unique @map("upload_id")
+  companyId         String    @map("company_id")
+  userId            String    @map("user_id")
+  status            String
+  attempt           Int       @default(1)
+  phase             String
+  progressPercent   Int       @default(0) @map("progress_percent")
+  sheetCount        Int?      @map("sheet_count")
+  rowCount          Int?      @map("row_count")
+  entryCount        Int?      @map("entry_count")
+  oversizedImages   Int?      @map("oversized_images")
+  uncompressedBytes BigInt?   @map("uncompressed_bytes")
+  peakMemoryBytes   BigInt?   @map("peak_memory_bytes")
+  durationMs        Int?      @map("duration_ms")
+  errorCode         String?   @map("error_code")
+  sheetNames        String?   @map("sheet_names")
+  queuedAt          DateTime  @default(now()) @map("queued_at")
+  startedAt         DateTime? @map("started_at")
+  heartbeatAt       DateTime? @map("heartbeat_at")
+  finishedAt        DateTime? @map("finished_at")
+
+  @@index([companyId, userId])
+  @@index([status, heartbeatAt])
+  @@map("product_import_processes")
+}

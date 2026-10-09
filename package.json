@@ -115,6 +115,7 @@
     "test:edit-product-stock-lot": "tsx scripts/phase-edit-product-stock-lot-check.ts"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
     "@jsquash/webp": "^1.5.0",
     "@next/swc-wasm-nodejs": "^16.2.12",
     "@next/swc-win32-x64-msvc": "^16.2.12",
