@@ -74,6 +74,7 @@ export type LargeImportPreview = {
   mapped: {
     page: number;
     pageCount: number;
+    pageSize: number;
     rows: Array<{
       barcode: string;
       category: string | null;
@@ -84,6 +85,7 @@ export type LargeImportPreview = {
       note: string;
       price: string | null;
       rowNumber: number;
+      sequence: number;
       sku: string;
       status: PreviewRowStatus;
       stock: string | null;
@@ -159,9 +161,11 @@ export function buildLargeImportPreview(input: {
 }): LargeImportPreview {
   const pageSize = normalizePreviewPageSize(input.pageSize ?? 20);
   const filter = input.filter ?? "all";
-  const method = sanitizeImportMethod(input.method);
+  const requestedMethod = sanitizeImportMethod(input.method);
+  const exactTemplate = requestedMethod === "letters" ? null : matchEgoTemplate(input.rows);
+  const method: ImportMethod = requestedMethod === "auto" && exactTemplate ? "template" : requestedMethod;
   const detectedHeader = detectPreviewHeaderIndex(input.rows);
-  const template = method === "template" ? matchEgoTemplate(input.rows) : null;
+  const template = method === "template" ? exactTemplate : null;
   const letters = method === "letters" ? resolveLetterMap(sanitizeImportLetters(input.letters)) : null;
   const headerIndex = template ? template.headerIndex : detectedHeader;
   const noteIndex = template?.noteIndex ?? letters?.noteIndex ?? null;
@@ -246,7 +250,8 @@ export function buildLargeImportPreview(input: {
     mapped: {
       page: mappedPage.page,
       pageCount: mappedPage.pageCount,
-      rows: mappedPage.rows.map((row) => ({ ...row, thumb: imageByRow.get(row.rowNumber)?.thumb ?? null })),
+      pageSize,
+      rows: mappedPage.rows.map((row, index) => ({ ...row, sequence: mappedPage.page * pageSize + index + 1, thumb: imageByRow.get(row.rowNumber)?.thumb ?? null })),
     },
     sheetName: input.sheetName,
   };

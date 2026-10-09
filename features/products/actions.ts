@@ -376,6 +376,7 @@ export async function previewUnifiedProductFileAction(input: {
   fileBase64: string;
   fileName: string;
   filter?: "all" | "duplicate" | "incomplete" | "needs_review" | "new";
+  includeImages?: boolean;
   letters?: ImportLetterMap;
   mappedPage?: number;
   method?: "auto" | "letters" | "template";

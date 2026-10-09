@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Upload } from "lucide-react";
-import { cancelLargeImportProcessAction, cancelLargeProductImportUploadAction, downloadEgoProductTemplateAction, previewUnifiedProductFileAction, readLargeImportPreviewAction, readLargeImportProcessAction, startLargeImportProcessAction, startLargeProductImportUploadAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
+import { cancelLargeImportProcessAction, cancelLargeProductImportUploadAction, previewUnifiedProductFileAction, readLargeImportPreviewAction, readLargeImportProcessAction, startLargeImportProcessAction, startLargeProductImportUploadAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
 import { ProductImportPreviewPanel } from "@/features/products/components/product-import-preview-panel";
 import { chooseImportSurface, IMPORT_IMAGES_STORAGE_KEY, readImportImagesPreference, readStoredPreviewPageSize, type LargeImportPreview, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "@/features/products/product-import-preview";
-import {
-  PRODUCT_IMPORT_TEMPLATE_CSV,
-  type ProductImportColumnChoice,
-} from "@/features/products/product-import";
+import { type ProductImportColumnChoice } from "@/features/products/product-import";
 import { readLargeImportResumeUrl, uploadLargeImportWithTus } from "@/features/products/product-import-large-tus";
-import { columnLetterFromIndex, IMPORT_LETTER_FIELDS, resolveLetterMap, type ImportLetterField, type ImportLetterMap, type ImportMethod } from "@/features/products/product-import-methods";
 import { fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 import { cn } from "@/lib/utils";
@@ -66,39 +61,12 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const autoPreview = useRef("");
   const importImages = useRef(true);
   const [importImagesChecked, setImportImagesChecked] = useState(true);
-  const [importMethod, setImportMethod] = useState<ImportMethod>("auto");
-  const importMethodRef = useRef<ImportMethod>("auto");
-  const [draftLetters, setDraftLetters] = useState<ImportLetterMap>({});
-  const appliedLetters = useRef<ImportLetterMap>({});
-  const lettersReady = useRef(true);
   const processPoll = useRef(0);
+  const startedProcessJob = useRef("");
   const largeTransfer = useRef<ReturnType<typeof uploadLargeImportWithTus> | null>(null);
 
-  function downloadTemplate() {
-    downloadText("ego-product-import-template.csv", PRODUCT_IMPORT_TEMPLATE_CSV);
-  }
-
-  async function downloadEgoTemplate() {
-    const result = await downloadEgoProductTemplateAction();
-    const fileBase64 = result.ok ? (result.data as { fileBase64?: string } | undefined)?.fileBase64 : "";
-    if (!fileBase64) {
-      setMessage(t("importPreviewUnavailable"));
-      return;
-    }
-    const bytes = Uint8Array.from(atob(fileBase64), (char) => char.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "ego-pos-product-template.xlsx";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   function methodPayload() {
-    return {
-      letters: importMethodRef.current === "letters" ? appliedLetters.current : {},
-      method: importMethodRef.current,
-    };
+    return { letters: {}, method: "auto" as const };
   }
 
   async function loadLocalPreview(file: StoredFile, next: { choices?: ProductImportColumnChoice[]; edits?: PreviewEdit[]; filter?: PreviewFilter; mappedPage?: number; page?: number; pageSize?: PreviewPageSize; sheetName?: string }) {
@@ -107,10 +75,6 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     const filter = next.filter ?? previewFilter;
     const pageSize = next.pageSize ?? readStoredPreviewPageSize(window.localStorage);
     const sheetName = next.sheetName ?? localSheet;
-    if (importMethodRef.current === "letters" && !lettersReady.current) {
-      setPhase("idle");
-      return;
-    }
     previewEdits.current = edits;
     setPreviewChoices(choices);
     setPreviewFilter(filter);
@@ -120,6 +84,7 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     const response = await previewUnifiedProductFileAction({
       choices,
       edits,
+      includeImages: importImages.current,
       ...methodPayload(),
       fileBase64: file.fileBase64,
       fileName: file.fileName,
@@ -241,52 +206,9 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     return window.confirm(t("importPreviewDiscard"));
   }
 
-  function changeMethod(next: ImportMethod) {
-    if (next === importMethodRef.current) return;
-    if (!confirmDiscardPreviewEdits()) return;
-    previewEdits.current = [];
-    importMethodRef.current = next;
-    setImportMethod(next);
-    lettersReady.current = next !== "letters";
-    if (next === "letters") {
-      setExcelPreview(null);
-      return;
-    }
-    reloadPreview({ choices: next === "auto" ? previewChoices : [], edits: [], mappedPage: 0, page: 0 });
-  }
-
-  function updateLetter(field: ImportLetterField, value: string) {
-    setDraftLetters((current) => ({ ...current, [field]: value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3) }));
-  }
-
-  function applyLetters() {
-    if (!confirmDiscardPreviewEdits()) return;
-    previewEdits.current = [];
-    appliedLetters.current = { ...draftLetters };
-    lettersReady.current = true;
-    reloadPreview({ choices: [], edits: [], mappedPage: 0, page: 0 });
-  }
-
-  function useDetectedLetters() {
-    if (!excelPreview || !confirmDiscardPreviewEdits()) return;
-    const next: ImportLetterMap = {};
-    for (const column of excelPreview.columns) {
-      if (column.status !== "mapped" || !column.choice || column.choice === "ignore") continue;
-      if (IMPORT_LETTER_FIELDS.some((item) => item.field === column.choice)) next[column.choice as ImportLetterField] = columnLetterFromIndex(column.index);
-    }
-    previewEdits.current = [];
-    appliedLetters.current = next;
-    setDraftLetters(next);
-    importMethodRef.current = "letters";
-    setImportMethod("letters");
-    lettersReady.current = true;
-    reloadPreview({ choices: [], edits: [], mappedPage: 0, page: 0 });
-  }
-
   async function loadExcelPreview(next: { choices?: ProductImportColumnChoice[]; edits?: PreviewEdit[]; filter?: PreviewFilter; mappedPage?: number; page?: number; pageSize?: PreviewPageSize; sheetName?: string }) {
     if (!processView || processView.status !== "ready") return;
     const sheetName = next.sheetName || previewSheet || processView.sheets[0]?.name || "";
-    if (importMethodRef.current === "letters" && !lettersReady.current) return;
     const choices = next.choices ?? previewChoices;
     const edits = (next.edits ?? previewEdits.current).slice(-200);
     const filter = next.filter ?? previewFilter;
@@ -332,12 +254,18 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   useEffect(() => {
     if (processView?.status !== "ready") return;
     if (autoPreview.current === processView.processId) return;
-    if (importMethodRef.current === "letters" && !lettersReady.current) return;
     autoPreview.current = processView.processId;
     const sheetName = processView.sheets[0]?.name ?? "";
     setPreviewSheet(sheetName);
     void loadExcelPreview({ mappedPage: 0, page: 0, sheetName });
   }, [processView?.processId, processView?.status]);
+
+  useEffect(() => {
+    if (!largeUpload || largeUpload.status !== "uploaded") return;
+    if (startedProcessJob.current === largeUpload.jobId) return;
+    startedProcessJob.current = largeUpload.jobId;
+    void beginMetadata();
+  }, [largeUpload?.jobId, largeUpload?.status]);
 
   async function cancelMetadata() {
     if (!processView) return;
@@ -406,179 +334,91 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     await loadLocalPreview(stored, { choices: [], edits: [], mappedPage: 0, page: 0, sheetName: "" });
   }
 
-  const busy = phase === "reading" || phase === "validating";
-  const formatLabel = localFormat ? localFormat.toUpperCase() : largeUpload ? "XLSX" : "";
+  const busy = phase === "reading" || phase === "validating" || largeUpload?.status === "uploading" || largeUpload?.status === "verifying" || processView?.status === "queued" || processView?.status === "running";
+  const fileLabel = storedFile?.fileName || largeUpload?.fileName || "";
+  const progressLabel = progressText();
+  const identityReady = Boolean(excelPreview && !excelPreview.notices.some((notice) => notice.code === "missing_field"));
+  const sheetOptions = localSheets.length > 0 ? localSheets.map((sheet) => sheet.name) : (processView?.sheets.map((sheet) => sheet.name) ?? []);
 
-  return (
-    <div className="grid gap-5" data-ignores-selection="true" data-testid="products-import-workflow">
-      <section className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted-foreground">
-        {t("importNotice")}
-      </section>
+  function progressText() {
+    if (phase === "reading" || phase === "validating") return t("importProcessRunning");
+    if (processView && processView.status !== "ready") return processStatusLabel(processView.status, t);
+    if (largeUpload && largeUpload.status !== "uploaded") return `${largeStatusLabel(largeUpload.status, t)} ${largeUpload.percent}%`;
+    if (excelPreview) return t("importProcessReady");
+    if (largeUpload) return largeStatusLabel(largeUpload.status, t);
+    return "";
+  }
+
+  function toggleImages() {
+    const checked = !importImages.current;
+    importImages.current = checked;
+    setImportImagesChecked(checked);
+    window.localStorage.setItem(IMPORT_IMAGES_STORAGE_KEY, checked ? "1" : "0");
+    reloadPreview({});
+  }
+
+return (
+    <div className="grid gap-4" data-ignores-selection="true" data-testid="products-import-workflow">
       {!canImport ? <p className="text-sm font-semibold text-danger">{t("importPermissionDenied")}</p> : null}
-      <p className="text-sm text-muted-foreground" data-testid="products-import-formats">{t("importFormatsHint")}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="inline-flex h-11 items-center rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-template" type="button" onClick={downloadTemplate}>
-          {t("importDownloadTemplate")}
-        </button>
-        <button className="inline-flex h-11 items-center rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-ego-template" type="button" onClick={() => { void downloadEgoTemplate(); }}>
-          {t("importDownloadEgoTemplate")}
-        </button>
-        <button className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-file" disabled={!canImport || busy} type="button" onClick={() => fileRef.current?.click()}>
-          <Upload aria-hidden="true" className="size-4"/>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-semibold" data-testid="products-import-file" disabled={!canImport || busy} type="button" onClick={() => fileRef.current?.click()}>
           {t("importChooseFile")}
         </button>
-        {formatLabel ? <span className="rounded-full border border-border px-3 py-1 text-sm font-semibold" data-testid="products-import-format">{t("importFileFormat")}: {formatLabel}</span> : null}
-        {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filename">{storedFile.fileName}</span> : null}
-        {storedFile ? <span className="text-sm text-muted-foreground" data-testid="products-import-filesize">{formatImportFileSize(storedFile.size)}</span> : null}
-        {largeUpload ? <span className="text-sm text-muted-foreground" data-testid="products-import-filesize">{formatImportFileSize(largeUpload.byteSize)}</span> : null}
+        <button aria-checked={importImagesChecked} className="inline-flex h-11 items-center gap-3 rounded-full border border-border px-4 text-sm font-semibold" data-testid="products-import-images" role="switch" type="button" onClick={toggleImages}>
+          <span>{t("importImages")}</span>
+          <span className={importImagesChecked ? "rounded-full bg-neutral-950 px-2 py-0.5 text-xs text-white" : "rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-950"} data-testid="products-import-images-state">{importImagesChecked ? "ON" : "OFF"}</span>
+        </button>
         <input ref={fileRef} accept=".csv,.tsv,.xlsx,.xls,.ods,text/csv,text/tab-separated-values" className="hidden" data-testid="products-import-input" type="file" onChange={(event) => { void onFileChange(event.target.files?.[0]); event.target.value = ""; }}/>
-        <label className="flex items-center gap-2 text-sm font-semibold" data-testid="products-import-images">
-          <input checked={importImagesChecked} type="checkbox" onChange={(event) => {
-            const checked = event.target.checked;
-            importImages.current = checked;
-            setImportImagesChecked(checked);
-            window.localStorage.setItem(IMPORT_IMAGES_STORAGE_KEY, checked ? "1" : "0");
-            reloadPreview({});
-          }} />
-          {t("importImages")}
-        </label>
       </div>
-      <p className="text-sm text-muted-foreground">{t("importImagesHint")}</p>
-      <div className="flex flex-wrap gap-2" data-testid="products-import-methods">
-        {(["template", "letters", "auto"] as const).map((method) => (
-          <label className="flex h-11 items-center gap-2 rounded-md border border-border px-3 text-sm font-semibold" key={method}>
-            <input checked={importMethod === method} data-testid={`products-import-method-${method}`} name="import-method" type="radio" onChange={() => changeMethod(method)} />
-            {t(method === "template" ? "importMethodTemplate" : method === "letters" ? "importMethodLetters" : "importMethodAuto")}
-          </label>
-        ))}
-      </div>
-      <p className="text-sm text-muted-foreground">{t("importDestinationHint")}</p>
-      {importMethod === "letters" ? (
-        <div className="grid gap-3 rounded-lg border border-border bg-background p-3" data-testid="products-import-letters">
-          <p className="text-sm text-muted-foreground">{t("importLetterHint")}</p>
-          <div className="flex flex-wrap gap-3">
-            {IMPORT_LETTER_FIELDS.map((item) => (
-              <label className="grid gap-1 text-xs font-semibold" key={item.field}>
-                <span>{t(item.labelKey)} <span className="font-mono text-muted-foreground">EGO {item.destination}</span></span>
-                <input className="h-9 w-16 rounded-md border border-border px-2 font-mono uppercase" data-testid={`products-import-letter-${item.field}`} maxLength={3} placeholder={t("importLetterSource")} value={draftLetters[item.field] ?? ""} onChange={(event) => updateLetter(item.field, event.target.value)} />
-              </label>
-            ))}
-          </div>
-          <p className="text-sm font-semibold" data-testid="products-import-letter-summary">
-            {resolveLetterMap(draftLetters).summary.map((item) => `Source ${item.source} → ${item.destination}`).join(" · ") || t("importLetterEmpty")}
-          </p>
-          {resolveLetterMap(draftLetters).notices.map((notice) => (
-            <p className="text-sm font-semibold text-amber-800" data-testid={`products-import-letter-issue-${notice.code}`} key={`${notice.code}-${notice.detail}`}>{notice.detail} {notice.sample}</p>
-          ))}
-          <button className="h-11 w-fit rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-letter-apply" type="button" onClick={applyLetters}>{t("importLetterApply")}</button>
-        </div>
-      ) : null}
-      {localSheets.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold" data-testid="products-import-sheet-name">{t("importSelectedSheet")}: {localSheet}</span>
-          {localSheets.length > 1 ? (
-            <label className="flex items-center gap-2 text-sm">
+      {fileLabel ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm" data-testid="products-import-progress">
+          <span className="font-semibold" data-testid="products-import-filename">{fileLabel}</span>
+          <span data-testid="products-import-large-status">{progressLabel}</span>
+          {largeUpload && (largeUpload.status === "uploading" || largeUpload.status === "verifying") ? (
+            <button className="h-9 rounded-full border border-border px-3 text-sm font-semibold" data-testid="products-import-large-cancel" type="button" onClick={() => { void cancelLargeUpload(); }}>{t("importLargeCancel")}</button>
+          ) : null}
+          {sheetOptions.length > 1 ? (
+            <label className="flex items-center gap-2">
               {t("importSheet")}
-              <select className="h-11 rounded-md border border-border bg-background px-3" data-testid="products-import-sheet" disabled={busy} value={localSheet} onChange={(event) => { void onLocalSheetChange(event.target.value); }}>
-                {localSheets.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}
+              <select className="h-9 rounded-md border border-border bg-background px-2" data-testid="products-import-sheet" value={localSheet || previewSheet} onChange={(event) => {
+                if (storedFile) { void onLocalSheetChange(event.target.value); return; }
+                if (!confirmDiscardPreviewEdits()) return;
+                previewEdits.current = [];
+                setPreviewSheet(event.target.value);
+                setExcelPreview(null);
+                autoPreview.current = "";
+                void loadExcelPreview({ choices: [], edits: [], mappedPage: 0, page: 0, sheetName: event.target.value });
+              }}>
+                {sheetOptions.map((sheet) => <option key={sheet} value={sheet}>{sheet}</option>)}
               </select>
             </label>
           ) : null}
         </div>
       ) : null}
-      {largeUpload ? (
-        <section className="grid gap-3 rounded-lg border border-border bg-background p-4" data-testid="products-import-large-upload">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold" data-testid="products-import-large-name">{largeUpload.fileName}</p>
-              <p className="text-sm text-muted-foreground">{formatImportFileSize(largeUpload.byteSize)}</p>
-            </div>
-            <p className="text-sm font-semibold" data-testid="products-import-large-status">{largeStatusLabel(largeUpload.status, t)}</p>
-          </div>
-          <p className="text-sm text-muted-foreground" data-testid="products-import-large-progress">{fillProductsCopy(t("importLargeProgress"), { percent: String(largeUpload.percent) })}</p>
-          <p className="text-sm text-muted-foreground">{t("importLargeHint")}</p>
-          <div className="flex flex-wrap gap-2">
-            {largeUpload.status === "failed" || largeUpload.status === "cancelled" ? (
-              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-large-retry" type="button" onClick={() => { void beginLargeUpload(largeUpload.file, largeUpload.idempotencyKey); }}>{t("importLargeRetry")}</button>
-            ) : null}
-            {largeUpload.status === "uploading" || largeUpload.status === "verifying" ? (
-              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-large-cancel" type="button" onClick={() => { void cancelLargeUpload(); }}>{t("importLargeCancel")}</button>
-            ) : null}
-            {largeUpload.status === "uploaded" && (!processView || processView.status === "failed") ? (
-              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-process-start" type="button" onClick={() => { void beginMetadata(); }}>{t("importProcessStart")}</button>
-            ) : null}
-            {processView && (processView.status === "queued" || processView.status === "running") ? (
-              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-process-cancel" type="button" onClick={() => { void cancelMetadata(); }}>{t("importProcessCancel")}</button>
-            ) : null}
-          </div>
-          {processView ? (
-            <div data-testid="products-import-process">
-              <p className="text-sm font-semibold" data-testid="products-import-process-status">{processStatusLabel(processView.status, t)}</p>
-              <p className="text-sm text-muted-foreground">{t("importProcessHint")}</p>
-              {processView.sheets.length > 0 ? (
-                <ul className="grid gap-1 text-sm" data-testid="products-import-process-sheets">
-                  {processView.sheets.map((sheet) => <li key={sheet.name}>{sheet.name}: {sheet.rows} {t("importProcessRows")}</li>)}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-          {processView?.status === "ready" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <select className="h-11 rounded-md border border-border bg-background px-3 text-sm" data-testid="products-import-preview-sheet" value={previewSheet || processView.sheets[0]?.name || ""} onChange={(event) => {
-                if (!confirmDiscardPreviewEdits()) return;
-                previewEdits.current = [];
-                setPreviewChoices([]);
-                setPreviewSheet(event.target.value);
-                setExcelPreview(null);
-                void loadExcelPreview({ choices: [], edits: [], mappedPage: 0, page: 0, sheetName: event.target.value });
-              }}>
-                {processView.sheets.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}
-              </select>
-              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-preview-excel" type="button" onClick={() => { void loadExcelPreview({ mappedPage: 0, page: 0, sheetName: previewSheet || processView.sheets[0]?.name || "" }); }}>{t("importPreviewExcel")}</button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
       {excelPreview ? (
         <ProductImportPreviewPanel
           preview={excelPreview}
-          showAdjust={importMethod === "auto"}
           onEdit={(edit) => {
             const current = previewEdits.current.filter((item) => !(item.rowNumber === edit.rowNumber && item.field === edit.field));
             reloadPreview({ edits: [...current, edit].slice(-200), mappedPage: excelPreview.mapped.page, page: excelPreview.excel.page });
           }}
           onFilter={(filter) => { reloadPreview({ filter, mappedPage: 0, page: 0 }); }}
-          onMapping={(index, field) => {
-            if (!confirmDiscardPreviewEdits()) return;
-            previewEdits.current = [];
-            const choices = excelPreview.columns.map((column) => ({
-              field: column.index === index ? (field || null) as ProductImportColumnChoice["field"] : column.choice,
-              index: column.index,
-            }));
-            reloadPreview({ choices, edits: [], mappedPage: 0, page: 0 });
-          }}
           onPage={(page) => { reloadPreview({ mappedPage: page, page }); }}
           onPageSize={(pageSize) => { reloadPreview({ mappedPage: 0, page: 0, pageSize }); }}
-          onUseLetters={useDetectedLetters}
         />
       ) : null}
-      <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
       {message ? <p className={cn("text-sm font-semibold", "text-danger")} data-testid="products-import-message">{message}</p> : null}
-      <div className="flex flex-wrap justify-end gap-2">
-        <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("closeDrawer")}</button>
-        <div className="grid justify-items-end gap-1">
-          <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-testid="products-import-confirm" disabled type="button">{t("importConfirm")}</button>
-          <p className="text-xs text-muted-foreground" data-testid="products-import-save-awaiting">{t("importSaveAwaiting")}</p>
+      {fileLabel ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" type="button" onClick={onClose}>{t("closeDrawer")}</button>
+          <div className="grid justify-items-end gap-1">
+            <button className="h-11 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" data-identity-ready={identityReady ? "yes" : "no"} data-testid="products-import-confirm" disabled type="button">{t("importConfirm")}</button>
+            <p className="text-xs text-muted-foreground" data-testid="products-import-save-awaiting">{t("importSaveAwaiting")}</p>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
-}
-
-function formatImportFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function terminalProcess(status: string) {
@@ -621,15 +461,6 @@ function idempotencyKeyFor(file: File) {
   const key = crypto.randomUUID();
   sessionStorage.setItem(stamp, key);
   return key;
-}
-
-function downloadText(filename: string, contents: string) {
-  const url = URL.createObjectURL(new Blob([contents], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function bytesToBase64(bytes: Uint8Array) {

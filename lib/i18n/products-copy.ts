@@ -299,7 +299,7 @@ const en = {
   importSkipped: "Skipped",
   importFailed: "Failed",
   importWarnings: "Warnings",
-  importChooseFile: "Choose File",
+  importChooseFile: "Choose Files",
   importConfirm: "Confirm Import",
   importBusy: "Importing...",
   importValidating: "Validating...",

@@ -12,7 +12,7 @@ const QA = "arkhwskvcnntluoakmef";
 const PRODUCTION = "ieutdqnlfiiaawctapor";
 const PERMANENT = new Set(["malformed_file", "memory_limit", "time_limit", "unsafe_workbook"]);
 
-const CONTAINER_INSTANCE = "preview-methods";
+const CONTAINER_INSTANCE = "preview-simple";
 const CATALOG_LIMIT = 20_000;
 
 type Env = {

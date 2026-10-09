@@ -474,8 +474,8 @@ for (const name of ["prices.csv", "prices.tsv", "prices.xls", "prices.ods"]) {
 }
 const drawerSource = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
 check("one white table is the only import screen", drawerSource.split("<ProductImportPreviewPanel").length === 2 && !drawerSource.includes('data-testid="products-import-mapping"') && !drawerSource.includes('data-testid="products-import-preview"') && !drawerSource.includes('data-testid="products-import-result"') && drawerSource.includes('data-testid="products-import-confirm" disabled'));
-check("adjust columns shows the source column and its confidence", panelSource.includes("importMapColumn") && panelSource.includes("importMapValues") && panelSource.includes("importMapConfidence") && panelSource.includes("products-import-map-letter-"));
-check("unchecked images skip image bytes", readFileSync("workers/import-processor/server.ts", "utf8").includes("body.includeImages !== false") && readFileSync("workers/import-processor/index.ts", "utf8").includes('CONTAINER_INSTANCE = "preview-methods"'));
+check("the preview uses destination letters without an adjust-columns panel", panelSource.includes("products-import-letter-row") && panelSource.includes("products-import-destination-") && !panelSource.includes("products-import-adjust-columns") && !panelSource.includes("importMapColumn"));
+check("unchecked images skip image bytes", readFileSync("workers/import-processor/server.ts", "utf8").includes("body.includeImages !== false") && readFileSync("workers/import-processor/index.ts", "utf8").includes('CONTAINER_INSTANCE = "preview-simple"'));
 
 console.log(`${checks.length}/${checks.length + failures.length} passed`);
 if (failures.length > 0) process.exit(1);

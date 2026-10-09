@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { WhiteDataTable } from "@/features/products/components/selected-products-list";
-import { PRODUCT_IMPORT_COLUMNS, type ProductImportColumn, type ProductImportMappedColumn } from "@/features/products/product-import";
 import {
   PREVIEW_PAGE_SIZE_STORAGE_KEY,
   PREVIEW_PAGE_SIZES,
@@ -16,23 +15,16 @@ import { IMPORT_DESTINATION_LETTERS } from "@/features/products/product-import-m
 import { fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
-export function ProductImportPreviewPanel({ preview, showAdjust = true, onEdit, onFilter, onMapping, onPage, onPageSize, onUseLetters }: {
+export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onPage, onPageSize }: {
   onEdit: (edit: PreviewEdit) => void;
   onFilter: (filter: PreviewFilter) => void;
-  onMapping: (index: number, field: string) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: PreviewPageSize) => void;
-  onUseLetters?: () => void;
   preview: LargeImportPreview;
-  showAdjust?: boolean;
 }) {
   const locale = useAppLocale();
   const t = (key: string) => tProducts(key, locale);
-  const [pageSize, setPageSize] = useState<PreviewPageSize>(20);
-  const identityKey = preview.columns.map((column) => `${column.index}:${column.choice ?? ""}:${column.status}`).join("|");
-  const needsMapping = identityColumnsNeedMapping(preview.columns);
-  const [adjustOpen, setAdjustOpen] = useState({ key: identityKey, open: needsMapping });
-  if (adjustOpen.key !== identityKey) setAdjustOpen({ key: identityKey, open: needsMapping });
+  const [pageSize, setPageSize] = useState<PreviewPageSize>(preview.mapped.pageSize === 50 || preview.mapped.pageSize === 100 ? preview.mapped.pageSize : 20);
   useEffect(() => {
     setPageSize(readStoredPreviewPageSize(window.localStorage));
   }, []);
@@ -85,14 +77,16 @@ export function ProductImportPreviewPanel({ preview, showAdjust = true, onEdit, 
           {preview.notices.map((notice, index) => (
             <p data-testid={`products-import-notice-${notice.code}`} key={`${notice.code}-${index}`}>{noticeText(notice, t)}</p>
           ))}
-          {preview.method === "auto" && onUseLetters ? (
-            <button className="mt-2 h-9 rounded-md border border-amber-400 bg-background px-3 text-sm font-semibold" data-testid="products-import-use-letters" type="button" onClick={onUseLetters}>{t("importUseLetters")}</button>
-          ) : null}
         </div>
       ) : null}
       <WhiteDataTable minWidth="1480px" testId="products-import-excel-table">
         <thead>
-          <tr>
+          <tr className="ego-column-letters" data-testid="products-import-letter-row">
+            {IMPORT_DESTINATION_LETTERS.map((letter) => (
+              <th key={letter} data-testid={`products-import-destination-${letter}`}>{letter}</th>
+            ))}
+          </tr>
+          <tr className="ego-column-names">
             {[
               t("importPreviewColNo"),
               t("importPreviewColImage"),
@@ -106,17 +100,14 @@ export function ProductImportPreviewPanel({ preview, showAdjust = true, onEdit, 
               t("importPreviewColPrice"),
               t("importPreviewColNotes"),
             ].map((label, index) => (
-              <th key={IMPORT_DESTINATION_LETTERS[index]}>
-                <span className="mr-1 font-mono text-[10px] text-muted-foreground" data-testid={`products-import-destination-${IMPORT_DESTINATION_LETTERS[index]}`}>{IMPORT_DESTINATION_LETTERS[index]}</span>
-                {label}
-              </th>
+              <th key={IMPORT_DESTINATION_LETTERS[index]}>{IMPORT_DESTINATION_LETTERS[index]} — {label}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {preview.mapped.rows.map((row) => (
-            <tr data-preview-status={row.status} key={row.rowNumber}>
-              <td>{row.rowNumber}</td>
+          {preview.mapped.rows.map((row, index) => (
+            <tr data-preview-status={row.status} data-source-row={row.rowNumber} key={row.rowNumber}>
+              <td data-testid={`products-import-sequence-${row.sequence || preview.mapped.page * pageSize + index + 1}`}>{row.sequence || preview.mapped.page * pageSize + index + 1}</td>
               <td>{row.thumb ? <img alt="" className="size-10 object-cover" data-testid={`products-import-excel-thumb-${row.rowNumber}`} src={row.thumb} /> : null}</td>
               <td><CellInput testId={`products-import-edit-name-${row.rowNumber}`} value={row.name} onCommit={(value) => onEdit({ field: "product_name", rowNumber: row.rowNumber, value })} /></td>
               <td><CellInput testId={`products-import-edit-barcode-${row.rowNumber}`} value={row.barcode} onCommit={(value) => onEdit({ field: barcodeField(row.unit), rowNumber: row.rowNumber, value })} /></td>
@@ -147,45 +138,6 @@ export function ProductImportPreviewPanel({ preview, showAdjust = true, onEdit, 
         </tbody>
       </WhiteDataTable>
       <Pager page={preview.mapped.page} pageCount={preview.mapped.pageCount} testId="products-import-excel-pager" onPage={onPage} />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {showAdjust ? <details data-testid="products-import-adjust-columns" open={adjustOpen.open} onToggle={(event) => setAdjustOpen({ key: identityKey, open: event.currentTarget.open })}>
-          <summary className="cursor-pointer text-sm font-semibold">{t("importAdjustColumns")}</summary>
-          <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-border" data-testid="products-import-preview-mapping">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="p-3">{t("importMapColumn")}</th>
-                  <th className="p-3">{t("importMapHeader")}</th>
-                  <th className="p-3">{t("importMapValues")}</th>
-                  <th className="p-3">{t("importMapField")}</th>
-                  <th className="p-3">{t("importMapConfidence")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.columns.map((column) => {
-                  const values = column.samples?.length ? column.samples : (column.sample ? [column.sample] : []);
-                  return (
-                    <tr className="border-t border-border" key={column.index}>
-                      <td className="p-3 font-mono font-semibold" data-testid={`products-import-map-letter-${column.index}`}>{columnLetter(column.index)}</td>
-                      <td className="p-3 font-semibold">{column.header.trim() || "-"}</td>
-                      <td className="p-3 font-mono text-xs" data-testid={`products-import-map-values-${column.index}`}>{values.join(" · ") || "-"}</td>
-                      <td className="p-3">
-                        <select className="h-11 w-full max-w-56 rounded-md border border-border bg-background px-3" data-testid={`products-import-preview-map-${column.index}`} value={column.status === "review" ? "" : (column.choice ?? "")} onChange={(event) => onMapping(column.index, event.target.value)}>
-                          <option value="">{t("importMapChoose")}</option>
-                          <option value="ignore">{t("importMapIgnore")}</option>
-                          {PRODUCT_IMPORT_COLUMNS.map((field) => <option key={field} value={field}>{mappingFieldLabel(field, t)}</option>)}
-                        </select>
-                      </td>
-                      <td className="p-3 font-semibold" data-testid={`products-import-map-confidence-${column.index}`}>{t(mappingConfidenceKey(column))}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </details> : null}
-        <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold text-muted-foreground" data-testid="products-import-preview-only" disabled type="button">{t("importPreviewOnly")}</button>
-      </div>
     </section>
   );
 }
@@ -223,43 +175,11 @@ function Pager({ onPage, page, pageCount, testId }: { onPage: (page: number) => 
   );
 }
 
-function identityColumnsNeedMapping(columns: ProductImportMappedColumn[]) {
-  const mapped = new Set(columns.filter((column) => column.status === "mapped").map((column) => column.choice));
-  return !mapped.has("product_name") || !mapped.has("piece_barcode") || !mapped.has("sku");
-}
-
 function noticeText(notice: { code: string; detail: string; sample: string }, t: (key: string) => string) {
   if (notice.code === "template_mismatch") return t("importTemplateMismatch");
   if (notice.code === "invalid_letter") return fillProductsCopy(t("importLetterInvalid"), { detail: notice.detail });
   if (notice.code === "duplicate_source") return fillProductsCopy(t("importLetterDuplicate"), { detail: notice.sample || notice.detail });
   return `${t("importLetterMissing")} ${notice.detail} ${notice.sample}`.trim();
-}
-
-function columnLetter(index: number) {
-  let value = index + 1;
-  let letters = "";
-  while (value > 0) {
-    const remainder = (value - 1) % 26;
-    letters = String.fromCharCode(65 + remainder) + letters;
-    value = Math.floor((value - 1) / 26);
-  }
-  return letters;
-}
-
-function mappingConfidenceKey(column: ProductImportMappedColumn) {
-  if (column.status === "mapped") return "importMapConfidenceHigh";
-  if (column.status === "ignored") return "importMapConfidenceIgnored";
-  if (column.status === "conflict") return "importMapConfidenceConflict";
-  if (column.suggestion) return "importMapConfidenceLow";
-  return "importMapConfidenceNone";
-}
-
-function mappingFieldLabel(field: ProductImportColumn | "ignore" | null, t: (key: string) => string) {
-  if (field === "ignore") return t("importMapIgnore");
-  if (!field) return t("importMapNone");
-  const key = `importField_${field}`;
-  const label = t(key);
-  return label === key ? field : label;
 }
 
 function filterLabel(filter: PreviewFilter, t: (key: string) => string) {

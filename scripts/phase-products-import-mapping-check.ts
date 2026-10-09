@@ -118,7 +118,7 @@ check("confirmed import still uses the create service", service.includes("import
 const actions = readFileSync("features/products/actions.ts", "utf8");
 const drawer = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
 check("mapping actions still require products.create", actions.includes("columns") && actions.includes("WRITE_PERMISSIONS.productsCreate"));
-check("the drawer keeps one unified table", drawer.includes("<ProductImportPreviewPanel") && !drawer.includes('data-testid="products-import-mapping"') && readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8").includes("products-import-adjust-columns"));
+check("the drawer keeps one unified table", drawer.includes("<ProductImportPreviewPanel") && !drawer.includes('data-testid="products-import-mapping"') && !readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8").includes("products-import-adjust-columns"));
 check("changing a column does not import", !drawer.includes("importProductsFileAction"));
 check("a new sheet clears the previous column choices", drawer.includes("onLocalSheetChange") && drawer.includes("choices: []"));
 check("confirm and save stays disabled", drawer.includes('data-testid="products-import-confirm" disabled'));

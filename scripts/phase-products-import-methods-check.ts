@@ -149,16 +149,7 @@ const drawer = readFileSync("features/products/components/product-import-drawer.
 const panel = readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8");
 const sources = ["features/products/product-import-methods.ts", "features/products/product-import-template.ts", "features/products/product-import-preview.ts", "features/products/actions.ts"].map((path) => readFileSync(path, "utf8")).join("\n");
 check("small and large files still use one table", chooseImportSurface("supplier.xlsx", 100 * 1024) === "unified-upload" && chooseImportSurface("supplier.xlsx", 3 * 1024 * 1024) === "unified-upload" && chooseImportSurface("prices.csv", 100 * 1024) === "unified-parse" && drawer.split("<ProductImportPreviewPanel").length === 2);
-check("the three methods do not add a second preview or enable saving", drawer.includes("products-import-method-") && drawer.includes("products-import-ego-template") && drawer.includes("products-import-letter-apply") && drawer.includes("onUseLetters={useDetectedLetters}") && drawer.includes('data-testid="products-import-confirm" disabled') && !drawer.includes("importProductsFileAction") && panel.includes("products-import-excel-table") && panel.includes("products-import-destination-") && panel.includes("IMPORT_DESTINATION_LETTERS"), [
-  ["methods", drawer.includes("products-import-method-")],
-  ["ego", drawer.includes("products-import-ego-template")],
-  ["apply", drawer.includes("products-import-letter-apply")],
-  ["switch", drawer.includes("onUseLetters={useDetectedLetters}")],
-  ["confirm", drawer.includes('data-testid="products-import-confirm" disabled')],
-  ["save", !drawer.includes("importProductsFileAction")],
-  ["table", panel.includes("products-import-excel-table")],
-  ["letters-ui", panel.includes("products-import-destination-")],
-].filter((item) => !item[1]).map((item) => item[0]).join(","));
+check("the simple screen keeps one table and leaves saving disabled", drawer.includes('data-testid="products-import-file"') && drawer.includes("rounded-full") && !drawer.includes("products-import-method-") && !drawer.includes("products-import-ego-template") && !drawer.includes("products-import-letter-apply") && drawer.includes('data-testid="products-import-confirm" disabled') && !drawer.includes("importProductsFileAction") && panel.includes("products-import-excel-table") && panel.includes("products-import-destination-") && panel.includes("IMPORT_DESTINATION_LETTERS"));
 check("preview code does not write products or inventory", !sources.includes("product.create") && !sources.includes("inventoryBalance") && !sources.includes("stockMovement"));
 
 console.log(`${checks.length}/${checks.length + failures.length} passed`);

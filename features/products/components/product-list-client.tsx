@@ -807,7 +807,7 @@ function ProductShellDrawer({ canImport, canViewCost, categories, drawerKey, exp
         return null;
     if (isProductToolDrawer(drawerKey)) {
         return (
-          <ProductDrawerFrame description={getProductToolDescription(drawerKey, t)} label={t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
+          <ProductDrawerFrame description={drawerKey === "tool_import" ? "" : getProductToolDescription(drawerKey, t)} label={drawerKey === "tool_import" ? "" : t("productsTool")} title={getProductToolTitle(drawerKey, t)} onClose={onClose}>
             <ProductToolDrawerBody canImport={canImport} canViewCost={canViewCost} categories={categories} drawerKey={drawerKey} exportQuery={exportQuery} filteredCount={filteredCount} filteredProducts={filteredProducts} operationProducts={operationProducts} prefillReprint={prefillReprint} selectedIds={selectedIds} selectedProducts={selectedProducts} stats={stats} onClose={onClose} onImported={onImported}/>
           </ProductDrawerFrame>
         );
@@ -870,9 +870,9 @@ function ProductDrawerFrame({ children, description, label, onClose, title }: {
           <header className="sticky top-0 z-20 border-b border-border bg-card p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-primary">{label}</p>
-                <h2 className="mt-1 text-2xl font-semibold">{title}</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
+                {label ? <p className="text-sm font-semibold text-primary">{label}</p> : null}
+                <h2 className={label ? "mt-1 text-2xl font-semibold" : "text-2xl font-semibold"}>{title}</h2>
+                {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p> : null}
               </div>
               <button aria-label={t("closeDrawer")} className="grid size-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition hover:text-foreground" type="button" onClick={onClose}>
                 <X className="size-5" aria-hidden="true"/>

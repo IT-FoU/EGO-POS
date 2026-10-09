@@ -31,7 +31,15 @@ const WHITE_TABLE_CSS = `
   font-weight: 650;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
+}
+.ego-white-table thead tr.ego-column-letters th {
+  top: 0;
+  z-index: 3;
+}
+.ego-white-table thead tr.ego-column-names th {
+  top: 2.25rem;
+  z-index: 2;
 }
 .ego-white-table tbody tr:hover td { background: #F1F5F9; }
 .ego-white-table .num { text-align: right; font-variant-numeric: tabular-nums; }

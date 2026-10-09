@@ -202,7 +202,12 @@ export function ExportProductsDrawer({ canViewCost = true, filteredCount, onClos
           {preview.sampleRows.length > 0 ? (
             <WhiteDataTable minWidth={`${Math.max(preview.headers.length, 1) * 148}px`} testId="products-export-preview-table">
               <thead>
-                <tr>
+                <tr className="ego-column-letters" data-testid="products-export-column-letters">
+                  {preview.headers.map((header, index) => (
+                    <th key={`letter-${header}-${index}`}>{exportColumnLetter(index)}</th>
+                  ))}
+                </tr>
+                <tr className="ego-column-names">
                   {preview.headers.map((header, index) => (
                     <th key={`${header}-${index}`}>{header}</th>
                   ))}
@@ -289,6 +294,16 @@ function FormatOption({ checked, disabled, label, onChange, testId }: {
       {label}
     </label>
   );
+}
+
+function exportColumnLetter(index: number) {
+  let value = index;
+  let letters = "";
+  do {
+    letters = String.fromCharCode(65 + (value % 26)) + letters;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return letters;
 }
 
 function downloadBase64(filename: string, mime: string, base64: string) {

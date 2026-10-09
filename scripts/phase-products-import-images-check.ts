@@ -52,7 +52,7 @@ check("copy parity", productsCopyKeyParity());
 check("lo unsafe workbook", tProducts("importIssue_unsafe_workbook", "lo") !== tProducts("importIssue_unsafe_workbook", "en"));
 check("lo include images", tProducts("importIncludeImages", "lo") !== tProducts("importIncludeImages", "en"));
 check("lo image review reasons", ["ambiguous", "oversized", "spanned", "unassigned", "unsupported"].every((reason) => tProducts(`importImageReason_${reason}`, "lo") !== tProducts(`importImageReason_${reason}`, "en")));
-check("preview shows the file size", drawer.includes("products-import-filesize"));
+check("preview shows the file name and status", drawer.includes("products-import-filename") && drawer.includes("products-import-large-status"));
 
 const failed = results.filter((result) => !result.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
