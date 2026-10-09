@@ -39,6 +39,7 @@ const SCAN_COLUMN_LIMIT = 64;
 export async function readProductImportFile(input: {
   bytes: Uint8Array;
   fileName: string;
+  scanRowLimit?: number;
   sheetName?: string;
 }): Promise<ProductImportFileRead> {
   if (input.bytes.byteLength > PRODUCT_IMPORT_MAX_CHARS) {
@@ -78,9 +79,10 @@ export async function readProductImportFile(input: {
       const zip = inspectZipCentralDirectory(input.bytes);
       if (!zip.ok) return blocked(zip.code, format);
     }
+    const scanRowLimit = input.scanRowLimit ?? SCAN_ROW_LIMIT;
     const workbook = format === "xlsx"
-      ? await readXlsxWorkbook(input.bytes)
-      : readSheetJsWorkbook(input.bytes);
+      ? await readXlsxWorkbook(input.bytes, scanRowLimit)
+      : readSheetJsWorkbook(input.bytes, scanRowLimit);
     return workbookToImport(workbook, input.sheetName, format);
   } catch {
     return blocked("malformed_file", format);
@@ -133,7 +135,7 @@ function agreeFormat(extension: string, sniffed: ReturnType<typeof sniffProductI
   return "unsupported" as const;
 }
 
-async function readXlsxWorkbook(bytes: Uint8Array): Promise<ImportedWorkbook> {
+async function readXlsxWorkbook(bytes: Uint8Array, scanRowLimit: number): Promise<ImportedWorkbook> {
   const workbook = new ExcelJS.Workbook();
   const payload = Buffer.from(bytes);
   await workbook.xlsx.load(payload as unknown as Parameters<typeof workbook.xlsx.load>[0]);
@@ -142,12 +144,12 @@ async function readXlsxWorkbook(bytes: Uint8Array): Promise<ImportedWorkbook> {
       empty: sheet.actualRowCount === 0,
       images: () => sheetEmbeddedImages(workbook, sheet),
       name: sheet.name,
-      rows: () => excelRows(sheet),
+      rows: () => excelRows(sheet, scanRowLimit),
     })),
   };
 }
 
-function readSheetJsWorkbook(bytes: Uint8Array): ImportedWorkbook {
+function readSheetJsWorkbook(bytes: Uint8Array, scanRowLimit: number): ImportedWorkbook {
   const book = XLSX.read(Buffer.from(bytes), {
     type: "buffer",
     bookFiles: false,
@@ -161,7 +163,7 @@ function readSheetJsWorkbook(bytes: Uint8Array): ImportedWorkbook {
   return {
     sheets: book.SheetNames.map((name) => {
       const sheet = book.Sheets[name];
-      const grid = sheet ? sheetJsRows(sheet) : { rows: [], skippedBlankRows: 0, tooMany: false };
+      const grid = sheet ? sheetJsRows(sheet, scanRowLimit) : { rows: [], skippedBlankRows: 0, tooMany: false };
       return {
         empty: grid.rows.length === 0,
         images: () => [],
@@ -230,8 +232,8 @@ function sheetEmbeddedImages(workbook: ExcelJS.Workbook, sheet: ExcelJS.Workshee
   });
 }
 
-function excelRows(sheet: ExcelJS.Worksheet) {
-  if (sheet.actualRowCount > SCAN_ROW_LIMIT) {
+function excelRows(sheet: ExcelJS.Worksheet, scanRowLimit: number) {
+  if (sheet.actualRowCount > scanRowLimit) {
     return { rows: [], skippedBlankRows: 0, tooMany: true };
   }
   const rows: ProductImportGridRow[] = [];
@@ -252,11 +254,11 @@ function excelRows(sheet: ExcelJS.Worksheet) {
   return { rows, skippedBlankRows, tooMany: false };
 }
 
-function sheetJsRows(sheet: XLSX.WorkSheet) {
+function sheetJsRows(sheet: XLSX.WorkSheet, scanRowLimit: number) {
   const ref = sheet["!ref"];
   if (!ref) return { rows: [], skippedBlankRows: 0, tooMany: false };
   const range = XLSX.utils.decode_range(ref);
-  if (range.e.r - range.s.r > SCAN_ROW_LIMIT) {
+  if (range.e.r - range.s.r > scanRowLimit) {
     return { rows: [], skippedBlankRows: 0, tooMany: true };
   }
   const rows: ProductImportGridRow[] = [];

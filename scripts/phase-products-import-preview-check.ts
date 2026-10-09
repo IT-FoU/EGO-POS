@@ -8,7 +8,7 @@ import type { EmbeddedImageAnchor } from "../features/products/product-import-im
 import { PRODUCT_IMPORT_MAX_ROWS } from "../features/products/product-import";
 import { createMemoryLargeImportStore } from "../features/products/product-import-large-store";
 import { loadCachedWorkbook, previewCacheDownloads, resetPreviewCacheForTests } from "../features/products/product-import-preview-cache";
-import { buildLargeImportPreview, PREVIEW_PAGE_SIZE_STORAGE_KEY, PREVIEW_RESPONSE_MAX_BYTES, readStoredPreviewPageSize } from "../features/products/product-import-preview";
+import { buildLargeImportPreview, chooseImportSurface, PREVIEW_PAGE_SIZE_STORAGE_KEY, PREVIEW_RESPONSE_MAX_BYTES, readStoredPreviewPageSize } from "../features/products/product-import-preview";
 import { loadAnchorsForRows, readWorkbookPreviewSource } from "../features/products/product-import-preview-sheet";
 import { downscalePreviewImage } from "../features/products/product-import-preview-image";
 import { readLargeImportPreview } from "../features/products/product-import-preview-service";
@@ -162,6 +162,41 @@ check("a mapping change rebuilds the preview without changing the source", ignor
 const automatic = buildLargeImportPreview({ catalog: [], choices: [], rows: [["Product Name", "SKU", "Barcode"], ["Soap", "SKU-1", "00111"]], sheetName: "Auto" });
 check("an empty choice list keeps automatic column mapping", automatic.mapped.rows[0]?.name === "Soap" && automatic.mapped.rows[0]?.sku === "SKU-1" && automatic.mapped.rows[0]?.barcode === "00111");
 
+const supplierRows = [
+  ["Price list", "", "", "", "", "", ""],
+  ["Printed", "2026-10-09", "", "", "", "", ""],
+  ["Picture", "Goods", "Art No", "Code128", "Quantity", "Cost Price", "Selling Price"],
+  ["", "Soap", "SKU-1", "0012399", "5", "1000", "1500"],
+  ["", "Rice", "SKU-2", "8850000000017", "2", "800", "1200"],
+];
+const lost = buildLargeImportPreview({ catalog: [], rows: supplierRows, sheetName: "Supplier" });
+const goods = lost.columns[1];
+console.log(`trace source=B4:Soap parsed=Soap destination=${goods?.choice ?? "unmapped"} preview=${lost.mapped.rows[0]?.name ?? ""} path=suggestProductImportColumn`);
+check("recognized price headers stay filled while unmatched identity headers stay blank", lost.mapped.rows.length === 2 && lost.mapped.rows[0]?.name === "" && lost.mapped.rows[0]?.barcode === "" && lost.mapped.rows[0]?.sku === "" && lost.mapped.rows[0]?.stock === "5" && lost.mapped.rows[0]?.cost === "1000" && lost.mapped.rows[0]?.price === "1500");
+check("the original name barcode and sku remain on their source columns", goods?.header === "Goods" && goods?.samples.join("|") === "Soap|Rice" && goods?.status === "review" && lost.columns[2]?.sample === "SKU-1" && lost.columns[3]?.samples[0] === "0012399");
+check("a row number column is not used as a product identifier", lost.columns[0]?.header === "Picture" && buildLargeImportPreview({ catalog: [], rows: [["No", "Notes", "Quantity", "Cost Price", "Selling Price"], ["1", "Supplier A", "4", "10", "20"]], sheetName: "Numbers" }).columns.every((column) => column.choice !== "product_name" && column.choice !== "piece_barcode" && column.choice !== "sku" || column.header === "Quantity" || column.header === "Cost Price" || column.header === "Selling Price"));
+const repaired = buildLargeImportPreview({
+  catalog: [],
+  choices: lost.columns.map((column) => ({
+    field: column.index === 1 ? "product_name" as const : column.index === 2 ? "sku" as const : column.index === 3 ? "piece_barcode" as const : column.choice,
+    index: column.index,
+  })),
+  edits: [{ field: "product_name", rowNumber: 4, value: "Edited Soap" }],
+  rows: supplierRows,
+  sheetName: "Supplier",
+});
+check("manual mapping restores product name barcode and sku", repaired.mapped.rows[0]?.name === "Edited Soap" && repaired.mapped.rows[0]?.sku === "SKU-1" && repaired.mapped.rows[0]?.barcode === "0012399" && repaired.mapped.rows[1]?.name === "Rice");
+const imageBytes = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+const imageRows = [["Product Name", "Barcode", "SKU", "Quantity", "Cost Price", "Selling Price"], ["Soap", "0012399", "SKU-1", "5", "1000", "1500"]];
+const imagesOnStarted = Date.now();
+const imagesOn = buildLargeImportPreview({ catalog: [], images: [{ bottomRow: 2, bytes: imageBytes, topRow: 1 }], rows: imageRows, sheetName: "Images" });
+const imagesOnMs = Date.now() - imagesOnStarted;
+const imagesOffStarted = Date.now();
+const imagesOff = buildLargeImportPreview({ catalog: [], edits: [{ field: "product_name", rowNumber: 2, value: "Edited Soap" }], images: [], rows: imageRows, sheetName: "Images" });
+const imagesOffMs = Date.now() - imagesOffStarted;
+console.log(`image-benchmark onMs=${imagesOnMs} offMs=${imagesOffMs}`);
+check("images on show a private thumbnail and images off keep the other fields", Boolean(imagesOn.mapped.rows[0]?.thumb?.startsWith("data:image/")) && imagesOff.mapped.rows[0]?.thumb === null && imagesOff.mapped.rows[0]?.name === "Edited Soap" && imagesOff.mapped.rows[0]?.barcode === "0012399" && imagesOff.mapped.rows[0]?.stock === "5" && !imagesOff.mapped.rows[0]?.issue.includes("Image needs review"));
+
 const headerless = buildLargeImportPreview({
   catalog: [],
   rows: [
@@ -296,8 +331,23 @@ try {
 }
 check("an oversized worksheet entry has its own limit", worksheetLimited);
 
+const sharedSheet = Buffer.from('<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c><c r="E1" t="s"><v>4</v></c><c r="F1" t="s"><v>5</v></c><c r="G1" t="s"><v>6</v></c></row><row r="2"><c r="B2" t="s"><v>7</v></c><c r="C2" t="inlineStr"><is><t>SKU-1</t></is></c><c r="D2" t="s"><v>8</v></c><c r="E2"><v>5</v></c><c r="F2"><v>1000</v></c><c r="G2"><v>1500</v></c></row></sheetData></worksheet>');
+const sharedStrings = Buffer.from('<sst><si><t>Picture</t></si><si><t>Goods</t></si><si><t>Art No</t></si><si><t>Code128</t></si><si><t>Quantity</t></si><si><t>Cost Price</t></si><si><t>Selling Price</t></si><si><t>Soap</t></si><si><t>0012399</t></si></sst>');
+const parsedPath = join(directory, "shared.xlsx");
+await writeFile(parsedPath, storedZip([
+  { data: Buffer.from('<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheet name="Synthetic" r:id="rId1"/></workbook>'), name: "xl/workbook.xml" },
+  { data: Buffer.from('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'), name: "xl/_rels/workbook.xml.rels" },
+  { data: sharedStrings, name: "xl/sharedStrings.xml" },
+  { data: sharedSheet, name: "xl/worksheets/sheet1.xml" },
+]));
+const parsedWorkbook = await readWorkbookPreviewSource(parsedPath, "Synthetic");
+const parsedPreview = buildLargeImportPreview({ catalog: [], rows: parsedWorkbook.rows, sheetName: "Synthetic" });
+console.log(`trace source=B2:Soap parsed=${parsedWorkbook.rows[1]?.[1] ?? ""} destination=${parsedPreview.columns[1]?.choice ?? "unmapped"} preview=${parsedPreview.mapped.rows[0]?.name ?? ""} path=parseSheetRows+suggestProductImportColumn`);
+check("shared text is parsed and stays blank until its column is mapped", parsedWorkbook.rows[1]?.[1] === "Soap" && parsedWorkbook.rows[1]?.[3] === "0012399" && parsedWorkbook.rows[1]?.[2] === "SKU-1" && parsedPreview.mapped.rows[0]?.name === "" && parsedPreview.mapped.rows[0]?.stock === "5" && parsedPreview.mapped.rows[0]?.cost === "1000" && parsedPreview.mapped.rows[0]?.price === "1500");
+
 const panelSource = readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8");
-check("only the page size is stored in the browser", panelSource.includes("PREVIEW_PAGE_SIZE_STORAGE_KEY") && panelSource.split("localStorage.setItem").length === 2 && readFileSync("features/products/components/product-import-drawer.tsx", "utf8").includes("previewRequest"));
+const drawerForStorage = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
+check("only the page size and image preference are stored in the browser", panelSource.includes("PREVIEW_PAGE_SIZE_STORAGE_KEY") && panelSource.split("localStorage.setItem").length === 2 && drawerForStorage.includes("IMPORT_IMAGES_STORAGE_KEY") && drawerForStorage.includes('checked ? "1" : "0"') && drawerForStorage.includes('data-testid="products-import-images"') && drawerForStorage.includes('data-testid="products-import-save-awaiting"'));
 await rm(directory, { force: true, recursive: true });
 
 const processes = createMemoryImportProcessStore();
@@ -411,6 +461,21 @@ const productionConfig = readFileSync("wrangler.jsonc", "utf8");
 check("QA service binding targets only the import worker", qaConfig.includes('"binding": "IMPORT_PREVIEW"') && qaConfig.includes('"service": "egopos-qa-import"') && !productionConfig.includes("IMPORT_PREVIEW"));
 check("preview route checks the caller and the tenant", worker.includes("IMPORT_PREVIEW_TOKEN") && worker.includes("row.company_id !== companyId") && worker.includes("company_id = $1"));
 check("copy keys match", productsCopyKeyParity());
+check("a 100 KB workbook uses the unified upload", chooseImportSurface("supplier.xlsx", 100 * 1024) === "unified-upload");
+check("a 3 MB workbook uses the unified upload", chooseImportSurface("supplier.xlsx", 3 * 1024 * 1024) === "unified-upload");
+check("a large workbook uses the unified upload", chooseImportSurface("supplier.xlsx", 20 * 1024 * 1024) === "unified-upload");
+for (const name of ["prices.csv", "prices.tsv", "prices.xls", "prices.ods"]) {
+  const parsed = buildLargeImportPreview({
+    catalog: [],
+    rows: [["Product Name", "Barcode", "SKU"], ["Soap", "0012399", "SKU-1"]],
+    sheetName: name,
+  });
+  check(`${name} uses the same unified table rows`, chooseImportSurface(name, 100 * 1024) === "unified-parse" && parsed.mapped.rows[0]?.name === "Soap" && parsed.mapped.rows[0]?.barcode === "0012399" && parsed.mapped.rows[0]?.sku === "SKU-1");
+}
+const drawerSource = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
+check("one white table is the only import screen", drawerSource.split("<ProductImportPreviewPanel").length === 2 && !drawerSource.includes('data-testid="products-import-mapping"') && !drawerSource.includes('data-testid="products-import-preview"') && !drawerSource.includes('data-testid="products-import-result"') && drawerSource.includes('data-testid="products-import-confirm" disabled'));
+check("adjust columns shows the source column and its confidence", panelSource.includes("importMapColumn") && panelSource.includes("importMapValues") && panelSource.includes("importMapConfidence") && panelSource.includes("products-import-map-letter-"));
+check("unchecked images skip image bytes", readFileSync("workers/import-processor/server.ts", "utf8").includes("body.includeImages !== false") && readFileSync("workers/import-processor/index.ts", "utf8").includes('CONTAINER_INSTANCE = "preview-accuracy"'));
 
 console.log(`${checks.length}/${checks.length + failures.length} passed`);
 if (failures.length > 0) process.exit(1);

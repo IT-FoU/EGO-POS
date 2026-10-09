@@ -118,11 +118,10 @@ check("confirmed import still uses the create service", service.includes("import
 const actions = readFileSync("features/products/actions.ts", "utf8");
 const drawer = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
 check("mapping actions still require products.create", actions.includes("columns") && actions.includes("WRITE_PERMISSIONS.productsCreate"));
-const mappingChange = drawer.slice(drawer.indexOf("async function onMappingChange"), drawer.indexOf("async function confirmImport"));
-const sheetChange = drawer.slice(drawer.indexOf("async function onSheetChange"), drawer.indexOf("async function onMappingChange"));
-check("changing a mapping does not import", !mappingChange.includes("importProductsFileAction") && drawer.includes("importProductsFileAction"));
-check("a new sheet does not keep the previous mapping", !sheetChange.includes("columns"));
-check("confirm stays disabled until product name is mapped", drawer.includes("!productNameMapped") && drawer.includes("products-import-mapping"));
+check("the drawer keeps one unified table", drawer.includes("<ProductImportPreviewPanel") && !drawer.includes('data-testid="products-import-mapping"') && readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8").includes("products-import-adjust-columns"));
+check("changing a column does not import", !drawer.includes("importProductsFileAction"));
+check("a new sheet clears the previous column choices", drawer.includes("onLocalSheetChange") && drawer.includes("choices: []"));
+check("confirm and save stays disabled", drawer.includes('data-testid="products-import-confirm" disabled'));
 check("copy parity", productsCopyKeyParity());
 check("file limit copy names 1.5 MB", tProducts("importIssue_file_too_large", "en").includes("1.5 MB") && tProducts("importIssue_file_too_large", "lo") !== tProducts("importIssue_file_too_large", "en"));
 for (const key of ["importMappingTitle", "importMappingHint", "importMappingNameRequired", "importMapReview", "importMapConflict", "importMapIgnore"]) {

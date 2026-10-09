@@ -99,8 +99,8 @@ check("file import uses the same create service", service.includes("importProduc
 const actions = readFileSync("features/products/actions.ts", "utf8");
 const drawer = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
 check("import still requires products.create", actions.includes("previewProductImportFileAction") && actions.includes("importProductsFileAction") && actions.includes("WRITE_PERMISSIONS.productsCreate") && drawer.includes("disabled={!canImport"));
-const fileChange = drawer.slice(drawer.indexOf("async function onFileChange"), drawer.indexOf("async function onSheetChange"));
-check("choosing a file does not import", !fileChange.includes("importProductsFileAction") && drawer.includes("importProductsFileAction"));
+const fileChange = drawer.slice(drawer.indexOf("async function onFileChange"), drawer.indexOf("const busy"));
+check("choosing a file does not import", fileChange.includes("chooseImportSurface") && !fileChange.includes("importProductsFileAction") && !drawer.includes("importProductsFileAction"));
 check("sheet control is present for workbooks", drawer.includes("products-import-sheet") && drawer.includes("products-import-format"));
 check("accepted formats are listed", [".csv", ".tsv", ".xlsx", ".xls", ".ods"].every((extension) => drawer.includes(extension)));
 check("copy parity", productsCopyKeyParity());

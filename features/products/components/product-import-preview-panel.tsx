@@ -26,6 +26,10 @@ export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onMapping
   const locale = useAppLocale();
   const t = (key: string) => tProducts(key, locale);
   const [pageSize, setPageSize] = useState<PreviewPageSize>(20);
+  const identityKey = preview.columns.map((column) => `${column.index}:${column.choice ?? ""}:${column.status}`).join("|");
+  const needsMapping = identityColumnsNeedMapping(preview.columns);
+  const [adjustOpen, setAdjustOpen] = useState({ key: identityKey, open: needsMapping });
+  if (adjustOpen.key !== identityKey) setAdjustOpen({ key: identityKey, open: needsMapping });
   useEffect(() => {
     setPageSize(readStoredPreviewPageSize(window.localStorage));
   }, []);
@@ -124,35 +128,38 @@ export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onMapping
       </WhiteDataTable>
       <Pager page={preview.mapped.page} pageCount={preview.mapped.pageCount} testId="products-import-excel-pager" onPage={onPage} />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <details data-testid="products-import-adjust-columns">
+        <details data-testid="products-import-adjust-columns" open={adjustOpen.open} onToggle={(event) => setAdjustOpen({ key: identityKey, open: event.currentTarget.open })}>
           <summary className="cursor-pointer text-sm font-semibold">{t("importAdjustColumns")}</summary>
           <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-border" data-testid="products-import-preview-mapping">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
                 <tr>
+                  <th className="p-3">{t("importMapColumn")}</th>
                   <th className="p-3">{t("importMapHeader")}</th>
-                  <th className="p-3">{t("importMapSample")}</th>
-                  <th className="p-3">{t("importMapSuggested")}</th>
+                  <th className="p-3">{t("importMapValues")}</th>
                   <th className="p-3">{t("importMapField")}</th>
-                  <th className="p-3">{t("importMapStatus")}</th>
+                  <th className="p-3">{t("importMapConfidence")}</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.columns.map((column) => (
-                  <tr className="border-t border-border" key={column.index}>
-                    <td className="p-3 font-semibold">{column.header.trim() || "-"}</td>
-                    <td className="p-3 font-mono text-xs">{column.sample || "-"}</td>
-                    <td className="p-3">{mappingFieldLabel(column.suggestion, t)}</td>
-                    <td className="p-3">
-                      <select className="h-11 w-full max-w-56 rounded-md border border-border bg-background px-3" data-testid={`products-import-preview-map-${column.index}`} value={column.status === "review" ? "" : (column.choice ?? "")} onChange={(event) => onMapping(column.index, event.target.value)}>
-                        <option value="">{t("importMapChoose")}</option>
-                        <option value="ignore">{t("importMapIgnore")}</option>
-                        {PRODUCT_IMPORT_COLUMNS.map((field) => <option key={field} value={field}>{mappingFieldLabel(field, t)}</option>)}
-                      </select>
-                    </td>
-                    <td className="p-3 font-semibold" data-testid={`products-import-preview-map-status-${column.index}`}>{t(mappingStatusKey(column.status))}</td>
-                  </tr>
-                ))}
+                {preview.columns.map((column) => {
+                  const values = column.samples?.length ? column.samples : (column.sample ? [column.sample] : []);
+                  return (
+                    <tr className="border-t border-border" key={column.index}>
+                      <td className="p-3 font-mono font-semibold" data-testid={`products-import-map-letter-${column.index}`}>{columnLetter(column.index)}</td>
+                      <td className="p-3 font-semibold">{column.header.trim() || "-"}</td>
+                      <td className="p-3 font-mono text-xs" data-testid={`products-import-map-values-${column.index}`}>{values.join(" · ") || "-"}</td>
+                      <td className="p-3">
+                        <select className="h-11 w-full max-w-56 rounded-md border border-border bg-background px-3" data-testid={`products-import-preview-map-${column.index}`} value={column.status === "review" ? "" : (column.choice ?? "")} onChange={(event) => onMapping(column.index, event.target.value)}>
+                          <option value="">{t("importMapChoose")}</option>
+                          <option value="ignore">{t("importMapIgnore")}</option>
+                          {PRODUCT_IMPORT_COLUMNS.map((field) => <option key={field} value={field}>{mappingFieldLabel(field, t)}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-3 font-semibold" data-testid={`products-import-map-confidence-${column.index}`}>{t(mappingConfidenceKey(column))}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -196,11 +203,28 @@ function Pager({ onPage, page, pageCount, testId }: { onPage: (page: number) => 
   );
 }
 
-function mappingStatusKey(status: ProductImportMappedColumn["status"]) {
-  if (status === "mapped") return "importMapMapped";
-  if (status === "ignored") return "importMapIgnored";
-  if (status === "conflict") return "importMapConflict";
-  return "importMapReview";
+function identityColumnsNeedMapping(columns: ProductImportMappedColumn[]) {
+  const mapped = new Set(columns.filter((column) => column.status === "mapped").map((column) => column.choice));
+  return !mapped.has("product_name") || !mapped.has("piece_barcode") || !mapped.has("sku");
+}
+
+function columnLetter(index: number) {
+  let value = index + 1;
+  let letters = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    value = Math.floor((value - 1) / 26);
+  }
+  return letters;
+}
+
+function mappingConfidenceKey(column: ProductImportMappedColumn) {
+  if (column.status === "mapped") return "importMapConfidenceHigh";
+  if (column.status === "ignored") return "importMapConfidenceIgnored";
+  if (column.status === "conflict") return "importMapConfidenceConflict";
+  if (column.suggestion) return "importMapConfidenceLow";
+  return "importMapConfidenceNone";
 }
 
 function mappingFieldLabel(field: ProductImportColumn | "ignore" | null, t: (key: string) => string) {

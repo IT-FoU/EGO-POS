@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { EmbeddedImageAnchor } from "../../features/products/product-import-images";
 import { MetadataReadError, readWorkbookMetadata } from "../../features/products/product-import-metadata";
 import { loadAnchorsForRows, readWorkbookPreviewSource } from "../../features/products/product-import-preview-sheet";
 import { loadCachedWorkbook, resetPreviewCacheForTests } from "../../features/products/product-import-preview-cache";
@@ -51,6 +52,7 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     choices?: ProductImportColumnChoice[];
     edits?: PreviewEdit[];
     filter?: PreviewFilter;
+    includeImages?: boolean;
     mappedPage?: number;
     page?: number;
     pageSize?: PreviewPageSize;
@@ -89,41 +91,34 @@ async function handle(request: import("node:http").IncomingMessage, response: im
         resetPreviewCacheForTests();
         throw new Error("memory_limit");
       }
-      const planned = buildLargeImportPreview({
+      const includeImages = body.includeImages !== false;
+      const previewInput = {
         catalog: body.catalog ?? [],
         categories: body.categories,
         choices: body.choices,
         edits: body.edits,
         filter: body.filter,
-        images: loaded.images,
         mappedPage: body.mappedPage,
         page: body.page,
         pageSize: body.pageSize,
-        rows: loaded.rows,
         sheetName: String(body.sheetName || ""),
-      });
-      const pageRows = [...planned.excel.rows.map((row) => row.rowNumber), ...planned.mapped.rows.map((row) => row.rowNumber)];
-      const images = loaded.filePath
-        ? await loadAnchorsForRows(loaded.filePath, loaded.images, previewSourceRowNumbers(loaded.rows), pageRows)
-        : loaded.images;
+      };
+      const pageImages = !includeImages
+        ? []
+        : loaded.filePath
+          ? await loadPageImages(loaded.filePath, loaded.images, loaded.rows, previewInput)
+          : loaded.images;
       const preview = buildLargeImportPreview({
-        catalog: body.catalog ?? [],
-        categories: body.categories,
-        choices: body.choices,
-        edits: body.edits,
-        filter: body.filter,
-        images,
-        mappedPage: body.mappedPage,
-        page: body.page,
-        pageSize: body.pageSize,
+        ...previewInput,
+        images: pageImages,
         rows: loaded.rows,
-        sheetName: String(body.sheetName || ""),
       });
       const payload = JSON.stringify({
         diagnostics: {
           cacheHit: loaded.cacheHit,
           downloadMs: loaded.cacheHit ? 0 : downloadMs,
           heapMb: Math.round(heap / 1024 / 1024),
+          images: includeImages ? 1 : 0,
           parseMs: loaded.cacheHit ? 0 : parseMs,
           responseBytes: Buffer.byteLength(JSON.stringify(preview)),
         },
@@ -156,6 +151,27 @@ async function handle(request: import("node:http").IncomingMessage, response: im
   } finally {
     await rm(directory, { force: true, recursive: true });
   }
+}
+
+async function loadPageImages(
+  filePath: string,
+  images: EmbeddedImageAnchor[],
+  rows: string[][],
+  input: {
+    catalog: PreviewCatalogItem[];
+    categories?: string[];
+    choices?: ProductImportColumnChoice[];
+    edits?: PreviewEdit[];
+    filter?: PreviewFilter;
+    mappedPage?: number;
+    page?: number;
+    pageSize?: PreviewPageSize;
+    sheetName: string;
+  },
+) {
+  const planned = buildLargeImportPreview({ ...input, images, rows });
+  const pageRows = [...planned.excel.rows.map((row) => row.rowNumber), ...planned.mapped.rows.map((row) => row.rowNumber)];
+  return loadAnchorsForRows(filePath, images, previewSourceRowNumbers(rows), pageRows);
 }
 
 async function download(url: URL, filePath: string) {

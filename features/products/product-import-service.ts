@@ -1,5 +1,6 @@
 import { createPrismaProduct, type ProductWriteInput } from "@/features/products/prisma-repository";
 import { readProductImportFile } from "@/features/products/product-import-files";
+import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "@/features/products/product-import-preview";
 import {
   evaluateProductImport,
   mapProductImportGrid,
@@ -51,6 +52,106 @@ export async function previewProductImportFile(
     sheets: read.sheets,
     skippedBlankRows: mapped.parsed.skippedBlankRows,
   };
+}
+
+const UNIFIED_PREVIEW_ROW_LIMIT = 20_000;
+const UNIFIED_PREVIEW_CATALOG_LIMIT = 20_000;
+
+export async function previewUnifiedProductFile(
+  input: {
+    bytes: Uint8Array;
+    choices?: ProductImportColumnChoice[];
+    edits?: PreviewEdit[];
+    fileName: string;
+    filter?: PreviewFilter;
+    mappedPage?: number;
+    page?: number;
+    pageSize?: PreviewPageSize;
+    sheetName?: string;
+  },
+  tenant: TenantContext,
+) {
+  const read = await readProductImportFile({
+    bytes: input.bytes,
+    fileName: input.fileName,
+    scanRowLimit: UNIFIED_PREVIEW_ROW_LIMIT,
+    sheetName: input.sheetName,
+  });
+  if (read.grid.length === 0) {
+    const code = read.parsed.fileIssues.find((issue) => issue.level === "error")?.code ?? "empty_file";
+    throw new Error(code === "too_many_rows" ? "preview_limit" : code);
+  }
+  const scope = await resolveTenantScope(tenant);
+  const [catalog, categories] = await Promise.all([
+    loadUnifiedPreviewCatalog(scope.companyId),
+    loadUnifiedPreviewCategories(scope.companyId),
+  ]);
+  const rows: string[][] = [];
+  for (const row of read.grid) {
+    while (rows.length < row.lineNumber - 1) rows.push([]);
+    rows[row.lineNumber - 1] = row.cells;
+  }
+  return {
+    format: read.format,
+    preview: buildLargeImportPreview({
+      catalog,
+      categories,
+      choices: input.choices,
+      edits: input.edits,
+      filter: input.filter,
+      images: [],
+      mappedPage: input.mappedPage,
+      page: input.page,
+      pageSize: input.pageSize,
+      rows,
+      sheetName: read.selectedSheet ?? input.fileName,
+    }),
+    selectedSheet: read.selectedSheet,
+    sheets: read.sheets,
+  };
+}
+
+async function loadUnifiedPreviewCatalog(companyId: string): Promise<PreviewCatalogItem[]> {
+  const [products, units] = await Promise.all([
+    db.product.count({ where: { companyId } }),
+    db.productUnit.count({ where: { barcode: { not: "" }, product: { companyId } } }),
+  ]);
+  if (products + units > UNIFIED_PREVIEW_CATALOG_LIMIT) throw new Error("preview_limit");
+  const [productRows, unitRows] = await Promise.all([
+    db.product.findMany({
+      select: { barcode: true, nameLo: true, sku: true },
+      where: { companyId },
+    }),
+    db.productUnit.findMany({
+      select: { barcode: true, product: { select: { nameLo: true } }, unitName: true },
+      where: { barcode: { not: "" }, product: { companyId } },
+    }),
+  ]);
+  return [
+    ...productRows.map((row: { barcode: string | null; nameLo: string | null; sku: string | null }) => ({
+      barcode: String(row.barcode ?? "").slice(0, 80),
+      productName: String(row.nameLo ?? "").slice(0, 120),
+      sku: String(row.sku ?? "").slice(0, 80),
+      unit: "Piece",
+    })),
+    ...unitRows.map((row: { barcode: string | null; product: { nameLo: string | null }; unitName: string | null }) => ({
+      barcode: String(row.barcode ?? "").slice(0, 80),
+      productName: String(row.product?.nameLo ?? "").slice(0, 120),
+      sku: "",
+      unit: String(row.unitName ?? "").slice(0, 40),
+    })),
+  ].filter((item) => item.barcode || item.sku);
+}
+
+async function loadUnifiedPreviewCategories(companyId: string): Promise<string[]> {
+  const rows = await db.category.findMany({
+    orderBy: { nameLo: "asc" },
+    select: { nameEn: true, nameLo: true },
+    take: 200,
+    where: { companyId },
+  }) as Array<{ nameEn: string | null; nameLo: string | null }>;
+  const names = rows.flatMap((row) => [row.nameLo, row.nameEn].filter((name): name is string => Boolean(name && name.trim())));
+  return [...new Set(names.map((name) => name.trim()))].slice(0, 200);
 }
 
 export async function importProductFileBatch(

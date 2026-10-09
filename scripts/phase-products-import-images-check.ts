@@ -40,11 +40,9 @@ const tooMany = mapProductImportGrid(productImportDelimitedGrid(["Product Name",
 check("row limit stays at 500", tooMany.fileIssues.some((issue) => issue.code === "too_many_rows") && tooMany.rows.length === 0);
 
 const drawer = readFileSync("features/products/components/product-import-drawer.tsx", "utf8");
-const confirm = drawer.slice(drawer.indexOf("async function confirmImport"), drawer.indexOf("function downloadErrors"));
-const beforeImages = confirm.slice(0, confirm.indexOf("let imageFailures"));
-check("images upload only after products are created", beforeImages.includes("importProductsFileAction") && !beforeImages.includes("uploadProductImageAction") && confirm.includes("uploadProductImageAction"));
-check("image upload is off unless the owner includes images", confirm.includes("if (includeImages)") && drawer.includes("products-import-include-images"));
 const service = readFileSync("features/products/product-import-service.ts", "utf8");
+check("the import screen does not save products or images", !drawer.includes("importProductsFileAction") && !drawer.includes("uploadProductImageAction") && !drawer.includes('data-testid="products-import-include-images"'));
+check("image save remains available only after a created product", service.includes("productId: createdProduct.id") && service.includes("importProductFileBatch"));
 const preview = service.slice(service.indexOf("export async function previewProductImportFile"), service.indexOf("export async function importProductFileBatch"));
 check("preview still does not create products or images", !preview.includes("createPrismaProduct") && !preview.includes("uploadAndAttachProductImages"));
 check("import returns the created product id for a later image save", service.includes("productId: createdProduct.id"));

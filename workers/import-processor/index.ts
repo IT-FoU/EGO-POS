@@ -12,7 +12,7 @@ const QA = "arkhwskvcnntluoakmef";
 const PRODUCTION = "ieutdqnlfiiaawctapor";
 const PERMANENT = new Set(["malformed_file", "memory_limit", "time_limit", "unsafe_workbook"]);
 
-const CONTAINER_INSTANCE = "preview-repair";
+const CONTAINER_INSTANCE = "preview-accuracy";
 const CATALOG_LIMIT = 20_000;
 
 type Env = {
@@ -65,6 +65,7 @@ export default {
         edits?: Array<{ field?: string; rowNumber?: number; value?: string }>;
         companyId?: string;
         filter?: string;
+        includeImages?: boolean;
         mappedPage?: number;
         page?: number;
         pageSize?: number;
@@ -106,9 +107,10 @@ export default {
             cacheKey: `${processId}\n${sheetName}`,
             catalog,
             categories,
-            choices: Array.isArray(body.choices) ? body.choices.slice(0, 40) : [],
+            choices: Array.isArray(body.choices) ? body.choices.slice(0, 64) : [],
             edits: cleanEdits(body.edits),
             filter: body.filter,
+            includeImages: body.includeImages !== false,
             mappedPage: body.mappedPage,
             page: body.page,
             pageSize: body.pageSize,
@@ -121,10 +123,10 @@ export default {
           },
           method: "POST",
         });
-        const payload = await response.json() as { diagnostics?: { cacheHit?: boolean; downloadMs?: number; heapMb?: number; parseMs?: number; responseBytes?: number }; errorCode?: string; ok?: boolean; preview?: unknown };
+        const payload = await response.json() as { diagnostics?: { cacheHit?: boolean; downloadMs?: number; heapMb?: number; images?: number; parseMs?: number; responseBytes?: number }; errorCode?: string; ok?: boolean; preview?: unknown };
         const diagnostics = payload.diagnostics;
         if (diagnostics) {
-          console.log(`import-preview cacheHit=${diagnostics.cacheHit ? 1 : 0} downloadMs=${diagnostics.downloadMs ?? 0} parseMs=${diagnostics.parseMs ?? 0} heapMb=${diagnostics.heapMb ?? 0} responseBytes=${diagnostics.responseBytes ?? 0}`);
+          console.log(`import-preview cacheHit=${diagnostics.cacheHit ? 1 : 0} downloadMs=${diagnostics.downloadMs ?? 0} parseMs=${diagnostics.parseMs ?? 0} heapMb=${diagnostics.heapMb ?? 0} responseBytes=${diagnostics.responseBytes ?? 0} images=${diagnostics.images ?? 0}`);
         }
         if (!response.ok || !payload.ok || !payload.preview) {
           return json({ errorCode: String(payload.errorCode || "download_failed").slice(0, 40), ok: false }, response.status || 502);

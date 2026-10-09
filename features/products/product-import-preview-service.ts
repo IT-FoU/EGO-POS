@@ -13,6 +13,7 @@ export type BoundPreviewRequest = {
   companyId: string;
   edits?: PreviewEdit[];
   filter?: PreviewFilter;
+  includeImages?: boolean;
   mappedPage?: number;
   page?: number;
   pageSize?: PreviewPageSize;
@@ -30,6 +31,7 @@ export async function readLargeImportPreview(
     edits?: PreviewEdit[];
     filter?: PreviewFilter;
     images?: EmbeddedImageAnchor[];
+    includeImages?: boolean;
     mappedPage?: number;
     page?: number;
     pageSize?: PreviewPageSize;
@@ -64,6 +66,7 @@ export async function readLargeImportPreview(
       companyId: tenant.companyId,
       edits: _request.edits,
       filter: _request.filter,
+      includeImages: _request.includeImages,
       mappedPage: _request.mappedPage,
       page: _request.page,
       pageSize: _request.pageSize,
@@ -77,7 +80,7 @@ export async function readLargeImportPreview(
     choices: _request.choices,
     edits: _request.edits,
     filter: _request.filter,
-    images: _request.images,
+    images: _request.includeImages === false ? [] : _request.images,
     mappedPage: _request.mappedPage,
     page: _request.page,
     pageSize: _request.pageSize,

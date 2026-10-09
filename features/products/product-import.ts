@@ -169,6 +169,7 @@ export type ProductImportMappedColumn = {
   header: string;
   index: number;
   sample: string;
+  samples: string[];
   status: "mapped" | "review" | "ignored" | "conflict";
   suggestion: ProductImportColumn | "ignore" | null;
 };
@@ -341,7 +342,8 @@ export function resolveProductImportColumns(
   });
   const suggested = Array.from({ length: width }, (_, index) => {
     const header = table[0]?.cells[index] ?? "";
-    return suggestProductImportColumn(header, index, samples[index] ?? "");
+    const values = representativeSamples(table, index);
+    return { ...suggestProductImportColumn(header, index, values[0] ?? samples[index] ?? ""), samples: values };
   });
   if (!choices?.length) return markProductImportConflicts(suggested);
   const byIndex = new Map(choices.map((choice) => [choice.index, choice.field]));
@@ -786,25 +788,25 @@ function suggestProductImportColumn(header: string, index: number, sample: strin
   const key = normalizeHeader(header);
   const { aliases, ignore } = normalizedAliasTables();
   if (!key) {
-    return { choice: null, header, index, sample, status: "review", suggestion: null };
+    return { choice: null, header, index, sample, samples: sample ? [sample] : [], status: "review", suggestion: null };
   }
   if (key === "item_no") {
-    if (/^\d{1,6}$/.test(sample.trim())) return { choice: "ignore", header, index, sample, status: "ignored", suggestion: "ignore" };
-    if (sample.trim()) return { choice: "sku", header, index, sample, status: "mapped", suggestion: "sku" };
-    return { choice: null, header, index, sample, status: "review", suggestion: null };
+    if (/^\d{1,6}$/.test(sample.trim())) return { choice: "ignore", header, index, sample, samples: sample ? [sample] : [], status: "ignored", suggestion: "ignore" };
+    if (sample.trim()) return { choice: "sku", header, index, sample, samples: [sample], status: "mapped", suggestion: "sku" };
+    return { choice: null, header, index, sample, samples: [], status: "review", suggestion: null };
   }
   if (ignore.has(key)) {
-    return { choice: "ignore", header, index, sample, status: "ignored", suggestion: "ignore" };
+    return { choice: "ignore", header, index, sample, samples: sample ? [sample] : [], status: "ignored", suggestion: "ignore" };
   }
   const exact = aliases.get(key);
   if (exact && !isWeakNameColumn(key, exact, sample)) {
-    return { choice: exact, header, index, sample, status: "mapped", suggestion: exact };
+    return { choice: exact, header, index, sample, samples: sample ? [sample] : [], status: "mapped", suggestion: exact };
   }
   const heuristic = heuristicProductImportField(key);
   if (heuristic && isWeakNameColumn(key, heuristic, sample)) {
-    return { choice: null, header, index, sample, status: "review", suggestion: null };
+    return { choice: null, header, index, sample, samples: sample ? [sample] : [], status: "review", suggestion: null };
   }
-  return { choice: null, header, index, sample, status: "review", suggestion: heuristic };
+  return { choice: null, header, index, sample, samples: sample ? [sample] : [], status: "review", suggestion: heuristic };
 }
 
 const WEAK_NAME_HEADERS = new Set(["name", "item", "number", "no"]);
@@ -894,6 +896,7 @@ export function inferHeaderlessProductColumns(rows: string[][]): ProductImportMa
       header: "",
       index,
       sample: samples[0] ?? "",
+      samples: samples.slice(0, 3),
       status: decision.status,
       suggestion: decision.choice,
     };
@@ -924,6 +927,17 @@ export function applyProductImportChoices(columns: ProductImportMappedColumn[], 
     return { ...column, choice: field, status: "mapped" as const };
   });
   return markProductImportConflicts(chosen);
+}
+
+function representativeSamples(table: ProductImportGridRow[], index: number) {
+  const samples: string[] = [];
+  for (const row of table.slice(1)) {
+    const value = (row.cells[index] ?? "").trim();
+    if (!value) continue;
+    samples.push(value.slice(0, 80));
+    if (samples.length === 3) break;
+  }
+  return samples;
 }
 
 function columnSamples(rows: string[][], index: number) {

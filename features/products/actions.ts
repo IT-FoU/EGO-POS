@@ -37,8 +37,8 @@ import { deleteFailureCode } from "@/features/products/product-delete";
 import { loadPermanentDeleteEligibility } from "@/features/products/product-delete-service";
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
-import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
-import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS, type ProductImportColumnChoice } from "@/features/products/product-import";
+import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile, previewUnifiedProductFile } from "@/features/products/product-import-service";
+import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_COLUMNS, PRODUCT_IMPORT_MAX_CHARS, type ProductImportColumn, type ProductImportColumnChoice } from "@/features/products/product-import";
 import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
 import type { LargeImportPreview, PreviewEdit, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
 import { readLargeImportPreview, type BoundPreviewRequest } from "@/features/products/product-import-preview-service";
@@ -368,6 +368,52 @@ export async function previewProductImportFileAction(input: { columns?: Array<{ 
   }
 }
 
+export async function previewUnifiedProductFileAction(input: {
+  choices?: Array<{ field?: string | null; index?: number }>;
+  edits?: Array<{ field?: string; rowNumber?: number; value?: string }>;
+  fileBase64: string;
+  fileName: string;
+  filter?: "all" | "duplicate" | "incomplete" | "needs_review" | "new";
+  mappedPage?: number;
+  page?: number;
+  pageSize?: 20 | 50 | 100;
+  sheetName?: string;
+}) {
+  try {
+    const bytes = decodeProductImportFile(input.fileBase64);
+    const editFields = new Set<PreviewEdit["field"]>(["box_barcode", "category", "notes", "opening_stock", "opening_stock_unit", "pack_barcode", "piece_barcode", "piece_cost", "piece_selling_price", "product_name", "sku"]);
+    const choiceFields = new Set<string>(PRODUCT_IMPORT_COLUMNS);
+    const edits = (input.edits ?? []).slice(0, 200).flatMap((edit) => {
+      const field = String(edit.field || "");
+      const rowNumber = Number(edit.rowNumber);
+      if (!editFields.has(field as PreviewEdit["field"]) || !Number.isInteger(rowNumber) || rowNumber < 1) return [];
+      return [{ field: field as PreviewEdit["field"], rowNumber, value: String(edit.value ?? "").slice(0, 120) }];
+    });
+    const choices = (input.choices ?? []).flatMap((choice): ProductImportColumnChoice[] => {
+      const index = Number(choice.index);
+      const field: ProductImportColumn | "ignore" | null = choice.field === "ignore" || (typeof choice.field === "string" && choiceFields.has(choice.field))
+        ? choice.field as ProductImportColumn | "ignore"
+        : null;
+      if (!Number.isInteger(index) || index < 0 || index > 63) return [];
+      return [{ field, index }];
+    });
+    const data = await previewUnifiedProductFile({
+      bytes,
+      choices,
+      edits,
+      fileName: input.fileName,
+      filter: input.filter,
+      mappedPage: input.mappedPage,
+      page: input.page,
+      pageSize: input.pageSize,
+      sheetName: input.sheetName,
+    }, await tenant(WRITE_PERMISSIONS.productsCreate));
+    return writeSuccess(data);
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
 export async function importProductsFileAction(input: { afterRow?: number; columns?: Array<{ field?: string | null; index?: number }>; fileBase64: string; fileName: string; limit?: number; sheetName?: string }) {
   try {
     const sessionTenant = await tenant(WRITE_PERMISSIONS.productsCreate);
@@ -433,6 +479,7 @@ export async function readLargeImportPreviewAction(input: {
   choices?: ProductImportColumnChoice[];
   edits?: PreviewEdit[];
   filter?: PreviewFilter;
+  includeImages?: boolean;
   mappedPage?: number;
   page?: number;
   pageSize?: PreviewPageSize;
@@ -445,6 +492,7 @@ export async function readLargeImportPreviewAction(input: {
       choices: input.choices,
       edits: input.edits,
       filter: input.filter,
+      includeImages: input.includeImages !== false,
       mappedPage: input.mappedPage,
       page: input.page,
       pageSize: input.pageSize,

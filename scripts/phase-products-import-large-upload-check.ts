@@ -85,7 +85,7 @@ const drawer = readFileSync("features/products/components/product-import-drawer.
 const actions = readFileSync("features/products/actions.ts", "utf8");
 const cleanup = readFileSync("features/products/product-import-large-storage.ts", "utf8");
 check("large upload does not create products", !service.includes("createPrismaProduct") && !service.includes("uploadAndAttachProductImages"));
-check("large confirm stays hidden", drawer.includes("!largeUpload") && drawer.includes("products-import-confirm"));
+check("confirm and save stays disabled for every file", drawer.includes('data-testid="products-import-confirm" disabled') && !drawer.includes("importProductsFileAction"));
 check("large file is not sent as a server-action body", drawer.includes("beginLargeUpload") && !drawer.slice(drawer.indexOf("async function beginLargeUpload"), drawer.indexOf("async function cancelLargeUpload")).includes("fileBase64"));
 check("upload actions still require products.create", actions.includes("startLargeProductImportUploadAction") && actions.includes("WRITE_PERMISSIONS.productsCreate"));
 check("cleanup cannot target product image paths", cleanup.includes("isTempImportObjectPath") && !cleanup.includes("product-images"));

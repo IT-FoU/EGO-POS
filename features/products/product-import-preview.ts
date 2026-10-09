@@ -1,7 +1,9 @@
+import { PRODUCT_IMPORT_LARGE_MAX_BYTES } from "@/features/products/product-import-large";
 import { assignEmbeddedImages, type EmbeddedImageAnchor } from "@/features/products/product-import-images";
 import { downscalePreviewImage } from "@/features/products/product-import-preview-image";
 import {
   PRODUCT_IMPORT_COLUMNS,
+  PRODUCT_IMPORT_MAX_CHARS,
   applyProductImportChoices,
   inferHeaderlessProductColumns,
   productImportHeaderScore,
@@ -90,6 +92,12 @@ export function readStoredPreviewPageSize(storage: { getItem(key: string): strin
   return normalizePreviewPageSize(storage.getItem(PREVIEW_PAGE_SIZE_STORAGE_KEY));
 }
 
+export const IMPORT_IMAGES_STORAGE_KEY = "ego-pos-import-images";
+
+export function readImportImagesPreference(storage: { getItem(key: string): string | null }) {
+  return storage.getItem(IMPORT_IMAGES_STORAGE_KEY) !== "0";
+}
+
 export function detectPreviewHeaderIndex(rows: string[][]) {
   let bestIndex = -1;
   let bestScore = 0;
@@ -102,6 +110,18 @@ export function detectPreviewHeaderIndex(rows: string[][]) {
     }
   }
   return bestScore >= 1 ? bestIndex : -1;
+}
+
+export type ImportSurface = "rejected" | "unified-parse" | "unified-upload";
+
+export function chooseImportSurface(fileName: string, size: number): ImportSurface {
+  const extension = fileName.trim().toLowerCase().split(".").pop() ?? "";
+  if (!Number.isInteger(size) || size < 1) return "rejected";
+  if (extension === "xlsx") return size > PRODUCT_IMPORT_LARGE_MAX_BYTES ? "rejected" : "unified-upload";
+  if (extension === "csv" || extension === "tsv" || extension === "xls" || extension === "ods") {
+    return size > PRODUCT_IMPORT_MAX_CHARS ? "rejected" : "unified-parse";
+  }
+  return "rejected";
 }
 
 export function previewSourceRowNumbers(rows: string[][]) {
