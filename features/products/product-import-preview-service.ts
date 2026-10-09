@@ -8,11 +8,17 @@ import { getImportProcessStore } from "@/features/products/product-import-proces
 import type { EmbeddedImageAnchor } from "@/features/products/product-import-images";
 import type { ProductImportColumnChoice } from "@/features/products/product-import";
 
-export class PreviewStoragePendingError extends Error {
-  constructor() {
-    super("preview_storage_pending");
-  }
-}
+export type BoundPreviewRequest = {
+  choices?: ProductImportColumnChoice[];
+  companyId: string;
+  filter?: PreviewFilter;
+  mappedPage?: number;
+  page?: number;
+  pageSize?: PreviewPageSize;
+  processId: string;
+  sheetName: string;
+  userId: string;
+};
 
 export async function readLargeImportPreview(
   processId: string,
@@ -22,12 +28,18 @@ export async function readLargeImportPreview(
     choices?: ProductImportColumnChoice[];
     filter?: PreviewFilter;
     images?: EmbeddedImageAnchor[];
+    mappedPage?: number;
     page?: number;
     pageSize?: PreviewPageSize;
     rows?: string[][];
     sheetName: string;
   },
-  deps?: { now?: Date; processes?: ImportProcessStore; uploads?: LargeImportStore },
+  deps?: {
+    now?: Date;
+    preview?: (request: BoundPreviewRequest) => Promise<LargeImportPreview>;
+    processes?: ImportProcessStore;
+    uploads?: LargeImportStore;
+  },
 ): Promise<LargeImportPreview> {
   const processes = deps?.processes ?? getImportProcessStore();
   const uploads = deps?.uploads ?? getLargeImportStore();
@@ -43,12 +55,26 @@ export async function readLargeImportPreview(
     throw new Error("preview_closed");
   }
   if (Date.parse(upload.expiresAt) <= now.getTime()) throw new Error("preview_closed");
-  if (!_request.rows) throw new PreviewStoragePendingError();
+  if (!_request.rows) {
+    if (!deps?.preview) throw new Error("preview_unavailable");
+    return deps.preview({
+      choices: _request.choices,
+      companyId: tenant.companyId,
+      filter: _request.filter,
+      mappedPage: _request.mappedPage,
+      page: _request.page,
+      pageSize: _request.pageSize,
+      processId,
+      sheetName: _request.sheetName,
+      userId: tenant.userId,
+    });
+  }
   return buildLargeImportPreview({
     catalog: _request.catalog,
     choices: _request.choices,
     filter: _request.filter,
     images: _request.images,
+    mappedPage: _request.mappedPage,
     page: _request.page,
     pageSize: _request.pageSize,
     rows: _request.rows,

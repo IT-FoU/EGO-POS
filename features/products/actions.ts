@@ -38,9 +38,10 @@ import { loadPermanentDeleteEligibility } from "@/features/products/product-dele
 import { ProductImageValidationError } from "@/lib/storage/image-validate";
 import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
-import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS } from "@/features/products/product-import";
+import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS, type ProductImportColumnChoice } from "@/features/products/product-import";
 import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
-import { readLargeImportPreview } from "@/features/products/product-import-preview-service";
+import type { LargeImportPreview, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
+import { readLargeImportPreview, type BoundPreviewRequest } from "@/features/products/product-import-preview-service";
 import { cancelImportProcess, readImportProcess, startImportProcess } from "@/features/products/product-import-process-service";
 import { assertImportProcessId } from "@/features/products/product-import-process";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
@@ -428,9 +429,25 @@ export async function readLargeImportProcessAction(processId: string) {
   }
 }
 
-export async function readLargeImportPreviewAction(processId: string, sheetName: string) {
+export async function readLargeImportPreviewAction(input: {
+  choices?: ProductImportColumnChoice[];
+  filter?: PreviewFilter;
+  mappedPage?: number;
+  page?: number;
+  pageSize?: PreviewPageSize;
+  processId: string;
+  sheetName: string;
+}) {
   try {
-    return writeSuccess(await readLargeImportPreview(processId, await tenant(WRITE_PERMISSIONS.productsCreate), { catalog: [], sheetName }));
+    return writeSuccess(await readLargeImportPreview(input.processId, await tenant(WRITE_PERMISSIONS.productsCreate), {
+      catalog: [],
+      choices: input.choices,
+      filter: input.filter,
+      mappedPage: input.mappedPage,
+      page: input.page,
+      pageSize: input.pageSize,
+      sheetName: input.sheetName,
+    }, { preview: fetchBoundPreview }));
   } catch (error) {
     return writeFailure(error);
   }
@@ -442,6 +459,25 @@ export async function cancelLargeImportProcessAction(processId: string) {
   } catch (error) {
     return writeFailure(error);
   }
+}
+
+async function fetchBoundPreview(request: BoundPreviewRequest): Promise<LargeImportPreview> {
+  const env = getCloudflareContext().env as {
+    IMPORT_PREVIEW?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+    IMPORT_PREVIEW_TOKEN?: string;
+  };
+  if (!env.IMPORT_PREVIEW || !env.IMPORT_PREVIEW_TOKEN) throw new Error("preview_unavailable");
+  const response = await env.IMPORT_PREVIEW.fetch("https://egopos-qa-import/preview", {
+    body: JSON.stringify(request),
+    headers: {
+      authorization: `Bearer ${env.IMPORT_PREVIEW_TOKEN}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
+  });
+  const payload = await response.json() as { errorCode?: string; ok?: boolean; preview?: LargeImportPreview };
+  if (!response.ok || !payload.ok || !payload.preview) throw new Error(payload.errorCode || "preview_unavailable");
+  return payload.preview;
 }
 
 async function sendImportProcessMessage(processId: string) {

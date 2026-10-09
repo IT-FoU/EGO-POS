@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { cancelLargeImportProcessAction, cancelLargeProductImportUploadAction, importProductsFileAction, previewProductImportFileAction, readLargeImportPreviewAction, readLargeImportProcessAction, startLargeImportProcessAction, startLargeProductImportUploadAction, uploadProductImageAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
 import { ProductImportPreviewPanel } from "@/features/products/components/product-import-preview-panel";
-import type { LargeImportPreview, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
+import { readStoredPreviewPageSize, type LargeImportPreview, type PreviewFilter, type PreviewPageSize } from "@/features/products/product-import-preview";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import type { ProductImportEmbeddedImage } from "@/features/products/product-import-images";
 import {
@@ -13,6 +13,7 @@ import {
   PRODUCT_IMPORT_MAX_CHARS,
   PRODUCT_IMPORT_TEMPLATE_CSV,
   type ProductImportColumn,
+  type ProductImportColumnChoice,
   type ProductImportIssue,
   type ProductImportMappedColumn,
   type ProductImportPreviewRow,
@@ -89,6 +90,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const [processView, setProcessView] = useState<ProcessView | null>(null);
   const [excelPreview, setExcelPreview] = useState<LargeImportPreview | null>(null);
   const [previewSheet, setPreviewSheet] = useState("");
+  const [previewChoices, setPreviewChoices] = useState<ProductImportColumnChoice[]>([]);
+  const [previewFilter, setPreviewFilter] = useState<PreviewFilter>("all");
   const processPoll = useRef(0);
   const largeTransfer = useRef<ReturnType<typeof uploadLargeImportWithTus> | null>(null);
   const [result, setResult] = useState<{ created: number; failed: number; rows: ResultRow[]; skipped: number; warnings: number } | null>(null);
@@ -215,14 +218,28 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
     }
   }
 
-  async function beginExcelPreview() {
+  async function loadExcelPreview(next: { choices?: ProductImportColumnChoice[]; filter?: PreviewFilter; mappedPage?: number; page?: number; pageSize?: PreviewPageSize; sheetName?: string }) {
     if (!processView || processView.status !== "ready") return;
-    const sheetName = previewSheet || processView.sheets[0]?.name || "";
-    const result = await readLargeImportPreviewAction(processView.processId, sheetName);
+    const sheetName = next.sheetName || previewSheet || processView.sheets[0]?.name || "";
+    const choices = next.choices ?? previewChoices;
+    const filter = next.filter ?? previewFilter;
+    const pageSize = next.pageSize ?? readStoredPreviewPageSize(window.localStorage);
+    setPreviewChoices(choices);
+    setPreviewFilter(filter);
+    const result = await readLargeImportPreviewAction({
+      choices,
+      filter,
+      mappedPage: next.mappedPage ?? 0,
+      page: next.page ?? 0,
+      pageSize,
+      processId: processView.processId,
+      sheetName,
+    });
     if (!result.ok || !result.data) {
-      setMessage(result.ok ? t("importPreviewPending") : result.error === "preview_storage_pending" ? t("importPreviewPending") : result.error || t("importPreviewPending"));
+      setMessage(previewErrorMessage(result.ok ? "" : result.error, t));
       return;
     }
+    setMessage("");
     setExcelPreview(result.data);
   }
 
@@ -471,10 +488,10 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
           ) : null}
           {processView?.status === "ready" ? (
             <div className="flex flex-wrap items-center gap-2">
-              <select className="h-11 rounded-md border border-border bg-background px-3 text-sm" data-testid="products-import-preview-sheet" value={previewSheet || processView.sheets[0]?.name || ""} onChange={(event) => setPreviewSheet(event.target.value)}>
+              <select className="h-11 rounded-md border border-border bg-background px-3 text-sm" data-testid="products-import-preview-sheet" value={previewSheet || processView.sheets[0]?.name || ""} onChange={(event) => { setPreviewSheet(event.target.value); setExcelPreview(null); setPreviewChoices([]); }}>
                 {processView.sheets.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}
               </select>
-              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-preview-excel" type="button" onClick={() => { void beginExcelPreview(); }}>{t("importPreviewExcel")}</button>
+              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-preview-excel" type="button" onClick={() => { void loadExcelPreview({ mappedPage: 0, page: 0, sheetName: previewSheet || processView.sheets[0]?.name || "" }); }}>{t("importPreviewExcel")}</button>
             </div>
           ) : null}
         </section>
@@ -482,11 +499,17 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
       {excelPreview ? (
         <ProductImportPreviewPanel
           preview={excelPreview}
-          onFilter={(_filter: PreviewFilter) => { setMessage(t("importPreviewPending")); }}
-          onMapping={() => { setMessage(t("importPreviewPending")); }}
-          onMappedPage={() => { setMessage(t("importPreviewPending")); }}
-          onPage={() => { setMessage(t("importPreviewPending")); }}
-          onPageSize={(_pageSize: PreviewPageSize) => { setMessage(t("importPreviewPending")); }}
+          onFilter={(filter) => { void loadExcelPreview({ filter, mappedPage: 0, page: excelPreview.excel.page }); }}
+          onMapping={(index, field) => {
+            const choices = excelPreview.columns.map((column) => ({
+              field: column.index === index ? (field || null) as ProductImportColumnChoice["field"] : column.choice,
+              index: column.index,
+            }));
+            void loadExcelPreview({ choices, mappedPage: 0, page: excelPreview.excel.page });
+          }}
+          onMappedPage={(mappedPage) => { void loadExcelPreview({ mappedPage, page: excelPreview.excel.page }); }}
+          onPage={(page) => { void loadExcelPreview({ mappedPage: excelPreview.mapped.page, page }); }}
+          onPageSize={(pageSize) => { void loadExcelPreview({ mappedPage: 0, page: 0, pageSize }); }}
         />
       ) : null}
       <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
@@ -653,6 +676,13 @@ function formatImportFileSize(bytes: number) {
 
 function terminalProcess(status: string) {
   return status === "ready" || status === "failed" || status === "cancelled" || status === "expired";
+}
+
+function previewErrorMessage(code: string | undefined, t: (key: string) => string) {
+  if (code === "preview_closed") return t("importPreviewClosed");
+  if (code === "preview_limit" || code === "memory_limit") return t("importPreviewLimit");
+  if (code === "preview_unavailable" || code === "preview_not_ready") return t("importPreviewUnavailable");
+  return t("importPreviewUnavailable");
 }
 
 function processStatusLabel(status: string, t: (key: string) => string) {

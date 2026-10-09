@@ -6,9 +6,10 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MetadataReadError, readWorkbookMetadata } from "../../features/products/product-import-metadata";
+import { loadCachedWorkbook, resetPreviewCacheForTests } from "../../features/products/product-import-preview-cache";
 import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewFilter, type PreviewPageSize } from "../../features/products/product-import-preview";
 import { readWorkbookPreviewSource } from "../../features/products/product-import-preview-sheet";
-import { IMPORT_CONTAINER_ALLOWED_HOSTS, IMPORT_METADATA_MAX_COMPRESSED_BYTES } from "../../features/products/product-import-process";
+import { IMPORT_CONTAINER_ALLOWED_HOSTS, IMPORT_METADATA_MAX_COMPRESSED_BYTES, IMPORT_PROCESS_MEMORY_STOP_BYTES } from "../../features/products/product-import-process";
 import type { ProductImportColumnChoice } from "../../features/products/product-import";
 
 const token = process.env.IMPORT_CONTAINER_TOKEN || "";
@@ -37,16 +38,18 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     response.end();
     return;
   }
-  const rawBody = await readBody(request);
-  if (request.url === "/preview" && rawBody.length > 600_000) {
+  const rawBody = await readBody(request, request.url === "/preview" ? 1_500_000 : 100_000);
+  if (request.url === "/preview" && rawBody.length > 1_500_000) {
     response.writeHead(422, { "content-type": "application/json" });
     response.end(JSON.stringify({ errorCode: "preview_limit", ok: false }));
     return;
   }
   const body = JSON.parse(rawBody) as {
+    cacheKey?: string;
     catalog?: PreviewCatalogItem[];
     choices?: ProductImportColumnChoice[];
     filter?: PreviewFilter;
+    mappedPage?: number;
     page?: number;
     pageSize?: PreviewPageSize;
     sheetName?: string;
@@ -61,29 +64,57 @@ async function handle(request: import("node:http").IncomingMessage, response: im
   const directory = await mkdtemp(join(tmpdir(), "ego-import-"));
   const filePath = join(directory, "workbook.xlsx");
   try {
-    await download(signedUrl, filePath);
     if (request.url === "/preview") {
-      const source = await readWorkbookPreviewSource(filePath, String(body.sheetName || ""));
+      const cacheKey = String(body.cacheKey || "");
+      let downloadMs = 0;
+      let parseMs = 0;
+      const loaded = await loadCachedWorkbook(cacheKey, async () => {
+        const downloadStarted = Date.now();
+        await download(signedUrl, filePath);
+        downloadMs = Date.now() - downloadStarted;
+        const parseStarted = Date.now();
+        const source = await readWorkbookPreviewSource(filePath, String(body.sheetName || ""));
+        parseMs = Date.now() - parseStarted;
+        return { images: source.images, rows: source.rows };
+      });
+      const heap = process.memoryUsage().heapUsed;
+      if (heap > IMPORT_PROCESS_MEMORY_STOP_BYTES) {
+        resetPreviewCacheForTests();
+        throw new Error("memory_limit");
+      }
       const preview = buildLargeImportPreview({
         catalog: body.catalog ?? [],
         choices: body.choices,
         filter: body.filter,
-        images: source.images,
+        images: loaded.images,
+        mappedPage: body.mappedPage,
         page: body.page,
         pageSize: body.pageSize,
-        rows: source.rows,
-        sheetName: source.sheetName,
+        rows: loaded.rows,
+        sheetName: String(body.sheetName || ""),
+      });
+      const payload = JSON.stringify({
+        diagnostics: {
+          cacheHit: loaded.cacheHit,
+          downloadMs: loaded.cacheHit ? 0 : downloadMs,
+          heapMb: Math.round(heap / 1024 / 1024),
+          parseMs: loaded.cacheHit ? 0 : parseMs,
+          responseBytes: Buffer.byteLength(JSON.stringify(preview)),
+        },
+        ok: true,
+        preview,
       });
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ ok: true, preview }));
+      response.end(payload);
       return;
     }
+    await download(signedUrl, filePath);
     const metadata = await readWorkbookMetadata(filePath);
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ ok: true, ...metadata }));
   } catch (error) {
     const named = error instanceof Error ? error.message : "";
-    const code = error instanceof MetadataReadError ? error.code : named === "preview_limit" || named === "unsafe_workbook" || named === "malformed_file" ? named : "download_failed";
+    const code = error instanceof MetadataReadError ? error.code : named === "preview_limit" || named === "unsafe_workbook" || named === "malformed_file" || named === "memory_limit" ? named : "download_failed";
     response.writeHead(code === "download_failed" ? 502 : 422, { "content-type": "application/json" });
     response.end(JSON.stringify({ errorCode: code, ok: false }));
   } finally {
@@ -120,10 +151,19 @@ async function download(url: URL, filePath: string) {
   );
 }
 
-function readBody(request: import("node:http").IncomingMessage) {
+function readBody(request: import("node:http").IncomingMessage, maxBytes: number) {
   return new Promise<string>((resolve, reject) => {
     const chunks: Buffer[] = [];
-    request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    let size = 0;
+    request.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error("preview_limit"));
+        request.destroy();
+        return;
+      }
+      chunks.push(Buffer.from(chunk));
+    });
     request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     request.on("error", reject);
   });

@@ -7,6 +7,7 @@ import { productsCopyKeyParity } from "../lib/i18n/products-copy";
 import type { EmbeddedImageAnchor } from "../features/products/product-import-images";
 import { PRODUCT_IMPORT_MAX_ROWS } from "../features/products/product-import";
 import { createMemoryLargeImportStore } from "../features/products/product-import-large-store";
+import { loadCachedWorkbook, previewCacheDownloads, resetPreviewCacheForTests } from "../features/products/product-import-preview-cache";
 import { buildLargeImportPreview, PREVIEW_PAGE_SIZE_STORAGE_KEY, PREVIEW_RESPONSE_MAX_BYTES, readStoredPreviewPageSize } from "../features/products/product-import-preview";
 import { readWorkbookPreviewSource } from "../features/products/product-import-preview-sheet";
 import { readLargeImportPreview } from "../features/products/product-import-preview-service";
@@ -179,13 +180,34 @@ try {
 check("a cancelled workbook cannot be previewed", closed);
 process.status = "ready";
 await processes.save(process);
-let pending = false;
+let unavailable = false;
 try {
-  await readLargeImportPreview("process-1", tenant, { sheetName: "Prices" }, { processes, uploads });
+  await readLargeImportPreview("process-1", tenant, { catalog: [], sheetName: "Prices" }, { processes, uploads });
 } catch (error) {
-  pending = error instanceof Error && error.message === "preview_storage_pending";
+  unavailable = error instanceof Error && error.message === "preview_unavailable";
 }
-check("preview storage is not applied before approval", pending);
+check("preview without the service binding stays closed", unavailable);
+let boundCompany = "";
+const bound = await readLargeImportPreview("process-1", tenant, { catalog: [], sheetName: "Prices" }, {
+  preview: async (request) => {
+    boundCompany = request.companyId;
+    return buildLargeImportPreview({ catalog: [], pageSize: 20, rows, sheetName: request.sheetName });
+  },
+  processes,
+  uploads,
+});
+check("the service binding receives only this tenant", boundCompany === "company-a" && bound.excel.headers[0] === "Product Name" && bound.excel.rows.length === 20);
+resetPreviewCacheForTests();
+let loads = 0;
+const first = await loadCachedWorkbook("process-1\nPrices", async () => {
+  loads += 1;
+  return { images: [], rows };
+});
+const cachedPage = await loadCachedWorkbook("process-1\nPrices", async () => {
+  loads += 1;
+  return { images: [], rows: [["Changed"]] };
+});
+check("a later page reuses the parsed sheet", first.cacheHit === false && cachedPage.cacheHit === true && cachedPage.rows[1]?.[0] === "Water (1×12)" && loads === 1 && previewCacheDownloads() === 1);
 upload.expiresAt = new Date(Date.now() - 1000).toISOString();
 await uploads.save(upload);
 let expired = false;
@@ -204,6 +226,11 @@ const sources = [
 ].map((path) => readFileSync(path, "utf8")).join("\n");
 check("preview does not create products or permanent images", !sources.includes("product.create") && !sources.includes("product-images"));
 check("preview table uses the white grid", sources.includes("WhiteDataTable") && sources.includes("products-import-excel-table"));
+const worker = readFileSync("workers/import-processor/index.ts", "utf8");
+const qaConfig = readFileSync("wrangler.qa.jsonc", "utf8");
+const productionConfig = readFileSync("wrangler.jsonc", "utf8");
+check("QA service binding targets only the import worker", qaConfig.includes('"binding": "IMPORT_PREVIEW"') && qaConfig.includes('"service": "egopos-qa-import"') && !productionConfig.includes("IMPORT_PREVIEW"));
+check("preview route checks the caller and the tenant", worker.includes("IMPORT_PREVIEW_TOKEN") && worker.includes("row.company_id !== companyId") && worker.includes("company_id = $1"));
 check("copy keys match", productsCopyKeyParity());
 
 console.log(`${checks.length}/${checks.length + failures.length} passed`);
