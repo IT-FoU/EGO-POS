@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import { cancelLargeImportProcessAction, cancelLargeProductImportUploadAction, importProductsFileAction, previewProductImportFileAction, readLargeImportProcessAction, startLargeImportProcessAction, startLargeProductImportUploadAction, uploadProductImageAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
+import { cancelLargeImportProcessAction, cancelLargeProductImportUploadAction, importProductsFileAction, previewProductImportFileAction, readLargeImportPreviewAction, readLargeImportProcessAction, startLargeImportProcessAction, startLargeProductImportUploadAction, uploadProductImageAction, verifyLargeProductImportUploadAction } from "@/features/products/actions";
+import { ProductImportPreviewPanel } from "@/features/products/components/product-import-preview-panel";
+import type { LargeImportPreview, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
 import { optimizeProductImageFile } from "@/features/products/product-image-optimize";
 import type { ProductImportEmbeddedImage } from "@/features/products/product-import-images";
 import {
@@ -85,6 +87,8 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
   const [includeImages, setIncludeImages] = useState(true);
   const [largeUpload, setLargeUpload] = useState<LargeUploadState | null>(null);
   const [processView, setProcessView] = useState<ProcessView | null>(null);
+  const [excelPreview, setExcelPreview] = useState<LargeImportPreview | null>(null);
+  const [previewSheet, setPreviewSheet] = useState("");
   const processPoll = useRef(0);
   const largeTransfer = useRef<ReturnType<typeof uploadLargeImportWithTus> | null>(null);
   const [result, setResult] = useState<{ created: number; failed: number; rows: ResultRow[]; skipped: number; warnings: number } | null>(null);
@@ -209,6 +213,17 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
       view = current.data as ProcessView;
       setProcessView(view);
     }
+  }
+
+  async function beginExcelPreview() {
+    if (!processView || processView.status !== "ready") return;
+    const sheetName = previewSheet || processView.sheets[0]?.name || "";
+    const result = await readLargeImportPreviewAction(processView.processId, sheetName);
+    if (!result.ok || !result.data) {
+      setMessage(result.ok ? t("importPreviewPending") : result.error === "preview_storage_pending" ? t("importPreviewPending") : result.error || t("importPreviewPending"));
+      return;
+    }
+    setExcelPreview(result.data);
   }
 
   async function cancelMetadata() {
@@ -454,7 +469,25 @@ export function ImportProductsDrawer({ canImport, onClose, onImported }: {
               ) : null}
             </div>
           ) : null}
+          {processView?.status === "ready" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <select className="h-11 rounded-md border border-border bg-background px-3 text-sm" data-testid="products-import-preview-sheet" value={previewSheet || processView.sheets[0]?.name || ""} onChange={(event) => setPreviewSheet(event.target.value)}>
+                {processView.sheets.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}
+              </select>
+              <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold" data-testid="products-import-preview-excel" type="button" onClick={() => { void beginExcelPreview(); }}>{t("importPreviewExcel")}</button>
+            </div>
+          ) : null}
         </section>
+      ) : null}
+      {excelPreview ? (
+        <ProductImportPreviewPanel
+          preview={excelPreview}
+          onFilter={(_filter: PreviewFilter) => { setMessage(t("importPreviewPending")); }}
+          onMapping={() => { setMessage(t("importPreviewPending")); }}
+          onMappedPage={() => { setMessage(t("importPreviewPending")); }}
+          onPage={() => { setMessage(t("importPreviewPending")); }}
+          onPageSize={(_pageSize: PreviewPageSize) => { setMessage(t("importPreviewPending")); }}
+        />
       ) : null}
       <p className="text-sm text-muted-foreground">{t("importSampleHint")}</p>
       {mappingColumns.length > 0 ? (

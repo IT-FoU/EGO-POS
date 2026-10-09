@@ -40,6 +40,7 @@ import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
 import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS } from "@/features/products/product-import";
 import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
+import { readLargeImportPreview } from "@/features/products/product-import-preview-service";
 import { cancelImportProcess, readImportProcess, startImportProcess } from "@/features/products/product-import-process-service";
 import { assertImportProcessId } from "@/features/products/product-import-process";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
@@ -422,6 +423,14 @@ export async function startLargeImportProcessAction(uploadId: string) {
 export async function readLargeImportProcessAction(processId: string) {
   try {
     return writeSuccess(await readImportProcess(processId, await tenant(WRITE_PERMISSIONS.productsCreate)));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function readLargeImportPreviewAction(processId: string, sheetName: string) {
+  try {
+    return writeSuccess(await readLargeImportPreview(processId, await tenant(WRITE_PERMISSIONS.productsCreate), { catalog: [], sheetName }));
   } catch (error) {
     return writeFailure(error);
   }

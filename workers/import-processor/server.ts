@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MetadataReadError, readWorkbookMetadata } from "../../features/products/product-import-metadata";
+import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewFilter, type PreviewPageSize } from "../../features/products/product-import-preview";
+import { readWorkbookPreviewSource } from "../../features/products/product-import-preview-sheet";
 import { IMPORT_CONTAINER_ALLOWED_HOSTS, IMPORT_METADATA_MAX_COMPRESSED_BYTES } from "../../features/products/product-import-process";
+import type { ProductImportColumnChoice } from "../../features/products/product-import";
 
 const token = process.env.IMPORT_CONTAINER_TOKEN || "";
 const allowed = new Set<string>(IMPORT_CONTAINER_ALLOWED_HOSTS);
@@ -24,7 +27,7 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     response.end("ok");
     return;
   }
-  if (request.method !== "POST" || request.url !== "/metadata") {
+  if (request.method !== "POST" || (request.url !== "/metadata" && request.url !== "/preview")) {
     response.writeHead(404);
     response.end();
     return;
@@ -34,7 +37,21 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     response.end();
     return;
   }
-  const body = JSON.parse(await readBody(request)) as { signedUrl?: string };
+  const rawBody = await readBody(request);
+  if (request.url === "/preview" && rawBody.length > 600_000) {
+    response.writeHead(422, { "content-type": "application/json" });
+    response.end(JSON.stringify({ errorCode: "preview_limit", ok: false }));
+    return;
+  }
+  const body = JSON.parse(rawBody) as {
+    catalog?: PreviewCatalogItem[];
+    choices?: ProductImportColumnChoice[];
+    filter?: PreviewFilter;
+    page?: number;
+    pageSize?: PreviewPageSize;
+    sheetName?: string;
+    signedUrl?: string;
+  };
   const signedUrl = new URL(String(body.signedUrl || ""));
   if (signedUrl.protocol !== "https:" || !allowed.has(signedUrl.host)) {
     response.writeHead(400, { "content-type": "application/json" });
@@ -45,11 +62,28 @@ async function handle(request: import("node:http").IncomingMessage, response: im
   const filePath = join(directory, "workbook.xlsx");
   try {
     await download(signedUrl, filePath);
+    if (request.url === "/preview") {
+      const source = await readWorkbookPreviewSource(filePath, String(body.sheetName || ""));
+      const preview = buildLargeImportPreview({
+        catalog: body.catalog ?? [],
+        choices: body.choices,
+        filter: body.filter,
+        images: source.images,
+        page: body.page,
+        pageSize: body.pageSize,
+        rows: source.rows,
+        sheetName: source.sheetName,
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, preview }));
+      return;
+    }
     const metadata = await readWorkbookMetadata(filePath);
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ ok: true, ...metadata }));
   } catch (error) {
-    const code = error instanceof MetadataReadError ? error.code : "download_failed";
+    const named = error instanceof Error ? error.message : "";
+    const code = error instanceof MetadataReadError ? error.code : named === "preview_limit" || named === "unsafe_workbook" || named === "malformed_file" ? named : "download_failed";
     response.writeHead(code === "download_failed" ? 502 : 422, { "content-type": "application/json" });
     response.end(JSON.stringify({ errorCode: code, ok: false }));
   } finally {
