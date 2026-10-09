@@ -722,6 +722,7 @@ function terminalProcess(status: string) {
 function previewErrorMessage(code: string | undefined, t: (key: string) => string) {
   if (code === "preview_closed") return t("importPreviewClosed");
   if (code === "preview_limit" || code === "memory_limit") return t("importPreviewLimit");
+  if (code === "worksheet_limit") return t("importPreviewWorksheetLimit");
   if (code === "preview_unavailable" || code === "preview_not_ready") return t("importPreviewUnavailable");
   return t("importPreviewUnavailable");
 }

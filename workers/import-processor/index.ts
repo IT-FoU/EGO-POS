@@ -12,7 +12,7 @@ const QA = "arkhwskvcnntluoakmef";
 const PRODUCTION = "ieutdqnlfiiaawctapor";
 const PERMANENT = new Set(["malformed_file", "memory_limit", "time_limit", "unsafe_workbook"]);
 
-const CONTAINER_INSTANCE = "preview-table";
+const CONTAINER_INSTANCE = "preview-repair";
 const CATALOG_LIMIT = 20_000;
 
 type Env = {
@@ -135,7 +135,7 @@ export default {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "preview_unavailable";
-      const code = message === "preview_limit" || message === "preview_closed" || message === "preview_not_ready" ? message : "preview_unavailable";
+      const code = message === "preview_limit" || message === "worksheet_limit" || message === "preview_closed" || message === "preview_not_ready" ? message : "preview_unavailable";
       console.log("import-preview-error " + code);
       return json({ errorCode: code, ok: false }, code === "preview_unavailable" ? 500 : 422);
     }

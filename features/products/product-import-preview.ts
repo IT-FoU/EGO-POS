@@ -1,8 +1,12 @@
-import { classifyEmbeddedImages, type EmbeddedImageAnchor } from "@/features/products/product-import-images";
+import { assignEmbeddedImages, type EmbeddedImageAnchor } from "@/features/products/product-import-images";
+import { downscalePreviewImage } from "@/features/products/product-import-preview-image";
 import {
   PRODUCT_IMPORT_COLUMNS,
+  applyProductImportChoices,
+  inferHeaderlessProductColumns,
   productImportHeaderScore,
   promoteLargePreviewColumns,
+  refinePreviewItemNumberColumns,
   resolveProductImportColumns,
   type ProductImportColumn,
   type ProductImportColumnChoice,
@@ -87,17 +91,22 @@ export function readStoredPreviewPageSize(storage: { getItem(key: string): strin
 }
 
 export function detectPreviewHeaderIndex(rows: string[][]) {
-  let bestIndex = 0;
-  let bestScore = productImportHeaderScore(rows[0] ?? []);
+  let bestIndex = -1;
+  let bestScore = 0;
   const limit = Math.min(rows.length, 8);
-  for (let index = 1; index < limit; index += 1) {
+  for (let index = 0; index < limit; index += 1) {
     const score = productImportHeaderScore(rows[index] ?? []);
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;
     }
   }
-  return bestScore >= 2 ? bestIndex : 0;
+  return bestScore >= 1 ? bestIndex : -1;
+}
+
+export function previewSourceRowNumbers(rows: string[][]) {
+  const headerIndex = detectPreviewHeaderIndex(rows);
+  return rows.flatMap((cells, index) => index > headerIndex && cells.some((cell) => cell.trim() !== "") ? [index + 1] : []);
 }
 
 export function buildLargeImportPreview(input: {
@@ -117,8 +126,10 @@ export function buildLargeImportPreview(input: {
   const filter = input.filter ?? "all";
   const headerIndex = detectPreviewHeaderIndex(input.rows);
   const table = input.rows.map((cells, index) => ({ cells, lineNumber: index + 1 }));
-  const resolved = resolveProductImportColumns(table.slice(headerIndex), input.choices);
-  const columns = input.choices?.length ? resolved : promoteLargePreviewColumns(resolved);
+  const resolved = headerIndex < 0 ? inferHeaderlessProductColumns(input.rows) : resolveProductImportColumns(table.slice(headerIndex), input.choices);
+  const chosen = headerIndex < 0 && input.choices?.length ? applyProductImportChoices(resolved, input.choices) : resolved;
+  const promoted = headerIndex >= 0 && !input.choices?.length ? promoteLargePreviewColumns(chosen) : chosen;
+  const columns = headerIndex >= 0 && !input.choices?.length ? refinePreviewItemNumberColumns(input.rows.slice(headerIndex + 1), promoted) : promoted;
   const columnIndex = new Map<ProductImportColumn, number>();
   for (const column of columns) {
     if (column.status === "mapped" && column.choice && column.choice !== "ignore") columnIndex.set(column.choice, column.index);
@@ -137,18 +148,21 @@ export function buildLargeImportPreview(input: {
     }
     return { rowNumber: row.lineNumber, values };
   });
-  const images = classifyEmbeddedImages(input.images ?? [], sourceRows.map((row) => row.rowNumber));
+  const images = assignEmbeddedImages(input.images ?? [], sourceRows.map((row) => row.rowNumber));
   const imageByRow = new Map<number, { review: boolean; thumb: string | null }>();
   let imageMatched = 0;
   let imageNeedsReview = 0;
   for (const image of images) {
-    if (image.status === "mapped") imageMatched += 1;
-    else imageNeedsReview += 1;
+    const thumb = image.status === "mapped" && image.source?.byteLength ? downscalePreviewImage(image.source) : null;
+    const review = image.status === "review" || (image.status === "mapped" && image.source?.byteLength ? !thumb : false);
+    if (review) imageNeedsReview += 1;
+    else imageMatched += 1;
     if (image.rowNumber === null) continue;
     const current = imageByRow.get(image.rowNumber) ?? { review: false, thumb: null };
-    if (image.status === "review") current.review = true;
-    if (image.status === "mapped" && image.dataUrl && imageByteLength(image.dataUrl) <= PREVIEW_THUMB_MAX_BYTES) current.thumb = image.dataUrl;
-    if (image.status === "review") current.thumb = null;
+    if (review) {
+      current.review = true;
+      current.thumb = null;
+    } else if (thumb) current.thumb = thumb;
     imageByRow.set(image.rowNumber, current);
   }
 
@@ -175,7 +189,7 @@ export function buildLargeImportPreview(input: {
     columns,
     counts,
     excel: {
-      headers: (input.rows[headerIndex] ?? []).map(clipCell),
+      headers: (headerIndex < 0 ? [] : input.rows[headerIndex] ?? []).map(clipCell),
       page: excelPage.page,
       pageCount: excelPage.pageCount,
       rows: excelPage.rows,
@@ -187,10 +201,37 @@ export function buildLargeImportPreview(input: {
     },
     sheetName: input.sheetName,
   };
-  if (Buffer.byteLength(JSON.stringify(preview)) > PREVIEW_RESPONSE_MAX_BYTES) {
-    throw new Error("preview_limit");
+  return fitPreviewPayload(preview);
+}
+
+function fitPreviewPayload(preview: LargeImportPreview): LargeImportPreview {
+  if (Buffer.byteLength(JSON.stringify(preview)) <= PREVIEW_RESPONSE_MAX_BYTES) return preview;
+  const counts = { ...preview.counts };
+  const rows = preview.mapped.rows.map((row) => ({ ...row }));
+  for (const row of rows) {
+    if (!row.thumb) continue;
+    row.thumb = null;
+    if (!row.issue.includes("Image needs review")) row.issue = [row.issue, "Image needs review"].filter(Boolean).join(". ");
+    if (row.status === "new") {
+      counts.newProducts -= 1;
+      counts.needsReview += 1;
+      row.status = "needs_review";
+    } else if (row.status === "incomplete") {
+      counts.incomplete -= 1;
+      counts.needsReview += 1;
+      row.status = "needs_review";
+    }
+    counts.imageMatched = Math.max(0, counts.imageMatched - 1);
+    counts.imageNeedsReview += 1;
   }
-  return preview;
+  const fitted: LargeImportPreview = {
+    ...preview,
+    counts,
+    excel: { ...preview.excel, rows: preview.excel.rows.map((row) => ({ ...row, thumb: null })) },
+    mapped: { ...preview.mapped, rows },
+  };
+  if (Buffer.byteLength(JSON.stringify(fitted)) > PREVIEW_RESPONSE_MAX_BYTES) throw new Error("preview_limit");
+  return fitted;
 }
 
 function classifyRows(
@@ -309,9 +350,4 @@ function slicePage<T>(rows: T[], page: number, pageSize: number) {
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(Math.max(0, page), pageCount - 1);
   return { page: safePage, pageCount, rows: rows.slice(safePage * pageSize, safePage * pageSize + pageSize) };
-}
-
-function imageByteLength(dataUrl: string) {
-  const encoded = dataUrl.split(",")[1] ?? "";
-  return Math.floor(encoded.length * 3 / 4);
 }

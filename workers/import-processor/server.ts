@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MetadataReadError, readWorkbookMetadata } from "../../features/products/product-import-metadata";
+import { loadAnchorsForRows, readWorkbookPreviewSource } from "../../features/products/product-import-preview-sheet";
 import { loadCachedWorkbook, resetPreviewCacheForTests } from "../../features/products/product-import-preview-cache";
-import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "../../features/products/product-import-preview";
-import { readWorkbookPreviewSource } from "../../features/products/product-import-preview-sheet";
+import { buildLargeImportPreview, previewSourceRowNumbers, type PreviewCatalogItem, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "../../features/products/product-import-preview";
 import { IMPORT_CONTAINER_ALLOWED_HOSTS, IMPORT_METADATA_MAX_COMPRESSED_BYTES, IMPORT_PROCESS_MEMORY_STOP_BYTES } from "../../features/products/product-import-process";
 import type { ProductImportColumnChoice } from "../../features/products/product-import";
 
@@ -63,34 +63,56 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     response.end(JSON.stringify({ errorCode: "unsafe_workbook", ok: false }));
     return;
   }
-  const directory = await mkdtemp(join(tmpdir(), "ego-import-"));
-  const filePath = join(directory, "workbook.xlsx");
-  try {
-    if (request.url === "/preview") {
-      const cacheKey = String(body.cacheKey || "");
-      let downloadMs = 0;
-      let parseMs = 0;
-      const loaded = await loadCachedWorkbook(cacheKey, async () => {
+  if (request.url === "/preview") {
+    const cacheKey = String(body.cacheKey || "");
+    let downloadMs = 0;
+    let parseMs = 0;
+    const loaded = await loadCachedWorkbook(cacheKey, async () => {
+      const directory = await mkdtemp(join(tmpdir(), "ego-import-"));
+      const cachedPath = join(directory, "workbook.xlsx");
+      try {
         const downloadStarted = Date.now();
-        await download(signedUrl, filePath);
+        await download(signedUrl, cachedPath);
         downloadMs = Date.now() - downloadStarted;
         const parseStarted = Date.now();
-        const source = await readWorkbookPreviewSource(filePath, String(body.sheetName || ""));
+        const source = await readWorkbookPreviewSource(cachedPath, String(body.sheetName || ""));
         parseMs = Date.now() - parseStarted;
-        return { images: source.images, rows: source.rows };
-      });
+        return { directory, filePath: cachedPath, images: source.images, rows: source.rows };
+      } catch (error) {
+        await rm(directory, { force: true, recursive: true });
+        throw error;
+      }
+    });
+    try {
       const heap = process.memoryUsage().heapUsed;
       if (heap > IMPORT_PROCESS_MEMORY_STOP_BYTES) {
         resetPreviewCacheForTests();
         throw new Error("memory_limit");
       }
-      const preview = buildLargeImportPreview({
+      const planned = buildLargeImportPreview({
         catalog: body.catalog ?? [],
         categories: body.categories,
         choices: body.choices,
         edits: body.edits,
         filter: body.filter,
         images: loaded.images,
+        mappedPage: body.mappedPage,
+        page: body.page,
+        pageSize: body.pageSize,
+        rows: loaded.rows,
+        sheetName: String(body.sheetName || ""),
+      });
+      const pageRows = [...planned.excel.rows.map((row) => row.rowNumber), ...planned.mapped.rows.map((row) => row.rowNumber)];
+      const images = loaded.filePath
+        ? await loadAnchorsForRows(loaded.filePath, loaded.images, previewSourceRowNumbers(loaded.rows), pageRows)
+        : loaded.images;
+      const preview = buildLargeImportPreview({
+        catalog: body.catalog ?? [],
+        categories: body.categories,
+        choices: body.choices,
+        edits: body.edits,
+        filter: body.filter,
+        images,
         mappedPage: body.mappedPage,
         page: body.page,
         pageSize: body.pageSize,
@@ -111,14 +133,24 @@ async function handle(request: import("node:http").IncomingMessage, response: im
       response.writeHead(200, { "content-type": "application/json" });
       response.end(payload);
       return;
+    } catch (error) {
+      const named = error instanceof Error ? error.message : "";
+      const code = named === "preview_limit" || named === "worksheet_limit" || named === "unsafe_workbook" || named === "malformed_file" || named === "memory_limit" ? named : "download_failed";
+      response.writeHead(code === "download_failed" ? 502 : 422, { "content-type": "application/json" });
+      response.end(JSON.stringify({ errorCode: code, ok: false }));
+      return;
     }
+  }
+  const directory = await mkdtemp(join(tmpdir(), "ego-import-"));
+  const filePath = join(directory, "workbook.xlsx");
+  try {
     await download(signedUrl, filePath);
     const metadata = await readWorkbookMetadata(filePath);
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ ok: true, ...metadata }));
   } catch (error) {
     const named = error instanceof Error ? error.message : "";
-    const code = error instanceof MetadataReadError ? error.code : named === "preview_limit" || named === "unsafe_workbook" || named === "malformed_file" || named === "memory_limit" ? named : "download_failed";
+    const code = error instanceof MetadataReadError ? error.code : named === "preview_limit" || named === "worksheet_limit" || named === "unsafe_workbook" || named === "malformed_file" || named === "memory_limit" ? named : "download_failed";
     response.writeHead(code === "download_failed" ? 502 : 422, { "content-type": "application/json" });
     response.end(JSON.stringify({ errorCode: code, ok: false }));
   } finally {

@@ -9,7 +9,8 @@ import { PRODUCT_IMPORT_MAX_ROWS } from "../features/products/product-import";
 import { createMemoryLargeImportStore } from "../features/products/product-import-large-store";
 import { loadCachedWorkbook, previewCacheDownloads, resetPreviewCacheForTests } from "../features/products/product-import-preview-cache";
 import { buildLargeImportPreview, PREVIEW_PAGE_SIZE_STORAGE_KEY, PREVIEW_RESPONSE_MAX_BYTES, readStoredPreviewPageSize } from "../features/products/product-import-preview";
-import { readWorkbookPreviewSource } from "../features/products/product-import-preview-sheet";
+import { loadAnchorsForRows, readWorkbookPreviewSource } from "../features/products/product-import-preview-sheet";
+import { downscalePreviewImage } from "../features/products/product-import-preview-image";
 import { readLargeImportPreview } from "../features/products/product-import-preview-service";
 import { createMemoryImportProcessStore } from "../features/products/product-import-process-store";
 import type { ImportProcessRecord } from "../features/products/product-import-process";
@@ -116,9 +117,10 @@ const stock = await readWorkbookPreviewSource(workbookPath, "Stock");
 const prices = await readWorkbookPreviewSource(workbookPath, "Prices");
 check("sheet selection reads the requested worksheet", stock.rows[0]?.[0] === "Product Name" && stock.rows[1]?.[0] === "Rice" && prices.rows[1]?.[0] === "Soap");
 check("a clear image anchor matches that row", stock.images.length === 1 && stock.images[0]?.topRow === 1);
-const pictured = buildLargeImportPreview({ catalog: [], images: stock.images, rows: stock.rows, sheetName: "Stock" });
+const picturedImages = await loadAnchorsForRows(workbookPath, stock.images, [2], [2]);
+const pictured = buildLargeImportPreview({ catalog: [], images: picturedImages, rows: stock.rows, sheetName: "Stock" });
 const thumb = pictured.excel.rows[0]?.thumb ?? "";
-check("the thumbnail is the workbook image and stays private", thumb.startsWith("data:image/png;base64,") && !thumb.includes("supabase") && pictured.counts.imageMatched === 1);
+check("the thumbnail is the workbook image and stays private", thumb.startsWith("data:image/jpeg;base64,") && !thumb.includes("supabase") && pictured.counts.imageMatched === 1);
 check("the product row shows its own thumbnail", pictured.mapped.rows[0]?.name === "Rice" && pictured.mapped.rows[0]?.thumb === thumb);
 
 const laoRows = [
@@ -159,6 +161,141 @@ const restored = buildLargeImportPreview({ catalog: [], rows: sourceRows, sheetN
 check("a mapping change rebuilds the preview without changing the source", ignoredName.mapped.rows[0]?.name === "" && restored.mapped.rows[0]?.name === "Soap" && restored.mapped.rows[0]?.barcode === "00111");
 const automatic = buildLargeImportPreview({ catalog: [], choices: [], rows: [["Product Name", "SKU", "Barcode"], ["Soap", "SKU-1", "00111"]], sheetName: "Auto" });
 check("an empty choice list keeps automatic column mapping", automatic.mapped.rows[0]?.name === "Soap" && automatic.mapped.rows[0]?.sku === "SKU-1" && automatic.mapped.rows[0]?.barcode === "00111");
+
+const headerless = buildLargeImportPreview({
+  catalog: [],
+  rows: [
+    ["", "SUP-01", "0012399", "ນ້ຳດື່ມ"],
+    ["", "SUP-02", "8850123456789", "ສະບູ"],
+  ],
+  sheetName: "Headerless",
+});
+check("a headerless supplier sheet keeps the first product row", headerless.mapped.rows.length === 2 && headerless.mapped.rows[0]?.name === "ນ້ຳດື່ມ" && headerless.mapped.rows[0]?.sku === "SUP-01" && headerless.mapped.rows[0]?.barcode === "0012399" && headerless.excel.rows[0]?.rowNumber === 1);
+const mixedHeaderless = buildLargeImportPreview({
+  catalog: [],
+  rows: [["", "SUP-01", "0012399", "Water 12"], ["", "SKU-2", "ABC-99", "Soap"]],
+  sheetName: "Mixed",
+});
+check("ambiguous headerless values stay unmapped", mixedHeaderless.columns[2]?.status === "review" && mixedHeaderless.mapped.rows[0]?.barcode === "" && mixedHeaderless.mapped.rows[1]?.name === "Soap");
+const coded = buildLargeImportPreview({
+  catalog: [],
+  rows: [["Item No", "Barcode No", "Product Name"], ["SKU-77", "0012399", "Soap"]],
+  sheetName: "Codes",
+});
+check("Barcode No maps and a coded Item No stays a SKU", coded.columns[0]?.choice === "sku" && coded.columns[1]?.choice === "piece_barcode" && coded.mapped.rows[0]?.sku === "SKU-77" && coded.mapped.rows[0]?.barcode === "0012399" && coded.mapped.rows[0]?.name === "Soap");
+const sequenced = buildLargeImportPreview({
+  catalog: [],
+  rows: [["Item No", "EAN-13", "UPC-A", "Product Name"], ["1", "8850123456789", "012345678905", "Soap"], ["2", "8850000000017", "012345678912", "Next"]],
+  sheetName: "Sequence",
+});
+check("a numeric Item No stays a sequence", sequenced.columns[0]?.status === "ignored" && sequenced.mapped.rows[0]?.sku === "" && sequenced.mapped.rows[0]?.name === "Soap");
+check("EAN and UPC headers map as barcodes", sequenced.columns[1]?.choice === "piece_barcode" && sequenced.columns[2]?.status === "conflict");
+const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+const tall = buildLargeImportPreview({
+  catalog: [],
+  images: [{ bottomRow: 6, bytes: png, topRow: 1 }],
+  rows: [["Product Name", "Barcode"], ["Only", "0012399"]],
+  sheetName: "Tall",
+});
+check("a tall image over one product row maps to that row", tall.counts.imageMatched === 1 && tall.mapped.rows[0]?.thumb?.startsWith("data:image/jpeg;base64,") && tall.mapped.rows[0]?.name === "Only");
+const spannedRows = buildLargeImportPreview({
+  catalog: [],
+  images: [{ bottomRow: 6, bytes: png, topRow: 1 }],
+  rows: [["Product Name"], ["One"], ["Two"]],
+  sheetName: "Span",
+});
+check("a tall image over several products is not copied onto each row", spannedRows.counts.imageMatched === 0 && spannedRows.mapped.rows.every((row) => row.thumb === null) && spannedRows.mapped.rows.length === 2);
+const oneCell = buildLargeImportPreview({
+  catalog: [],
+  images: [{ bottomRow: null, bytes: png, topRow: 1 }],
+  rows: [["Product Name"], ["Rice"]],
+  sheetName: "OneCell",
+});
+check("a one-cell anchor maps to its product row", oneCell.counts.imageMatched === 1 && oneCell.mapped.rows[0]?.thumb?.startsWith("data:image/jpeg;base64,"));
+const pageImages = Array.from({ length: 20 }, (_, index) => ({ bottomRow: index + 2, bytes: png, topRow: index + 1 }));
+const pageRows = [["Product Name"], ...Array.from({ length: 20 }, (_, index) => [`Photo ${index + 1}`])];
+const photoPage = buildLargeImportPreview({ catalog: [], images: pageImages, pageSize: 20, rows: pageRows, sheetName: "Photos" });
+check("twenty thumbnails stay on one preview page", photoPage.mapped.rows.length === 20 && photoPage.mapped.rows.every((row) => row.thumb?.startsWith("data:image/jpeg;base64,")) && Buffer.byteLength(JSON.stringify(photoPage)) <= PREVIEW_RESPONSE_MAX_BYTES);
+const noisy = new Uint8Array(180 * 180 * 4);
+for (let index = 0; index < noisy.length; index += 4) {
+  noisy[index] = index % 251;
+  noisy[index + 1] = (index * 3) % 251;
+  noisy[index + 2] = (index * 7) % 251;
+  noisy[index + 3] = 255;
+}
+const { encode } = await import("jpeg-js");
+const largeJpeg = Uint8Array.from(encode({ data: noisy, height: 180, width: 180 }, 90).data);
+const reduced = downscalePreviewImage(largeJpeg);
+check("a large embedded image is downscaled before the response is measured", reduced?.startsWith("data:image/jpeg;base64,") === true && Buffer.byteLength(reduced ?? "") < largeJpeg.byteLength);
+const heavyImages = Array.from({ length: 40 }, (_, index) => ({ bottomRow: index + 2, bytes: largeJpeg, topRow: index + 1 }));
+const heavyRows = [["Product Name", ...Array.from({ length: 7 }, (_, index) => `Note ${index}`)], ...Array.from({ length: 40 }, () => ["Product", ...Array.from({ length: 7 }, () => "x".repeat(80))])];
+const heavy = buildLargeImportPreview({ catalog: [], images: heavyImages, pageSize: 50, rows: heavyRows, sheetName: "Heavy" });
+check("thumbnails that do not fit return the product rows", heavy.mapped.rows.length === 40 && heavy.mapped.rows.every((row) => row.thumb === null) && (heavy.mapped.rows[0]?.issue ?? "").includes("Image needs review"));
+for (const count of [190, 272, 274]) {
+  const manyRows = [["Product Name", "Barcode"], ...Array.from({ length: count }, (_, index) => [`Item ${index + 1}`, `8850${String(index).padStart(9, "0")}`])];
+  const many = buildLargeImportPreview({ catalog: [], pageSize: 20, rows: manyRows, sheetName: "Many" });
+  const page50 = buildLargeImportPreview({ catalog: [], pageSize: 50, rows: manyRows, sheetName: "Many" });
+  const page100 = buildLargeImportPreview({ catalog: [], pageSize: 100, rows: manyRows, sheetName: "Many" });
+  const last = buildLargeImportPreview({ catalog: [], mappedPage: many.mapped.pageCount - 1, page: many.excel.pageCount - 1, pageSize: 20, rows: manyRows, sheetName: "Many" });
+  check(`a worksheet with ${count} products stays previewable`, many.counts.totalRows === count && many.excel.rows.length === 20 && page50.excel.rows.length === 50 && page100.excel.rows.length === 100 && last.mapped.rows.at(-1)?.name === `Item ${count}`);
+}
+const duplicateSheet = buildLargeImportPreview({
+  catalog: [],
+  rows: [["Product Name", "Barcode", "SKU", "Selling Price", "Opening Stock"], ["A", "11112222", "SKU-1", "10", "1"], ["B", "11112222", "SKU-2", "10", "1"]],
+  sheetName: "Dup",
+});
+check("duplicate barcodes in the sheet stay marked", duplicateSheet.counts.duplicate === 2 && duplicateSheet.mapped.rows.every((row) => (row.issue ?? "").includes("Duplicate")));
+
+const formatPath = join(directory, "formats.xlsx");
+const formatSheet = Buffer.from('<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Barcode</t></is></c></row><row r="2"><c r="A2" s="0"><v>123</v></c></row><row r="3"><c r="B3" t="inlineStr"><is><t>00123</t></is></c></row><row r="4"><c r="A4"><v>8.85012345678901E+12</v></c></row></sheetData></worksheet>');
+const styles = Buffer.from('<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="00000"/></numFmts><cellXfs count="1"><xf numFmtId="164"/></cellXfs></styleSheet>');
+const formatBook = Buffer.from('<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheet name="Codes" r:id="rId1"/></workbook>');
+const formatRels = Buffer.from('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="styles" Target="styles.xml"/></Relationships>');
+await writeFile(formatPath, storedZip([
+  { data: formatBook, name: "xl/workbook.xml" },
+  { data: formatRels, name: "xl/_rels/workbook.xml.rels" },
+  { data: formatSheet, name: "xl/worksheets/sheet1.xml" },
+  { data: styles, name: "xl/styles.xml" },
+]));
+const formatted = await readWorkbookPreviewSource(formatPath, "Codes");
+check("Excel zero formats and text barcodes keep their digits", formatted.rows[1]?.[0] === "00123" && formatted.rows[2]?.[1] === "00123" && formatted.rows[3]?.[0] === "8.85012345678901E+12");
+const formattedPreview = buildLargeImportPreview({ catalog: [], rows: formatted.rows, sheetName: "Codes" });
+check("a numeric barcode that Excel stored in scientific notation needs review", formattedPreview.mapped.rows[2]?.barcode === "8.85012345678901E+12" && (formattedPreview.mapped.rows[2]?.issue ?? "").includes("Barcode needs review"));
+const oneCellPath = join(directory, "onecell.xlsx");
+const oneCellSheet = sheetXml(["Product Name"], ["Rice"]);
+const oneCellDrawing = Buffer.from('<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:row>1</xdr:row></xdr:from><xdr:pic><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill></xdr:pic></xdr:oneCellAnchor></xdr:wsDr>');
+const oneCellRels = Buffer.from('<Relationships><Relationship Id="rId1" Type="drawing" Target="../drawings/drawing1.xml"/></Relationships>');
+const oneCellDrawingRels = Buffer.from('<Relationships><Relationship Id="rId1" Target="../media/image1.png"/></Relationships>');
+const oneCellBook = Buffer.from('<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheet name="Stock" r:id="rId1"/></workbook>');
+const oneCellBookRels = Buffer.from('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>');
+await writeFile(oneCellPath, storedZip([
+  { data: oneCellBook, name: "xl/workbook.xml" },
+  { data: oneCellBookRels, name: "xl/_rels/workbook.xml.rels" },
+  { data: oneCellSheet, name: "xl/worksheets/sheet1.xml" },
+  { data: oneCellRels, name: "xl/worksheets/_rels/sheet1.xml.rels" },
+  { data: oneCellDrawing, name: "xl/drawings/drawing1.xml" },
+  { data: oneCellDrawingRels, name: "xl/drawings/_rels/drawing1.xml.rels" },
+  { data: Buffer.from(png), name: "xl/media/image1.png" },
+]));
+const oneCellSource = await readWorkbookPreviewSource(oneCellPath, "Stock");
+const oneCellLoaded = await loadAnchorsForRows(oneCellPath, oneCellSource.images, [2], [2]);
+const oneCellPreview = buildLargeImportPreview({ catalog: [], images: oneCellLoaded, rows: oneCellSource.rows, sheetName: "Stock" });
+check("a worksheet one-cell anchor is read for the requested row", oneCellSource.images[0]?.bottomRow === null && oneCellPreview.mapped.rows[0]?.thumb?.startsWith("data:image/jpeg;base64,"));
+const limitedPath = join(directory, "limited.xlsx");
+const limitedSheet = sheetXml(["Product Name"], ["Rice"]);
+await writeFile(limitedPath, storedZip([
+  { data: oneCellBook, name: "xl/workbook.xml" },
+  { data: oneCellBookRels, name: "xl/_rels/workbook.xml.rels" },
+  { data: limitedSheet, name: "xl/worksheets/sheet1.xml", uncompressedSize: 64 * 1024 * 1024 + 1 },
+]));
+let worksheetLimited = false;
+try {
+  await readWorkbookPreviewSource(limitedPath, "Stock");
+} catch (error) {
+  worksheetLimited = error instanceof Error && error.message === "worksheet_limit";
+}
+check("an oversized worksheet entry has its own limit", worksheetLimited);
+
 const panelSource = readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8");
 check("only the page size is stored in the browser", panelSource.includes("PREVIEW_PAGE_SIZE_STORAGE_KEY") && panelSource.split("localStorage.setItem").length === 2 && readFileSync("features/products/components/product-import-drawer.tsx", "utf8").includes("previewRequest"));
 await rm(directory, { force: true, recursive: true });
@@ -304,7 +441,7 @@ function sheetXml(headers: string[], values: string[]) {
   return Buffer.from(`<worksheet><sheetData><row r="1">${cells(headers, 1)}</row><row r="2">${cells(values, 2)}</row></sheetData></worksheet>`);
 }
 
-function storedZip(entries: Array<{ data: Buffer; name: string }>) {
+function storedZip(entries: Array<{ data: Buffer; name: string; uncompressedSize?: number }>) {
   const parts: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
@@ -314,7 +451,7 @@ function storedZip(entries: Array<{ data: Buffer; name: string }>) {
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
     local.writeUInt32LE(entry.data.length, 18);
-    local.writeUInt32LE(entry.data.length, 22);
+    local.writeUInt32LE(entry.uncompressedSize ?? entry.data.length, 22);
     local.writeUInt16LE(name.length, 26);
     parts.push(local, name, entry.data);
     const central = Buffer.alloc(46 + name.length);
@@ -322,7 +459,7 @@ function storedZip(entries: Array<{ data: Buffer; name: string }>) {
     central.writeUInt16LE(20, 4);
     central.writeUInt16LE(20, 6);
     central.writeUInt32LE(entry.data.length, 20);
-    central.writeUInt32LE(entry.data.length, 24);
+    central.writeUInt32LE(entry.uncompressedSize ?? entry.data.length, 24);
     central.writeUInt16LE(name.length, 28);
     central.writeUInt32LE(offset, 42);
     name.copy(central, 46);

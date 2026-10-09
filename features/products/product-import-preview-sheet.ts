@@ -1,6 +1,7 @@
 import { open } from "node:fs/promises";
 import { inflateRawSync } from "node:zlib";
-import type { EmbeddedImageAnchor } from "@/features/products/product-import-images";
+import { singleMappedImageRow, type EmbeddedImageAnchor } from "@/features/products/product-import-images";
+import { PREVIEW_IMAGE_SOURCE_MAX_BYTES } from "@/features/products/product-import-preview-image";
 import { IMPORT_METADATA_MAX_COMPRESSED_BYTES, IMPORT_METADATA_MAX_ENTRIES } from "@/features/products/product-import-process";
 
 const PREVIEW_ENTRY_MAX_BYTES = 64 * 1024 * 1024;
@@ -20,8 +21,9 @@ export async function readWorkbookPreviewSource(filePath: string, sheetName: str
     const rels = textEntry(file, entries, "xl/_rels/workbook.xml.rels");
     const sheetPath = sheetPathForName(entries, await workbook, await rels, sheetName);
     const shared = parseSharedStrings(await textEntry(file, entries, "xl/sharedStrings.xml"));
+    const formats = parseStyleFormats(await textEntry(file, entries, "xl/styles.xml"));
     const sheetXml = await textEntry(file, entries, sheetPath);
-    const rows = parseSheetRows(sheetXml ?? "", shared);
+    const rows = parseSheetRows(sheetXml ?? "", shared, formats);
     const images = await readAnchors(file, entries, sheetPath);
     return { images, rows, sheetName };
   } finally {
@@ -48,11 +50,11 @@ async function readAnchors(file: Awaited<ReturnType<typeof open>>, entries: ZipE
     const embed = /r:embed="([^"]+)"/.exec(xml)?.[1] ?? "";
     const media = targets.get(embed);
     const entry = media ? entries.find((item) => item.name === media) : undefined;
-    const bytes = entry && entry.uncompressedSize <= 32 * 1024 ? await readEntry(file, entry) : new Uint8Array();
     anchors.push({
       bottomRow: Number.isFinite(to) ? to : null,
-      bytes,
+      mediaName: media,
       topRow: Number.isFinite(from) ? from : null,
+      uncompressedSize: entry?.uncompressedSize ?? 0,
     });
   }
   return anchors;
@@ -78,7 +80,62 @@ function parseSharedStrings(xml: string | null) {
   );
 }
 
-function parseSheetRows(xml: string, shared: string[]) {
+export async function loadAnchorsForRows(filePath: string, images: EmbeddedImageAnchor[], dataRowNumbers: number[], pageRowNumbers: number[]) {
+  const pageRows = new Set(pageRowNumbers);
+  const loaded: EmbeddedImageAnchor[] = [];
+  for (const image of images) {
+    const rowNumber = singleMappedImageRow(image, dataRowNumbers);
+    if (!rowNumber || !pageRows.has(rowNumber)) {
+      loaded.push({ ...image, bytes: undefined });
+      continue;
+    }
+    if (image.bytes && image.bytes.byteLength > 0) {
+      loaded.push(image);
+      continue;
+    }
+    if ((image.uncompressedSize ?? 0) <= 0 || (image.uncompressedSize ?? 0) > PREVIEW_IMAGE_SOURCE_MAX_BYTES || !image.mediaName) {
+      loaded.push({ ...image, bytes: new Uint8Array() });
+      continue;
+    }
+    const bytes = await readPreviewImageBytes(filePath, image.mediaName);
+    loaded.push({ ...image, bytes: bytes ?? new Uint8Array() });
+  }
+  return loaded;
+}
+
+export async function readPreviewImageBytes(filePath: string, mediaName: string) {
+  const file = await open(filePath, "r");
+  try {
+    const entries = await readCentralDirectory(file, (await file.stat()).size);
+    const entry = entries.find((item) => item.name === mediaName);
+    if (!entry || entry.uncompressedSize <= 0 || entry.uncompressedSize > PREVIEW_IMAGE_SOURCE_MAX_BYTES) return null;
+    return await readEntry(file, entry);
+  } finally {
+    await file.close();
+  }
+}
+
+function parseStyleFormats(xml: string | null) {
+  const custom = new Map<number, string>();
+  for (const match of (xml ?? "").matchAll(/<numFmt\b[^>]*numFmtId="(\d+)"[^>]*formatCode="([^"]*)"/g)) {
+    custom.set(Number(match[1]), decodeXml(match[2] ?? ""));
+  }
+  const formats: string[] = [];
+  const cellXfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml ?? "")?.[1] ?? "";
+  for (const match of cellXfs.matchAll(/<xf\b[^>]*numFmtId="(\d+)"/g)) {
+    const id = Number(match[1]);
+    formats.push(custom.get(id) ?? (id === 49 ? "@" : ""));
+  }
+  return formats;
+}
+
+function applyNumberFormat(value: string, format: string) {
+  const zeros = /^0+$/.exec(format.replace(/"[^"]*"/g, "").trim());
+  if (!zeros || !/^\d+$/.test(value)) return value;
+  return value.padStart(zeros[0].length, "0");
+}
+
+function parseSheetRows(xml: string, shared: string[], formats: string[]) {
   const rows: string[][] = [];
   for (const match of xml.matchAll(/<row\b[^>]*r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
     const rowNumber = Number(match[1]);
@@ -89,10 +146,12 @@ function parseSheetRows(xml: string, shared: string[]) {
       const ref = /r="([A-Z]+)\d+"/.exec(attrs)?.[1] ?? "";
       const column = ref ? columnIndex(ref) : cells.length;
       const type = /t="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      const styleText = /s="(\d+)"/.exec(attrs)?.[1];
       let value = "";
       if (type === "inlineStr") value = decodeXml([...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((item) => item[1] ?? "").join(""));
       else if (type === "s") value = shared[Number(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? "")] ?? "";
       else value = decodeXml(/<v>([\s\S]*?)<\/v>/.exec(body)?.[1] ?? "");
+      if (styleText) value = applyNumberFormat(value, formats[Number(styleText)] ?? "");
       while (cells.length < column) cells.push("");
       cells[column] = value;
     }
@@ -122,7 +181,7 @@ function normalizeZipPath(base: string, target: string) {
 async function textEntry(file: Awaited<ReturnType<typeof open>>, entries: ZipEntry[], name: string) {
   const entry = entries.find((item) => item.name === name);
   if (!entry) return null;
-  if (entry.uncompressedSize > PREVIEW_ENTRY_MAX_BYTES) throw new Error("preview_limit");
+  if (entry.uncompressedSize > PREVIEW_ENTRY_MAX_BYTES) throw new Error("worksheet_limit");
   return Buffer.from(await readEntry(file, entry)).toString("utf8");
 }
 
@@ -135,7 +194,8 @@ async function readEntry(file: Awaited<ReturnType<typeof open>>, entry: ZipEntry
   if (entry.method === 0) return new Uint8Array(compressed.subarray(0, entry.uncompressedSize));
   if (entry.method !== 8) throw new Error("unsafe_workbook");
   const inflated = inflateRawSync(compressed);
-  if (inflated.length > entry.uncompressedSize || inflated.length > PREVIEW_ENTRY_MAX_BYTES) throw new Error("preview_limit");
+  if (inflated.length > PREVIEW_ENTRY_MAX_BYTES) throw new Error("worksheet_limit");
+  if (inflated.length > entry.uncompressedSize) throw new Error("unsafe_workbook");
   return new Uint8Array(inflated);
 }
 

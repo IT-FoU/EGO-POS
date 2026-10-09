@@ -82,6 +82,13 @@ const HEADER_ALIASES: Record<string, ProductImportColumn> = {
   ລະຫັດສິນຄ້າ: "sku",
   รหัสสินค้า: "sku",
   barcode: "piece_barcode",
+  barcode_no: "piece_barcode",
+  ean: "piece_barcode",
+  ean_13: "piece_barcode",
+  ean13: "piece_barcode",
+  upc: "piece_barcode",
+  upc_a: "piece_barcode",
+  upca: "piece_barcode",
   main_barcode: "piece_barcode",
   product_barcode: "piece_barcode",
   barcode_ຫຼັກ: "piece_barcode",
@@ -142,7 +149,6 @@ const IGNORE_HEADER_ALIASES = new Set([
   "row_no",
   "line",
   "line_no",
-  "item_no",
   "sequence",
   "seq",
   "stt",
@@ -782,6 +788,11 @@ function suggestProductImportColumn(header: string, index: number, sample: strin
   if (!key) {
     return { choice: null, header, index, sample, status: "review", suggestion: null };
   }
+  if (key === "item_no") {
+    if (/^\d{1,6}$/.test(sample.trim())) return { choice: "ignore", header, index, sample, status: "ignored", suggestion: "ignore" };
+    if (sample.trim()) return { choice: "sku", header, index, sample, status: "mapped", suggestion: "sku" };
+    return { choice: null, header, index, sample, status: "review", suggestion: null };
+  }
   if (ignore.has(key)) {
     return { choice: "ignore", header, index, sample, status: "ignored", suggestion: "ignore" };
   }
@@ -824,7 +835,7 @@ export function productImportHeaderScore(cells: string[]) {
   let score = 0;
   for (const cell of cells) {
     const key = normalizeHeader(cell);
-    if (key && (aliases.has(key) || ignore.has(key))) score += 1;
+    if (key && (aliases.has(key) || ignore.has(key) || key === "item_no")) score += 1;
   }
   return score;
 }
@@ -867,6 +878,74 @@ function markProductImportConflicts(columns: ProductImportMappedColumn[]) {
     seen.add(column.choice);
     return column;
   });
+}
+
+const HEADERLESS_SEQUENCE = /^\d{1,6}$/;
+const HEADERLESS_BARCODE = /^[0-9]{4,32}$/;
+const HEADERLESS_SKU = /^(?=.*[A-Za-z])(?=.*\d)[0-9A-Za-z._-]{2,32}$/;
+
+export function inferHeaderlessProductColumns(rows: string[][]): ProductImportMappedColumn[] {
+  const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const columns = Array.from({ length: width }, (_, index) => {
+    const samples = columnSamples(rows, index);
+    const decision = decideHeaderlessColumn(samples);
+    return {
+      choice: decision.choice,
+      header: "",
+      index,
+      sample: samples[0] ?? "",
+      status: decision.status,
+      suggestion: decision.choice,
+    };
+  });
+  return markProductImportConflicts(columns);
+}
+
+export function refinePreviewItemNumberColumns(rows: string[][], columns: ProductImportMappedColumn[]) {
+  const refined = columns.map((column) => {
+    if (normalizeHeader(column.header) !== "item_no") return column;
+    const samples = columnSamples(rows, column.index);
+    if (samples.length === 0) return { ...column, choice: null, status: "review" as const, suggestion: null };
+    if (samples.every((value) => HEADERLESS_SEQUENCE.test(value))) {
+      return { ...column, choice: "ignore" as const, status: "ignored" as const, suggestion: "ignore" as const };
+    }
+    return { ...column, choice: "sku" as const, status: "mapped" as const, suggestion: "sku" as const };
+  });
+  return markProductImportConflicts(refined);
+}
+
+export function applyProductImportChoices(columns: ProductImportMappedColumn[], choices: ProductImportColumnChoice[]) {
+  const byIndex = new Map(choices.map((choice) => [choice.index, choice.field]));
+  const chosen = columns.map((column) => {
+    if (!byIndex.has(column.index)) return { ...column, choice: null, status: "review" as const };
+    const field = byIndex.get(column.index);
+    if (field === "ignore") return { ...column, choice: "ignore" as const, status: "ignored" as const };
+    if (!field) return { ...column, choice: null, status: "review" as const };
+    return { ...column, choice: field, status: "mapped" as const };
+  });
+  return markProductImportConflicts(chosen);
+}
+
+function columnSamples(rows: string[][], index: number) {
+  const samples: string[] = [];
+  for (const row of rows) {
+    const value = (row[index] ?? "").trim();
+    if (!value) continue;
+    samples.push(value);
+    if (samples.length === 8) break;
+  }
+  return samples;
+}
+
+function decideHeaderlessColumn(samples: string[]): { choice: ProductImportColumn | "ignore" | null; status: "ignored" | "mapped" | "review" } {
+  if (samples.length === 0) return { choice: null, status: "review" };
+  if (samples.every((value) => HEADERLESS_SEQUENCE.test(value))) {
+    return samples.some((value) => value.length <= 3) ? { choice: "ignore", status: "ignored" } : { choice: null, status: "review" };
+  }
+  if (samples.every((value) => HEADERLESS_BARCODE.test(value))) return { choice: "piece_barcode", status: "mapped" };
+  if (samples.every((value) => HEADERLESS_SKU.test(value))) return { choice: "sku", status: "mapped" };
+  if (samples.every((value) => /\p{L}/u.test(value))) return { choice: "product_name", status: "mapped" };
+  return { choice: null, status: "review" };
 }
 
 function normalizeHeader(value: string) {

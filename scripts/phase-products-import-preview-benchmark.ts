@@ -35,6 +35,7 @@ console.log(JSON.stringify({
   fileMb: Number((sheet.length / 1024 / 1024).toFixed(2)),
   heapMb,
   pageRows: preview.excel.rows.length,
+  responseBytes: Buffer.byteLength(JSON.stringify(preview)),
   sheetRows: source.rows.length - 1,
   status: "synthetic",
 }));
