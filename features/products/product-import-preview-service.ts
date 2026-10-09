@@ -7,6 +7,7 @@ import type { ImportProcessStore } from "@/features/products/product-import-proc
 import { getImportProcessStore } from "@/features/products/product-import-process-store";
 import type { EmbeddedImageAnchor } from "@/features/products/product-import-images";
 import type { ProductImportColumnChoice } from "@/features/products/product-import";
+import type { ImportLetterMap, ImportMethod } from "@/features/products/product-import-methods";
 
 export type BoundPreviewRequest = {
   choices?: ProductImportColumnChoice[];
@@ -14,7 +15,9 @@ export type BoundPreviewRequest = {
   edits?: PreviewEdit[];
   filter?: PreviewFilter;
   includeImages?: boolean;
+  letters?: ImportLetterMap;
   mappedPage?: number;
+  method?: ImportMethod;
   page?: number;
   pageSize?: PreviewPageSize;
   processId: string;
@@ -32,7 +35,9 @@ export async function readLargeImportPreview(
     filter?: PreviewFilter;
     images?: EmbeddedImageAnchor[];
     includeImages?: boolean;
+    letters?: ImportLetterMap;
     mappedPage?: number;
+    method?: ImportMethod;
     page?: number;
     pageSize?: PreviewPageSize;
     rows?: string[][];
@@ -67,7 +72,9 @@ export async function readLargeImportPreview(
       edits: _request.edits,
       filter: _request.filter,
       includeImages: _request.includeImages,
+      letters: _request.letters,
       mappedPage: _request.mappedPage,
+      method: _request.method,
       page: _request.page,
       pageSize: _request.pageSize,
       processId,
@@ -81,7 +88,9 @@ export async function readLargeImportPreview(
     edits: _request.edits,
     filter: _request.filter,
     images: _request.includeImages === false ? [] : _request.images,
+    letters: _request.letters,
     mappedPage: _request.mappedPage,
+    method: _request.method,
     page: _request.page,
     pageSize: _request.pageSize,
     rows: _request.rows,

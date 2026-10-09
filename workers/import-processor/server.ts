@@ -53,7 +53,9 @@ async function handle(request: import("node:http").IncomingMessage, response: im
     edits?: PreviewEdit[];
     filter?: PreviewFilter;
     includeImages?: boolean;
+    letters?: Record<string, string>;
     mappedPage?: number;
+    method?: "auto" | "letters" | "template";
     page?: number;
     pageSize?: PreviewPageSize;
     sheetName?: string;
@@ -98,7 +100,9 @@ async function handle(request: import("node:http").IncomingMessage, response: im
         choices: body.choices,
         edits: body.edits,
         filter: body.filter,
+        letters: body.letters,
         mappedPage: body.mappedPage,
+        method: body.method,
         page: body.page,
         pageSize: body.pageSize,
         sheetName: String(body.sheetName || ""),
@@ -163,7 +167,9 @@ async function loadPageImages(
     choices?: ProductImportColumnChoice[];
     edits?: PreviewEdit[];
     filter?: PreviewFilter;
+    letters?: Record<string, string>;
     mappedPage?: number;
+    method?: "auto" | "letters" | "template";
     page?: number;
     pageSize?: PreviewPageSize;
     sheetName: string;

@@ -42,6 +42,8 @@ import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_COLUMNS, PRODUCT_IMPORT_MAX_C
 import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
 import type { LargeImportPreview, PreviewEdit, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
 import { readLargeImportPreview, type BoundPreviewRequest } from "@/features/products/product-import-preview-service";
+import { sanitizeImportLetters, sanitizeImportMethod, type ImportLetterMap } from "@/features/products/product-import-methods";
+import { buildEgoTemplateWorkbook } from "@/features/products/product-import-template";
 import { cancelImportProcess, readImportProcess, startImportProcess } from "@/features/products/product-import-process-service";
 import { assertImportProcessId } from "@/features/products/product-import-process";
 import { loadProductBarcodeAudit } from "@/features/products/barcode-audit-service";
@@ -374,7 +376,9 @@ export async function previewUnifiedProductFileAction(input: {
   fileBase64: string;
   fileName: string;
   filter?: "all" | "duplicate" | "incomplete" | "needs_review" | "new";
+  letters?: ImportLetterMap;
   mappedPage?: number;
+  method?: "auto" | "letters" | "template";
   page?: number;
   pageSize?: 20 | 50 | 100;
   sheetName?: string;
@@ -403,7 +407,9 @@ export async function previewUnifiedProductFileAction(input: {
       edits,
       fileName: input.fileName,
       filter: input.filter,
+      letters: sanitizeImportLetters(input.letters),
       mappedPage: input.mappedPage,
+      method: sanitizeImportMethod(input.method),
       page: input.page,
       pageSize: input.pageSize,
       sheetName: input.sheetName,
@@ -480,7 +486,9 @@ export async function readLargeImportPreviewAction(input: {
   edits?: PreviewEdit[];
   filter?: PreviewFilter;
   includeImages?: boolean;
+  letters?: ImportLetterMap;
   mappedPage?: number;
+  method?: "auto" | "letters" | "template";
   page?: number;
   pageSize?: PreviewPageSize;
   processId: string;
@@ -493,11 +501,23 @@ export async function readLargeImportPreviewAction(input: {
       edits: input.edits,
       filter: input.filter,
       includeImages: input.includeImages !== false,
+      letters: sanitizeImportLetters(input.letters),
       mappedPage: input.mappedPage,
+      method: sanitizeImportMethod(input.method),
       page: input.page,
       pageSize: input.pageSize,
       sheetName: input.sheetName,
     }, { preview: fetchBoundPreview }));
+  } catch (error) {
+    return writeFailure(error);
+  }
+}
+
+export async function downloadEgoProductTemplateAction() {
+  try {
+    await tenant(WRITE_PERMISSIONS.productsCreate);
+    const bytes = await buildEgoTemplateWorkbook();
+    return writeSuccess({ fileBase64: Buffer.from(bytes).toString("base64") });
   } catch (error) {
     return writeFailure(error);
   }

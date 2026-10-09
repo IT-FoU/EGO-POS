@@ -12,7 +12,7 @@ const QA = "arkhwskvcnntluoakmef";
 const PRODUCTION = "ieutdqnlfiiaawctapor";
 const PERMANENT = new Set(["malformed_file", "memory_limit", "time_limit", "unsafe_workbook"]);
 
-const CONTAINER_INSTANCE = "preview-accuracy";
+const CONTAINER_INSTANCE = "preview-methods";
 const CATALOG_LIMIT = 20_000;
 
 type Env = {
@@ -66,7 +66,9 @@ export default {
         companyId?: string;
         filter?: string;
         includeImages?: boolean;
+        letters?: Record<string, string>;
         mappedPage?: number;
+        method?: string;
         page?: number;
         pageSize?: number;
         processId?: string;
@@ -111,7 +113,9 @@ export default {
             edits: cleanEdits(body.edits),
             filter: body.filter,
             includeImages: body.includeImages !== false,
+            letters: cleanLetters(body.letters),
             mappedPage: body.mappedPage,
+            method: body.method === "letters" || body.method === "template" ? body.method : "auto",
             page: body.page,
             pageSize: body.pageSize,
             sheetName,
@@ -260,6 +264,17 @@ async function fail(client: pg.Client, processId: string, code: string) {
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" }, status });
+}
+
+function cleanLetters(value: Record<string, string> | undefined) {
+  const fields = ["image", "product_name", "piece_barcode", "sku", "category", "opening_stock_unit", "opening_stock", "piece_cost", "piece_selling_price", "notes"];
+  const source = value && typeof value === "object" ? value : {};
+  const letters: Record<string, string> = {};
+  for (const field of fields) {
+    const text = String(source[field] ?? "").trim().toUpperCase().slice(0, 3);
+    if (/^[A-Z]{1,3}$/.test(text)) letters[field] = text;
+  }
+  return letters;
 }
 
 function cleanEdits(value: Array<{ field?: string; rowNumber?: number; value?: string }> | undefined) {

@@ -1,6 +1,7 @@
 import { createPrismaProduct, type ProductWriteInput } from "@/features/products/prisma-repository";
 import { readProductImportFile } from "@/features/products/product-import-files";
 import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "@/features/products/product-import-preview";
+import type { ImportLetterMap, ImportMethod } from "@/features/products/product-import-methods";
 import {
   evaluateProductImport,
   mapProductImportGrid,
@@ -64,7 +65,9 @@ export async function previewUnifiedProductFile(
     edits?: PreviewEdit[];
     fileName: string;
     filter?: PreviewFilter;
+    letters?: ImportLetterMap;
     mappedPage?: number;
+    method?: ImportMethod;
     page?: number;
     pageSize?: PreviewPageSize;
     sheetName?: string;
@@ -100,7 +103,9 @@ export async function previewUnifiedProductFile(
       edits: input.edits,
       filter: input.filter,
       images: [],
+      letters: input.letters,
       mappedPage: input.mappedPage,
+      method: input.method,
       page: input.page,
       pageSize: input.pageSize,
       rows,

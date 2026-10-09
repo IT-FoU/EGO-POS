@@ -12,16 +12,19 @@ import {
   type PreviewFilter,
   type PreviewPageSize,
 } from "@/features/products/product-import-preview";
+import { IMPORT_DESTINATION_LETTERS } from "@/features/products/product-import-methods";
 import { fillProductsCopy, tProducts } from "@/lib/i18n/products-copy";
 import { useAppLocale } from "@/lib/i18n/use-app-locale";
 
-export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onMapping, onPage, onPageSize }: {
+export function ProductImportPreviewPanel({ preview, showAdjust = true, onEdit, onFilter, onMapping, onPage, onPageSize, onUseLetters }: {
   onEdit: (edit: PreviewEdit) => void;
   onFilter: (filter: PreviewFilter) => void;
   onMapping: (index: number, field: string) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: PreviewPageSize) => void;
+  onUseLetters?: () => void;
   preview: LargeImportPreview;
+  showAdjust?: boolean;
 }) {
   const locale = useAppLocale();
   const t = (key: string) => tProducts(key, locale);
@@ -77,20 +80,37 @@ export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onMapping
           <button className="h-9 rounded-md border border-border px-3 text-sm font-semibold" data-testid={`products-import-preview-filter-${filter}`} key={filter} type="button" onClick={() => onFilter(filter)}>{filterLabel(filter, t)}</button>
         ))}
       </div>
+      {(preview.notices ?? []).length > 0 ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" data-testid="products-import-method-notices">
+          {preview.notices.map((notice, index) => (
+            <p data-testid={`products-import-notice-${notice.code}`} key={`${notice.code}-${index}`}>{noticeText(notice, t)}</p>
+          ))}
+          {preview.method === "auto" && onUseLetters ? (
+            <button className="mt-2 h-9 rounded-md border border-amber-400 bg-background px-3 text-sm font-semibold" data-testid="products-import-use-letters" type="button" onClick={onUseLetters}>{t("importUseLetters")}</button>
+          ) : null}
+        </div>
+      ) : null}
       <WhiteDataTable minWidth="1480px" testId="products-import-excel-table">
         <thead>
           <tr>
-            <th>{t("importPreviewColNo")}</th>
-            <th>{t("importPreviewColImage")}</th>
-            <th>{t("importPreviewColName")}</th>
-            <th>{t("importPreviewColBarcode")}</th>
-            <th>{t("importPreviewColSku")}</th>
-            <th>{t("importPreviewColCategory")}</th>
-            <th>{t("importPreviewColUnit")}</th>
-            <th>{t("importPreviewColQuantity")}</th>
-            <th>{t("importPreviewColCost")}</th>
-            <th>{t("importPreviewColPrice")}</th>
-            <th>{t("importPreviewColNotes")}</th>
+            {[
+              t("importPreviewColNo"),
+              t("importPreviewColImage"),
+              t("importPreviewColName"),
+              t("importPreviewColBarcode"),
+              t("importPreviewColSku"),
+              t("importPreviewColCategory"),
+              t("importPreviewColUnit"),
+              t("importPreviewColQuantity"),
+              t("importPreviewColCost"),
+              t("importPreviewColPrice"),
+              t("importPreviewColNotes"),
+            ].map((label, index) => (
+              <th key={IMPORT_DESTINATION_LETTERS[index]}>
+                <span className="mr-1 font-mono text-[10px] text-muted-foreground" data-testid={`products-import-destination-${IMPORT_DESTINATION_LETTERS[index]}`}>{IMPORT_DESTINATION_LETTERS[index]}</span>
+                {label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -128,7 +148,7 @@ export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onMapping
       </WhiteDataTable>
       <Pager page={preview.mapped.page} pageCount={preview.mapped.pageCount} testId="products-import-excel-pager" onPage={onPage} />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <details data-testid="products-import-adjust-columns" open={adjustOpen.open} onToggle={(event) => setAdjustOpen({ key: identityKey, open: event.currentTarget.open })}>
+        {showAdjust ? <details data-testid="products-import-adjust-columns" open={adjustOpen.open} onToggle={(event) => setAdjustOpen({ key: identityKey, open: event.currentTarget.open })}>
           <summary className="cursor-pointer text-sm font-semibold">{t("importAdjustColumns")}</summary>
           <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-border" data-testid="products-import-preview-mapping">
             <table className="w-full min-w-[980px] text-left text-sm">
@@ -163,7 +183,7 @@ export function ProductImportPreviewPanel({ preview, onEdit, onFilter, onMapping
               </tbody>
             </table>
           </div>
-        </details>
+        </details> : null}
         <button className="h-11 rounded-md border border-border px-3 text-sm font-semibold text-muted-foreground" data-testid="products-import-preview-only" disabled type="button">{t("importPreviewOnly")}</button>
       </div>
     </section>
@@ -206,6 +226,13 @@ function Pager({ onPage, page, pageCount, testId }: { onPage: (page: number) => 
 function identityColumnsNeedMapping(columns: ProductImportMappedColumn[]) {
   const mapped = new Set(columns.filter((column) => column.status === "mapped").map((column) => column.choice));
   return !mapped.has("product_name") || !mapped.has("piece_barcode") || !mapped.has("sku");
+}
+
+function noticeText(notice: { code: string; detail: string; sample: string }, t: (key: string) => string) {
+  if (notice.code === "template_mismatch") return t("importTemplateMismatch");
+  if (notice.code === "invalid_letter") return fillProductsCopy(t("importLetterInvalid"), { detail: notice.detail });
+  if (notice.code === "duplicate_source") return fillProductsCopy(t("importLetterDuplicate"), { detail: notice.sample || notice.detail });
+  return `${t("importLetterMissing")} ${notice.detail} ${notice.sample}`.trim();
 }
 
 function columnLetter(index: number) {

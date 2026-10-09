@@ -14,6 +14,16 @@ import {
   type ProductImportColumnChoice,
   type ProductImportMappedColumn,
 } from "@/features/products/product-import";
+import {
+  columnLetterFromIndex,
+  matchEgoTemplate,
+  resolveLetterMap,
+  sanitizeImportLetters,
+  sanitizeImportMethod,
+  type ImportLetterMap,
+  type ImportMethod,
+  type ImportPreviewNotice,
+} from "@/features/products/product-import-methods";
 
 export const PREVIEW_PAGE_SIZES = [20, 50, 100] as const;
 export type PreviewPageSize = (typeof PREVIEW_PAGE_SIZES)[number];
@@ -58,6 +68,9 @@ export type LargeImportPreview = {
     pageCount: number;
     rows: Array<{ cells: string[]; rowNumber: number; thumb: string | null }>;
   };
+  letterSummary: Array<{ destination: string; source: string }>;
+  method: ImportMethod;
+  notices: ImportPreviewNotice[];
   mapped: {
     page: number;
     pageCount: number;
@@ -136,7 +149,9 @@ export function buildLargeImportPreview(input: {
   edits?: PreviewEdit[];
   filter?: PreviewFilter;
   images?: EmbeddedImageAnchor[];
+  letters?: ImportLetterMap;
   mappedPage?: number;
+  method?: ImportMethod;
   page?: number;
   pageSize?: PreviewPageSize;
   rows: string[][];
@@ -144,12 +159,14 @@ export function buildLargeImportPreview(input: {
 }): LargeImportPreview {
   const pageSize = normalizePreviewPageSize(input.pageSize ?? 20);
   const filter = input.filter ?? "all";
-  const headerIndex = detectPreviewHeaderIndex(input.rows);
+  const method = sanitizeImportMethod(input.method);
+  const detectedHeader = detectPreviewHeaderIndex(input.rows);
+  const template = method === "template" ? matchEgoTemplate(input.rows) : null;
+  const letters = method === "letters" ? resolveLetterMap(sanitizeImportLetters(input.letters)) : null;
+  const headerIndex = template ? template.headerIndex : detectedHeader;
+  const noteIndex = template?.noteIndex ?? letters?.noteIndex ?? null;
   const table = input.rows.map((cells, index) => ({ cells, lineNumber: index + 1 }));
-  const resolved = headerIndex < 0 ? inferHeaderlessProductColumns(input.rows) : resolveProductImportColumns(table.slice(headerIndex), input.choices);
-  const chosen = headerIndex < 0 && input.choices?.length ? applyProductImportChoices(resolved, input.choices) : resolved;
-  const promoted = headerIndex >= 0 && !input.choices?.length ? promoteLargePreviewColumns(chosen) : chosen;
-  const columns = headerIndex >= 0 && !input.choices?.length ? refinePreviewItemNumberColumns(input.rows.slice(headerIndex + 1), promoted) : promoted;
+  const columns = columnsForMethod(input.rows, table, headerIndex, method, template?.choices, letters?.choices, input.choices);
   const columnIndex = new Map<ProductImportColumn, number>();
   for (const column of columns) {
     if (column.status === "mapped" && column.choice && column.choice !== "ignore") columnIndex.set(column.choice, column.index);
@@ -161,6 +178,10 @@ export function buildLargeImportPreview(input: {
       const index = columnIndex.get(column);
       return [column, index === undefined ? "" : (row.cells[index] ?? "").trim()];
     })) as Partial<Record<ProductImportColumn, string>>;
+    if (noteIndex !== null && !noteByRow.has(row.lineNumber)) {
+      const note = (row.cells[noteIndex] ?? "").trim();
+      if (note) noteByRow.set(row.lineNumber, note.slice(0, PREVIEW_CELL_MAX_CHARS));
+    }
     for (const edit of edits) {
       if (edit.rowNumber !== row.lineNumber) continue;
       if (edit.field === "notes") noteByRow.set(row.lineNumber, edit.value.slice(0, PREVIEW_CELL_MAX_CHARS));
@@ -186,7 +207,7 @@ export function buildLargeImportPreview(input: {
     imageByRow.set(image.rowNumber, current);
   }
 
-  const classified = classifyRows(sourceRows, input.catalog, input.categories ?? [], imageByRow, noteByRow);
+  const classified = classifyRows(sourceRows, input.catalog, input.categories ?? [], imageByRow, noteByRow, method);
   const counts = {
     duplicate: classified.filter((row) => row.status === "duplicate").length,
     imageMatched,
@@ -204,10 +225,18 @@ export function buildLargeImportPreview(input: {
   const visible = classified.filter((row) => filter === "all" || row.status === filter);
   const excelPage = slicePage(excelRows, input.page ?? 0, pageSize);
   const mappedPage = slicePage(visible, input.mappedPage ?? 0, pageSize);
+  const notices = [
+    ...(template || method !== "template" ? [] : [{ code: "template_mismatch" as const, detail: "EGO POS template", sample: (input.rows[0] ?? []).slice(0, 11).join(" | ") }]),
+    ...(letters?.notices ?? []),
+    ...(method === "auto" ? criticalFieldNotices(columns) : []),
+  ];
   const preview: LargeImportPreview = {
     categories: (input.categories ?? []).slice(0, 200),
     columns,
     counts,
+    letterSummary: letters?.summary ?? [],
+    method,
+    notices,
     excel: {
       headers: (headerIndex < 0 ? [] : input.rows[headerIndex] ?? []).map(clipCell),
       page: excelPage.page,
@@ -254,12 +283,74 @@ function fitPreviewPayload(preview: LargeImportPreview): LargeImportPreview {
   return fitted;
 }
 
+function columnsForMethod(
+  rows: string[][],
+  table: Array<{ cells: string[]; lineNumber: number }>,
+  headerIndex: number,
+  method: ImportMethod,
+  templateChoices: ProductImportColumnChoice[] | undefined,
+  letterChoices: ProductImportColumnChoice[] | undefined,
+  autoChoices: ProductImportColumnChoice[] | undefined,
+) {
+  if (method === "template" && !templateChoices) return blankReviewColumns(rows, headerIndex);
+  if (method === "template" && templateChoices) return headerIndex < 0
+    ? applyProductImportChoices(inferHeaderlessProductColumns(rows), templateChoices)
+    : resolveProductImportColumns(table.slice(headerIndex), templateChoices);
+  if (method === "letters") {
+    const explicit = letterChoices?.length ? letterChoices : [{ field: null, index: 0 }];
+    return headerIndex < 0
+      ? applyProductImportChoices(inferHeaderlessProductColumns(rows), explicit)
+      : resolveProductImportColumns(table.slice(headerIndex), explicit);
+  }
+  const resolved = headerIndex < 0 ? inferHeaderlessProductColumns(rows) : resolveProductImportColumns(table.slice(headerIndex), autoChoices);
+  const chosen = headerIndex < 0 && autoChoices?.length ? applyProductImportChoices(resolved, autoChoices) : resolved;
+  const promoted = headerIndex >= 0 && !autoChoices?.length ? promoteLargePreviewColumns(chosen) : chosen;
+  return headerIndex >= 0 && !autoChoices?.length ? refinePreviewItemNumberColumns(rows.slice(headerIndex + 1), promoted) : promoted;
+}
+
+function blankReviewColumns(rows: string[][], headerIndex: number): ProductImportMappedColumn[] {
+  const body = headerIndex < 0 ? rows : rows.slice(headerIndex);
+  const width = body.reduce((max, row) => Math.max(max, row.length), 0);
+  return Array.from({ length: width }, (_, index) => {
+    const samples: string[] = [];
+    for (const row of body.slice(headerIndex < 0 ? 0 : 1)) {
+      const value = (row[index] ?? "").trim();
+      if (!value) continue;
+      samples.push(value.slice(0, 80));
+      if (samples.length === 3) break;
+    }
+    return {
+      choice: null,
+      header: headerIndex < 0 ? "" : (rows[headerIndex]?.[index] ?? ""),
+      index,
+      sample: samples[0] ?? "",
+      samples,
+      status: "review" as const,
+      suggestion: null,
+    };
+  });
+}
+
+function criticalFieldNotices(columns: ProductImportMappedColumn[]): ImportPreviewNotice[] {
+  const mapped = new Set(columns.filter((column) => column.status === "mapped" && column.choice).map((column) => column.choice));
+  return (["product_name", "piece_barcode", "sku"] as const).flatMap((field) => {
+    if (mapped.has(field)) return [];
+    const sources = columns.filter((column) => column.status !== "ignored" && column.status !== "mapped" && ((column.samples?.length ?? 0) > 0 || column.sample));
+    return [{
+      code: "missing_field" as const,
+      detail: field,
+      sample: sources.slice(0, 4).map((column) => `${columnLetterFromIndex(column.index)}:${column.header || "blank"}=${(column.samples?.length ? column.samples : [column.sample]).filter(Boolean).slice(0, 3).join(",")}`).join(" | "),
+    }];
+  });
+}
+
 function classifyRows(
   rows: Array<{ rowNumber: number; values: Partial<Record<ProductImportColumn, string>> }>,
   catalog: PreviewCatalogItem[],
   categories: string[],
   imageByRow: Map<number, { review: boolean; thumb: string | null }>,
   noteByRow: Map<number, string>,
+  method: ImportMethod,
 ) {
   const skuSeen = new Map<string, number>();
   const barcodeSeen = new Map<string, number[]>();
@@ -299,9 +390,14 @@ function classifyRows(
     const imageReview = imageByRow.get(row.rowNumber)?.review === true;
     const unitReview = Boolean(row.unitText) && !row.unitChoice;
     const categoryReview = Boolean(row.category.source) && !row.category.matched;
+    const numberNotes = method === "auto" ? [] : [
+      row.stock && !isPreviewNumber(row.stock) ? "Quantity needs review" : "",
+      row.cost && !isPreviewNumber(row.cost) ? "Cost needs review" : "",
+      row.price && !isPreviewNumber(row.price) ? "Price needs review" : "",
+    ].filter(Boolean);
     let status: PreviewRowStatus = "new";
     if (existing || inFileSku || inFileBarcode || sameRowConflict) status = "duplicate";
-    else if (!row.name.trim() || invalidBarcode || imageReview || unitReview) status = "needs_review";
+    else if (!row.name.trim() || invalidBarcode || imageReview || unitReview || numberNotes.length > 0) status = "needs_review";
     else if (row.price === null || row.stock === null) status = "incomplete";
     const unit = row.unitChoice ?? "Piece";
     const barcode = unit === "Pack" ? row.packBarcode : unit === "Box" ? row.boxBarcode : row.barcode;
@@ -315,6 +411,7 @@ function classifyRows(
       unitReview ? "Unit needs review" : "",
       categoryReview ? "Category was not matched" : "",
       row.packNote,
+      ...numberNotes,
     ].filter(Boolean);
     return {
       barcode,
@@ -332,6 +429,10 @@ function classifyRows(
       unit: unitReview ? "" : unit,
     };
   });
+}
+
+function isPreviewNumber(value: string) {
+  return /^-?\d+(\.\d+)?$/.test(value.replace(/,/g, "").trim());
 }
 
 function previewQuantity(value: string) {
