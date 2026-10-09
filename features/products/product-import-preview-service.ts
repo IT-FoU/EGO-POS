@@ -2,7 +2,7 @@ import { PermissionDeniedError } from "@/lib/auth/permissions";
 import type { TenantContext } from "@/lib/db/write-context";
 import type { LargeImportStore } from "@/features/products/product-import-large-store";
 import { getLargeImportStore } from "@/features/products/product-import-large-store";
-import { buildLargeImportPreview, type LargeImportPreview, type PreviewCatalogItem, type PreviewFilter, type PreviewPageSize } from "@/features/products/product-import-preview";
+import { buildLargeImportPreview, type LargeImportPreview, type PreviewCatalogItem, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "@/features/products/product-import-preview";
 import type { ImportProcessStore } from "@/features/products/product-import-process-store";
 import { getImportProcessStore } from "@/features/products/product-import-process-store";
 import type { EmbeddedImageAnchor } from "@/features/products/product-import-images";
@@ -11,6 +11,7 @@ import type { ProductImportColumnChoice } from "@/features/products/product-impo
 export type BoundPreviewRequest = {
   choices?: ProductImportColumnChoice[];
   companyId: string;
+  edits?: PreviewEdit[];
   filter?: PreviewFilter;
   mappedPage?: number;
   page?: number;
@@ -26,6 +27,7 @@ export async function readLargeImportPreview(
   _request: {
     catalog: PreviewCatalogItem[];
     choices?: ProductImportColumnChoice[];
+    edits?: PreviewEdit[];
     filter?: PreviewFilter;
     images?: EmbeddedImageAnchor[];
     mappedPage?: number;
@@ -60,6 +62,7 @@ export async function readLargeImportPreview(
     return deps.preview({
       choices: _request.choices,
       companyId: tenant.companyId,
+      edits: _request.edits,
       filter: _request.filter,
       mappedPage: _request.mappedPage,
       page: _request.page,
@@ -69,9 +72,10 @@ export async function readLargeImportPreview(
       userId: tenant.userId,
     });
   }
-  return buildLargeImportPreview({
+    return buildLargeImportPreview({
     catalog: _request.catalog,
     choices: _request.choices,
+    edits: _request.edits,
     filter: _request.filter,
     images: _request.images,
     mappedPage: _request.mappedPage,

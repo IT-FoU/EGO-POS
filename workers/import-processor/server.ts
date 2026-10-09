@@ -7,7 +7,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MetadataReadError, readWorkbookMetadata } from "../../features/products/product-import-metadata";
 import { loadCachedWorkbook, resetPreviewCacheForTests } from "../../features/products/product-import-preview-cache";
-import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewFilter, type PreviewPageSize } from "../../features/products/product-import-preview";
+import { buildLargeImportPreview, type PreviewCatalogItem, type PreviewEdit, type PreviewFilter, type PreviewPageSize } from "../../features/products/product-import-preview";
 import { readWorkbookPreviewSource } from "../../features/products/product-import-preview-sheet";
 import { IMPORT_CONTAINER_ALLOWED_HOSTS, IMPORT_METADATA_MAX_COMPRESSED_BYTES, IMPORT_PROCESS_MEMORY_STOP_BYTES } from "../../features/products/product-import-process";
 import type { ProductImportColumnChoice } from "../../features/products/product-import";
@@ -47,7 +47,9 @@ async function handle(request: import("node:http").IncomingMessage, response: im
   const body = JSON.parse(rawBody) as {
     cacheKey?: string;
     catalog?: PreviewCatalogItem[];
+    categories?: string[];
     choices?: ProductImportColumnChoice[];
+    edits?: PreviewEdit[];
     filter?: PreviewFilter;
     mappedPage?: number;
     page?: number;
@@ -84,7 +86,9 @@ async function handle(request: import("node:http").IncomingMessage, response: im
       }
       const preview = buildLargeImportPreview({
         catalog: body.catalog ?? [],
+        categories: body.categories,
         choices: body.choices,
+        edits: body.edits,
         filter: body.filter,
         images: loaded.images,
         mappedPage: body.mappedPage,

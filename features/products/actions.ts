@@ -40,7 +40,7 @@ import type { ProductListQuery } from "@/features/products/list-query";
 import { importProductCsvBatch, importProductFileBatch, previewProductImport, previewProductImportFile } from "@/features/products/product-import-service";
 import { PRODUCT_IMPORT_BATCH_SIZE, PRODUCT_IMPORT_MAX_CHARS, type ProductImportColumnChoice } from "@/features/products/product-import";
 import { cancelLargeImportUpload, startLargeImportUpload, verifyLargeImportUpload } from "@/features/products/product-import-large-service";
-import type { LargeImportPreview, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
+import type { LargeImportPreview, PreviewEdit, PreviewFilter, PreviewPageSize } from "@/features/products/product-import-preview";
 import { readLargeImportPreview, type BoundPreviewRequest } from "@/features/products/product-import-preview-service";
 import { cancelImportProcess, readImportProcess, startImportProcess } from "@/features/products/product-import-process-service";
 import { assertImportProcessId } from "@/features/products/product-import-process";
@@ -431,6 +431,7 @@ export async function readLargeImportProcessAction(processId: string) {
 
 export async function readLargeImportPreviewAction(input: {
   choices?: ProductImportColumnChoice[];
+  edits?: PreviewEdit[];
   filter?: PreviewFilter;
   mappedPage?: number;
   page?: number;
@@ -442,6 +443,7 @@ export async function readLargeImportPreviewAction(input: {
     return writeSuccess(await readLargeImportPreview(input.processId, await tenant(WRITE_PERMISSIONS.productsCreate), {
       catalog: [],
       choices: input.choices,
+      edits: input.edits,
       filter: input.filter,
       mappedPage: input.mappedPage,
       page: input.page,

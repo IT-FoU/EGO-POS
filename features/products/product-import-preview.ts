@@ -1,6 +1,8 @@
 import { classifyEmbeddedImages, type EmbeddedImageAnchor } from "@/features/products/product-import-images";
 import {
   PRODUCT_IMPORT_COLUMNS,
+  productImportHeaderScore,
+  promoteLargePreviewColumns,
   resolveProductImportColumns,
   type ProductImportColumn,
   type ProductImportColumnChoice,
@@ -24,7 +26,16 @@ export type PreviewCatalogItem = {
   unit: string;
 };
 
+export type PreviewEdit = {
+  field: "box_barcode" | "category" | "notes" | "opening_stock" | "opening_stock_unit" | "pack_barcode" | "piece_barcode" | "piece_cost" | "piece_selling_price" | "product_name" | "sku";
+  rowNumber: number;
+  value: string;
+};
+
+export const PREVIEW_EDIT_LIMIT = 200;
+
 export type LargeImportPreview = {
+  categories: string[];
   columns: ProductImportMappedColumn[];
   counts: {
     duplicate: number;
@@ -46,9 +57,12 @@ export type LargeImportPreview = {
     pageCount: number;
     rows: Array<{
       barcode: string;
+      category: string | null;
       cost: string | null;
+      issue: string;
       match: { productName: string; unit: string } | null;
       name: string;
+      note: string;
       price: string | null;
       rowNumber: number;
       sku: string;
@@ -72,9 +86,25 @@ export function readStoredPreviewPageSize(storage: { getItem(key: string): strin
   return normalizePreviewPageSize(storage.getItem(PREVIEW_PAGE_SIZE_STORAGE_KEY));
 }
 
+export function detectPreviewHeaderIndex(rows: string[][]) {
+  let bestIndex = 0;
+  let bestScore = productImportHeaderScore(rows[0] ?? []);
+  const limit = Math.min(rows.length, 8);
+  for (let index = 1; index < limit; index += 1) {
+    const score = productImportHeaderScore(rows[index] ?? []);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestScore >= 2 ? bestIndex : 0;
+}
+
 export function buildLargeImportPreview(input: {
   catalog: PreviewCatalogItem[];
+  categories?: string[];
   choices?: ProductImportColumnChoice[];
+  edits?: PreviewEdit[];
   filter?: PreviewFilter;
   images?: EmbeddedImageAnchor[];
   mappedPage?: number;
@@ -85,19 +115,28 @@ export function buildLargeImportPreview(input: {
 }): LargeImportPreview {
   const pageSize = normalizePreviewPageSize(input.pageSize ?? 20);
   const filter = input.filter ?? "all";
+  const headerIndex = detectPreviewHeaderIndex(input.rows);
   const table = input.rows.map((cells, index) => ({ cells, lineNumber: index + 1 }));
-  const columns = resolveProductImportColumns(table, input.choices);
+  const resolved = resolveProductImportColumns(table.slice(headerIndex), input.choices);
+  const columns = input.choices?.length ? resolved : promoteLargePreviewColumns(resolved);
   const columnIndex = new Map<ProductImportColumn, number>();
   for (const column of columns) {
     if (column.status === "mapped" && column.choice && column.choice !== "ignore") columnIndex.set(column.choice, column.index);
   }
-  const sourceRows = table.slice(1).filter((row) => row.cells.some((cell) => cell.trim() !== "")).map((row) => ({
-    rowNumber: row.lineNumber,
-    values: Object.fromEntries(PRODUCT_IMPORT_COLUMNS.map((column) => {
+  const noteByRow = new Map<number, string>();
+  const edits = (input.edits ?? []).slice(0, PREVIEW_EDIT_LIMIT);
+  const sourceRows = table.slice(headerIndex + 1).filter((row) => row.cells.some((cell) => cell.trim() !== "")).map((row) => {
+    const values = Object.fromEntries(PRODUCT_IMPORT_COLUMNS.map((column) => {
       const index = columnIndex.get(column);
       return [column, index === undefined ? "" : (row.cells[index] ?? "").trim()];
-    })) as Partial<Record<ProductImportColumn, string>>,
-  }));
+    })) as Partial<Record<ProductImportColumn, string>>;
+    for (const edit of edits) {
+      if (edit.rowNumber !== row.lineNumber) continue;
+      if (edit.field === "notes") noteByRow.set(row.lineNumber, edit.value.slice(0, PREVIEW_CELL_MAX_CHARS));
+      else values[edit.field] = edit.value.trim().slice(0, PREVIEW_CELL_MAX_CHARS);
+    }
+    return { rowNumber: row.lineNumber, values };
+  });
   const images = classifyEmbeddedImages(input.images ?? [], sourceRows.map((row) => row.rowNumber));
   const imageByRow = new Map<number, { review: boolean; thumb: string | null }>();
   let imageMatched = 0;
@@ -113,7 +152,7 @@ export function buildLargeImportPreview(input: {
     imageByRow.set(image.rowNumber, current);
   }
 
-  const classified = classifyRows(sourceRows, input.catalog, imageByRow);
+  const classified = classifyRows(sourceRows, input.catalog, input.categories ?? [], imageByRow, noteByRow);
   const counts = {
     duplicate: classified.filter((row) => row.status === "duplicate").length,
     imageMatched,
@@ -123,19 +162,20 @@ export function buildLargeImportPreview(input: {
     newProducts: classified.filter((row) => row.status === "new").length,
     totalRows: classified.length,
   };
-  const excelRows = input.rows.slice(1).map((cells, index) => ({
+  const excelRows = input.rows.slice(headerIndex + 1).map((cells, index) => ({
     cells: cells.map(clipCell),
-    rowNumber: index + 2,
-    thumb: imageByRow.get(index + 2)?.thumb ?? null,
+    rowNumber: headerIndex + index + 2,
+    thumb: imageByRow.get(headerIndex + index + 2)?.thumb ?? null,
   }));
   const visible = classified.filter((row) => filter === "all" || row.status === filter);
   const excelPage = slicePage(excelRows, input.page ?? 0, pageSize);
   const mappedPage = slicePage(visible, input.mappedPage ?? 0, pageSize);
   const preview: LargeImportPreview = {
+    categories: (input.categories ?? []).slice(0, 200),
     columns,
     counts,
     excel: {
-      headers: (input.rows[0] ?? []).map(clipCell),
+      headers: (input.rows[headerIndex] ?? []).map(clipCell),
       page: excelPage.page,
       pageCount: excelPage.pageCount,
       rows: excelPage.rows,
@@ -156,7 +196,9 @@ export function buildLargeImportPreview(input: {
 function classifyRows(
   rows: Array<{ rowNumber: number; values: Partial<Record<ProductImportColumn, string>> }>,
   catalog: PreviewCatalogItem[],
+  categories: string[],
   imageByRow: Map<number, { review: boolean; thumb: string | null }>,
+  noteByRow: Map<number, string>,
 ) {
   const skuSeen = new Map<string, number>();
   const barcodeSeen = new Map<string, number[]>();
@@ -168,7 +210,10 @@ function classifyRows(
     const boxBarcode = row.values.box_barcode ?? "";
     const cost = blankToNull(row.values.piece_cost);
     const price = blankToNull(row.values.piece_selling_price);
-    const stock = blankToNull(row.values.opening_stock);
+    const quantity = previewQuantity(row.values.opening_stock ?? "");
+    const stock = quantity.stock;
+    const unitChoice = previewUnit(row.values.opening_stock_unit ?? "");
+    const category = matchCategory(row.values.category ?? "", categories);
     const skuKey = sku.trim().toLowerCase();
     if (skuKey) skuSeen.set(skuKey, (skuSeen.get(skuKey) ?? 0) + 1);
     for (const value of [barcode, packBarcode, boxBarcode]) {
@@ -178,7 +223,7 @@ function classifyRows(
       list.push(row.rowNumber);
       barcodeSeen.set(key, list);
     }
-    return { barcode, boxBarcode, cost, name, packBarcode, price, rowNumber: row.rowNumber, sku, stock };
+    return { barcode, boxBarcode, category, cost, name, packBarcode, packNote: quantity.note, price, rowNumber: row.rowNumber, sku, stock, unitChoice, unitText: (row.values.opening_stock_unit ?? "").trim() };
   });
   const catalogSkus = new Map(catalog.filter((item) => item.sku.trim()).map((item) => [item.sku.trim().toLowerCase(), item]));
   const catalogBarcodes = new Map(catalog.filter((item) => item.barcode.trim()).map((item) => [item.barcode.trim().toLowerCase(), item]));
@@ -191,23 +236,64 @@ function classifyRows(
     const inFileBarcode = barcodes.some((value) => (barcodeSeen.get(value.toLowerCase()) ?? []).length > 1);
     const existing = catalogSkus.get(row.sku.trim().toLowerCase()) ?? barcodes.map((value) => catalogBarcodes.get(value.toLowerCase())).find(Boolean) ?? null;
     const imageReview = imageByRow.get(row.rowNumber)?.review === true;
+    const unitReview = Boolean(row.unitText) && !row.unitChoice;
+    const categoryReview = Boolean(row.category.source) && !row.category.matched;
     let status: PreviewRowStatus = "new";
     if (existing || inFileSku || inFileBarcode || sameRowConflict) status = "duplicate";
-    else if (!row.name.trim() || invalidBarcode || imageReview) status = "needs_review";
+    else if (!row.name.trim() || invalidBarcode || imageReview || unitReview) status = "needs_review";
     else if (row.price === null || row.stock === null) status = "incomplete";
+    const unit = row.unitChoice ?? "Piece";
+    const barcode = unit === "Pack" ? row.packBarcode : unit === "Box" ? row.boxBarcode : row.barcode;
+    const issues = [
+      status === "duplicate" && existing ? `Duplicate ${existing.productName} / ${existing.unit}` : "",
+      status === "duplicate" && !existing ? "Duplicate in this sheet" : "",
+      status === "incomplete" ? "Not ready for POS" : "",
+      !row.name.trim() ? "Product name is missing" : "",
+      invalidBarcode ? "Barcode needs review" : "",
+      imageReview ? "Image needs review" : "",
+      unitReview ? "Unit needs review" : "",
+      categoryReview ? "Category was not matched" : "",
+      row.packNote,
+    ].filter(Boolean);
     return {
-      barcode: row.barcode,
+      barcode,
+      category: row.category.matched,
       cost: row.cost,
+      issue: issues.join(". "),
       match: existing ? { productName: existing.productName, unit: existing.unit } : null,
       name: row.name,
+      note: noteByRow.get(row.rowNumber) ?? "",
       price: row.price,
       rowNumber: row.rowNumber,
       sku: row.sku,
       status,
       stock: row.stock,
-      unit: "Piece",
+      unit: unitReview ? "" : unit,
     };
   });
+}
+
+function previewQuantity(value: string) {
+  const text = value.trim();
+  if (!text) return { note: "", stock: null as string | null };
+  if (/\d/.test(text) && /[×x*]/i.test(text)) return { note: "Quantity left blank", stock: null };
+  return { note: "", stock: text };
+}
+
+function previewUnit(value: string) {
+  const key = value.trim().toLowerCase();
+  if (!key) return "Piece" as const;
+  if (["piece", "pcs", "pc", "ຊິ້ນ", "ชิ้น", "base"].includes(key)) return "Piece" as const;
+  if (["pack", "ແພັກ", "แพ็ค", "แพค"].includes(key)) return "Pack" as const;
+  if (["box", "ກ່ອງ", "กล่อง"].includes(key)) return "Box" as const;
+  return null;
+}
+
+function matchCategory(value: string, categories: string[]) {
+  const text = value.trim();
+  if (!text) return { matched: null as string | null, source: "" };
+  const found = categories.find((category) => category.trim().toLowerCase() === text.toLowerCase());
+  return { matched: found ?? null, source: text };
 }
 
 function blankToNull(value: string | undefined) {

@@ -101,6 +101,14 @@ const HEADER_ALIASES: Record<string, ProductImportColumn> = {
   retail_price: "piece_selling_price",
   ລາຄາຂາຍ: "piece_selling_price",
   ราคาขาย: "piece_selling_price",
+  quantity: "opening_stock",
+  stock: "opening_stock",
+  qty_on_hand: "opening_stock",
+  ຈຳນວນ: "opening_stock",
+  ຈໍານວນ: "opening_stock",
+  ສະຕັອກ: "opening_stock",
+  จำนวน: "opening_stock",
+  สต็อก: "opening_stock",
   product_category: "category",
   ປະເພດສິນຄ້າ: "category",
   ປະເພດ: "category",
@@ -127,6 +135,22 @@ const IGNORE_HEADER_ALIASES = new Set([
   "รูป",
   "รูปภาพ",
   "รูปสินค้า",
+  "no",
+  "no.",
+  "#",
+  "row",
+  "row_no",
+  "line",
+  "line_no",
+  "item_no",
+  "sequence",
+  "seq",
+  "stt",
+  "ลำดับ",
+  "ลำดับที่",
+  "ລຳດັບ",
+  "ລໍາດັບ",
+  "序号",
 ]);
 
 export type ProductImportColumnChoice = {
@@ -313,7 +337,7 @@ export function resolveProductImportColumns(
     const header = table[0]?.cells[index] ?? "";
     return suggestProductImportColumn(header, index, samples[index] ?? "");
   });
-  if (!choices) return markProductImportConflicts(suggested);
+  if (!choices?.length) return markProductImportConflicts(suggested);
   const byIndex = new Map(choices.map((choice) => [choice.index, choice.field]));
   const chosen = suggested.map((column) => {
     if (!byIndex.has(column.index)) return { ...column, choice: null, status: "review" as const };
@@ -762,10 +786,47 @@ function suggestProductImportColumn(header: string, index: number, sample: strin
     return { choice: "ignore", header, index, sample, status: "ignored", suggestion: "ignore" };
   }
   const exact = aliases.get(key);
-  if (exact) {
+  if (exact && !isWeakNameColumn(key, exact, sample)) {
     return { choice: exact, header, index, sample, status: "mapped", suggestion: exact };
   }
-  return { choice: null, header, index, sample, status: "review", suggestion: heuristicProductImportField(key) };
+  const heuristic = heuristicProductImportField(key);
+  if (heuristic && isWeakNameColumn(key, heuristic, sample)) {
+    return { choice: null, header, index, sample, status: "review", suggestion: null };
+  }
+  return { choice: null, header, index, sample, status: "review", suggestion: heuristic };
+}
+
+const WEAK_NAME_HEADERS = new Set(["name", "item", "number", "no"]);
+
+function isWeakNameColumn(key: string, field: ProductImportColumn | "ignore", sample: string) {
+  return field === "product_name" && WEAK_NAME_HEADERS.has(key) && /^\d{1,6}$/.test(sample.trim());
+}
+
+const PREVIEW_UNIT_HEADERS = new Set(["unit", "ຫົວໜ່ວຍ", "หน่วย"].map((header) => normalizeHeader(header)));
+const EXPLICIT_UNIT_SAMPLES = new Set(["piece", "pcs", "pc", "ຊິ້ນ", "ชิ้น", "base", "pack", "ແພັກ", "แพ็ค", "แพค", "box", "ກ່ອງ", "กล่อง"]);
+
+export function promoteLargePreviewColumns(columns: ProductImportMappedColumn[]) {
+  const seen = new Set(columns.filter((column) => column.status === "mapped" && column.choice && column.choice !== "ignore").map((column) => column.choice));
+  return columns.map((column) => {
+    if (column.status !== "review" || column.choice) return column;
+    const key = normalizeHeader(column.header);
+    if (!PREVIEW_UNIT_HEADERS.has(key)) return column;
+    const sample = column.sample.trim().toLowerCase();
+    if (sample && !EXPLICIT_UNIT_SAMPLES.has(sample)) return column;
+    if (seen.has("opening_stock_unit")) return { ...column, choice: "opening_stock_unit" as const, status: "conflict" as const, suggestion: "opening_stock_unit" as const };
+    seen.add("opening_stock_unit");
+    return { ...column, choice: "opening_stock_unit" as const, status: "mapped" as const, suggestion: "opening_stock_unit" as const };
+  });
+}
+
+export function productImportHeaderScore(cells: string[]) {
+  const { aliases, ignore } = normalizedAliasTables();
+  let score = 0;
+  for (const cell of cells) {
+    const key = normalizeHeader(cell);
+    if (key && (aliases.has(key) || ignore.has(key))) score += 1;
+  }
+  return score;
 }
 
 function heuristicProductImportField(key: string): ProductImportColumn | "ignore" | null {

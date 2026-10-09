@@ -119,6 +119,48 @@ check("a clear image anchor matches that row", stock.images.length === 1 && stoc
 const pictured = buildLargeImportPreview({ catalog: [], images: stock.images, rows: stock.rows, sheetName: "Stock" });
 const thumb = pictured.excel.rows[0]?.thumb ?? "";
 check("the thumbnail is the workbook image and stays private", thumb.startsWith("data:image/png;base64,") && !thumb.includes("supabase") && pictured.counts.imageMatched === 1);
+check("the product row shows its own thumbnail", pictured.mapped.rows[0]?.name === "Rice" && pictured.mapped.rows[0]?.thumb === thumb);
+
+const laoRows = [
+  ["ລາຍງານຜູ້ສະໜອງ"],
+  ["ລຳດັບ", "ຊື່ສິນຄ້າ", "ບາໂຄດ", "ລະຫັດສິນຄ້າ", "ປະເພດ", "ຫົວໜ່ວຍ", "ຈຳນວນ", "ລາຄາທຶນ", "ລາຄາຂາຍ"],
+  ["1", "ນ້ຳດື່ມ", "00123", "SKU-01", "ເຄື່ອງດື່ມ", "ຊິ້ນ", "", "", ""],
+  ["2", "ເບຍ", "00456", "SKU-02", "ບໍ່ມີໝວດ", "1×12", "1×24", "", "0"],
+];
+const laoSupplier = buildLargeImportPreview({ catalog: [], categories: ["ເຄື່ອງດື່ມ"], rows: laoRows, sheetName: "Lao" });
+check("a Lao header row is found under a title", laoSupplier.excel.headers[1] === "ຊື່ສິນຄ້າ" && laoSupplier.mapped.rows[0]?.name === "ນ້ຳດື່ມ");
+check("a sequence column is not the product name", laoSupplier.columns[0]?.status === "ignored" && laoSupplier.mapped.rows[0]?.name !== "1" && laoSupplier.mapped.rows[1]?.name === "ເບຍ");
+check("barcode and sku keep leading zeros", laoSupplier.mapped.rows[0]?.barcode === "00123" && laoSupplier.mapped.rows[0]?.sku === "SKU-01");
+check("only an existing category is filled", laoSupplier.mapped.rows[0]?.category === "ເຄື່ອງດື່ມ" && laoSupplier.mapped.rows[1]?.category === null && (laoSupplier.mapped.rows[1]?.issue ?? "").includes("Category was not matched"));
+check("missing price and stock stay blank", laoSupplier.mapped.rows[0]?.price === null && laoSupplier.mapped.rows[0]?.cost === null && laoSupplier.mapped.rows[0]?.stock === null && laoSupplier.mapped.rows[0]?.unit === "Piece");
+check("packaging text is not a unit or a quantity", laoSupplier.mapped.rows[1]?.unit === "" && laoSupplier.mapped.rows[1]?.stock === null && laoSupplier.mapped.rows[1]?.status === "needs_review" && laoSupplier.mapped.rows[1]?.price === "0");
+
+const edited = buildLargeImportPreview({
+  catalog,
+  edits: [{ field: "piece_barcode", rowNumber: 2, value: "1234567890123" }],
+  rows: [["Product Name", "Barcode", "Selling Price", "Opening Stock"], ["Fresh", "0099", "10", "1"]],
+  sheetName: "Edits",
+});
+check("editing a barcode reruns duplicate detection", edited.mapped.rows[0]?.barcode === "1234567890123" && edited.mapped.rows[0]?.status === "duplicate" && edited.counts.duplicate === 1);
+const pagedRows = [["Product Name", "Selling Price", "Opening Stock"], ...Array.from({ length: 21 }, (_, index) => [`Item ${index + 1}`, "10", "1"])];
+const keptEdit = [{ field: "product_name" as const, rowNumber: 2, value: "Kept" }];
+const laterPage = buildLargeImportPreview({ catalog: [], edits: keptEdit, mappedPage: 1, pageSize: 20, rows: pagedRows, sheetName: "Pages" });
+const firstPage = buildLargeImportPreview({ catalog: [], edits: keptEdit, mappedPage: 0, pageSize: 20, rows: pagedRows, sheetName: "Pages" });
+check("an inline edit stays with its source row across pages", laterPage.mapped.rows.every((row) => row.name !== "Kept") && firstPage.mapped.rows[0]?.name === "Kept");
+const sourceRows = [["Product Name", "Barcode"], ["Soap", "00111"]];
+const source = buildLargeImportPreview({ catalog: [], rows: sourceRows, sheetName: "Map" });
+const ignoredName = buildLargeImportPreview({
+  catalog: [],
+  choices: source.columns.map((column) => ({ field: column.choice === "product_name" ? "ignore" as const : column.choice, index: column.index })),
+  rows: sourceRows,
+  sheetName: "Map",
+});
+const restored = buildLargeImportPreview({ catalog: [], rows: sourceRows, sheetName: "Map" });
+check("a mapping change rebuilds the preview without changing the source", ignoredName.mapped.rows[0]?.name === "" && restored.mapped.rows[0]?.name === "Soap" && restored.mapped.rows[0]?.barcode === "00111");
+const automatic = buildLargeImportPreview({ catalog: [], choices: [], rows: [["Product Name", "SKU", "Barcode"], ["Soap", "SKU-1", "00111"]], sheetName: "Auto" });
+check("an empty choice list keeps automatic column mapping", automatic.mapped.rows[0]?.name === "Soap" && automatic.mapped.rows[0]?.sku === "SKU-1" && automatic.mapped.rows[0]?.barcode === "00111");
+const panelSource = readFileSync("features/products/components/product-import-preview-panel.tsx", "utf8");
+check("only the page size is stored in the browser", panelSource.includes("PREVIEW_PAGE_SIZE_STORAGE_KEY") && panelSource.split("localStorage.setItem").length === 2 && readFileSync("features/products/components/product-import-drawer.tsx", "utf8").includes("previewRequest"));
 await rm(directory, { force: true, recursive: true });
 
 const processes = createMemoryImportProcessStore();

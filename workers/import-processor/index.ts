@@ -12,7 +12,7 @@ const QA = "arkhwskvcnntluoakmef";
 const PRODUCTION = "ieutdqnlfiiaawctapor";
 const PERMANENT = new Set(["malformed_file", "memory_limit", "time_limit", "unsafe_workbook"]);
 
-const CONTAINER_INSTANCE = "preview-pages";
+const CONTAINER_INSTANCE = "preview-table";
 const CATALOG_LIMIT = 20_000;
 
 type Env = {
@@ -59,9 +59,10 @@ export default {
     if (connection.includes(PRODUCTION) || !env.SUPABASE_URL?.includes(QA)) return json({ errorCode: "preview_unavailable", ok: false }, 403);
     try {
       const raw = await request.text();
-      if (raw.length > 20_000) return json({ errorCode: "preview_limit", ok: false }, 422);
+      if (raw.length > 100_000) return json({ errorCode: "preview_limit", ok: false }, 422);
       const body = JSON.parse(raw) as {
         choices?: Array<{ field?: string; index?: number }>;
+        edits?: Array<{ field?: string; rowNumber?: number; value?: string }>;
         companyId?: string;
         filter?: string;
         mappedPage?: number;
@@ -97,13 +98,16 @@ export default {
         }
         if (file.expires_at.getTime() <= Date.now()) return json({ errorCode: "preview_closed", ok: false }, 422);
         const catalog = await loadCatalog(client, companyId);
+        const categories = await loadCategories(client, companyId);
         const signedUrl = await signDownload(env, file.object_path);
         const container = getContainer(env.IMPORT_CONTAINER, CONTAINER_INSTANCE);
         const response = await container.fetch("http://container/preview", {
           body: JSON.stringify({
             cacheKey: `${processId}\n${sheetName}`,
             catalog,
+            categories,
             choices: Array.isArray(body.choices) ? body.choices.slice(0, 40) : [],
+            edits: cleanEdits(body.edits),
             filter: body.filter,
             mappedPage: body.mappedPage,
             page: body.page,
@@ -254,6 +258,26 @@ async function fail(client: pg.Client, processId: string, code: string) {
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" }, status });
+}
+
+function cleanEdits(value: Array<{ field?: string; rowNumber?: number; value?: string }> | undefined) {
+  const fields = new Set(["box_barcode", "category", "notes", "opening_stock", "opening_stock_unit", "pack_barcode", "piece_barcode", "piece_cost", "piece_selling_price", "product_name", "sku"]);
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).flatMap((edit) => {
+    const field = String(edit.field || "");
+    const rowNumber = Number(edit.rowNumber);
+    if (!fields.has(field) || !Number.isInteger(rowNumber) || rowNumber < 1) return [];
+    return [{ field, rowNumber, value: String(edit.value ?? "").slice(0, 120) }];
+  });
+}
+
+async function loadCategories(client: pg.Client, companyId: string) {
+  const rows = await client.query(
+    "select name_lo, name_en from categories where company_id = $1 order by name_lo asc limit 200",
+    [companyId],
+  );
+  const names = rows.rows.flatMap((row: { name_en?: string | null; name_lo?: string | null }) => [row.name_lo, row.name_en].filter((name): name is string => Boolean(name && name.trim())));
+  return [...new Set(names.map((name) => name.trim()))].slice(0, 200);
 }
 
 async function loadCatalog(client: pg.Client, companyId: string): Promise<PreviewCatalogItem[]> {
